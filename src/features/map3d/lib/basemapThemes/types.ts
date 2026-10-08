@@ -1,16 +1,18 @@
 /**
- * A colour, or a zoom ramp `[[zoom, colour], …]` interpolated linearly.
- * Ramps are used where a feature must read differently from afar (thin line,
- * needs contrast) and up close (wide line with its own casing).
+ * Une couleur, ou une rampe de zoom `[[zoom, couleur], …]` interpolée
+ * linéairement. Les rampes servent là où une entité doit se lire différemment
+ * de loin (trait fin, besoin de contraste) et de près (trait large avec son
+ * propre liseré).
  */
 export type ColorRamp = string | ReadonlyArray<readonly [number, string]>;
 
 type BasemapTone = 'light' | 'dark';
 
 /**
- * Every colour decision of a RedView basemap. One palette = one theme: the
- * layer mapping in `buildThemeOverrides` is shared, so both themes keep the
- * same hierarchy and only the colour language changes.
+ * Toutes les décisions de couleur d'un fond de carte RedView. Une palette = un
+ * thème : la correspondance des calques de `buildThemeOverrides` est partagée,
+ * donc les deux thèmes gardent la même hiérarchie et seul le langage des
+ * couleurs change.
  */
 export interface BasemapPalette {
   tone: BasemapTone;
@@ -48,7 +50,7 @@ export interface BasemapPalette {
   nationalPark: { fill: string; band: string; maxOpacity: number };
 
   water: string;
-  /** Offset copy under the water: reads as a thin shoreline. */
+  /** Copie décalée sous l'eau : se lit comme une fine ligne de rivage. */
   waterShadow: string;
   waterway: string;
   waterDepth: { shallow: string; deep: string };
@@ -58,9 +60,9 @@ export interface BasemapPalette {
   hillshade: {
     shadow: string;
     highlight: string;
-    /** Relief stays at full strength up to this zoom… */
+    /** Le relief reste à pleine intensité jusqu'à ce zoom… */
     fadeStartZoom: number;
-    /** …and is gone at this one (buildings take over the ground). */
+    /** …et disparaît à celui-ci (les bâtiments prennent le relais au sol). */
     fadeEndZoom: number;
   };
   cliffOpacity: number;
@@ -92,7 +94,7 @@ export interface BasemapPalette {
     turningOutline: string;
   };
   paths: {
-    /** Halo drawn under every path so dashes read on any ground. */
+    /** Halo dessiné sous chaque chemin pour que les tirets se lisent sur tout fond. */
     halo: string;
     pisteHalo: string;
     trail: string;

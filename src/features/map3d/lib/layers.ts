@@ -1,8 +1,9 @@
 import { VHR_ORTHO_SOURCE_ID } from './sources';
 
-// IGN orthophoto overlay. Uses the default Standard-Satellite slot (middle)
-// so the 20 cm IGN imagery renders ABOVE the base satellite, not below it.
-// 'slot: "bottom"' hides the layer entirely under Standard-Satellite.
+// Overlay d'orthophoto IGN. Utilise l'emplacement par défaut de Standard-Satellite
+// (middle) pour que l'imagerie IGN à 20 cm s'affiche AU-DESSUS du satellite de
+// base, pas en dessous. 'slot: "bottom"' cache entièrement le calque sous
+// Standard-Satellite.
 export const ignOrthoLayer = {
   id: 'ign-ortho-layer',
   type: 'raster' as const,
@@ -11,14 +12,14 @@ export const ignOrthoLayer = {
   minzoom: 11,
   paint: {
     'raster-opacity': 1,
-    // Crossfade from parent to child tile over 250 ms. With 0 ms (previous
-    // setting) a pending tile fetch produced an instant white hole; with
-    // 250 ms Mapbox GL holds the blurry-but-valid parent visible until the
-    // sharp child arrives, eliminating the "patchwork of missing tiles"
-    // dezoom artifact without any perceptible sharpness loss.
+    // Fondu enchaîné de la tuile parente vers l'enfant sur 250 ms. Avec 0 ms
+    // (réglage précédent), un fetch de tuile en attente laissait un trou blanc
+    // instantané ; avec 250 ms, Mapbox GL garde visible le parent flou mais valide
+    // jusqu'à l'arrivée de l'enfant net, ce qui supprime l'artefact de dézoom
+    // « patchwork de tuiles manquantes » sans perte de netteté perceptible.
     'raster-fade-duration': 250,
-    // Smooth bilinear upscaling of the overzoomed parent while the child
-    // fetch is pending — prevents pixelation during the fade window.
+    // Agrandissement bilinéaire lissé du parent suréchantillonné pendant que le
+    // fetch de l'enfant est en attente — évite la pixelisation pendant le fondu.
     'raster-resampling': 'linear' as const,
   },
   layout: {
@@ -26,13 +27,14 @@ export const ignOrthoLayer = {
   },
 };
 
-// Very-high-resolution ortho (see `buildVhrOrthoSource`). Inserted right above
-// the Mapbox satellite raster, under roads, labels and every app overlay.
+// Ortho à très haute résolution (voir `buildVhrOrthoSource`). Insérée juste
+// au-dessus du raster satellite de Mapbox, sous les routes, les libellés et
+// chaque overlay de l'app.
 export const vhrOrthoLayer = {
   id: 'rv-vhr-ortho-layer',
   type: 'raster' as const,
   source: VHR_ORTHO_SOURCE_ID,
-  // A 256 px source asks round(zoom + 1): its z18 tiles start at zoom 16.5.
+  // Une source de 256 px demande round(zoom + 1) : ses tuiles z18 commencent au zoom 16,5.
   minzoom: 16.5,
   paint: {
     'raster-opacity': 1,

@@ -117,8 +117,9 @@ export default memo(function MapView({
   }, [isLoaded, map, overlayInsets]);
 
   const openPoiDraft = useCallback((payload: MapContextMenuActionPayload, mapInstance: MapboxMap | null) => {
-    // `screenPoint` is the click's `event.point` (map-container layout px), the
-    // space of the insets and of the card's left/top: no client rect involved.
+    // `screenPoint` est le `event.point` du clic (px de mise en page du conteneur
+    // de la carte), l'espace des marges et des left/top de la carte : aucun
+    // rectangle client en jeu.
     const container = containerRef.current;
     const area = resolvePanelArea(
       container?.clientWidth || window.innerWidth,
@@ -143,8 +144,8 @@ export default memo(function MapView({
     if (payload.action === 'create-poi') openPoiDraft(payload, map.current);
   }, [map, onMapContextMenuAction, openPoiDraft]);
 
-  // « Créer un POI » asked from outside the map (analysis chart): same card as
-  // the context menu, opened where the point lands once the camera stops.
+  // « Créer un POI » demandé hors de la carte (graphique d'analyse) : même carte
+  // que le menu contextuel, ouverte là où tombe le point une fois la caméra arrêtée.
   useEffect(() => {
     if (!isLoaded) return;
     return listenMapPoiDraftRequest(({ lat, lon }) => {
@@ -195,10 +196,11 @@ export default memo(function MapView({
   }) => React.ReactNode;
 
   return (
-    // width/height: 100% (not 100vw/100dvh) so the map fills its parent
-    // container. The Dashboard wraps everything in a scaled box whose
-    // logical size is `viewport / appScale`, so vw/dvh would only cover
-    // a fraction of the wrapper and leave empty space on small screens.
+    // width/height : 100 % (pas 100vw/100dvh) pour que la carte remplisse son
+    // conteneur parent. Le Dashboard enveloppe tout dans une boîte mise à
+    // l'échelle dont la taille logique est `viewport / appScale` : vw/dvh ne
+    // couvriraient qu'une fraction de l'enveloppe et laisseraient du vide sur
+    // les petits écrans.
     <>
       <div style={{ position: 'relative', width: '100%', height: '100%', zIndex: 0, isolation: 'isolate' }}>
         <div

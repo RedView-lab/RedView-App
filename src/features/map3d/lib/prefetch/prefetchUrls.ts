@@ -21,7 +21,7 @@ function getSlopeTileQuery(map: MapboxMap): string {
   return queryStart >= 0 ? template.slice(queryStart) : '';
 }
 
-/** Deepest zoom the slope source requests (Mapbox overzooms beyond). */
+/** Zoom le plus profond demandé par la source des pentes (Mapbox suréchantillonne au-delà). */
 export function getSlopeSourceMaxZoom(map: MapboxMap): number {
   const maxzoom = getSlopeSource(map)?.maxzoom;
   return typeof maxzoom === 'number' && Number.isFinite(maxzoom) ? maxzoom : 16;
@@ -34,13 +34,13 @@ export function slopePrefetchUrl(map: MapboxMap, z: number, x: number, y: number
     : `/slope-tiles/${z}/${x}/${y}?pf=1`;
 }
 
-/** `demQuery`: '' (surface profile) or 'rv-dem-profile=terrain'. */
+/** `demQuery` : '' (profil surface) ou 'rv-dem-profile=terrain'. */
 export function demPrefetchUrl(z: number, x: number, y: number, demQuery: string): string {
   return `/dem-tiles/${z}/${x}/${y}?${demQuery ? `${demQuery}&` : ''}pf=1`;
 }
 
 export interface PrefetchFamilies {
-  /** DEM query (see demPrefetchUrl), or null for no DEM prefetch. */
+  /** Requête DEM (voir demPrefetchUrl), ou null pour aucun préchargement de DEM. */
   demQuery: string | null;
   ortho: boolean;
   slope: boolean;

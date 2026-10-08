@@ -52,8 +52,9 @@ export function bootstrapUnifiedDem({
   const IMPORT_GUARD_WATCH_MS = 15000;
   const IMPORT_GUARD_PROBE_INTERVAL_MS = 750;
   const FORCE_3D_ESCALATION_MS = 7000;
-  // Guards, escalation and ortho fallback count visible time: a hidden page
-  // loads no DEM tile, so its terrain is never "renderable" there.
+  // Les garde-fous, l'escalade et le repli ortho comptent le temps visible : une
+  // page masquée ne charge aucune tuile DEM, son terrain n'y est donc jamais
+  // « affichable ».
   const importGuardTimers: VisibleTimer[] = [];
   const importGuardCleanup: (() => void)[] = [];
 
@@ -110,7 +111,7 @@ export function bootstrapUnifiedDem({
     importGuardCleanup.push(() => mapWithEvents.off?.('style.import.load', onImportLoad));
     importGuardCleanup.push(() => mapWithEvents.off?.('style.load', onLateStyleLoad));
   } catch {
-    /* event name may not exist on this Mapbox version */
+    /* le nom d'événement peut ne pas exister dans cette version de Mapbox */
   }
 
   const force3dEscalationTimer = setVisibleTimeout(() => {

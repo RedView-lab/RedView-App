@@ -2,22 +2,24 @@ import type { FogSpecification, LightsSpecification, Map as MapboxMap } from 'ma
 import { FOG_CONFIG } from './mapbox.config';
 
 /**
- * Map environment bus (jour / crépuscule / nuit).
+ * Bus de l'environnement de la carte (jour / crépuscule / nuit).
  *
- * Decouples the ControlPanel "Environnement" selector from the map3d
- * lifecycle. This module is the single owner of the scene lights and fog:
- *   - the style bootstrap applies it after every `setStyle` (lights and fog
- *     are reset by a style swap);
- *   - `useMapSubscriptions` re-applies it live when the environment or the
- *     sun override changes;
- *   - the sunlight feature only publishes a sun direction override instead of
- *     calling `map.setLights()` itself.
+ * Découple le sélecteur « Environnement » du panneau de contrôle du cycle de vie
+ * de map3d. Ce module est le seul propriétaire des lumières et du brouillard de
+ * la scène :
+ *   - le bootstrap du style l'applique après chaque `setStyle` (un changement de
+ *     style réinitialise lumières et brouillard) ;
+ *   - `useMapSubscriptions` le réapplique en direct quand l'environnement ou le
+ *     forçage du soleil change ;
+ *   - la fonction d'ensoleillement ne publie qu'un forçage de direction du
+ *     soleil au lieu d'appeler elle-même `map.setLights()`.
  *
- * Mapbox GL v3 lights every 2D layer (fill, line, raster, background…) whose
- * `*-emissive-strength` is 0, so darkening the ambient/directional lights
- * dims the basemap while app layers declaring `*-emissive-strength: 1`
- * (routes, POIs, slope/altitude/weather overlays) keep their true colours.
- * Symbols default to emissive, so labels stay readable at night.
+ * Mapbox GL v3 éclaire chaque calque 2D (fill, line, raster, background…) dont
+ * le `*-emissive-strength` vaut 0 : assombrir les lumières ambiante /
+ * directionnelle atténue le fond de carte, tandis que les calques de l'app qui
+ * déclarent `*-emissive-strength: 1` (itinéraires, POI, overlays pente /
+ * altitude / météo) gardent leurs vraies couleurs. Les symboles sont émissifs
+ * par défaut : les libellés restent lisibles la nuit.
  */
 
 export type MapEnvironment = 'day' | 'dusk' | 'night';
@@ -42,13 +44,13 @@ interface EnvironmentLighting {
 }
 
 const ENVIRONMENTS: Record<MapEnvironment, EnvironmentLighting> = {
-  // Historical neutral look (ground radiance ≈ 0.89): unchanged for users.
+  // Aspect neutre historique (radiance du sol ≈ 0,89) : inchangé pour les utilisateurs.
   day: {
     ambient: { color: '#ffffff', intensity: 0.34 },
     directional: { color: '#ffffff', intensity: 0.55, direction: [180, 38] },
     fog: FOG_CONFIG as FogSpecification,
   },
-  // Low warm sun from the west, rosy ambient (ground radiance ≈ 0.6).
+  // Soleil bas et chaud venant de l'ouest, ambiance rosée (radiance du sol ≈ 0,6).
   dusk: {
     ambient: { color: '#e6ccd4', intensity: 0.3 },
     directional: { color: '#ffa060', intensity: 0.6, direction: [255, 75] },
@@ -61,7 +63,7 @@ const ENVIRONMENTS: Record<MapEnvironment, EnvironmentLighting> = {
       'star-intensity': 0.15,
     },
   },
-  // Cool moonlight (ground radiance ≈ 0.35): dark but the terrain stays legible.
+  // Clair de lune froid (radiance du sol ≈ 0,35) : sombre, mais le terrain reste lisible.
   night: {
     ambient: { color: '#a0b3ed', intensity: 0.14 },
     directional: { color: '#9fb4ff', intensity: 0.15, direction: [200, 45] },
@@ -76,7 +78,7 @@ const ENVIRONMENTS: Record<MapEnvironment, EnvironmentLighting> = {
   },
 };
 
-/** Real sun direction published by the sunlight feature while it is enabled. */
+/** Vraie direction du soleil publiée par la fonction d'ensoleillement quand elle est active. */
 export interface SunLightOverride {
   azimuthDeg: number;
   altitudeDeg: number;
@@ -123,7 +125,7 @@ export function setSunLightOverride(next: SunLightOverride | null): void {
   notify();
 }
 
-/** Fires on environment or sun override change. */
+/** Déclenché au changement d'environnement ou de forçage du soleil. */
 export function subscribeMapEnvironment(listener: () => void): () => void {
   listeners.add(listener);
   return () => { listeners.delete(listener); };
@@ -149,8 +151,9 @@ function buildMapEnvironmentLights(
         color: directional.color,
         intensity: directional.intensity,
         direction,
-        // `cast-shadows` triggers a per-frame shadow-map pass over every
-        // fill-extrusion building: only enabled by the sunlight "Ombres" toggle.
+        // `cast-shadows` déclenche à chaque image une passe de carte d'ombres sur
+        // chaque bâtiment fill-extrusion : activé seulement par la bascule
+        // « Ombres » de l'ensoleillement.
         'cast-shadows': castShadows,
         'shadow-intensity': castShadows ? 0.62 : 0,
       },
@@ -162,16 +165,16 @@ function getMapEnvironmentFog(environment: MapEnvironment): FogSpecification {
   return ENVIRONMENTS[environment].fog;
 }
 
-/** Applies the active environment (lights + fog) to the map. Best-effort. */
+/** Applique à la carte l'environnement actif (lumières + brouillard). Au mieux. */
 export function applyMapEnvironment(map: MapboxMap): void {
   try {
     map.setFog(getMapEnvironmentFog(currentEnvironment));
   } catch {
-    /* style may still be finishing its internal graph rebuild */
+    /* le style termine peut-être encore la reconstruction de son graphe interne */
   }
   try {
     map.setLights(buildMapEnvironmentLights(currentEnvironment, currentSunOverride));
   } catch {
-    /* style not ready — the next style bootstrap re-applies */
+    /* style pas prêt — le prochain bootstrap du style le réappliquera */
   }
 }

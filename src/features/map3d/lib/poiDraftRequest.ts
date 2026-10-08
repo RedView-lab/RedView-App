@@ -1,7 +1,8 @@
 /**
- * Opens the map's POI draft card (« Créer un POI » of the context menu) at a
- * point chosen outside the map — the analysis chart's « Ajouter › POI ». The
- * card belongs to `MapView`; it opens once the camera has landed on the point.
+ * Ouvre la carte de brouillon de POI de la carte (« Créer un POI » du menu
+ * contextuel) en un point choisi hors de la carte — le « Ajouter › POI » du
+ * graphique d'analyse. La carte de brouillon appartient à `MapView` ; elle
+ * s'ouvre une fois que la caméra s'est posée sur le point.
  */
 const MAP_POI_DRAFT_REQUEST_EVENT = 'redview:map-poi-draft-request';
 

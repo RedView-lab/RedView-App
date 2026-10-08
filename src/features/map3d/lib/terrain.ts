@@ -13,18 +13,19 @@ export class TerrainManager {
     this.sourceId = sourceId;
   }
 
-  /** Idempotent. Safe to call multiple times. */
+  /** Idempotent. Peut être appelé plusieurs fois sans risque. */
   init(): void {
     this.applyTerrain();
   }
 
   /**
-   * Binds the terrain, or does nothing when the style already has it with the
-   * same source and exaggeration. The anti-flat guards call this on every
-   * `styledata` / idle / heartbeat: an unconditional `setTerrain` dirties the
-   * style and makes Mapbox resample its average elevation on the next frame
-   * instead of every 500 ms — ~11 calls/s during a zoom gesture, camera
-   * framing nudged each time.
+   * Lie le terrain, ou ne fait rien quand le style l'a déjà avec la même source
+   * et la même exagération. Les garde-fous anti-plat l'appellent à chaque
+   * `styledata` / inactivité / battement de cœur : un `setTerrain`
+   * inconditionnel salit le style et fait rééchantillonner par Mapbox son
+   * altitude moyenne à l'image suivante au lieu de toutes les 500 ms — ~11 appels
+   * par seconde pendant un geste de zoom, avec un cadrage de caméra décalé à
+   * chaque fois.
    */
   private applyTerrain(): void {
     try {
@@ -39,9 +40,10 @@ export class TerrainManager {
       });
       this.applied = true;
     } catch (error) {
-      // setTerrain can throw during sprite storms, stale style graphs,
-      // or when the source was removed between check and apply. Don't
-      // mark applied=true so subsequent init() calls can retry.
+      // setTerrain peut lever une exception pendant des tempêtes de sprites, sur
+      // un graphe de style périmé, ou quand la source a été retirée entre le
+      // contrôle et l'application. On ne marque pas applied=true, pour que les
+      // appels suivants à init() puissent réessayer.
       console.warn('[terrain] setTerrain failed — will retry on next init()', error);
     }
   }
@@ -67,7 +69,7 @@ export class TerrainManager {
 
   destroy(): void {
     if (!this.applied) return;
-    try { this.map.setTerrain(null); } catch { /* map may already be destroyed */ }
+    try { this.map.setTerrain(null); } catch { /* la carte est peut-être déjà détruite */ }
     this.applied = false;
   }
 }

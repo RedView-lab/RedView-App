@@ -8,21 +8,21 @@ import { clearVisibleTimer, setVisibleInterval } from './visibleClock';
 import { getActiveDem3dQuality } from '../../../lib/dem3dQualityBus';
 
 /**
- * Anti-flat heartbeat. Once the bootstrap has reported "ready" at least
- * once, periodically verify that terrain is still bound to the unified
- * DEM. This is the last line of defence against silent terrain drops
- * (Mapbox sometimes detaches terrain after a late style.load or after
- * a sprite/image rejection storm without firing any error event).
+ * Battement de cœur anti-plat. Une fois que le bootstrap a signalé « prêt » au
+ * moins une fois, vérifie périodiquement que le terrain est toujours lié au DEM
+ * unifié. C'est la dernière ligne de défense contre les pertes de terrain
+ * silencieuses (Mapbox détache parfois le terrain après un style.load tardif ou
+ * après une tempête de rejets de sprites / d'images, sans émettre d'erreur).
  *
- * Escalation:
- *   1. Try a soft re-attach (`applyUnifiedTerrain`).
- *   2. If the next heartbeat still sees a flat state, force a full
- *      reload (`reloadMapElevation`, cooldown bypassed).
- *   3. After repeated failures, the standard reload escalation kicks
- *      in (style re-apply, etc.).
- *   4. NEW: if the SW controller is now available but no DEM source
- *      was ever added (late-SW-claim session stuck in plain-Mapbox
- *      mode), re-trigger the full bootstrap from scratch.
+ * Escalade :
+ *   1. Tentative de rattachement doux (`applyUnifiedTerrain`).
+ *   2. Si le battement suivant voit encore un état plat, rechargement complet
+ *      forcé (`reloadMapElevation`, sans délai de récupération).
+ *   3. Après des échecs répétés, l'escalade standard du rechargement prend le
+ *      relais (réapplication du style, etc.).
+ *   4. NOUVEAU : si le contrôleur du SW est maintenant disponible mais qu'aucune
+ *      source DEM n'a jamais été ajoutée (session à prise de contrôle tardive du
+ *      SW bloquée en mode Mapbox simple), relance complète du bootstrap.
  */
 export function attachHeartbeat(ctx: Ctx): void {
   const { map, isCancelled } = ctx;
@@ -39,13 +39,14 @@ export function attachHeartbeat(ctx: Ctx): void {
         fns.stopTerrainHeartbeat();
         return;
       }
-      // Don't probe while a reload is already in flight — those paths
-      // handle their own verification.
+      // Pas de sonde pendant qu'un rechargement est en cours — ces chemins font
+      // leur propre vérification.
       if (st.reloadInProgress) return;
       if (!fns.canMutateStyle()) return;
-      // Fast 30 m mode owns the terrain binding directly. The aws-fast-dem
-      // source is rock-stable (AWS S3), so we only verify it is still
-      // bound and re-attach on the rare detach. No reload escalation.
+      // Le mode rapide 30 m possède directement la liaison du terrain. La source
+      // aws-fast-dem est très stable (AWS S3) : on vérifie seulement qu'elle est
+      // toujours liée et on la rattache dans le rare cas d'un détachement. Pas
+      // d'escalade de rechargement.
       if (getActiveDem3dQuality() === 'fast-30m') {
         try {
           const currentTerrain = map.getTerrain();
@@ -61,9 +62,9 @@ export function attachHeartbeat(ctx: Ctx): void {
         } catch { /* best-effort */ }
         return;
       }
-      // Allow self-heal even before the first "ready" report if the
-      // heartbeat has been ticking for a while (3 ticks of visible time). This
-      // covers bootstraps that stall and never call finishDemActivity.
+      // Autorise l'autoréparation avant même le premier signal « prêt » si le
+      // battement tourne depuis un moment (3 battements de temps visible). Couvre
+      // les bootstraps qui se bloquent et n'appellent jamais finishDemActivity.
       if (!st.hasReportedReadyOnce && tickCount < 3) return;
 
       const sourcePresent = !!map.getSource(unifiedDEMSource.id);
@@ -71,9 +72,9 @@ export function attachHeartbeat(ctx: Ctx): void {
       const terrainBound = fns.isUnifiedTerrainActive();
       const terrainRenderable = fns.isManagedTerrainRenderable();
 
-      // AWS fallback terrain is active — this is the expected state
-      // when the SW never claimed. The terrain is real (~30 m AWS
-      // Terrarium), just lower resolution. Don't report flat state.
+      // Le terrain de repli AWS est actif — c'est l'état attendu quand le SW n'a
+      // jamais pris le contrôle. Le terrain est réel (AWS Terrarium à ~30 m),
+      // simplement en plus basse résolution. On ne signale pas d'état plat.
       if (awsFallbackPresent && !sourcePresent) {
         try {
           const currentTerrain = map.getTerrain();
@@ -116,7 +117,7 @@ export function attachHeartbeat(ctx: Ctx): void {
         },
       );
 
-      // Soft fix first: re-attach if the source is still there.
+      // Correction douce d'abord : rattachement si la source est encore là.
       if (sourcePresent && !terrainBound) {
         fns.applyUnifiedTerrain();
         if (fns.isUnifiedTerrainActive()) {
@@ -125,10 +126,10 @@ export function attachHeartbeat(ctx: Ctx): void {
         }
       }
 
-      // If the DEM source was never added AND the SW controller
-      // is now available, we're in a late-SW-claim session that got
-      // stuck in plain-Mapbox mode. The only fix is to re-run the
-      // full bootstrap.
+      // Si la source DEM n'a jamais été ajoutée ET que le contrôleur du SW est
+      // maintenant disponible, on est dans une session à prise de contrôle
+      // tardive du SW restée bloquée en mode Mapbox simple. La seule correction
+      // est de relancer tout le bootstrap.
       if (!sourcePresent && navigator.serviceWorker?.controller) {
         console.warn('[map3d] heartbeat: DEM source missing but SW available — re-bootstrapping');
         st.heartbeatFailures = 0;
@@ -136,10 +137,10 @@ export function attachHeartbeat(ctx: Ctx): void {
         return;
       }
 
-      // Either the source is gone or re-attach didn't take. Escalate
-      // to a full reload (cooldown bypassed) once we're sure it's not
-      // a one-shot blip — but only if the SW is available, since
-      // reloadMapElevation requires the controller.
+      // Soit la source a disparu, soit le rattachement n'a pas pris. On escalade
+      // vers un rechargement complet (sans délai de récupération) une fois sûr que
+      // ce n'est pas un accident ponctuel — mais seulement si le SW est
+      // disponible, car reloadMapElevation exige le contrôleur.
       if (
         st.heartbeatFailures >= TERRAIN_HEARTBEAT_FAILURES_BEFORE_RELOAD
         && navigator.serviceWorker?.controller

@@ -1,14 +1,17 @@
 /**
- * Timers of the map lifecycle that only count the time the page is visible.
+ * Minuteurs du cycle de vie de la carte qui ne comptent que le temps où la page
+ * est visible.
  *
- * A hidden page (background tab, minimised or fully covered window) gets no
- * animation frame: Mapbox does not parse a style (`Style#loadJSON` waits for
- * a frame), requests no tile and never goes idle. A wall-clock watchdog then
- * saw a "stuck" map and fired its recoveries on a map that was simply not
- * being drawn — forced `setStyle` from the URL, DEM source rebuilds, terrain
- * reloads, a false "Carte prête" at 12 s. Every watchdog that judges Mapbox's
- * progress runs on this clock instead: it pauses while the page is hidden and
- * resumes with the time it had left once the page shows again.
+ * Une page masquée (onglet en arrière-plan, fenêtre réduite ou entièrement
+ * recouverte) ne reçoit aucune image d'animation : Mapbox n'analyse pas de
+ * style (`Style#loadJSON` attend une image), ne demande aucune tuile et
+ * n'atteint jamais l'inactivité. Un chien de garde en temps réel voyait alors
+ * une carte « bloquée » et lançait ses récupérations sur une carte simplement
+ * pas dessinée — `setStyle` forcé depuis l'URL, reconstructions de la source
+ * DEM, rechargements du terrain, un faux « Carte prête » à 12 s. Chaque chien de
+ * garde qui juge la progression de Mapbox tourne plutôt sur cette horloge :
+ * elle se met en pause quand la page est masquée et reprend avec le temps qui
+ * lui restait dès que la page réapparaît.
  */
 export interface VisibleTimer {
   readonly visibleTimer: true;
@@ -16,9 +19,9 @@ export interface VisibleTimer {
 
 interface TimerEntry extends VisibleTimer {
   fn: () => void;
-  /** Visible milliseconds left before the next run. */
+  /** Millisecondes visibles restantes avant la prochaine exécution. */
   remaining: number;
-  /** Period of an interval, null for a one-shot timer. */
+  /** Période d'un intervalle, null pour un minuteur à usage unique. */
   period: number | null;
   startedAt: number;
   native: ReturnType<typeof setTimeout> | null;
@@ -46,7 +49,7 @@ function fire(entry: TimerEntry): void {
   entry.native = null;
   if (!entries.has(entry)) return;
   if (isPageHidden()) {
-    // Fired between the page hiding and its visibilitychange event.
+    // Déclenché entre le masquage de la page et son événement visibilitychange.
     entry.remaining = 0;
     return;
   }
@@ -85,12 +88,12 @@ function track(fn: () => void, delayMs: number, period: number | null): VisibleT
   return entry;
 }
 
-/** `setTimeout` counting visible time only. */
+/** `setTimeout` qui ne compte que le temps visible. */
 export function setVisibleTimeout(fn: () => void, delayMs: number): VisibleTimer {
   return track(fn, delayMs, null);
 }
 
-/** `setInterval` counting visible time only. */
+/** `setInterval` qui ne compte que le temps visible. */
 export function setVisibleInterval(fn: () => void, periodMs: number): VisibleTimer {
   return track(fn, periodMs, Math.max(1, periodMs));
 }

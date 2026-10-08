@@ -15,8 +15,8 @@ interface StyleLayerLike {
 }
 
 /**
- * Id of the style layer drawing Mapbox Satellite, or null when the active
- * basemap has no satellite imagery (the overlay is then skipped).
+ * Identifiant du calque de style qui dessine Mapbox Satellite, ou null quand
+ * le fond actif n'a pas d'imagerie satellite (l'overlay est alors sauté).
  */
 function findSatelliteRasterLayerId(
   layers: readonly StyleLayerLike[],
@@ -30,10 +30,10 @@ function findSatelliteRasterLayerId(
 }
 
 /**
- * Very-high-resolution ortho overlay (IGN PCRS / THR, see
- * `buildVhrOrthoSource`) above Mapbox Satellite. Only on basemaps that draw
- * Mapbox Satellite, and only once the Service Worker controls the page:
- * without it /vhr-tiles answers 204 and the overlay would be useless.
+ * Overlay d'ortho à très haute résolution (IGN PCRS / THR, voir
+ * `buildVhrOrthoSource`) au-dessus de Mapbox Satellite. Seulement sur les fonds
+ * qui dessinent Mapbox Satellite, et seulement une fois que le Service Worker
+ * contrôle la page : sans lui, /vhr-tiles répond 204 et l'overlay serait inutile.
  */
 export function attachVhrOrtho(ctx: Ctx): void {
   const { map } = ctx;

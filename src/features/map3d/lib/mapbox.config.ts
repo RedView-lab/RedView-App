@@ -1,13 +1,13 @@
 export const MAPBOX_TOKEN = (import.meta.env?.VITE_MAPBOX_TOKEN ?? '') as string;
 
-// Default style aligns with DEFAULT_BASEMAP_ID in features/controlPanel/basemaps.
-// Outdoors (vector) is billed under Vector Tiles, NOT Raster Tiles, so the
-// default-app load no longer charges the Raster Tiles SKU. Satellite remains
-// available as a premium-tier basemap option.
+// Le style par défaut correspond à DEFAULT_BASEMAP_ID dans features/controlPanel/basemaps.
+// Outdoors (vectoriel) est facturé en Vector Tiles, PAS en Raster Tiles : le
+// chargement par défaut de l'app ne coûte plus rien sur le SKU Raster Tiles.
+// Le satellite reste disponible comme option de fond de gamme premium.
 export const MAPBOX_STYLE = 'mapbox://styles/mapbox/outdoors-v12';
 
-// Default camera for a brand-new project: France seen wide, so the user starts
-// from a national overview and zooms into their area of interest.
+// Caméra par défaut d'un nouveau projet : la France vue de loin, pour que
+// l'utilisateur parte d'une vue nationale et zoome sur sa zone d'intérêt.
 export const DEFAULT_VIEW = {
   center: [2.3522, 46.6034] as [number, number],
   zoom: 5,

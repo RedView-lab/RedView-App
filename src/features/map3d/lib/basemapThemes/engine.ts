@@ -13,8 +13,8 @@ type LayerOverrides = Record<string, LayerOverride>;
 const ROAD_STRUCTURES = ['road', 'bridge', 'tunnel'] as const;
 
 /**
- * Outdoors' own contours are dropped: contour lines are owned by the
- * "Courbes de niveau" control (interval / opacity, `features/contourLines`).
+ * Les courbes de niveau propres à Outdoors sont retirées : elles relèvent du
+ * contrôle « Courbes de niveau » (intervalle / opacité, `features/contourLines`).
  */
 const REMOVED_LAYER_IDS: ReadonlySet<string> = new Set(['contour-line', 'contour-label']);
 
@@ -33,11 +33,11 @@ function colorAtStop(ramp: ColorRamp, zoom: number): string {
 }
 
 /**
- * `match` on a feature property whose branches may be zoom ramps. The style
- * spec only allows `zoom` at the top level, so the ramp is hoisted: one
- * interpolate over the union of stops, one `match` per stop. Ramps matched
- * together should share their stops (a missing stop falls back to the
- * previous one).
+ * `match` sur une propriété d'entité dont les branches peuvent être des rampes
+ * de zoom. La spécification de style n'autorise `zoom` qu'au premier niveau :
+ * la rampe est donc remontée — un interpolate sur l'union des paliers, un
+ * `match` par palier. Les rampes associées dans un même match doivent partager
+ * leurs paliers (un palier manquant reprend le précédent).
  */
 function matchRamp(property: string, cases: ReadonlyArray<readonly [string, ColorRamp]>, fallback: ColorRamp): Expression {
   const ramps = [...cases.map(([, ramp]) => ramp), fallback];
@@ -56,7 +56,7 @@ function byClass(cases: Record<string, string>, fallback: string): Expression {
   return ['match', ['get', 'class'], ...Object.entries(cases).flat(), fallback];
 }
 
-/** Outdoors' POI icon ramp (sizerank-gated), with a theme opacity ceiling. */
+/** Rampe des icônes de POI d'Outdoors (conditionnée par sizerank), avec un plafond d'opacité propre au thème. */
 function iconOpacity(max: number): Expression {
   return [
     'step', ['zoom'],
@@ -115,8 +115,9 @@ function buildRoadOverrides(p: BasemapPalette): LayerOverrides {
     out[`${s}-minor-link`] = line(minorFill);
     out[`${s}-construction`] = line(r.construction);
 
-    // Walking / cycling network. Cycleways are the one path type a
-    // bikepacking planner must spot instantly: own hue, slightly wider.
+    // Réseau piéton / cyclable. Les pistes cyclables sont le seul type de chemin
+    // qu'un planificateur de bikepacking doit repérer immédiatement : teinte
+    // propre, un peu plus large.
     out[`${s}-path-bg`] = line(['match', ['get', 'type'], 'piste', p.paths.pisteHalo, p.paths.halo]);
     out[`${s}-steps-bg`] = line(p.paths.halo);
     out[`${s}-path-trail`] = line(p.paths.trail);
@@ -132,7 +133,7 @@ function buildRoadOverrides(p: BasemapPalette): LayerOverrides {
     out[`${s}-rail-tracks`] = line(p.rail);
   }
 
-  // Bridge-only double-deck layers.
+  // Calques à double niveau propres aux ponts.
   out['bridge-motorway-trunk-2-case'] = line(r.motorwayCase);
   out['bridge-major-link-2-case'] = line(r.motorwayCase);
   out['bridge-motorway-trunk-2'] = line(motorwayTrunk);
@@ -220,8 +221,8 @@ function buildWaterOverrides(p: BasemapPalette): LayerOverrides {
 function buildTerrainOverrides(p: BasemapPalette): LayerOverrides {
   const h = p.hillshade;
   return {
-    // Swiss-style relief: cool shadows, warm light. The Outdoors source stacks
-    // several `level` polygons, so per-polygon alphas stay low on purpose.
+    // Relief à la suisse : ombres froides, lumière chaude. La source Outdoors
+    // empile plusieurs polygones `level`, d'où des alphas volontairement bas par polygone.
     hillshade: fill(['match', ['get', 'class'], 'shadow', h.shadow, h.highlight], {
       'fill-opacity': ['interpolate', ['linear'], ['zoom'], h.fadeStartZoom, 1, h.fadeEndZoom, 0],
     }),
@@ -291,11 +292,12 @@ export function buildThemeOverrides(palette: BasemapPalette): LayerOverrides {
 }
 
 /**
- * Recolours a Mapbox Outdoors v12 style definition in place with `palette`.
- * Apart from the removed native contours, only paint properties are touched:
- * layer ids, filters, sources and zoom width curves stay Mapbox's, so the
- * labels feature (which
- * toggles layers by id pattern) and every app overlay keep working unchanged.
+ * Recolore sur place une définition de style Mapbox Outdoors v12 avec
+ * `palette`. À part les courbes de niveau natives retirées, seules les
+ * propriétés de peinture sont touchées : identifiants de calques, filtres,
+ * sources et courbes de largeur selon le zoom restent ceux de Mapbox, pour que
+ * la fonction des libellés (qui bascule les calques par motif d'identifiant) et
+ * chaque overlay de l'app continuent de fonctionner sans changement.
  */
 export function applyBasemapPalette(style: StyleDefinition, palette: BasemapPalette): StyleDefinition {
   const overrides = buildThemeOverrides(palette);

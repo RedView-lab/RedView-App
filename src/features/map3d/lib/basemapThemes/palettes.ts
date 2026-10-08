@@ -1,16 +1,17 @@
 import type { BasemapPalette } from './types';
 
 /*
- * Design notes shared by both palettes
- * ------------------------------------
- * - The route overlay is RedView red: no basemap feature uses a saturated
- *   red, and motorways sit on the amber side so they never read as a route.
- * - Hierarchy a cyclist reads first: relief (hillshade) → road
- *   class (busy primaries tinted, quiet lanes neutral) → cycleways (teal) →
- *   trails (earth brown) → settlements.
- * - The scene lights (`mapEnvironment`, "Jour") render 2D layers at ~0.89 of
- *   their colour, so the light palette is keyed slightly brighter than it
- *   should look on screen.
+ * Notes de conception communes aux deux palettes
+ * ----------------------------------------------
+ * - Le tracé de l'itinéraire est en rouge RedView : aucune entité du fond de
+ *   carte n'utilise de rouge saturé, et les autoroutes sont du côté ambre pour
+ *   ne jamais être lues comme un itinéraire.
+ * - Hiérarchie qu'un cycliste lit en premier : relief (ombrage) → classe de
+ *   route (grands axes chargés teintés, petites routes calmes neutres) →
+ *   pistes cyclables (bleu canard) → sentiers (brun terre) → localités.
+ * - Les lumières de la scène (`mapEnvironment`, « Jour ») rendent les calques
+ *   2D à ~0,89 de leur couleur : la palette claire est donc réglée un peu plus
+ *   claire que le rendu voulu à l'écran.
  */
 
 /** "Papier topo": warm paper, crisp hierarchy, Swiss-style relief. */
@@ -139,8 +140,9 @@ export const TOPO_LIGHT_PALETTE: BasemapPalette = {
 };
 
 /**
- * "Nuit": deep slate-blue ground (never pure black, so the terrain relief and
- * the red route both keep their depth), dark water, luminous labels.
+ * « Nuit » : sol bleu ardoise profond (jamais noir pur, pour que le relief du
+ * terrain et l'itinéraire rouge gardent leur profondeur), eau sombre, libellés
+ * lumineux.
  */
 export const TOPO_DARK_PALETTE: BasemapPalette = {
   tone: 'dark',

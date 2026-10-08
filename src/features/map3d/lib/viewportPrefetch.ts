@@ -32,33 +32,34 @@ export * from './prefetch/types';
 let currentHandle: ViewportPrefetchHandle | null = null;
 
 /**
- * Speculative tiles only make sense when the Service Worker answers them.
- * On an uncontrolled page (force-reload, SW not claimed yet, AWS fallback
- * terrain) every `/dem-tiles?pf=1` would reach the server instead — burning
- * the tile rate-limit bucket (429) for tiles nobody displays.
+ * Les tuiles spéculatives n'ont de sens que si le Service Worker y répond. Sur
+ * une page non contrôlée (rechargement forcé, SW pas encore pris, terrain de
+ * repli AWS), chaque `/dem-tiles?pf=1` partirait au serveur — et viderait le
+ * quota de débit des tuiles (429) pour des tuiles que personne n'affiche.
  */
 function isServiceWorkerControlled(): boolean {
   return typeof navigator !== 'undefined' && Boolean(navigator.serviceWorker?.controller);
 }
 
 /**
- * DEM query of the tiles the 3D terrain reads, or null when it does not read
- * `/dem-tiles` at all: the 30 m mode streams AWS Terrarium straight to the
- * GPU, so warming `/dem-tiles` there built 0.40 m IGN tiles nobody displays.
+ * Requête DEM des tuiles que lit le terrain 3D, ou null quand il ne lit pas du
+ * tout `/dem-tiles` : le mode 30 m envoie AWS Terrarium directement au GPU, donc
+ * préchauffer `/dem-tiles` y construisait des tuiles IGN à 0,40 m que personne
+ * n'affiche.
  */
 function terrainDemPrefetchQuery(): string | null {
   if (getActiveDem3dQuality() === 'fast-30m') return null;
   return getActiveDemProfilePreference() === 'terrain' ? 'rv-dem-profile=terrain' : '';
 }
 
-/** Zoom of the terrain's DEM tiles (what the terrain and the slope overlay read). */
+/** Zoom des tuiles DEM du terrain (ce que lisent le terrain et l'overlay des pentes). */
 function terrainDemPrefetchZoom(zoom: number): number {
   return Math.max(unifiedDEMSource.minzoom, Math.min(unifiedDEMSource.maxzoom, terrainDemTileZoom(zoom)));
 }
 
 interface TileBox { xMin: number; yMin: number; xMax: number; yMax: number }
 
-/** Tiles one step beyond the box edge in the direction of travel. */
+/** Tuiles situées un cran au-delà du bord de la boîte dans la direction du déplacement. */
 function leadTiles(box: TileBox, z: number, velocity: { dx: number; dy: number }): Array<[number, number]> {
   const out: Array<[number, number]> = [];
   const cap = (1 << z) - 1;
@@ -80,7 +81,7 @@ function leadTiles(box: TileBox, z: number, velocity: { dx: number; dy: number }
   return out;
 }
 
-/** DEM and ortho share the per-cycle cap fairly. */
+/** DEM et ortho se partagent équitablement le plafond par cycle. */
 function interleave(a: readonly string[], b: readonly string[]): string[] {
   const out: string[] = [];
   for (let i = 0; i < Math.max(a.length, b.length); i++) {
@@ -309,8 +310,8 @@ export function installViewportPrefetch(
     };
 
     const urls: string[] = [];
-    // Slope tiles are the terrain's DEM tiles (same pyramid), capped at the
-    // slope source's native maxzoom.
+    // Les tuiles de pente sont les tuiles DEM du terrain (même pyramide),
+    // plafonnées au maxzoom natif de la source des pentes.
     if (demQuery !== null || slopeOn) {
       const slopeZ = Math.min(demZ, getSlopeSourceMaxZoom(map));
       const demSquare = squareAround(demZ);
@@ -404,16 +405,17 @@ export function installViewportPrefetch(
   };
   map.on('style.load', onStyleLoad);
 
-  // A user gesture aborts speculative fetches and the speculative IGN /
-  // ortho network work. The terrain tiles' own LiDAR work is NOT cancelled:
-  // after a rotation or a pitch the map still needs nearly all of them, and
-  // killing it left them on 30 m relief — the SW drops it per tile once the
-  // map stops waiting on it (controller/demWantedTiles.ts). Slope and
-  // altitude tiles are NOT cancelled either: they read the terrain's own DEM
-  // tiles, and a cancelled request answered a transparent tile that Mapbox
-  // kept as final (holes after every pan).
-  // Only a user gesture carries an `originalEvent` (not flyTo, easeTo…);
-  // Mapbox's types omit it on `zoomstart`, hence the `in` check.
+  // Un geste de l'utilisateur annule les fetchs spéculatifs et le travail réseau
+  // spéculatif IGN / ortho. Le travail LiDAR propre aux tuiles du terrain n'est
+  // PAS annulé : après une rotation ou une inclinaison, la carte a encore besoin
+  // de presque toutes, et le tuer les laissait sur un relief à 30 m — le SW
+  // l'abandonne tuile par tuile dès que la carte ne l'attend plus
+  // (controller/demWantedTiles.ts). Les tuiles de pente et d'altitude ne sont PAS
+  // annulées non plus : elles lisent les tuiles DEM du terrain lui-même, et une
+  // requête annulée répondait une tuile transparente que Mapbox gardait comme
+  // définitive (des trous après chaque déplacement).
+  // Seul un geste de l'utilisateur porte un `originalEvent` (pas flyTo,
+  // easeTo…) ; les types de Mapbox l'omettent sur `zoomstart`, d'où le test `in`.
   const cancelOnUserGesture = (evt: { type: string }): void => {
     if (!('originalEvent' in evt) || !evt.originalEvent) return;
     if (activeAbort) {

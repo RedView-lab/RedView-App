@@ -10,7 +10,7 @@ export type MapboxStyleDefinition = Record<string, unknown>;
 export const prefetchedStyleCache = new Map<string, MapboxStyleDefinition>();
 
 const STYLE_PREFETCH_TIMEOUT_MS = 6000;
-/** Second, unhurried attempt for a RedView theme (see `resolveStyleInput`). */
+/** Seconde tentative, sans précipitation, pour un thème RedView (voir `resolveStyleInput`). */
 export const THEMED_STYLE_RETRY_TIMEOUT_MS = 20000;
 
 export function createEmptyBootstrapStyle(): MapboxStyleDefinition {
@@ -32,7 +32,7 @@ function cloneStyleDefinition(style: MapboxStyleDefinition): MapboxStyleDefiniti
 }
 
 export function shouldPrefetchMapboxStyle(styleUrl: string): boolean {
-  // RedView themes only exist as a recoloured JSON definition.
+  // Les thèmes RedView n'existent que sous forme de définition JSON recolorée.
   if (isRedviewThemedStyleUrl(styleUrl)) return true;
   const apiUrl = getMapboxStyleApiUrl(styleUrl);
   if (!apiUrl) return false;
@@ -108,9 +108,10 @@ export async function resolveStyleInput(styleUrl: string): Promise<string | Mapb
 }
 
 /**
- * Synchronous variant for recovery paths that cannot await: the cached (and
- * themed) definition when available, otherwise a URL Mapbox can load itself
- * (a RedView theme then degrades to its untouched base style).
+ * Variante synchrone pour les chemins de récupération qui ne peuvent pas
+ * attendre : la définition en cache (et thématisée) quand elle existe, sinon
+ * une URL que Mapbox peut charger lui-même (un thème RedView retombe alors sur
+ * son style de base non modifié).
  */
 export function resolveStyleInputSync(styleUrl: string): string | MapboxStyleDefinition {
   const cached = prefetchedStyleCache.get(styleUrl);

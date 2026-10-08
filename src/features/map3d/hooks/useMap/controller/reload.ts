@@ -7,27 +7,29 @@ import type { Ctx } from './context';
 import { clearVisibleTimer, setVisibleTimeout } from './visibleClock';
 import { logger } from '@/shared/lib/logger';
 
-// Debounce window for back-to-back DEM profile switches. The profile path
-// is cheap (no cache wipe), but a forceRebuild still removes/re-adds the
-// source, so coalescing rapid toggles avoids thrashing Mapbox's tile graph.
+// Fenêtre d'antirebond pour des changements de profil DEM consécutifs. Le
+// chemin du profil est peu coûteux (aucun vidage de cache), mais un
+// forceRebuild retire et réajoute quand même la source : regrouper les
+// bascules rapides évite de malmener le graphe de tuiles de Mapbox.
 const PROFILE_RELOAD_DEBOUNCE_MS = 250;
-// Readiness poll of a reload requested before the style/SW could take it.
+// Attente de disponibilité d'un rechargement demandé avant que le style / le SW puissent le prendre.
 const RELOAD_READINESS_POLL_MS = 400;
-const RELOAD_READINESS_MAX_POLLS = 25; // ~10 s of visible time
+const RELOAD_READINESS_MAX_POLLS = 25; // ~10 s de temps visible
 
 /**
- * Reload pipeline + escalation. Used both by the manual reload button
- * and by the self-heal path inside `finishDemActivity`.
+ * Pipeline de rechargement + escalade. Utilisé par le bouton de rechargement
+ * manuel et par le chemin d'autoréparation dans `finishDemActivity`.
  */
 export function attachReload(ctx: Ctx): void {
   const { map, isCancelled, getActiveStyleUrl } = ctx;
   const fns = ctx.fns;
   const st = ctx.state;
 
-  // Shared reload core. The manual reload button wipes the SW caches and
-  // bumps the cache-bust token (forces a clean re-fetch from IGN); the DEM
-  // profile switch keeps both stable so each profile's tiles survive in
-  // CacheStorage and a switch *back* resolves instantly.
+  // Cœur de rechargement partagé. Le bouton de rechargement manuel vide les
+  // caches du SW et change le jeton d'invalidation (force un nouveau
+  // téléchargement propre depuis l'IGN) ; le changement de profil DEM garde les
+  // deux stables, pour que les tuiles de chaque profil survivent dans
+  // CacheStorage et qu'un *retour* soit instantané.
   const runReloadOnce = (opts: {
     clearCaches: boolean;
     bumpCacheBust: boolean;
@@ -44,11 +46,12 @@ export function attachReload(ctx: Ctx): void {
     if (opts.bumpCacheBust) {
       st.demCacheBust = Date.now();
     }
-    // Force a real source rebuild — `setTiles` alone keeps mapbox's
-    // existing (possibly empty) tile pyramid, which is the typical cause
-    // of "reload says 100% but the map stays flat". For a profile switch
-    // this re-issues the new `rv-dem-profile` template so Mapbox refetches
-    // through the SW (served from the profile-keyed cache when warm).
+    // Force une vraie reconstruction de la source — `setTiles` seul garde la
+    // pyramide de tuiles existante (peut-être vide) de Mapbox, cause typique de
+    // « le rechargement affiche 100 % mais la carte reste plate ». Pour un
+    // changement de profil, cela réémet le nouveau modèle `rv-dem-profile`, pour
+    // que Mapbox redemande via le SW (servi depuis le cache indexé par profil
+    // quand il est chaud).
     if (!fns.refreshDemSource({ forceRebuild: true })) return false;
 
     st.demPassiveRefreshPending = false;
@@ -67,24 +70,24 @@ export function attachReload(ctx: Ctx): void {
   fns.performReloadOnce = (): boolean =>
     runReloadOnce({ clearCaches: true, bumpCacheBust: true, statusDetail: 'Rechargement relief' });
 
-  // ── DEM profile switch (0.40 m surface ↔ 1 m terrain) ──────────────
-  // Lightweight reload for the "Qualité 3D" selector. Critically it does
-  // NOT clear the SW DEM/negative caches and does NOT bump the cache-bust
-  // token: the Service Worker keys every DEM tile by profile
-  // (buildDemCacheKey includes the profile), so keeping URLs stable lets a
-  // switch back to a previously viewed profile come straight from
-  // CacheStorage instead of re-fetching the entire viewport from IGN.
+  // ── Changement de profil DEM (surface 0,40 m ↔ terrain 1 m) ────────
+  // Rechargement léger pour le sélecteur « Qualité 3D ». Point essentiel : il NE
+  // vide PAS les caches DEM / négatifs du SW et NE change PAS le jeton
+  // d'invalidation : le Service Worker indexe chaque tuile DEM par profil
+  // (buildDemCacheKey inclut le profil), donc garder des URL stables permet à un
+  // retour vers un profil déjà vu de venir directement de CacheStorage au lieu
+  // de redemander toute la vue à l'IGN.
   let lastProfileReloadAt = 0;
   fns.reloadMapElevationForProfile = () => {
-    // Fast 30 m mode is GPU-decoded AWS Terrarium with no profile concept;
-    // the unified DEM pipeline is detached, so a profile change is a no-op
-    // until the user returns to an HD quality.
+    // Le mode rapide 30 m est de l'AWS Terrarium décodé par le GPU, sans notion
+    // de profil ; le pipeline du DEM unifié est détaché, donc un changement de
+    // profil ne fait rien tant que l'utilisateur ne revient pas à une qualité HD.
     if (getActiveDem3dQuality() === 'fast-30m') return;
 
-    // A switch arriving inside the debounce window, or while a heavy reload
-    // runs, is replayed afterwards with the profile active *then* — it used
-    // to be dropped, leaving the terrain on the previous MNT/MNS profile while
-    // the selector showed the new one (audit d-basemap-static).
+    // Un changement qui arrive dans la fenêtre d'antirebond, ou pendant un
+    // rechargement lourd, est rejoué ensuite avec le profil actif *à ce
+    // moment-là* — il était abandonné, laissant le terrain sur l'ancien profil
+    // MNT / MNS alors que le sélecteur montrait le nouveau (audit d-basemap-static).
     const now = Date.now();
     const wait = PROFILE_RELOAD_DEBOUNCE_MS - (now - lastProfileReloadAt);
     if (wait > 0 || st.reloadInProgress) {
@@ -105,7 +108,7 @@ export function attachReload(ctx: Ctx): void {
       tiles?: string[];
     } | undefined;
 
-    // Replayed switch that ended on the profile already shown: nothing to reload.
+    // Changement rejoué qui finit sur le profil déjà affiché : rien à recharger.
     if (existingSource?.tiles && existingSource.tiles.length === tiles.length
       && existingSource.tiles.every((url, index) => url === tiles[index])) return;
 
@@ -136,7 +139,7 @@ export function attachReload(ctx: Ctx): void {
       const unifiedPresent = Boolean(map.getSource(unifiedDEMSource.id));
       const terrainBound = fns.isUnifiedTerrainActive();
 
-      // If terrain merely unbound, try gentle re-attachment before any escalation
+      // Si le terrain est seulement délié, on tente un rattachement en douceur avant toute escalade
       if (unifiedPresent && !terrainBound) {
         fns.applyUnifiedTerrain();
         if (fns.isUnifiedTerrainActive()) {
@@ -145,7 +148,7 @@ export function attachReload(ctx: Ctx): void {
         }
       }
 
-      // Check if tiles are actively loading (0.40m DEM takes 3-6s cold on remote IGN)
+      // Vérifie si des tuiles sont en cours de chargement (le DEM à 0,40 m prend 3 à 6 s à froid depuis l'IGN distant)
       let isSourceBusy = false;
       try {
         isSourceBusy = !map.isSourceLoaded(unifiedDEMSource.id);
@@ -155,7 +158,7 @@ export function attachReload(ctx: Ctx): void {
       const hasTileActivity = [...st.requestedTiles].some((key) => key.startsWith(`${unifiedDEMSource.id}:`))
         && st.requestedTiles.size > st.loadedTiles.size;
 
-      // Do NOT destroy and re-apply style if tiles are actively in-flight
+      // NE PAS détruire puis réappliquer le style si des tuiles sont en cours de chargement
       if (unifiedPresent && (isSourceBusy || hasTileActivity)) {
         logger.map3d.info('reload verify: tiles still loading, extending grace window');
         st.reloadVerifyTimer = setVisibleTimeout(() => {
@@ -166,7 +169,7 @@ export function attachReload(ctx: Ctx): void {
         return;
       }
 
-      // If terrain is still completely broken after grace period, escalate gracefully
+      // Si le terrain est encore complètement cassé après le délai de grâce, on escalade en douceur
       if (!terrainBound || !unifiedPresent) {
         if (st.reloadStyleEscalations >= 2) {
           console.warn('[map3d] reload escalation exhausted; map may stay flat');
@@ -220,10 +223,11 @@ export function attachReload(ctx: Ctx): void {
       return;
     }
 
-    // Conditions weren't ready (style not loaded yet, SW controller
-    // missing). Don't fake a 100% "ready" status — that's what made the
-    // button look broken. Instead poll for readiness for up to ~10 s of
-    // visible time and retry, then surface a real error if it still can't run.
+    // Les conditions n'étaient pas réunies (style pas encore chargé, contrôleur
+    // du SW absent). On n'affiche pas un faux statut « prêt » à 100 % — c'est ce
+    // qui donnait l'impression d'un bouton cassé. On attend plutôt que tout soit
+    // prêt pendant jusqu'à ~10 s de temps visible et on réessaie, puis on remonte
+    // une vraie erreur si ça ne peut toujours pas tourner.
     st.reloadInProgress = true;
     fns.reportStatus('loading', 8, 'En attente du fond de carte');
     clearVisibleTimer(st.reloadReadinessTimer);

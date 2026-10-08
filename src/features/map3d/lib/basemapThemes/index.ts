@@ -15,14 +15,15 @@ export {
 ;
 
 interface BasemapTheme {
-  /** Real Mapbox style the theme recolours (fetched through the Styles API). */
+  /** Vrai style Mapbox que le thème recolore (récupéré via la Styles API). */
   baseStyleUrl: string;
   palette: BasemapPalette;
 }
 
-// Outdoors carries everything a route planner needs (vector hillshade,
-// cycleways, trails, peaks) and is already the "Topographique"
-// basemap: same tilesets, same billing, no custom Styles API upload.
+// Outdoors porte tout ce dont un planificateur d'itinéraire a besoin (ombrage
+// vectoriel, pistes cyclables, sentiers, sommets) et c'est déjà le fond
+// « Topographique » : mêmes jeux de tuiles, même facturation, pas d'envoi de
+// style personnalisé par la Styles API.
 const OUTDOORS_V12 = 'mapbox://styles/mapbox/outdoors-v12';
 
 const THEMES: Record<string, BasemapTheme> = {
@@ -34,14 +35,15 @@ function getTheme(styleUrl: string): BasemapTheme | null {
   return isRedviewThemedStyleUrl(styleUrl) ? (THEMES[styleUrl] ?? null) : null;
 }
 
-/** Mapbox style a (possibly virtual) style URL is rendered from. */
+/** Style Mapbox à partir duquel une URL de style (éventuellement virtuelle) est rendue. */
 export function getBaseStyleUrl(styleUrl: string): string {
   return getTheme(styleUrl)?.baseStyleUrl ?? styleUrl;
 }
 
 /**
- * Applies the RedView theme of `styleUrl` to a fetched base style definition
- * (mutates and returns it). Non-themed URLs return the definition untouched.
+ * Applique le thème RedView de `styleUrl` à une définition de style de base
+ * récupérée (la modifie et la renvoie). Les URL sans thème renvoient la
+ * définition intacte.
  */
 export function applyBasemapTheme<T extends Record<string, unknown>>(styleUrl: string, style: T): T {
   const theme = getTheme(styleUrl);

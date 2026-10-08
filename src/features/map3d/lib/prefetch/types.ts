@@ -1,28 +1,28 @@
 export interface ViewportPrefetchOptions {
-  /** Returns true when the IGN ortho overlay is engaged on the map. */
+  /** Renvoie true quand l'overlay d'ortho IGN est engagé sur la carte. */
   isOrthoActive?: () => boolean;
-  /** Returns true when the slope overlay layer is visible on the map. */
+  /** Renvoie true quand le calque d'overlay des pentes est visible sur la carte. */
   isSlopeActive?: () => boolean;
 }
 
 export interface PrewarmDestinationOptions {
-  /** Override ortho-overlay state for the destination (defaults to current). */
+  /** Force l'état de l'overlay d'ortho pour la destination (par défaut : l'état courant). */
   withOrtho?: boolean;
-  /** Optional radius (tiles) around the destination to warm. Default 1 (3×3). */
+  /** Rayon optionnel (en tuiles) autour de la destination à préchauffer. 1 par défaut (3×3). */
   radius?: number;
-  /** Set false to skip z+1 children warming (default true). */
+  /** false pour sauter le préchauffage des enfants z+1 (true par défaut). */
   includeChildren?: boolean;
 }
 
 export interface ViewportPrefetchHandle {
   dispose: () => void;
-  /** Force a prefetch cycle (useful after style switch). */
+  /** Force un cycle de préchargement (utile après un changement de style). */
   trigger: () => void;
   /**
-   * Eagerly warm the SW cache for a known future viewport (search bar
-   * teleport, programmatic easeTo, etc.). Runs in parallel with the
-   * camera animation so by the time the camera arrives, the foreground
-   * tiles are already in CacheStorage.
+   * Préchauffe tout de suite le cache du SW pour une vue future connue
+   * (téléportation par la barre de recherche, easeTo programmé, etc.). Tourne
+   * en parallèle de l'animation de la caméra : quand la caméra arrive, les
+   * tuiles de premier plan sont déjà dans CacheStorage.
    */
   prewarmDestination: (
     lng: number,

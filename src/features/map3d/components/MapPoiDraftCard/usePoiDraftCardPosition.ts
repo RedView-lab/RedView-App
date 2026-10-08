@@ -32,14 +32,14 @@ export function usePoiDraftCardPosition({
   const syncCardPosition = useCallback(() => {
     if (!cardRef.current || !containerRef.current) return;
 
-    // Layout px of the map container, like `map.project()`, the insets and the
-    // card's own left/top (the dashboard canvas may be CSS-zoomed:
-    // getBoundingClientRect() would give on-screen px).
+    // Px de mise en page du conteneur de la carte, comme `map.project()`, les
+    // marges et les left/top de la carte elle-même (le canvas du dashboard peut
+    // être zoomé en CSS : getBoundingClientRect() donnerait des px d'écran).
     const cardWidth = cardRef.current.offsetWidth;
     const cardHeight = cardRef.current.offsetHeight;
     const containerWidth = containerRef.current.clientWidth;
     const containerHeight = containerRef.current.clientHeight;
-    // `screenPoint` is the click's `event.point`: already map-container px.
+    // `screenPoint` est le `event.point` du clic : déjà en px du conteneur de la carte.
     const fallbackPoint = draft.screenPoint;
     const projectedPoint = map
       ? map.project([draft.point.lng, draft.point.lat])

@@ -3,7 +3,7 @@ import type { Map as MapboxMap, MapboxGeoJSONFeature, PointLike } from 'mapbox-g
 import { isMapCursorManaged } from '../lib/mapCursor';
 
 const IGNORED_LAYER_PREFIXES = [
-  // Itinerary POIs: their manager hit-tests the drawn pixels and owns the cursor.
+  // POI des itinéraires : leur gestionnaire teste les pixels dessinés et possède le curseur.
   'rv-poi-',
   'route-',
   'tracer-',
@@ -162,14 +162,16 @@ function findNamedPoiFeature(
 }
 
 /**
- * Sets a `pointer` cursor when the map is hovered over a named POI/label so the
- * user can tell a place is interactive — hover affordance only, no navigation.
+ * Pose un curseur `pointer` quand la carte est survolée au-dessus d'un POI /
+ * libellé nommé, pour que l'utilisateur voie qu'un lieu est interactif — simple
+ * indication au survol, sans navigation.
  *
- * NOTE: this hook used to also open a Google search tab on every plain map
- * `click`. That was removed: clicking the map (a national park label, a peak, a
- * town…) after a pan threw the user out of the app, and since drag-and-drop is
- * the way projects are filed here, accidental clicks are frequent. Clicking the
- * map must stay inert.
+ * NOTE : ce hook ouvrait aussi un onglet de recherche Google à chaque `click`
+ * simple sur la carte. Retiré : cliquer sur la carte (un libellé de parc
+ * national, un sommet, une ville…) après un déplacement faisait sortir
+ * l'utilisateur de l'app, et comme le glisser-déposer sert ici à ranger les
+ * projets, les clics accidentels sont fréquents. Un clic sur la carte doit rester
+ * sans effet.
  */
 export function useMapPoiHoverCursor(map: MapboxMap | null): void {
   useEffect(() => {
@@ -188,7 +190,7 @@ export function useMapPoiHoverCursor(map: MapboxMap | null): void {
     };
 
     const onMouseMove = (e: mapboxgl.MapMouseEvent) => {
-      // Skip expensive spatial queries while dragging or during active camera movement
+      // On saute les requêtes spatiales coûteuses pendant un glissement ou un mouvement de caméra en cours
       if (startPoint !== null || map.isMoving()) return;
       // Un outil (mode Tracer…) impose le curseur via l'arbitre : on s'efface.
       if (isMapCursorManaged(map)) return;

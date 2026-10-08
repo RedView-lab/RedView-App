@@ -2,7 +2,7 @@ import { ignOrthoLayer } from '../../../lib/layers';
 import { ignOrthoSource } from '../../../lib/sources';
 import type { Ctx } from './context';
 
-/** Optional IGN ortho overlay (currently disabled by default). */
+/** Overlay d'ortho IGN optionnel (désactivé par défaut pour l'instant). */
 export function attachIgnOrtho(ctx: Ctx): void {
   const { map } = ctx;
   const fns = ctx.fns;

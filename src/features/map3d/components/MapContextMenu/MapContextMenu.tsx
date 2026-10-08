@@ -144,7 +144,7 @@ export function MapContextMenu({
         pending.moved = true;
       }
 
-      // Keep pending state briefly for contextmenu event, then clean up if no contextmenu event fires
+      // Garde brièvement l'état en attente pour l'événement contextmenu, puis nettoie si aucun contextmenu n'arrive
       if (pendingCleanupTimerRef.current != null) {
         window.clearTimeout(pendingCleanupTimerRef.current);
       }
@@ -173,7 +173,7 @@ export function MapContextMenu({
       const pending = pendingRightClickRef.current;
       pendingRightClickRef.current = null;
 
-      // If no valid right-click was tracked, ignore
+      // Si aucun clic droit valide n'a été suivi, on ignore
       if (!pending) return;
 
       const holdDurationMs = performance.now() - pending.startedAtMs;

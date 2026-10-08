@@ -54,8 +54,9 @@ export function bootstrapAwsFallback({
     return false;
   }
 
-  // Guards, upgrade checks and the ready fallback count visible time: a
-  // hidden page loads no tile and never goes idle.
+  // Les garde-fous, les contrôles d'évolution et le repli « prêt » comptent le
+  // temps visible : une page masquée ne charge aucune tuile et n'atteint jamais
+  // l'inactivité.
   const fallbackImportGuardTimers: VisibleTimer[] = [];
   const fallbackImportGuardCleanup: (() => void)[] = [];
 
@@ -104,7 +105,7 @@ export function bootstrapAwsFallback({
     fallbackImportGuardCleanup.push(() => mapWithEvents.off?.('style.import.load', onImportLoad));
     fallbackImportGuardCleanup.push(() => mapWithEvents.off?.('style.load', onLateStyleLoad));
   } catch {
-    /* event name may not exist on this Mapbox version */
+    /* le nom d'événement peut ne pas exister dans cette version de Mapbox */
   }
 
   fns.reportStatus('loading', 80, 'Tuiles satellites');

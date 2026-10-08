@@ -17,25 +17,25 @@ import { attachHeartbeat } from './heartbeat';
 import { clearVisibleTimer } from './visibleClock';
 
 /**
- * Map / DEM / terrain lifecycle controller.
+ * Contrôleur du cycle de vie carte / DEM / terrain.
  *
- * The controller is split into focused modules under `controller/`. They
- * all share a single mutable `Ctx` containing the runtime state and a
- * `fns` registry. Modules attach their functions onto `fns` during
- * construction; the assembly order below doesn't matter for runtime
- * behaviour because every cross-module call goes through `ctx.fns.*`
- * after construction completes.
+ * Le contrôleur est découpé en modules ciblés sous `controller/`. Ils
+ * partagent tous un `Ctx` mutable unique qui contient l'état d'exécution et un
+ * registre `fns`. Les modules attachent leurs fonctions à `fns` pendant la
+ * construction ; l'ordre d'assemblage ci-dessous ne change rien au
+ * comportement, car chaque appel entre modules passe par `ctx.fns.*` une fois
+ * la construction terminée.
  *
- * Responsibilities:
- *  - `context.ts`          : shared types, state factory, helpers.
- *  - `status.ts`           : status reporting + DEM tile progress.
- *  - `demSource.ts`        : DEM source attach/refresh + terrain bind.
- *  - `reload.ts`           : reload pipeline + escalation.
- *  - `ignOrtho.ts`         : optional IGN ortho overlay.
- *  - `vhrOrtho.ts`         : IGN PCRS / THR overlay above Mapbox Satellite.
- *  - `listeners.ts`        : tile-tracking + idle/style hooks.
- *  - `styleBootstrap.ts`   : initial + post-switch style bootstrap.
- *  - `heartbeat.ts`        : anti-flat periodic terrain verification.
+ * Responsabilités :
+ *  - `context.ts`          : types partagés, fabrique d'état, fonctions d'appui.
+ *  - `status.ts`           : remontée d'état + progression des tuiles DEM.
+ *  - `demSource.ts`        : attachement / rafraîchissement de la source DEM + liaison du terrain.
+ *  - `reload.ts`           : pipeline de rechargement + escalade.
+ *  - `ignOrtho.ts`         : overlay d'ortho IGN optionnel.
+ *  - `vhrOrtho.ts`         : overlay IGN PCRS / THR au-dessus de Mapbox Satellite.
+ *  - `listeners.ts`        : suivi des tuiles + accroches inactivité / style.
+ *  - `styleBootstrap.ts`   : bootstrap du style initial et après changement.
+ *  - `heartbeat.ts`        : vérification périodique anti-plat du terrain.
  */
 export function createMapLifecycleController(
   options: CreateMapLifecycleControllerOptions,
@@ -43,7 +43,7 @@ export function createMapLifecycleController(
   const ctx: Ctx = {
     ...options,
     state: createInitialState(),
-    // populated below — every property is assigned by an attach* call.
+    // rempli plus bas — chaque propriété est affectée par un appel attach*.
     fns: {} as ControllerFns,
   };
 

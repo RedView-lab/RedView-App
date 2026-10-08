@@ -26,22 +26,24 @@ import { setupMapSubscriptions } from './useMapSubscriptions';
 
 mapboxgl.accessToken = MAPBOX_TOKEN;
 
-// Terrain DEM, satellite, IGN ortho, slope, altitude and weather tiles all go
-// through ONE FIFO image queue (16 by default). Service-Worker tiles that
-// wait on a DEM build hold their slot meanwhile, so with overlays on, the
-// terrain's own DEM requests queued behind them. SW-served requests open no
-// connection and the external hosts are HTTP/2, so a wider queue costs
-// nothing on the network side.
+// Les tuiles DEM du terrain, satellite, ortho IGN, pente, altitude et météo
+// passent toutes par UNE file d'images FIFO (16 par défaut). Les tuiles du
+// Service Worker qui attendent une construction de DEM gardent leur créneau
+// pendant ce temps : avec des overlays actifs, les requêtes DEM du terrain
+// lui-même attendaient derrière elles. Les requêtes servies par le SW n'ouvrent
+// aucune connexion et les hôtes externes sont en HTTP/2 : une file plus large ne
+// coûte rien côté réseau.
 mapboxgl.maxParallelImageRequests = 32;
 
-// The map lives in the dashboard canvas, scaled with CSS `zoom` (appScale):
-// Mapbox must size itself in the canvas' layout px (lib/mapContainerZoom.ts).
+// La carte vit dans le canvas du dashboard, mis à l'échelle par le `zoom` CSS
+// (appScale) : Mapbox doit se dimensionner en px de mise en page du canvas
+// (lib/mapContainerZoom.ts).
 installCssZoomAwareMapSizing();
 // Style jamais chargé (api.mapbox.com injoignable, jeton refusé) : getSource/getLayer
 // renvoient undefined au lieu de lever (lib/styleLessMapGuards.ts).
 installStyleLessMapGuards();
 
-// Request maximum clock state from Windows D3D11 / AMD graphics driver for APUs
+// Demande l'état d'horloge maximal au pilote graphique Windows D3D11 / AMD pour les APU
 const supportCheck = mapboxgl.supported as typeof mapboxgl.supported & { webGLContextAttributes?: WebGLContextAttributes };
 if (supportCheck.webGLContextAttributes) {
   supportCheck.webGLContextAttributes.powerPreference = 'high-performance';
@@ -127,9 +129,10 @@ export function useMap(
       bearing: savedVp?.bearing ?? DEFAULT_VIEW.bearing,
       projection: DEFAULT_VIEW.projection,
       antialias: runtimeProfile.antialias,
-      // false: avoids a full-screen back-buffer copy every frame (major cost on
-      // Apple TBDR GPUs / ANGLE-Metal and iGPUs). Canvas readers (MapBlurMirror,
-      // mapThumbnail) copy synchronously inside the `render` event instead.
+      // false : évite une copie plein écran du tampon arrière à chaque image
+      // (coût majeur sur les GPU Apple TBDR / ANGLE-Metal et les iGPU). Les
+      // lecteurs du canvas (MapBlurMirror, mapThumbnail) copient plutôt de façon
+      // synchrone dans l'événement `render`.
       preserveDrawingBuffer: false,
       performanceMetricsCollection: false,
       fadeDuration: 0,
@@ -140,10 +143,11 @@ export function useMap(
 
     mapRef.current = map;
 
-    // While the camera moves, every `backdrop-filter` above the WebGL canvas is
-    // re-blurred each map frame (large kernels at Retina resolution, the main
-    // jank source on Safari/macOS and on iGPUs). `index.css` drops the backdrop
-    // blur while this flag is set; it is restored shortly after the move ends.
+    // Pendant que la caméra bouge, chaque `backdrop-filter` au-dessus du canvas
+    // WebGL est reflouté à chaque image de la carte (gros noyaux en résolution
+    // Retina, principale source d'à-coups sur Safari / macOS et sur les iGPU).
+    // `index.css` retire le flou d'arrière-plan tant que cet indicateur est
+    // posé ; il est rétabli peu après la fin du mouvement.
     const rootEl = document.documentElement;
     let movingFlagTimer: ReturnType<typeof setTimeout> | null = null;
     const handleCameraMoveStart = () => {
@@ -226,11 +230,12 @@ export function useMap(
           if (!cancelled) setIsLoaded(true);
         });
 
-    // Retries the initial setStyle once if Mapbox hasn't parsed it after 4 s
-    // of visible time (a URL style whose request failed). Armed after the
-    // setStyle, never during the prefetch (it used to fire there on a slow
-    // link and race it with a second setStyle), and on the visible clock: a
-    // hidden page parses no style at all (`Style#loadJSON` waits for a frame).
+    // Réessaie une fois le setStyle initial si Mapbox ne l'a pas analysé après
+    // 4 s de temps visible (un style par URL dont la requête a échoué). Armé
+    // après le setStyle, jamais pendant le préchargement (il s'y déclenchait sur
+    // une liaison lente et entrait en course avec un second setStyle), et sur
+    // l'horloge visible : une page masquée n'analyse aucun style
+    // (`Style#loadJSON` attend une image).
     const STUCK_SHELL_WATCHDOG_MS = 4000;
     let stuckShellTimer: VisibleTimer | null = null;
     const armStuckShellWatchdog = () => {
@@ -265,8 +270,8 @@ export function useMap(
       if (shouldHydrateInitialStyle) {
         styleInput = await resolveStyleInput(basemapConfig.styleUrl);
         if (cancelled) return;
-        // A basemap switch landed during the prefetch: it already set its
-        // own style and bootstraps it.
+        // Un changement de fond est arrivé pendant le préchargement : il a déjà
+        // posé son propre style et le démarre.
         if (activeBasemapConfigRef.current !== basemapConfig) return;
       } else {
         styleInput = basemapConfig.styleUrl;

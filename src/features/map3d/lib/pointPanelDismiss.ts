@@ -1,18 +1,20 @@
 /**
- * Utility to manage dismissal of map point panels (POI popup, waypoint popup,
- * pause popup on/off route, draft POI card, context menu, etc.).
+ * Gestion de la fermeture des panneaux de point de la carte (popup de POI, popup
+ * de point de passage, popup de pause sur / hors itinéraire, carte de brouillon
+ * de POI, menu contextuel, etc.).
  *
- * Ensures that when a user clicks on the map to dismiss an open point panel,
- * that click ONLY closes the panel and does NOT trigger any other planning action
- * (such as appending a trace point or creating a drag-waypoint).
+ * Garantit que lorsque l'utilisateur clique sur la carte pour fermer un panneau
+ * de point ouvert, ce clic ne fait QUE fermer le panneau et NE déclenche AUCUNE
+ * autre action de planification (comme ajouter un point de tracé ou créer un
+ * point de passage par glisser).
  */
 
 let isPressDismissingPointPanel = false;
 let lastPointPanelDismissTimestamp = 0;
 
 /**
- * Returns true if an interactive point panel or popup is currently open in the DOM,
- * and the target (if provided) is not inside that panel.
+ * Renvoie true si un panneau de point ou une popup interactifs sont ouverts dans
+ * le DOM et que la cible (si elle est fournie) n'est pas dans ce panneau.
  */
 export function isPointPanelOpen(target?: EventTarget | null): boolean {
   if (typeof document === 'undefined') return false;
@@ -27,7 +29,7 @@ export function isPointPanelOpen(target?: EventTarget | null): boolean {
     }
   }
 
-  // 1. Any Mapbox popup attached to the DOM (POI, checkpoint, waypoint, pause, search)
+  // 1. Toute popup Mapbox attachée au DOM (POI, point de contrôle, point de passage, pause, recherche)
   const popups = document.querySelectorAll('.mapboxgl-popup');
   for (const el of popups) {
     if (el instanceof HTMLElement && el.offsetParent !== null) {
@@ -47,7 +49,7 @@ export function isPointPanelOpen(target?: EventTarget | null): boolean {
     return true;
   }
 
-  // 4. Open comment thread or new comment (features/comments)
+  // 4. Fil de commentaires ouvert ou nouveau commentaire (features/comments)
   const commentCard = document.querySelector('[data-rv-comment-card]');
   if (commentCard instanceof HTMLElement && commentCard.offsetParent !== null) {
     return true;
@@ -57,8 +59,8 @@ export function isPointPanelOpen(target?: EventTarget | null): boolean {
 }
 
 /**
- * Call on `mousedown` on the map or canvas. If a point panel is open, records that
- * this press sequence is meant to dismiss the panel.
+ * À appeler sur `mousedown` sur la carte ou le canvas. Si un panneau de point
+ * est ouvert, note que cette séquence d'appui sert à fermer le panneau.
  */
 export function handlePointPanelMousedown(target: EventTarget | null): boolean {
   if (isPointPanelOpen(target)) {
@@ -70,9 +72,10 @@ export function handlePointPanelMousedown(target: EventTarget | null): boolean {
 }
 
 /**
- * Call in `click` handlers (e.g. TraceToolContext, RouteDragWaypointContext, RouteSplitToolContext).
- * Returns true if this click was used to dismiss a point panel, in which case the click
- * should be ignored and perform NO action.
+ * À appeler dans les handlers de `click` (p. ex. TraceToolContext,
+ * RouteDragWaypointContext, RouteSplitToolContext). Renvoie true si ce clic a
+ * servi à fermer un panneau de point : le clic doit alors être ignoré et ne
+ * faire AUCUNE action.
  */
 export function shouldIgnoreMapClickAfterPanelDismiss(
   target: EventTarget | null,
@@ -97,12 +100,12 @@ export function shouldIgnoreMapClickAfterPanelDismiss(
 }
 
 /**
- * Makes a second click on a marker whose popup is open close that popup.
+ * Fait qu'un second clic sur un marqueur dont la popup est ouverte ferme cette popup.
  *
- * Mapbox closes a `closeOnClick` popup on `preclick`, then the marker toggles
- * it back open on `click`, so re-clicking an open marker kept its panel open.
- * This listener runs before the map's (bubbling, child element): it closes
- * the panel and stops there.
+ * Mapbox ferme une popup `closeOnClick` sur `preclick`, puis le marqueur la
+ * rouvre sur `click` : recliquer sur un marqueur ouvert gardait son panneau
+ * ouvert. Cet écouteur s'exécute avant celui de la carte (remontée, élément
+ * enfant) : il ferme le panneau et s'arrête là.
  */
 export function closeMarkerPopupOnSecondClick(
   element: HTMLElement,

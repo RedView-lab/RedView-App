@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 
 const SETTLE_AFTER_MOVE_MS = 250;
-const MIRROR_SCALE = 0.5; // 50% resolution (e.g. 190x450px) = crisp details with zero pixelation on AMD Ryzen
+const MIRROR_SCALE = 0.5; // 50 % de résolution (p. ex. 190x450 px) = détails nets sans pixelisation sur AMD Ryzen
 
 interface MirrorFrameProfile {
   activeFrameMs: number;
@@ -25,8 +25,9 @@ interface MirrorInstance {
 const mapBlurMirrorSchedulers = new WeakMap<MapboxMap, MapBlurMirrorScheduler>();
 
 function getMirrorFrameProfile(): MirrorFrameProfile {
-  // 14 FPS during camera movement is completely fluid for a heavily blurred background
-  // while saving over 80% of GPU copy cycles on integrated AMD Radeon GPUs.
+  // 14 images/s pendant un mouvement de caméra restent parfaitement fluides pour
+  // un fond très flouté, tout en économisant plus de 80 % des copies GPU sur les
+  // GPU intégrés AMD Radeon.
   const activeFps = 14;
 
   return {
@@ -36,18 +37,21 @@ function getMirrorFrameProfile(): MirrorFrameProfile {
 }
 
 /**
- * Copies regions of the Mapbox canvas into small blurred 2D canvases.
+ * Copie des régions du canvas Mapbox dans de petits canvas 2D floutés.
  *
- * Map pixels are read synchronously inside the map `render` event, while the
- * WebGL drawing buffer is still valid. This lets the map run with
- * `preserveDrawingBuffer: false`, which avoids a full-screen buffer copy on every
- * map frame (very costly on Apple tile-based GPUs / ANGLE-Metal and on iGPUs).
+ * Les pixels de la carte sont lus de façon synchrone dans l'événement `render`
+ * de la carte, pendant que le tampon de dessin WebGL est encore valide. La carte
+ * peut ainsi tourner avec `preserveDrawingBuffer: false`, ce qui évite une copie
+ * plein écran du tampon à chaque image (très coûteuse sur les GPU Apple à tuiles
+ * / ANGLE-Metal et sur les iGPU).
  *
- * Each read refreshes a downscaled 2D snapshot of the whole map; mirrors are cut
- * from that snapshot. A pure geometry change (panel resize/drag, 60 events/s)
- * therefore only re-cuts the snapshot on the next animation frame — no map
- * repaint. A real map frame is requested only when the map image may have changed
- * (move start/end, map canvas resize, tab shown, first mount).
+ * Chaque lecture rafraîchit un instantané 2D réduit de toute la carte ; les
+ * miroirs sont découpés dans cet instantané. Un simple changement de géométrie
+ * (redimensionnement / glissement d'un panneau, 60 événements/s) ne fait donc
+ * que redécouper l'instantané à l'image d'animation suivante — sans repeindre la
+ * carte. Une vraie image de carte n'est demandée que lorsque l'image de la carte
+ * a pu changer (début / fin de mouvement, redimensionnement du canvas de la
+ * carte, onglet affiché, premier montage).
  */
 class MapBlurMirrorScheduler {
   private readonly map: MapboxMap;
@@ -111,7 +115,7 @@ class MapBlurMirrorScheduler {
     }
   }
 
-  /** Mirror geometry changed: re-cut from the snapshot, or fetch a map frame if none. */
+  /** La géométrie du miroir a changé : redécoupe depuis l'instantané, ou demande une image de carte s'il n'y en a pas. */
   requestRedraw() {
     this.invalidateSourceRect();
     for (const mirror of this.mirrors) {
@@ -228,7 +232,7 @@ class MapBlurMirrorScheduler {
     }, SETTLE_AFTER_MOVE_MS);
   }
 
-  /** Downscales the current WebGL frame into the snapshot. Must run inside `render`. */
+  /** Réduit l'image WebGL courante dans l'instantané. Doit s'exécuter dans `render`. */
   private refreshSnapshot(): boolean {
     const src = this.sourceCanvas;
     const ctx = this.snapshotCtx;
@@ -252,12 +256,12 @@ class MapBlurMirrorScheduler {
       this.snapshotValid = true;
       return true;
     } catch {
-      /* drawImage can throw if the WebGL context was lost; ignore one frame */
+      /* drawImage peut lever une exception si le contexte WebGL a été perdu ; on ignore une image */
       return false;
     }
   }
 
-  /** Cuts each due mirror out of the snapshot (2D -> 2D, cheap). */
+  /** Découpe dans l'instantané chaque miroir à mettre à jour (2D -> 2D, peu coûteux). */
   private cutMirrors(force: boolean, dueOnly?: Set<MirrorInstance>) {
     if (!this.visible || !this.snapshotValid) return;
 
@@ -368,9 +372,9 @@ function getMapBlurMirrorScheduler(map: MapboxMap) {
 }
 
 interface MapBlurMirrorProps {
-  /** Mapbox map instance. Copies are taken inside `render`, no `preserveDrawingBuffer` needed. */
+  /** Instance de carte Mapbox. Les copies sont faites dans `render`, sans besoin de `preserveDrawingBuffer`. */
   map: MapboxMap | null;
-  /** Absolute geometry of the region to mirror. */
+  /** Géométrie absolue de la région à refléter. */
   top: number;
   left: number;
   width: number;

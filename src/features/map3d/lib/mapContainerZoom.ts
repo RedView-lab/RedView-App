@@ -2,28 +2,30 @@ import mapboxgl from 'mapbox-gl';
 import { supportsStandardZoom } from '@/shared/lib/appScale';
 
 /**
- * Mapbox GL sized for a container under a CSS `zoom` ancestor.
+ * Mapbox GL dimensionné pour un conteneur sous un ancêtre en `zoom` CSS.
  *
- * The dashboard is rendered at `appScale` with CSS `zoom` (`appScaleStyle`,
- * shared/lib/appScale.ts): 0.85–0.95 on Retina laptops, up to 1.12 on large
- * screens. Mapbox GL (`Map#_updateContainerDimensions`, checked on 3.21)
- * measures its container with `getBoundingClientRect()` — zoomed px under the
- * standardised `zoom` model — and only divides out a CSS `transform` scale.
- * The transform and the canvas then got the zoomed size, and the canvas was
- * laid out inside the zoomed box, i.e. zoomed twice: at 0.894 (MacBook Pro
- * 14") the 3D map covered 0.894² of its area, a blank band along the right
- * and bottom edges; at 1.117 (1440p) it overflowed and was clipped.
+ * Le dashboard est rendu à `appScale` avec le `zoom` CSS (`appScaleStyle`,
+ * shared/lib/appScale.ts) : 0,85 à 0,95 sur les portables Retina, jusqu'à 1,12
+ * sur les grands écrans. Mapbox GL (`Map#_updateContainerDimensions`, vérifié
+ * sur 3.21) mesure son conteneur avec `getBoundingClientRect()` — des px zoomés
+ * avec le modèle `zoom` standardisé — et ne compense qu'une échelle de
+ * `transform` CSS. La transformation et le canvas prenaient alors la taille
+ * zoomée, et le canvas était placé dans la boîte zoomée, donc zoomé deux fois :
+ * à 0,894 (MacBook Pro 14") la carte 3D couvrait 0,894² de sa surface, avec une
+ * bande vide le long des bords droit et bas ; à 1,117 (1440p) elle débordait et
+ * était rognée.
  *
- * The patch divides that measure by the container's effective zoom: the
- * transform, the canvas CSS size and the pointer mapping (`mousePos`:
- * offsetWidth / rect.width, see lib/mapPointer.ts) all use the container's
- * layout px again, like at scale 1, so `map.project()`, `event.point`,
- * markers and popups match the logical canvas the UI is laid out in. The
- * backing store keeps its on-screen density: `devicePixelRatio` already
- * carries the canvas scale (`setDprLayoutScale`, runtimeProfile.ts).
+ * Le correctif divise cette mesure par le zoom effectif du conteneur : la
+ * transformation, la taille CSS du canvas et la correspondance du pointeur
+ * (`mousePos` : offsetWidth / rect.width, voir lib/mapPointer.ts) utilisent de
+ * nouveau les px de mise en page du conteneur, comme à l'échelle 1, pour que
+ * `map.project()`, `event.point`, les marqueurs et les popups correspondent au
+ * canvas logique dans lequel l'interface est disposée. Le tampon garde sa
+ * densité d'écran : `devicePixelRatio` porte déjà l'échelle du canvas
+ * (`setDprLayoutScale`, runtimeProfile.ts).
  *
- * Engines without the standardised `zoom` get a `transform: scale()` canvas
- * instead (`appScaleStyle`), which Mapbox compensates itself: factor 1.
+ * Les moteurs sans `zoom` standardisé reçoivent plutôt un canvas en
+ * `transform: scale()` (`appScaleStyle`), que Mapbox compense lui-même : facteur 1.
  */
 
 interface MapContainerInternals {
@@ -33,7 +35,7 @@ interface MapContainerInternals {
   _updateContainerDimensions?: () => void;
 }
 
-/** Product of the CSS `zoom` applied to `element` and its ancestors. */
+/** Produit du `zoom` CSS appliqué à `element` et à ses ancêtres. */
 function readEffectiveCssZoom(element: Element): number {
   const native = (element as Element & { currentCSSZoom?: unknown }).currentCSSZoom;
   if (typeof native === 'number') return Number.isFinite(native) && native > 0 ? native : 1;
@@ -47,7 +49,7 @@ function readEffectiveCssZoom(element: Element): number {
 
 let installed = false;
 
-/** Patches `mapboxgl.Map` once; call before creating a map. */
+/** Corrige `mapboxgl.Map` une seule fois ; à appeler avant de créer une carte. */
 export function installCssZoomAwareMapSizing(): void {
   if (installed) return;
   installed = true;
@@ -69,10 +71,10 @@ export function installCssZoomAwareMapSizing(): void {
 }
 
 /**
- * The zoom is stored as a float32 (0.89 → 0.88999999): 890 / zoom gives
- * 1000.000016, which Mapbox ceils into a 1001 px backing row for a 1000 px
- * canvas — a 0.1 % resample of the whole frame. Layout sizes are multiples of
- * 1/64 px anyway.
+ * Le zoom est stocké en float32 (0,89 → 0,88999999) : 890 / zoom donne
+ * 1000,000016, que Mapbox arrondit au supérieur en une ligne de tampon de
+ * 1001 px pour un canvas de 1000 px — un rééchantillonnage de 0,1 % de toute
+ * l'image. De toute façon, les tailles de mise en page sont des multiples de 1/64 px.
  */
 function toLayoutPx(zoomedPx: number, zoom: number): number {
   return Math.round((zoomedPx / zoom) * 1000) / 1000;

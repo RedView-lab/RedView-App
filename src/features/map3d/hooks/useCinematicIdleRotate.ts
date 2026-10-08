@@ -5,30 +5,30 @@ import { getCameraOwner } from '../lib/cameraOwnership';
 
 export interface UseCinematicIdleRotateOptions {
   /**
-   * Inactivity delay before starting rotation, in milliseconds.
-   * Defaults to 30,000 ms (30 seconds).
+   * Délai d'inactivité avant de lancer la rotation, en millisecondes.
+   * 30 000 ms (30 secondes) par défaut.
    */
   idleDelayMs?: number;
 
   /**
-   * Rotation speed in degrees per second.
-   * Defaults to 2.5 deg/sec (full 360° turn in 144 seconds).
+   * Vitesse de rotation en degrés par seconde.
+   * 2,5 °/s par défaut (un tour complet de 360° en 144 secondes).
    */
   speedDegPerSec?: number;
 
   /**
-   * Whether the cinematic idle rotation is enabled.
-   * Defaults to true.
+   * Indique si la rotation cinématique d'inactivité est active.
+   * true par défaut.
    */
   enabled?: boolean;
 }
 
 /**
- * Hook providing a smooth, cinematic 360° terrain camera rotation
- * when the user remains inactive for +30 seconds.
+ * Hook qui fait tourner la caméra de façon fluide et cinématique sur 360°
+ * autour du terrain quand l'utilisateur reste inactif plus de 30 secondes.
  *
- * Instantly and seamlessly cancels as soon as any user interaction occurs
- * (mouse move, click, touch, key press, wheel, drag, etc.).
+ * S'annule instantanément et sans à-coup à la moindre interaction de
+ * l'utilisateur (mouvement de souris, clic, toucher, touche, molette, glisser, etc.).
  */
 export function useCinematicIdleRotate(
   map: MapboxMap | null,
@@ -110,7 +110,7 @@ export function useCinematicIdleRotate(
       }, idleDelayMs);
     };
 
-    // Arm the initial idle timer
+    // Arme le minuteur d'inactivité initial
     resetIdleTimer();
 
     // User activity event listeners (window / document)
@@ -127,7 +127,7 @@ export function useCinematicIdleRotate(
       'pointermove',
     ] as const;
 
-    // Throttled activity handler for high-frequency events like pointermove
+    // Gestionnaire d'activité limité en fréquence pour les événements rapides comme pointermove
     let lastThrottledMs = 0;
     const handleThrottledActivity = () => {
       const now = Date.now();

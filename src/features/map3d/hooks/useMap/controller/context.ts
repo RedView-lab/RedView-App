@@ -20,15 +20,15 @@ import type { VisibleTimer } from './visibleClock';
 type BasemapVisualFamily = 'mapbox-standard-v3' | 'mapbox-classic-v12';
 type TerrainBootstrapContract = 'unified-dem-v1';
 type BasemapLightPreset = 'dawn' | 'day' | 'dusk' | 'night';
-// Event-driven style readiness — the bootstrap waits for Mapbox to parse
-// the style (styleBootstrapReadiness.ts). This constant only gates a
-// periodic telemetry warning, counted in visible time, so a genuinely stuck
-// style is still observable in the console.
+// Disponibilité du style pilotée par les événements — le bootstrap attend que
+// Mapbox ait analysé le style (styleBootstrapReadiness.ts). Cette constante ne
+// conditionne qu'un avertissement périodique de télémétrie, compté en temps
+// visible, pour qu'un style vraiment bloqué reste observable dans la console.
 export const STYLE_READINESS_TELEMETRY_INTERVAL_MS = 15000;
 
-// Anti-flat reinforcement constants. Picked low enough to detect a
-// flat-state regression quickly but high enough to leave Mapbox time to
-// settle a freshly attached terrain graph between checks.
+// Constantes de renfort anti-plat. Assez basses pour détecter vite une
+// régression vers l'état plat, assez hautes pour laisser à Mapbox le temps de
+// stabiliser entre deux contrôles un graphe de terrain fraîchement attaché.
 export const TERRAIN_HEARTBEAT_INTERVAL_MS = 12000;
 export const TERRAIN_HEARTBEAT_FAILURES_BEFORE_RELOAD = 2;
 export const DEM_SETTILE_VERIFY_MS = 3500;
@@ -71,7 +71,7 @@ export interface ControllerState {
   demPassiveRefreshPending: boolean;
   demSettleTimer: VisibleTimer | null;
   loadingWatchdog: VisibleTimer | null;
-  /** Hard deadline of the current "loading" cycle (see MAP_LOADING_MAX_MS). */
+  /** Échéance ferme du cycle de « chargement » en cours (voir MAP_LOADING_MAX_MS). */
   loadingDeadline: VisibleTimer | null;
   lastReportedState: 'loading' | 'ready' | 'error';
   lastReportedProgress: number;
@@ -100,7 +100,7 @@ export interface ControllerState {
   setTilesVerifyTimer: VisibleTimer | null;
   hasReportedReadyOnce: boolean;
 
-  /** Debounce slope/altitude sourceCache reload after burst DEM upgrades. */
+  /** Antirebond du rechargement du sourceCache pente / altitude après une rafale de mises à niveau de DEM. */
   derivedReloadTimer: ReturnType<typeof setTimeout> | null;
 
   requestedTiles: Set<string>;
@@ -230,11 +230,12 @@ export function attachHelpers(ctx: Ctx): void {
   fns.canMutateStyle = () => {
     if (isCancelled()) return false;
     try {
-      // Sources, layers and terrain can be added once Mapbox parsed the style
-      // (`getStyle()` throws before). `isStyleLoaded()` also waits for the
-      // sprite, every source's TileJSON and the imports — seconds on a cold
-      // start — which none of them needs. The empty bootstrap shell has no
-      // content: nothing is attached to a style about to be replaced.
+      // Sources, calques et terrain peuvent être ajoutés dès que Mapbox a
+      // analysé le style (`getStyle()` lève une exception avant). `isStyleLoaded()`
+      // attend aussi le sprite, le TileJSON de chaque source et les imports —
+      // des secondes à froid — dont aucun n'a besoin. La coquille vide du
+      // bootstrap n'a pas de contenu : rien n'est attaché à un style sur le point
+      // d'être remplacé.
       return styleHasUsableContent(map.getStyle());
     } catch {
       return false;
@@ -289,9 +290,10 @@ export function attachHelpers(ctx: Ctx): void {
       }
       if (!sourceLoaded) return true;
 
-      // Below DEM source minzoom (e.g. unifiedDEMSource minzoom is 6 while default view
-      // is zoom 5.5 globe), Mapbox does not load DEM tiles so queryTerrainElevation returns null.
-      // The terrain is bound and valid; marking it unrenderable here triggers a false escalation loop.
+      // Sous le minzoom de la source DEM (p. ex. le minzoom d'unifiedDEMSource est 6
+      // alors que la vue par défaut est un globe à zoom 5,5), Mapbox ne charge pas de
+      // tuiles DEM et queryTerrainElevation renvoie null. Le terrain est lié et valide ;
+      // le déclarer non affichable ici déclencherait une boucle d'escalade à tort.
       const source = map.getSource(expectedSourceId) as { minzoom?: number } | undefined;
       const minzoom = typeof source?.minzoom === 'number'
         ? source.minzoom
@@ -377,13 +379,13 @@ export function attachHelpers(ctx: Ctx): void {
     return `${event.sourceId}:${tileKey}`;
   };
 
-  // All basemap styles use the same 'default' DEM profile so the SW
-  // cache (keyed by profile) is shared across style switches. This
-  // avoids a full re-fetch when switching from topo to satellite and
-  // ensures both styles get IGN MNS LiDAR HD (0.40 cm, with buildings,
-  // trees, rocks). The 'terrain' profile is reserved for slope/altitude
-  // computation — it routes to RGE ALTI WMS (bare-earth) which strips
-  // canopy/buildings and is unsuitable for 3D terrain display.
+  // Tous les styles de fond utilisent le même profil DEM 'default', pour que le
+  // cache du SW (indexé par profil) soit partagé entre changements de style. Cela
+  // évite un nouveau téléchargement complet en passant de topo à satellite et
+  // garantit que les deux styles reçoivent le MNS LiDAR HD de l'IGN (0,40 m, avec
+  // bâtiments, arbres, rochers). Le profil 'terrain' est réservé au calcul des
+  // pentes / altitudes — il passe par le WMS RGE ALTI (sol nu), qui retire la
+  // canopée et les bâtiments et ne convient pas à l'affichage du terrain 3D.
   fns.getActiveDemProfile = () => getActiveDemProfilePreference();
 
   fns.shouldUseIgnOrthoOverlay = () => false;

@@ -27,8 +27,9 @@ function detectGpuProfile(): GpuProfile {
     if (!gl) return UNKNOWN_GPU;
     const dbg = gl.getExtension('WEBGL_debug_renderer_info');
     const renderer = (dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : '') || '';
-    // Release the probe context right away: browsers cap live WebGL contexts
-    // (Safari ~16) and an orphan context keeps GPU memory until GC.
+    // Libère tout de suite le contexte de sonde : les navigateurs plafonnent le
+    // nombre de contextes WebGL vivants (Safari ~16) et un contexte orphelin garde
+    // de la mémoire GPU jusqu'au ramasse-miettes.
     gl.getExtension('WEBGL_lose_context')?.loseContext();
     const r = renderer.toLowerCase();
 
@@ -86,8 +87,8 @@ export function getMapRuntimeProfile(): MapRuntimeProfile {
     || (mem > 0 && mem <= 8)
     || (cores > 0 && cores <= 8);
   if (balancedDevice) {
-    // Integrated GPUs (e.g. AMD Ryzen APU with Radeon 780M / 680M) share system memory (UMA).
-    // Disabling MSAA 4x and capping DPR at 1.25 saves >60% fill-rate while preserving crisp visuals.
+    // Les GPU intégrés (p. ex. APU AMD Ryzen avec Radeon 780M / 680M) partagent la mémoire système (UMA).
+    // Désactiver le MSAA 4x et plafonner le DPR à 1,25 économise plus de 60 % de débit de remplissage en gardant un rendu net.
     return {
       antialias: false,
       // Apple Silicon Retina: 1.5 on-screen density (true on-screen, see setDprLayoutScale).
@@ -123,19 +124,21 @@ function resolveNativeDprGetter(): () => number {
 }
 
 /**
- * Ensures Mapbox GL JS (and every canvas in the dashboard) renders at the
- * optimal device pixel ratio for the host hardware profile.
+ * Garantit que Mapbox GL JS (et chaque canvas du dashboard) rend au rapport de
+ * pixels optimal pour le profil matériel de la machine.
  *
- * Mapbox GL JS does not support a `pixelRatio` constructor option and reads
- * `window.devicePixelRatio` directly via its internal browser utility.
- * Redefining the getter before `new mapboxgl.Map()` guarantees that canvas sizing,
- * painter viewports, projection matrices, and shader uniforms remain in sync.
+ * Mapbox GL JS n'accepte pas d'option `pixelRatio` au constructeur et lit
+ * directement `window.devicePixelRatio` via son utilitaire navigateur interne.
+ * Redéfinir l'accesseur avant `new mapboxgl.Map()` garantit que le
+ * dimensionnement du canvas, les viewports du peintre, les matrices de
+ * projection et les uniformes des shaders restent synchronisés.
  *
- * The getter is live: it follows the native DPR (window moved between screens),
- * applies the profile cap, and compensates the dashboard canvas scale (CSS
- * `zoom: appScale`, see {@link setDprLayoutScale}) so canvases sized in logical
- * px are rendered at on-screen resolution. Mapbox sizes its canvas in those
- * logical px (lib/mapContainerZoom.ts).
+ * L'accesseur est dynamique : il suit le DPR natif (fenêtre déplacée d'un écran
+ * à l'autre), applique le plafond du profil et compense l'échelle du canvas du
+ * dashboard (`zoom: appScale` en CSS, voir {@link setDprLayoutScale}), pour que
+ * des canvas dimensionnés en px logiques soient rendus à la résolution de
+ * l'écran. Mapbox dimensionne son canvas dans ces px logiques
+ * (lib/mapContainerZoom.ts).
  */
 export function applyRuntimeProfileDpr(profile: MapRuntimeProfile): void {
   if (typeof window === 'undefined') return;
@@ -159,12 +162,13 @@ function patchDevicePixelRatio(): boolean {
 }
 
 /**
- * Runs `fn` with `window.devicePixelRatio` forced to `dpr`, synchronously.
- * Mapbox has one pixel ratio for every map of the page: the offscreen map of
- * the flyover video export (rendered at 2× while the dashboard map keeps the
- * profile's) wraps its own render, construction and tile requests in this,
- * nothing else sees the override. Without the getter patch `fn` simply runs
- * at the current ratio.
+ * Exécute `fn` avec `window.devicePixelRatio` forcé à `dpr`, de façon synchrone.
+ * Mapbox n'a qu'un seul rapport de pixels pour toutes les cartes de la page : la
+ * carte hors écran de l'export vidéo du survol (rendue en 2× pendant que la carte
+ * du dashboard garde celui du profil) enveloppe dans cette fonction son propre
+ * rendu, sa construction et ses requêtes de tuiles ; rien d'autre ne voit le
+ * forçage. Sans le correctif de l'accesseur, `fn` s'exécute simplement au
+ * rapport courant.
  */
 export function withDevicePixelRatio<T>(dpr: number, fn: () => T): T {
   if (typeof window === 'undefined' || !patchDevicePixelRatio()) return fn();
@@ -178,11 +182,12 @@ export function withDevicePixelRatio<T>(dpr: number, fn: () => T): T {
 }
 
 /**
- * Declares the CSS scale applied to the dashboard canvas (`appScale`).
- * A layout box of W logical px is shown on W * appScale screen px, so the
- * backing store only needs `W * appScale * dpr` pixels: per on-screen px it
- * keeps the profile's (capped) DPR whatever the canvas scale.
- * Takes effect on the next canvas resize (Mapbox resizes with its container).
+ * Déclare l'échelle CSS appliquée au canvas du dashboard (`appScale`).
+ * Une boîte de mise en page de W px logiques s'affiche sur W * appScale px
+ * d'écran : le tampon n'a besoin que de `W * appScale * dpr` pixels. Par px
+ * d'écran, il garde donc le DPR (plafonné) du profil quelle que soit l'échelle
+ * du canvas. Prend effet au prochain redimensionnement du canvas (Mapbox se
+ * redimensionne avec son conteneur).
  */
 export function setDprLayoutScale(scale: number): void {
   dprLayoutScale = Number.isFinite(scale) && scale > 0 ? scale : 1;

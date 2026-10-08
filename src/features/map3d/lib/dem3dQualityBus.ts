@@ -1,20 +1,19 @@
 import { resolveDem3dSelection } from './dem3dSelection';
 
 /**
- * 3D DEM quality bus.
+ * Bus de qualité du DEM 3D.
  *
- * Decouples the ControlPanel "Qualité 3D" selector from the map3d
- * lifecycle controller. The control panel writes the active quality
- * here; the map hook subscribes and swaps the bound terrain source
- * accordingly.
+ * Découple le sélecteur « Qualité 3D » du panneau de contrôle du contrôleur de
+ * cycle de vie de map3d. Le panneau de contrôle écrit ici la qualité active ; le
+ * hook de la carte s'y abonne et change en conséquence la source de terrain liée.
  *
- * Two qualities are supported:
- *   - 'hd'      : unified-dem (Service-Worker pipeline: IGN MNS LiDAR
- *                 0.40 m over France/Swiss + Mapbox Terrain-RGB elsewhere).
- *                 This is the historical "slow-040" option.
- *   - 'fast-30m': aws-fast-dem (AWS Open Data Terrarium, ~30 m, decoded
- *                 natively on the GPU). No Service Worker, no IGN. Perfect
- *                 for instant flyovers and weaker connections.
+ * Deux qualités sont gérées :
+ *   - 'hd'      : unified-dem (pipeline du Service Worker : MNS LiDAR IGN à
+ *                 0,40 m sur la France et la Suisse + Terrain-RGB Mapbox ailleurs).
+ *                 C'est l'option historique « slow-040 ».
+ *   - 'fast-30m': aws-fast-dem (AWS Open Data Terrarium, ~30 m, décodé
+ *                 nativement sur le GPU). Sans Service Worker ni IGN. Idéal pour
+ *                 des survols instantanés et les connexions plus faibles.
  */
 
 export type Dem3dQuality = 'hd' | 'fast-30m';
@@ -24,9 +23,9 @@ const DEFAULT_DEM3D_QUALITY: Dem3dQuality = 'fast-30m';
 const VALID_QUALITIES: ReadonlySet<string> = new Set(['hd', 'fast-30m']);
 
 /**
- * Normalize legacy / persisted option ids to the canonical `Dem3dQuality`
- * value. The ControlPanel stores values like 'slow-040' (HD surface),
- * 'terrain-1m' (HD terrain), or 'fast-30m'.
+ * Ramène les identifiants d'option anciens / persistés à la valeur canonique
+ * `Dem3dQuality`. Le panneau de contrôle stocke des valeurs comme 'slow-040'
+ * (surface HD), 'terrain-1m' (terrain HD) ou 'fast-30m'.
  */
 function normalizeDem3dQuality(value: string | null | undefined): Dem3dQuality {
   return resolveDem3dSelection(value).quality;

@@ -10,10 +10,10 @@ import type { Ctx } from './context';
 import { clearVisibleTimer, setVisibleTimeout } from './visibleClock';
 
 /**
- * Status reporting + DEM tile progress aggregation.
+ * Remontée d'état + agrégation de la progression des tuiles DEM.
  *
- * Anti-flat reinforcement: `finishDemActivity` self-heals when
- * the bootstrap settled in 2D (terrain not bound to unified-dem).
+ * Renfort anti-plat : `finishDemActivity` s'autorépare quand le bootstrap s'est
+ * stabilisé en 2D (terrain non lié à unified-dem).
  */
 export function attachStatus(ctx: Ctx): void {
   const { map, isCancelled, onLoadStatusChangeRef, registerReloadRef } = ctx;
@@ -30,12 +30,13 @@ export function attachStatus(ctx: Ctx): void {
     st.loadingWatchdog = null;
   };
 
-  // Hard deadline per loading cycle. Bootstrap phases ("Relief" 68 %,
-  // "Tuiles satellites" 80 %, "Terrain" 82 %…) only complete on Mapbox
-  // `idle` / `areTilesLoaded()`, which never fire while ANY source keeps
-  // streaming (weather, POI, prefetch…). Without this cap the pill stayed
-  // frozen at 80–99 % forever even though the map was fully usable.
-  // Visible time only: a hidden page loads no tile and never goes idle.
+  // Échéance ferme par cycle de chargement. Les phases du bootstrap (« Relief »
+  // 68 %, « Tuiles satellites » 80 %, « Terrain » 82 %…) ne se terminent que sur
+  // `idle` / `areTilesLoaded()` de Mapbox, qui ne se déclenchent jamais tant
+  // qu'UNE source continue de streamer (météo, POI, préchargement…). Sans ce
+  // plafond, la pastille restait figée entre 80 et 99 % pour toujours alors que
+  // la carte était parfaitement utilisable. Temps visible seulement : une page
+  // masquée ne charge aucune tuile et n'atteint jamais l'inactivité.
   const armLoadingDeadline = (delayMs: number) => {
     st.loadingDeadline = setVisibleTimeout(() => {
       st.loadingDeadline = null;
@@ -45,9 +46,10 @@ export function attachStatus(ctx: Ctx): void {
         return;
       }
       console.warn(`[map3d] loading cycle exceeded ${MAP_LOADING_MAX_MS} ms; reporting ready`);
-      // Deliberately NOT finishDemActivity(): its flat-terrain self-heal can
-      // trigger a reload, which would restart a cycle and loop every 12 s.
-      // The terrain heartbeat keeps covering genuine terrain drops.
+      // Volontairement PAS finishDemActivity() : son autoréparation du terrain
+      // plat peut déclencher un rechargement, qui relancerait un cycle et
+      // bouclerait toutes les 12 s. Le battement de cœur du terrain continue de
+      // couvrir les vraies pertes de terrain.
       if (st.demTrackingEnabled) {
         fns.clearDemTracking();
         st.hasReportedReadyOnce = true;
@@ -86,14 +88,14 @@ export function attachStatus(ctx: Ctx): void {
     fns.clearDemTracking();
     if (isCancelled()) return;
 
-    // Self-heal: if we're about to report "ready" but terrain isn't
-    // actually wired to the unified DEM, the bootstrap finished in a
-    // flat 2D state. Auto-trigger a reload instead of falsely
-    // reporting 100% — that's what made the manual reload button feel
-    // useless ("ça met 100% mais tout reste plat").
+    // Autoréparation : si on s'apprête à signaler « prêt » alors que le terrain
+    // n'est pas vraiment relié au DEM unifié, le bootstrap s'est terminé dans un
+    // état 2D plat. On déclenche automatiquement un rechargement au lieu
+    // d'afficher à tort 100 % — c'est ce qui rendait le bouton de rechargement
+    // manuel inutile (« ça met 100% mais tout reste plat »).
     if (!fns.isManagedTerrainRenderable() && fns.getManagedTerrainSourceId()) {
-      // A terrain source exists but the renderer lost its binding.
-      // Re-attach in place before claiming success.
+      // Une source de terrain existe mais le rendu a perdu sa liaison. On la
+      // rattache sur place avant de déclarer le succès.
       fns.applyManagedTerrain();
     }
     if (
@@ -115,10 +117,10 @@ export function attachStatus(ctx: Ctx): void {
     st.demTrackingEnabled = true;
     st.hasReportedReadyOnce = true;
     fns.reportStatus('ready', 100, detail);
-    // Anti-flat reinforcement: ensure heartbeat is running once we've
-    // reported ready at least once. The heartbeat verifies every 5s
-    // that terrain is still bound to the unified DEM and self-heals if
-    // it isn't (covers silent terrain drops after late style.load).
+    // Renfort anti-plat : on s'assure que le battement de cœur tourne dès qu'on a
+    // signalé « prêt » au moins une fois. Il vérifie toutes les 5 s que le
+    // terrain est toujours lié au DEM unifié et s'autorépare sinon (couvre les
+    // pertes silencieuses de terrain après un style.load tardif).
     fns.startTerrainHeartbeat();
   };
 
@@ -160,9 +162,10 @@ export function attachStatus(ctx: Ctx): void {
         if (st.loadedTiles.has(key)) fns.dropTrackedTile(key);
       }
       fns.pruneStalePendingTiles();
-      // `allTilesLoaded()` covers EVERY source (weather, POI, vector…), so it
-      // can stay false indefinitely. Once no tracked relief/raster tile is
-      // pending anymore, the map is done from the user's point of view.
+      // `allTilesLoaded()` couvre TOUTES les sources (météo, POI, vectoriel…) et
+      // peut rester à false indéfiniment. Dès qu'aucune tuile de relief / raster
+      // suivie n'est plus en attente, la carte est terminée du point de vue de
+      // l'utilisateur.
       if (st.requestedTiles.size === 0) {
         fns.finishDemActivity('Carte prête');
         return;

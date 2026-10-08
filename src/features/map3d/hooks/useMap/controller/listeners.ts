@@ -9,21 +9,21 @@ import { clearVisibleTimer } from './visibleClock';
 import { logger } from '@/shared/lib/logger';
 
 /**
- * Tile-tracking listeners + style/idle event hooks. Centralised so the
- * cleanup path can detach everything in one call.
+ * Écouteurs de suivi des tuiles + accroches aux événements de style /
+ * d'inactivité. Centralisés pour que le nettoyage détache tout en un seul appel.
  *
- * Anti-flat reinforcement: `onMapIdle` also re-verifies that terrain is
- * still bound to the unified DEM. If Mapbox silently dropped terrain
- * (typical after a late style.load on basemap switch), idle is the
- * earliest reliable point to detect it and re-attach.
+ * Renfort anti-plat : `onMapIdle` revérifie aussi que le terrain est toujours
+ * lié au DEM unifié. Si Mapbox a perdu le terrain en silence (cas typique après
+ * un style.load tardif lors d'un changement de fond), l'inactivité est le
+ * premier moment fiable pour le détecter et le rattacher.
  */
 export function attachListeners(ctx: Ctx): void {
   const { map, isCancelled } = ctx;
   const fns = ctx.fns;
   const st = ctx.state;
   let styleDataTerrainRepairTimer: ReturnType<typeof setTimeout> | null = null;
-  // Derived overlay sources (slope, altitude) waiting for a reload: one timer
-  // reloads every source queued before it fires.
+  // Sources d'overlays dérivés (pente, altitude) en attente de rechargement : un
+  // seul minuteur recharge toutes les sources mises en file avant son déclenchement.
   const pendingDerivedReloads = new Set<string>();
   const staleSourcesAwaitingMoveEnd = new Set<string>();
 
@@ -86,9 +86,10 @@ export function attachListeners(ctx: Ctx): void {
 
   const onMapIdle = () => {
     if (!st.demTrackingEnabled || isCancelled()) return;
-    // Anti-flat: if the unified DEM source is still missing but the SW
-    // controller finally appeared, upgrade the AWS/plain fallback path
-    // immediately from idle — the earliest safe point to mutate style.
+    // Anti-plat : si la source du DEM unifié manque toujours mais que le
+    // contrôleur du SW est enfin apparu, on fait évoluer tout de suite le chemin
+    // de repli AWS / Mapbox simple depuis l'inactivité — le premier moment sûr
+    // pour modifier le style.
     if (
       getActiveDem3dQuality() !== 'fast-30m'
       &&
@@ -100,15 +101,15 @@ export function attachListeners(ctx: Ctx): void {
       void fns.bootstrapCurrentStyle();
       return;
     }
-    // Anti-flat: idle is the cheapest reliable signal that terrain
-    // detach happened silently. If the DEM source exists but terrain
-    // isn't bound, re-attach immediately.
+    // Anti-plat : l'inactivité est le signal fiable le moins coûteux d'un
+    // détachement silencieux du terrain. Si la source DEM existe mais que le
+    // terrain n'est pas lié, on le rattache tout de suite.
     //
-    // Use `isManagedTerrainActive()` (binding check) here, not
-    // `isManagedTerrainRenderable()` — the renderable probe returns
-    // false over water / at globe-world zoom even when terrain is
-    // healthy, which previously triggered a re-attach loop that
-    // starved basemap tile loading.
+    // On utilise ici `isManagedTerrainActive()` (contrôle de liaison), pas
+    // `isManagedTerrainRenderable()` — la sonde d'affichabilité renvoie false
+    // au-dessus de l'eau / à l'échelle du globe même quand le terrain va bien, ce
+    // qui déclenchait une boucle de rattachement qui affamait le chargement des
+    // tuiles du fond de carte.
     if (fns.canMutateStyle()) {
       const managedSourceId = fns.getManagedTerrainSourceId();
       if (managedSourceId && !fns.isManagedTerrainActive()) {
@@ -116,9 +117,9 @@ export function attachListeners(ctx: Ctx): void {
           `[map3d] idle: terrain detached from ${managedSourceId}; re-attaching`,
         );
         if (!repairManagedTerrain() && managedSourceId === unifiedDEMSource.id) {
-        // Re-attach refused — escalate to forceful rebuild via the
-        // standard reload path (cooldown bypassed since this is a
-        // genuine regression, not user-initiated).
+        // Rattachement refusé — escalade vers une reconstruction forcée par le
+        // chemin de rechargement standard (sans délai de récupération, car c'est
+        // une vraie régression et non une action de l'utilisateur).
           st.demReloadCoolingUntil = 0;
           fns.reloadMapElevation();
           return;
@@ -131,11 +132,12 @@ export function attachListeners(ctx: Ctx): void {
     fns.finishDemActivity('Carte prête');
   };
 
-  // Anti-flat: Standard / Standard-Satellite can emit additional
-  // `styledata` bursts after DEM source attach, and those imported-style
-  // updates may silently overwrite the active terrain source back away from
-  // `unified-dem` while `isStyleLoaded()` is still false. React immediately
-  // on the next macrotask instead of waiting for `idle` / heartbeat.
+  // Anti-plat : Standard / Standard-Satellite peuvent émettre des rafales de
+  // `styledata` supplémentaires après l'attachement de la source DEM, et ces
+  // mises à jour de styles importés peuvent en silence ramener la source de
+  // terrain active ailleurs qu'`unified-dem` pendant que `isStyleLoaded()` est
+  // encore false. On réagit dès la macrotâche suivante au lieu d'attendre
+  // `idle` / le battement de cœur.
   const onStyleDataTerrainCheck = () => {
     if (isCancelled()) return;
     if (styleDataTerrainRepairTimer) return;
@@ -155,18 +157,18 @@ export function attachListeners(ctx: Ctx): void {
     }, 0);
   };
 
-  // Anti-flat: verify terrain binding after every zoom operation.
-  // Mapbox GL v3 occasionally drops terrain silently during zoom
-  // transitions (when the tile pyramid crosses z-level boundaries).
-  // Re-attach immediately so the user never sees a flat frame.
+  // Anti-plat : vérifie la liaison du terrain après chaque zoom. Mapbox GL v3
+  // perd parfois le terrain en silence pendant les transitions de zoom (quand la
+  // pyramide de tuiles franchit des niveaux z). On le rattache tout de suite pour
+  // que l'utilisateur ne voie jamais d'image plate.
   //
-  // Important: only trigger the noisy re-attach path when terrain is
-  // actually unbound (`isManagedTerrainActive()` false). The renderable
-  // check also returns false when the camera is centered over water or
-  // on the globe at world zoom where `queryTerrainElevation` returns
-  // null at every sample point — those are NOT real detachments and
-  // were causing console-spam loops + repeated style mutations that
-  // starved the basemap of its tile budget.
+  // Important : ne déclencher le chemin de rattachement bruyant que si le
+  // terrain est vraiment délié (`isManagedTerrainActive()` à false). Le contrôle
+  // d'affichabilité renvoie aussi false quand la caméra est centrée sur l'eau ou
+  // sur le globe à l'échelle du monde, où `queryTerrainElevation` renvoie null à
+  // chaque point d'échantillonnage — ce ne sont PAS de vrais détachements, et
+  // ils provoquaient des boucles de spam dans la console + des modifications de
+  // style répétées qui privaient le fond de carte de son budget de tuiles.
   const onZoomEndTerrainCheck = () => {
     if (!st.demTrackingEnabled || isCancelled()) return;
     if (!fns.canMutateStyle()) return;
@@ -215,10 +217,11 @@ export function attachListeners(ctx: Ctx): void {
       return;
     }
 
-    // Slope by default. Altitude only on ALTITUDE_TILES_STALE: it re-reads
-    // the terrain DEM (Terrarium in fast-30m, SW passthrough in HD) and
-    // hypsometric bands gain nothing from a full pyramid reload on every DEM
-    // upgrade — only its provisional tiles need one.
+    // Pente par défaut. L'altitude seulement sur ALTITUDE_TILES_STALE : elle
+    // relit le DEM du terrain (Terrarium en fast-30m, passage direct par le SW en
+    // HD), et les bandes hypsométriques ne gagnent rien à un rechargement complet
+    // de la pyramide à chaque mise à niveau de DEM — seules ses tuiles
+    // provisoires en ont besoin.
     const scheduleDerivedCachesReload = (delayMs = 250, sourceIds: readonly string[] = ['slope-tiles']) => {
       for (const id of sourceIds) pendingDerivedReloads.add(id);
       if (st.derivedReloadTimer) clearTimeout(st.derivedReloadTimer);
@@ -248,12 +251,13 @@ export function attachListeners(ctx: Ctx): void {
       return;
     }
 
-    // The SW answered some slope / altitude tiles with a placeholder or a
-    // provisional build (work cancelled by a pan/zoom gesture, DEM not built
-    // yet, missing neighbours). Mapbox keeps any 200 image as final, so those
-    // tiles stayed empty until they left the viewport. Reload that source
-    // once the gesture is over — a reload during it would be cancelled again
-    // by the next movestart. Complete tiles come back from the SW hot tier.
+    // Le SW a répondu à certaines tuiles de pente / d'altitude par un remplaçant
+    // ou une construction provisoire (travail annulé par un geste de
+    // déplacement / zoom, DEM pas encore construit, voisines manquantes). Mapbox
+    // garde toute image en 200 comme définitive, donc ces tuiles restaient vides
+    // jusqu'à leur sortie de la vue. On recharge cette source une fois le geste
+    // terminé — un rechargement pendant le geste serait de nouveau annulé par le
+    // movestart suivant. Les tuiles complètes reviennent du niveau chaud du SW.
     const staleSourceId = event.data?.type === 'SLOPE_TILES_STALE'
       ? 'slope-tiles'
       : event.data?.type === 'ALTITUDE_TILES_STALE'
@@ -278,7 +282,7 @@ export function attachListeners(ctx: Ctx): void {
     }
 
     if (event.data?.type === 'SLOPE_TILE_UPDATED') {
-      // Ignore zone-specific per-tile updates to avoid patchy tile-by-tile reloads
+      // On ignore les mises à jour par tuile propres à une zone, pour éviter des rechargements tuile par tuile en patchwork
       if (event.data?.zone) return;
       scheduleDerivedCachesReload(200);
       return;
@@ -286,27 +290,31 @@ export function attachListeners(ctx: Ctx): void {
 
     if (event.data?.type !== 'DEM_TILE_CACHE_UPDATED') return;
 
-    // ── Decide whether this cache update affects the BASEMAP mesh ────────
-    // A basemap passive refresh is expensive: `applyPendingDemPassiveRefresh`
-    // bumps `st.demCacheBust`, which rewrites every DEM tile URL and forces
-    // a full network re-fetch of the visible terrain (extremely visible on
-    // Satellite). It is only worth it when the tile that just changed in the
-    // SW cache actually feeds the basemap relief.
+    // ── Cette mise à jour du cache touche-t-elle le maillage du FOND DE CARTE ? ──
+    // Un rafraîchissement passif du fond de carte coûte cher :
+    // `applyPendingDemPassiveRefresh` incrémente `st.demCacheBust`, ce qui réécrit
+    // l'URL de chaque tuile DEM et force un nouveau téléchargement complet du
+    // terrain visible (très visible en Satellite). Il ne vaut la peine que si la
+    // tuile qui vient de changer dans le cache du SW alimente vraiment le relief
+    // du fond de carte.
     //
-    // Two updates do NOT feed the basemap and must be treated as derived-
-    // overlay-only (reload slope/altitude, never touch the DEM source):
-    //   1. `source === 'slope-seam-heal'` — the SW only warmed *neighbour*
-    //      DEM tiles so the slope overlay's 3×3 Horn padding is seam-free.
-    //      The basemap DEM render is unchanged. Dozens of these fire while
-    //      1 m slope is active; before this guard they queued a pending
-    //      passive refresh that fired (cache-bust + full DEM rebuild) the
-    //      instant the overlay was torn down and `idle` fired → "the map
-    //      takes forever to load after disabling 1 m slope".
-    //   2. A genuine quality upgrade built for a DEM profile that is NOT the
-    //      active basemap profile (e.g. a terrain-profile 1 m slope tile
-    //      upgrade while the basemap runs the default 0.40 m surface). The
-    //      basemap reads a different profile-keyed tile, so refreshing it
-    //      would re-fetch identical bytes.
+    // Deux mises à jour n'alimentent PAS le fond de carte et doivent être
+    // traitées comme concernant seulement les overlays dérivés (recharger pente /
+    // altitude, ne jamais toucher à la source DEM) :
+    //   1. `source === 'slope-seam-heal'` — le SW n'a fait que préchauffer des
+    //      tuiles DEM *voisines* pour que le remplissage de Horn 3×3 de l'overlay
+    //      des pentes soit sans jointure. Le rendu DEM du fond de carte ne change
+    //      pas. Des dizaines de ces mises à jour arrivent quand la pente à 1 m est
+    //      active ; avant ce garde-fou, elles mettaient en file un rafraîchissement
+    //      passif qui se déclenchait (invalidation + reconstruction complète du
+    //      DEM) dès que l'overlay était démonté et que `idle` survenait → « la
+    //      carte met une éternité à charger après avoir désactivé la pente 1 m ».
+    //   2. Une vraie mise à niveau de qualité construite pour un profil DEM qui
+    //      n'est PAS celui du fond de carte actif (p. ex. une mise à niveau de
+    //      tuile de pente à 1 m du profil terrain alors que le fond de carte
+    //      tourne sur la surface 0,40 m par défaut). Le fond de carte lit une autre
+    //      tuile indexée par profil : la rafraîchir redemanderait des octets
+    //      identiques.
     const source = typeof event.data.source === 'string' ? event.data.source : '';
     const tileProfile = typeof event.data.profile === 'string' ? event.data.profile : null;
     const isSlopeUpdate = source === 'slope-seam-heal' || source.startsWith('slope');
@@ -319,11 +327,11 @@ export function attachListeners(ctx: Ctx): void {
       fns.scheduleDemSettle();
     }
 
-    // Per-tile invalidation of derived slope/altitude caches so the
-    // upgraded DEM resolution actually shows up in the overlays. Without
-    // this the user sees a "delais" between DEM HD upgrading and slope
-    // catching up — slope/altitude PNGs encode the OLD DEM until the SW
-    // entry is deleted.
+    // Invalidation par tuile des caches dérivés pente / altitude, pour que la
+    // résolution du DEM mis à niveau apparaisse vraiment dans les overlays. Sans
+    // cela, l'utilisateur voit un « délai » entre la mise à niveau du DEM HD et le
+    // rattrapage de la pente — les PNG de pente / altitude encodent l'ANCIEN DEM
+    // jusqu'à la suppression de l'entrée du SW.
     const z = event.data.z | 0;
     const x = event.data.x | 0;
     const y = event.data.y | 0;
@@ -382,23 +390,24 @@ export function attachListeners(ctx: Ctx): void {
     map.on('styledata', fns.scheduleTerrainRecovery);
     navigator.serviceWorker?.addEventListener('message', onServiceWorkerMessage);
     syncViewportCenterToSW();
-    // Strava-style speculative prefetch: warm the 1-tile ring outside the
-    // visible bbox + the 4 z+1 children of centre on every idle. Tiles land
-    // in the SW CacheStorage at low H2 priority (won't preempt visible-tile
-    // fetches) so subsequent pans / zooms render from cache instead of
-    // paying provider RTT (50–400 ms cold).
+    // Préchargement spéculatif à la Strava : on préchauffe l'anneau d'une tuile
+    // autour de la bbox visible + les 4 enfants z+1 du centre à chaque
+    // inactivité. Les tuiles arrivent dans le CacheStorage du SW avec une faible
+    // priorité H2 (elles ne passent pas devant les fetchs des tuiles visibles),
+    // donc les déplacements / zooms suivants s'affichent depuis le cache au lieu
+    // de payer l'aller-retour du fournisseur (50 à 400 ms à froid).
     if (!st.disposeViewportPrefetch) {
       const handle = installViewportPrefetch(map, {
         isOrthoActive: () => Boolean(map.getSource(ignOrthoSource.id)),
-        // Slope tiles are derived from cached DEM by the SW.
-        // Warming them alongside their parent DEM tile means: by the time
-        // the user pans/zooms into the prefetched neighbourhood the SW
-        // pipeline (Horn / decode / PNG encode) has already run — the
-        // raster appears within one Mapbox tile-load round-trip instead
-        // of several seconds of cold pipeline. Detection is layer-based
-        // (style.getLayer) — the slope hook toggles the layer
-        // visibility, not the source presence, so we have to look at the
-        // layer.
+        // Les tuiles de pente sont dérivées par le SW du DEM en cache. Les
+        // préchauffer avec leur tuile DEM parente signifie que, quand
+        // l'utilisateur se déplace / zoome dans le voisinage préchargé, le
+        // pipeline du SW (Horn / décodage / encodage PNG) a déjà tourné — le
+        // raster apparaît en un aller-retour de chargement de tuile Mapbox au
+        // lieu de plusieurs secondes de pipeline à froid. La détection se fait
+        // par le calque (style.getLayer) — le hook des pentes bascule la
+        // visibilité du calque, pas la présence de la source, il faut donc
+        // regarder le calque.
         isSlopeActive: () => {
           try {
             return Boolean(map.getLayer('slope-overlay'))
@@ -408,18 +417,19 @@ export function attachListeners(ctx: Ctx): void {
       });
       st.disposeViewportPrefetch = handle.dispose;
     }
-    // The SW keeps the LiDAR work of every terrain tile the map still waits
-    // on, whatever the camera does, and drops the rest (demWantedTiles.ts).
+    // Le SW garde le travail LiDAR de chaque tuile de terrain que la carte
+    // attend encore, quoi que fasse la caméra, et abandonne le reste
+    // (demWantedTiles.ts).
     if (!st.disposeDemWantedTilesSync) {
       st.disposeDemWantedTilesSync = installDemWantedTilesSync(map);
     }
-    // ── DEM ↔ Ortho pairing flag (SW-side speed-up) ──────────────────
-    // When the satellite basemap is active, instruct the SW to pair
-    // every /dem-tiles request with an immediate /ortho-tiles
-    // background fetch. Eliminates the perceived "DEM first, ortho
-    // 200-800 ms later" gap on cold viewport loads. The SW gates
-    // everything behind this flag so we do NOT waste IGN ortho fetches
-    // when the user is on a non-satellite basemap (topo, plan IGN).
+    // ── Indicateur d'appariement DEM ↔ Ortho (accélération côté SW) ──────
+    // Quand le fond satellite est actif, on demande au SW d'associer à chaque
+    // requête /dem-tiles un fetch /ortho-tiles immédiat en arrière-plan. Supprime
+    // l'écart perçu « DEM d'abord, ortho 200 à 800 ms plus tard » au chargement à
+    // froid d'une vue. Le SW conditionne tout à cet indicateur, pour ne PAS
+    // gaspiller de fetchs d'ortho IGN quand l'utilisateur est sur un fond non
+    // satellite (topo, plan IGN).
     if (!st.disposeOrthoPairingSync) {
       let lastOrthoPairingFlag: boolean | null = null;
       const syncOrthoPairing = (): void => {
@@ -434,10 +444,10 @@ export function attachListeners(ctx: Ctx): void {
         } catch { /* best-effort */ }
       };
       map.on('styledata', syncOrthoPairing);
-      syncOrthoPairing(); // fire once now in case source already mounted
+      syncOrthoPairing(); // déclenché une fois tout de suite au cas où la source serait déjà montée
       st.disposeOrthoPairingSync = () => {
         try { map.off('styledata', syncOrthoPairing); } catch { /* ignore */ }
-        // Tell SW to stop pairing on teardown.
+        // Dit au SW d'arrêter l'appariement au démontage.
         try {
           navigator.serviceWorker?.controller?.postMessage({
             type: 'SET_PAIR_ORTHO_WITH_DEM',

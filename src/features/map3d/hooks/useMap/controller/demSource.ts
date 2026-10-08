@@ -9,31 +9,32 @@ import { getActiveDem3dQuality } from '../../../lib/dem3dQualityBus';
 import { logger } from '@/shared/lib/logger';
 
 /**
- * DEM source + terrain attachment lifecycle.
+ * Cycle de vie de la source DEM et de l'attachement du terrain.
  *
- * Anti-flat reinforcements:
- *  - `refreshDemSource({ forceRebuild })` removes the source so the next
- *    `addSource` rebuilds the tile pyramid from scratch (the `setTiles`
- *    fast path leaves cached empty tiles in place).
- *  - `scheduleSetTilesVerify` re-checks ~3.5 s after a `setTiles`-only
- *    refresh that tiles actually started loading; if no DEM tile was
- *    requested OR terrain isn't bound, force a full rebuild.
- *  - `applyUnifiedTerrain` always re-issues `setTerrain` even if the
- *    manager already exists (covers the case where Mapbox silently
- *    detached terrain after a late style.load).
+ * Renforts anti-plat :
+ *  - `refreshDemSource({ forceRebuild })` retire la source pour que l'`addSource`
+ *    suivant reconstruise la pyramide de tuiles de zéro (le chemin rapide
+ *    `setTiles` laisse en place des tuiles vides en cache).
+ *  - `scheduleSetTilesVerify` revérifie ~3,5 s après un rafraîchissement par
+ *    `setTiles` seul que des tuiles ont bien commencé à charger ; si aucune
+ *    tuile DEM n'a été demandée OU que le terrain n'est pas lié, reconstruction
+ *    complète forcée.
+ *  - `applyUnifiedTerrain` réémet toujours `setTerrain` même si le gestionnaire
+ *    existe déjà (couvre le cas où Mapbox a détaché le terrain en silence après
+ *    un style.load tardif).
  */
 export function attachDemSource(ctx: Ctx): void {
   const { map, terrainRef, isCancelled } = ctx;
   const fns = ctx.fns;
   const st = ctx.state;
   const terrainRecoveryRetryMs = 120;
-  // ~6 s of visible time for the style to become mutable again.
+  // ~6 s de temps visible pour que le style redevienne modifiable.
   const maxTerrainRecoveryAttempts = Math.ceil(6000 / terrainRecoveryRetryMs);
 
   fns.applyManagedTerrain = () => {
-    // Fast 30 m mode short-circuits the unified-DEM pipeline. AWS
-    // Terrarium is decoded natively on the GPU — no SW dependency,
-    // no IGN — so any environment can switch to it instantly.
+    // Le mode rapide 30 m court-circuite le pipeline du DEM unifié. AWS Terrarium
+    // est décodé nativement sur le GPU — sans dépendance au SW ni à l'IGN —,
+    // donc n'importe quel environnement peut y basculer instantanément.
     if (getActiveDem3dQuality() === 'fast-30m') {
       return fns.applyFastDemTerrain();
     }
@@ -48,10 +49,10 @@ export function attachDemSource(ctx: Ctx): void {
   };
 
   fns.applyUnifiedTerrain = () => {
-    // Honor the user's 3D quality choice: when fast-30m is active, every
-    // caller (bootstrap, settle-verify, reload, idle handlers, …) must
-    // route to the AWS fast source instead of re-binding the unified HD
-    // DEM that we just swapped away from.
+    // Respecte le choix de qualité 3D de l'utilisateur : quand fast-30m est actif,
+    // chaque appelant (bootstrap, vérification de stabilisation, rechargement,
+    // handlers d'inactivité, …) doit aller vers la source rapide AWS au lieu de
+    // relier le DEM HD unifié qu'on vient de quitter.
     if (getActiveDem3dQuality() === 'fast-30m') {
       return fns.applyFastDemTerrain();
     }
@@ -71,14 +72,14 @@ export function attachDemSource(ctx: Ctx): void {
   };
 
   fns.detachManagedTerrain = () => {
-    // Only tear down terrain when the active terrain source is one of the
-    // managed DEM sources we own. Imported Mapbox Standard / Standard-
-    // Satellite styles can temporarily publish their own builtin terrain
-    // (`mapbox-dem`) during initial hydration; clearing that here before the
-    // unified DEM bootstrap runs can suppress the whole readiness chain and
-    // leave the globe permanently flat with zero `[map3d]` / `[sw-dem]`
-    // activity. If our ref is stale but the active terrain is not managed,
-    // drop the ref without mutating the style.
+    // On ne démonte le terrain que si la source de terrain active est l'une des
+    // sources DEM gérées qui nous appartiennent. Les styles Mapbox Standard /
+    // Standard-Satellite importés peuvent publier un moment leur propre terrain
+    // intégré (`mapbox-dem`) pendant l'hydratation initiale ; le supprimer ici
+    // avant le bootstrap du DEM unifié peut bloquer toute la chaîne de
+    // disponibilité et laisser le globe plat pour de bon, sans aucune activité
+    // `[map3d]` / `[sw-dem]`. Si notre référence est périmée mais que le terrain
+    // actif n'est pas géré, on abandonne la référence sans modifier le style.
     let activeTerrainSource: string | null = null;
     try {
       activeTerrainSource = map.getTerrain()?.source ?? null;
@@ -94,7 +95,7 @@ export function attachDemSource(ctx: Ctx): void {
       try {
         terrainRef.current.destroy();
       } catch {
-        /* terrain teardown must stay best-effort during style rebuilds */
+        /* le démontage du terrain doit rester « au mieux » pendant les reconstructions de style */
       }
     }
     terrainRef.current = null;
@@ -102,7 +103,7 @@ export function attachDemSource(ctx: Ctx): void {
     try {
       map.setTerrain(null);
     } catch {
-      /* style may already be replacing the terrain graph */
+      /* le style est peut-être déjà en train de remplacer le graphe de terrain */
     }
   };
 
@@ -131,20 +132,20 @@ export function attachDemSource(ctx: Ctx): void {
       existingSource.setTiles(tiles);
       fns.refreshTrackedSourceIds();
       fns.applyUnifiedTerrain();
-      // Anti-flat: a soft setTiles refresh keeps the existing tile
-      // pyramid. Verify after a short delay that tiles actually started
-      // loading and terrain is bound — otherwise upgrade to a full
-      // rebuild.
+      // Anti-plat : un rafraîchissement doux par setTiles garde la pyramide de
+      // tuiles existante. On vérifie peu après que des tuiles ont bien commencé
+      // à charger et que le terrain est lié — sinon on passe à une
+      // reconstruction complète.
       fns.scheduleSetTilesVerify();
       return true;
     }
 
     if (existingSource && options.forceRebuild) {
-      // Full rebuild: detach managed terrain first so mapbox doesn't crash
-      // when the raster-dem source disappears underneath the active terrain
-      // graph, then drop the source so the next addSource refills the tile
-      // pyramid from scratch (setTiles alone leaves cached empty tiles in
-      // place, which is what keeps the map flat after a soft reload).
+      // Reconstruction complète : on détache d'abord le terrain géré pour que
+      // Mapbox ne plante pas quand la source raster-dem disparaît sous le graphe
+      // de terrain actif, puis on retire la source pour que l'addSource suivant
+      // remplisse la pyramide de zéro (setTiles seul laisse en place des tuiles
+      // vides en cache, ce qui laisse la carte plate après un rechargement doux).
       fns.detachManagedTerrain();
       try {
         map.setTerrain(null);
@@ -153,12 +154,12 @@ export function attachDemSource(ctx: Ctx): void {
       }
       let removeSucceeded = false;
       try {
-        // Mapbox GL JS v3 bug workaround: in globe projection, calling setTerrain(null)
-        // triggers setTerrainForDraping() which leaves an internal dummy { source: "", exaggeration: 0 }
-        // terrain object lacking StyleProperty wrappers (.properties / .get).
-        // Calling map.removeSource() subsequently runs painter.updateTerrain() which crashes
-        // with "TypeError: can't access property 'get', i is undefined".
-        // Detach internal terrain before removeSource to ensure safe removal:
+        // Contournement d'un bug de Mapbox GL JS v3 : en projection globe, appeler setTerrain(null)
+        // déclenche setTerrainForDraping(), qui laisse un objet terrain factice interne
+        // { source: "", exaggeration: 0 } sans les enveloppes StyleProperty (.properties / .get).
+        // Un map.removeSource() ultérieur exécute painter.updateTerrain(), qui plante
+        // avec « TypeError: can't access property 'get', i is undefined ».
+        // On détache le terrain interne avant removeSource pour un retrait sûr :
         const mapAny = map as unknown as {
           style?: { terrain?: unknown };
           painter?: { _terrain?: { enabled?: boolean } | null };
@@ -174,10 +175,11 @@ export function attachDemSource(ctx: Ctx): void {
         removeSucceeded = true;
       } catch (error) {
         console.warn('[map3d] DEM source remove failed (forceRebuild)', error);
-        // Mapbox 3.x can crash in removeSource when the internal terrain
-        // graph has a stale reference (Cannot read properties of undefined
-        // reading 'get'). If the source still exists, fall back to a soft
-        // setTiles refresh — better than crashing the whole bootstrap.
+        // Mapbox 3.x peut planter dans removeSource quand le graphe de terrain
+        // interne garde une référence périmée (Cannot read properties of undefined
+        // reading 'get'). Si la source existe encore, on retombe sur un
+        // rafraîchissement doux par setTiles — mieux que de faire planter tout le
+        // bootstrap.
         const staleSource = map.getSource(unifiedDEMSource.id) as {
           setTiles?: (tiles: string[]) => unknown;
         } | undefined;
@@ -191,15 +193,15 @@ export function attachDemSource(ctx: Ctx): void {
           return true;
         }
       }
-      // If removeSource threw but the source is actually gone (race
-      // condition), treat as a successful remove and fall through to
-      // addSource below.
+      // Si removeSource a levé une exception mais que la source a bien disparu
+      // (course), on traite le cas comme un retrait réussi et on continue vers
+      // l'addSource ci-dessous.
       if (!removeSucceeded && map.getSource(unifiedDEMSource.id)) {
-        // Anti-flat: terrain was detached at the top of this branch and
-        // the setTiles fallback above didn't fire (no setTiles method).
-        // The source is still there — re-bind terrain to it before bailing
-        // out so we never leave the map flat with a usable DEM source
-        // sitting underneath.
+        // Anti-plat : le terrain a été détaché en haut de cette branche et le
+        // repli setTiles ci-dessus ne s'est pas déclenché (pas de méthode
+        // setTiles). La source est toujours là — on y relie le terrain avant de
+        // sortir, pour ne jamais laisser la carte plate avec une source DEM
+        // utilisable en dessous.
         fns.applyUnifiedTerrain();
         return false;
       }
@@ -242,9 +244,9 @@ export function attachDemSource(ctx: Ctx): void {
         fns.refreshDemSource({ forceRebuild: true });
         return;
       }
-      // If no DEM tile loaded into the unified-dem source yet, the
-      // previous tile pyramid is stale/empty — force rebuild to re-fetch
-      // through the SW.
+      // Si aucune tuile DEM n'est encore chargée dans la source unified-dem, la
+      // pyramide précédente est périmée / vide — reconstruction forcée pour tout
+      // redemander via le SW.
       let unifiedLoaded = false;
       try {
         unifiedLoaded = map.isSourceLoaded(unifiedDEMSource.id);
@@ -262,9 +264,9 @@ export function attachDemSource(ctx: Ctx): void {
 
   fns.scheduleTerrainRecovery = () => {
     if (st.terrainRecoveryTimer) return;
-    // Small delay (instead of 0) lets Mapbox finish the styledata
-    // burst that often precedes terrain detach — checking immediately
-    // would race the rebuild.
+    // Un court délai (au lieu de 0) laisse Mapbox finir la rafale de styledata
+    // qui précède souvent le détachement du terrain — vérifier tout de suite
+    // ferait la course avec la reconstruction.
     const runRecovery = (attempt: number) => {
       st.terrainRecoveryTimer = null;
       if (getActiveDem3dQuality() === 'fast-30m') {
@@ -293,8 +295,8 @@ export function attachDemSource(ctx: Ctx): void {
       fns.refreshTrackedSourceIds();
       if (!fns.isManagedTerrainActive()) {
         fns.applyUnifiedTerrain();
-        // If re-attach didn't take, the source is probably stale. Force
-        // a rebuild rather than leaving the map flat.
+        // Si le rattachement n'a pas pris, la source est probablement périmée. On
+        // force une reconstruction plutôt que de laisser la carte plate.
         if (!fns.isManagedTerrainActive()) {
           console.warn('[map3d] terrain re-attach failed; forcing source rebuild');
           fns.refreshDemSource({ forceRebuild: true });
@@ -346,21 +348,22 @@ export function attachDemSource(ctx: Ctx): void {
     }
   };
 
-  // ── AWS Terrarium direct fallback ──────────────────────────────────
-  // Used when the SW never claims. Attaches AWS Open Data Terrarium
-  // tiles directly as a raster-dem source with native `terrarium`
-  // encoding. Mapbox GL v3 handles the decode on the GPU — no SW
-  // pipeline, no re-encoding, no overzoom logic. ~30 m global terrain.
+  // ── Repli direct AWS Terrarium ─────────────────────────────────────
+  // Utilisé quand le SW ne prend jamais le contrôle. Attache directement les
+  // tuiles AWS Open Data Terrarium comme source raster-dem avec l'encodage natif
+  // `terrarium`. Mapbox GL v3 décode sur le GPU — pas de pipeline SW, pas de
+  // réencodage, pas de logique d'overzoom. Terrain mondial à ~30 m.
   fns.attachAwsFallbackTerrain = () => {
     if (!fns.canMutateStyle()) return;
-    // Honor user's 3D quality choice: in fast-30m mode the fast source
-    // owns the terrain binding; don't let the fallback path override it.
+    // Respecte le choix de qualité 3D de l'utilisateur : en mode fast-30m, la
+    // source rapide possède la liaison du terrain ; le chemin de repli ne doit
+    // pas la remplacer.
     if (getActiveDem3dQuality() === 'fast-30m') {
       fns.applyFastDemTerrain();
       return;
     }
-    // Don't attach if the unified-dem source is already present
-    // (SW path took over).
+    // Pas d'attachement si la source unified-dem est déjà présente (le chemin
+    // SW a pris le relais).
     if (map.getSource(unifiedDEMSource.id)) return;
     const sourceAlreadyPresent = !!map.getSource(awsFallbackDEMSource.id);
 
@@ -425,13 +428,12 @@ export function attachDemSource(ctx: Ctx): void {
     }
   };
 
-  // ── Fast 30 m mode (AWS Terrarium direct, no SW) ──────────────────
-  // Identical AWS Open Data Terrarium pipeline as the fallback but
-  // attached under its own source id `aws-fast-dem` so it can coexist
-  // with the unified SW source without conflict — letting us swap back
-  // and forth between HD and Fast quality instantly. The browser HTTP
-  // cache + Mapbox per-source tile cache make every subsequent swap
-  // free of any visible lag.
+  // ── Mode rapide 30 m (AWS Terrarium en direct, sans SW) ───────────
+  // Même pipeline AWS Open Data Terrarium que le repli, mais attaché sous son
+  // propre identifiant de source `aws-fast-dem` pour coexister sans conflit avec
+  // la source unifiée du SW — ce qui permet de basculer instantanément entre les
+  // qualités HD et Rapide. Le cache HTTP du navigateur et le cache de tuiles par
+  // source de Mapbox rendent chaque bascule suivante sans aucun délai visible.
   fns.applyFastDemTerrain = () => {
     if (!fns.canMutateStyle()) return false;
     const sourceAlreadyPresent = !!map.getSource(awsFastDEMSource.id);
@@ -452,10 +454,10 @@ export function attachDemSource(ctx: Ctx): void {
     }
 
     try {
-      // Replace any existing TerrainManager binding (which may target
-      // unified-dem or aws-fallback-dem) with a fresh one pointing at
-      // the fast source. TerrainManager.init() issues setTerrain which
-      // Mapbox treats as a hot-swap — no flat frame in between.
+      // Remplace toute liaison TerrainManager existante (qui peut viser
+      // unified-dem ou aws-fallback-dem) par une nouvelle pointant sur la source
+      // rapide. TerrainManager.init() émet setTerrain, que Mapbox traite comme un
+      // remplacement à chaud — aucune image plate entre les deux.
       let activeTerrainSource: string | null = null;
       try { activeTerrainSource = map.getTerrain()?.source ?? null; } catch { /* best-effort */ }
       const alreadyBound = activeTerrainSource === awsFastDEMSource.id;
@@ -481,9 +483,9 @@ export function attachDemSource(ctx: Ctx): void {
     }
   };
 
-  // Quality switch entry point. Idempotent — safe to call repeatedly
-  // with the same value (no-ops if the desired terrain is already
-  // bound). Designed for zero-flicker user-facing toggling.
+  // Point d'entrée du changement de qualité. Idempotent — peut être appelé
+  // plusieurs fois avec la même valeur (rien ne se passe si le terrain voulu est
+  // déjà lié). Conçu pour une bascule côté utilisateur sans scintillement.
   fns.setDem3dQuality = (quality) => {
     if (!fns.canMutateStyle()) return;
 

@@ -2,23 +2,24 @@ import type { Map as MapboxMap } from 'mapbox-gl';
 import { unifiedDEMSource } from '../../../lib/sources';
 
 /**
- * Tells the DEM service worker which terrain tiles the map still waits on.
+ * Indique au service worker DEM les tuiles de terrain que la carte attend encore.
  *
- * Chromium never propagates a page-side fetch abort to the service worker
- * (FetchEvent.request.signal stays silent), so when Mapbox drops a DEM tile
- * that left the view the SW cannot know its LiDAR work became useless. It
- * used to guess — every camera gesture aborted all the IGN work — and killed
- * the work of the tiles still on screen: rotating or pitching the camera
- * turned them into 30 m relief, cached that way. The page posts instead the
- * tiles its terrain source has in flight, throttled while the camera moves;
- * the SW drops the work of the other ones only (DEM_WANTED_TILES in
- * public/sw-dem/runtime/lifecycle.js). Only requests tagged `rv-src=map`
- * (buildDemTilesTemplate) are judged by these snapshots.
+ * Chromium ne propage jamais au service worker l'abandon d'un fetch côté page
+ * (FetchEvent.request.signal reste muet) : quand Mapbox abandonne une tuile
+ * DEM sortie de la vue, le SW ne peut pas savoir que son travail LiDAR est
+ * devenu inutile. Il devinait — chaque geste de caméra annulait tout le travail
+ * IGN — et tuait le travail des tuiles encore à l'écran : tourner ou incliner la
+ * caméra les transformait en relief à 30 m, mis en cache ainsi. La page envoie à
+ * la place les tuiles que sa source de terrain a en cours, avec une limitation
+ * de fréquence pendant que la caméra bouge ; le SW n'abandonne que le travail des
+ * autres (DEM_WANTED_TILES dans public/sw-dem/runtime/lifecycle.js). Seules les
+ * requêtes marquées `rv-src=map` (buildDemTilesTemplate) sont jugées par ces
+ * instantanés.
  */
 
 const SYNC_INTERVAL_MS = 250;
-// Mapbox drops tiles from the cover in the render that follows the camera
-// change, not in the `moveend` handler itself.
+// Mapbox retire les tuiles de la couverture au rendu qui suit le changement de
+// caméra, pas dans le handler `moveend` lui-même.
 const MOVE_END_DELAY_MS = 120;
 const PENDING_TILE_STATES: ReadonlySet<string> = new Set(['loading', 'reloading', 'expired']);
 
@@ -54,7 +55,7 @@ export function installDemWantedTilesSync(map: MapboxMap): () => void {
     if (!controller) return;
     let keys: string[] | null = null;
     try { keys = readPendingDemTileKeys(map); } catch { keys = null; }
-    // No terrain source (fast 30 m mode, style swap): nothing to judge.
+    // Pas de source de terrain (mode rapide 30 m, changement de style) : rien à juger.
     if (!keys) return;
     lastPostAt = Date.now();
     try {

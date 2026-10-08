@@ -4,7 +4,7 @@ import {
 } from './context';
 import { clearVisibleTimer, setVisibleInterval, type VisibleTimer } from './visibleClock';
 
-/** Mapbox fires `styledata` when it parses a style, `style.load` once its imports are in. */
+/** Mapbox émet `styledata` quand il analyse un style, `style.load` une fois ses imports arrivés. */
 const READINESS_EVENTS = ['style.load', 'styledata', 'sourcedata', 'idle'] as const;
 
 function isActiveRun(ctx: Ctx, runId: number): boolean {
@@ -12,13 +12,14 @@ function isActiveRun(ctx: Ctx, runId: number): boolean {
 }
 
 /**
- * Resolves once the active style is parsed (`canMutateStyle()`: sources,
- * layers and terrain can be added) — true — or once a newer bootstrap run
- * superseded this one — false. Event-driven, no deadline: a style parses on
- * the first animation frame after `setStyle` (a JSON style) or once its JSON
- * arrived (a URL), and a hidden page renders no frame at all, so a timeout
- * would only fire on a map that is not being drawn. The telemetry warning
- * counts visible time and changes nothing.
+ * Se résout dès que le style actif est analysé (`canMutateStyle()` : sources,
+ * calques et terrain peuvent être ajoutés) — true — ou dès qu'une exécution de
+ * bootstrap plus récente a remplacé celle-ci — false. Piloté par les
+ * événements, sans échéance : un style est analysé à la première image
+ * d'animation après `setStyle` (style JSON) ou dès l'arrivée de son JSON (URL),
+ * et une page masquée ne rend aucune image, donc un délai ne se déclencherait
+ * que sur une carte qui n'est pas dessinée. L'avertissement de télémétrie
+ * compte le temps visible et ne change rien.
  */
 export async function waitForStyleReadiness(ctx: Ctx, runId: number): Promise<boolean> {
   const { map } = ctx;

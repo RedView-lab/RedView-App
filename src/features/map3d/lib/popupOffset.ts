@@ -2,25 +2,25 @@ import type { PopupOptions } from 'mapbox-gl';
 
 type PopupOffset = NonNullable<PopupOptions['offset']>;
 
-/** Screen-space footprint of a marker around its geographic anchor (px). */
+/** Emprise à l'écran d'un marqueur autour de son ancre géographique (px). */
 export interface MarkerClearance {
-  /** Extent above the anchor. */
+  /** Étendue au-dessus de l'ancre. */
   above: number;
-  /** Extent below the anchor. */
+  /** Étendue en dessous de l'ancre. */
   below: number;
-  /** Half width (left / right of the anchor). */
+  /** Demi-largeur (à gauche / à droite de l'ancre). */
   side: number;
 }
 
 /**
- * Per-anchor Mapbox popup offset that keeps the popup clear of its marker.
+ * Décalage de popup Mapbox par ancre, qui écarte la popup de son marqueur.
  *
- * Mapbox auto-picks the popup anchor (above the point by default, below /
- * beside it near the viewport edges). A single `[x, y]` offset is applied
- * as-is to every anchor, so an offset tuned for one side pushes the popup
- * ONTO the marker as soon as Mapbox flips the anchor. This map offsets each
- * anchor away from the marker by its footprint on that side; corner anchors
- * clear vertically (the popup then extends sideways, away from the marker).
+ * Mapbox choisit seul l'ancre de la popup (au-dessus du point par défaut, en
+ * dessous / à côté près des bords de la vue). Un décalage `[x, y]` unique est
+ * appliqué tel quel à toutes les ancres : un décalage réglé pour un côté pousse
+ * la popup SUR le marqueur dès que Mapbox retourne l'ancre. Cette table éloigne
+ * chaque ancre du marqueur de son emprise de ce côté ; les ancres de coin se
+ * dégagent verticalement (la popup s'étend alors sur le côté, loin du marqueur).
  */
 export function buildPopupClearanceOffset(clearance: MarkerClearance, gapPx = 8): PopupOffset {
   const above = Math.round(clearance.above + gapPx);

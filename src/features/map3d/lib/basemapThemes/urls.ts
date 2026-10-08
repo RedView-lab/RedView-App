@@ -1,11 +1,12 @@
 /**
- * Virtual style URLs for the RedView-designed basemaps.
+ * URL de style virtuelles des fonds de carte conçus pour RedView.
  *
- * They are not real Mapbox styles: `stylePrefetch` resolves them by fetching
- * their Mapbox base style (`outdoors-v12`, same tilesets and billing as the
- * "Topographique" basemap) and recolouring it client-side with a RedView
- * palette. Kept in a dependency-free module so the control panel can reference
- * them without pulling the palettes into its chunk.
+ * Ce ne sont pas de vrais styles Mapbox : `stylePrefetch` les résout en
+ * récupérant leur style de base Mapbox (`outdoors-v12`, mêmes jeux de tuiles et
+ * même facturation que le fond « Topographique ») puis en le recolorant côté
+ * client avec une palette RedView. Gardées dans un module sans dépendance pour
+ * que le panneau de contrôle puisse les référencer sans tirer les palettes dans
+ * son chunk.
  */
 const REDVIEW_STYLE_URL_PREFIX = 'redview://styles/';
 

@@ -40,8 +40,9 @@ export function buildDemTilesTemplate(
 ): string[] {
   const queryParams = [
     `rv-map-cache-epoch=${encodeURIComponent(MAP_CACHE_EPOCH)}`,
-    // Marks the terrain source's own requests: the SW keeps their LiDAR work
-    // alive until the map stops waiting on the tile (demWantedTiles.ts).
+    // Marque les requêtes propres à la source de terrain : le SW garde leur
+    // travail LiDAR vivant jusqu'à ce que la carte n'attende plus la tuile
+    // (demWantedTiles.ts).
     'rv-src=map',
     ...(profile === 'terrain' ? ['rv-dem-profile=terrain'] : []),
     ...(cacheBust > 0 ? [`rv-dem=${cacheBust}`] : []),
