@@ -5,13 +5,11 @@ import {
   clearAnalysisFlyoverProgress,
   getRouteElevationContext,
   isAnalysisFlyoverRouteMounted,
-  setAnalysisFlyoverProgress,
-  setAnalysisFlyoverRoute,
   setRouteLayerVisibility,
 } from '@/features/itineraryPanel/lib/route-layer';
 import { setPoiLayersSuppressed } from '@/features/poi/lib/poi-markers';
 import { percentBucket, roundTo, trackAnalyticsEvent } from '@/shared/lib/analytics';
-import { createRouteDotMarker, setRouteDotMarkerColor } from '../components/analysis/routeDotMarker';
+import { setRouteDotMarkerColor } from '../components/analysis/routeDotMarker';
 import {
   APPROACH_CURVE,
   ARRIVAL_HOLD_S,
@@ -59,7 +57,7 @@ import {
   toRadians,
   wrapPi,
 } from './engine/geo';
-import { fovDistanceFactor, headingBlendDurationS, playbackDurationForLength } from './engine/laws';
+import { fovDistanceFactor, headingBlendDurationS } from './engine/laws';
 import { buildRouteTrack, createTrackPosition, TrackCursor } from './engine/routeTrack';
 import { approachExponential, smootherstep } from './engine/springs';
 import { PlaybackTransport } from './engine/transport';
@@ -73,6 +71,13 @@ import {
 import { FovController } from './map/fov';
 import { createGroundSampler, readTerrainExaggeration } from './map/terrain';
 import type { FlyoverInput, FlyoverPhase, FlyoverRouteInput, FlyoverStatus } from './types';
+import { buildFlyoverStatus, sameRoute } from './flyoverStatus';
+import {
+  hideFlyoverNonTraceOverlays,
+  isMapAlive,
+  mountFlyoverLayers,
+  placeFlyoverHead,
+} from './map/sessionLayers';
 
 type Listener = () => void;
 
@@ -102,14 +107,6 @@ interface PoseOffset {
 
 const RUNNING_PHASES: ReadonlySet<FlyoverPhase> = new Set(['approaching', 'handoff', 'playing']);
 const SPEED_STEP_COUNT = FLYOVER_SPEED_STEPS.length;
-
-function sameRoute(a: FlyoverRouteInput | null, b: FlyoverRouteInput | null): boolean {
-  return a === b || (a != null && b != null && a.itineraryId === b.itineraryId && a.points === b.points && a.distancesM === b.distancesM);
-}
-
-function isMapAlive(map: MapboxMap): boolean {
-  return Boolean((map as unknown as { style?: unknown }).style);
-}
 
 /**
  * Lecture 3D de l'itinéraire, hors React : rail caméra pré-calculé, horloge,
@@ -416,24 +413,13 @@ export class FlyoverController {
     return this.phase === 'handoff' || this.phase === 'playing' || (this.phase === 'approaching' && this.approachResumes);
   }
 
-  /**
-   * La lecture ne montre que la trace : trace complète du flyover posée,
-   * tracé normal masqué, POI masqués, marqueurs et popups de la carte cachés
-   * (`[data-rv-flyover-session]`, src/index.css) sauf la tête. Rejoué après
-   * un changement de style.
-   */
+  /** Trace du flyover seule à l'écran, voir `mountFlyoverLayers`. */
   private mountLayers(session: Session): void {
-    if (!isMapAlive(this.map)) return;
-    const mounted = setAnalysisFlyoverRoute(this.map, session.route.points, session.color);
-    session.layerSignature = mounted ? getRouteElevationContext(this.map).signature : '';
-    this.hideNonTraceOverlays(session);
-    this.updateHead(session, session.distanceM);
+    mountFlyoverLayers(this.map, session, this.head);
   }
 
   private hideNonTraceOverlays(session: Session): void {
-    setRouteLayerVisibility(this.map, session.route.itineraryId, false);
-    setPoiLayersSuppressed(this.map, true);
-    this.map.getContainer().dataset.rvFlyoverSession = '';
+    hideFlyoverNonTraceOverlays(this.map, session);
   }
 
   private recolor(color: string): void {
@@ -473,18 +459,7 @@ export class FlyoverController {
   }
 
   private updateHead(session: Session, distanceM: number): void {
-    session.distanceM = distanceM;
-    if (distanceM > session.maxDistanceM) session.maxDistanceM = distanceM;
-    const head = session.cursor.locate(distanceM, this.head);
-    if (!isMapAlive(this.map)) return;
-    setAnalysisFlyoverProgress(this.map, distanceM >= session.rail.lengthM ? 1 : head.lineProgress);
-    if (session.marker) {
-      session.marker.setLngLat([head.lng, head.lat]);
-    } else {
-      session.marker = createRouteDotMarker(this.map, [head.lng, head.lat], session.color);
-      // Seul marqueur laissé visible pendant la lecture.
-      session.marker.getElement().dataset.rvFlyoverHead = '';
-    }
+    placeFlyoverHead(this.map, session, distanceM, this.head);
   }
 
   /* ── Appropriation de la caméra ────────────────────────────────────── */
@@ -864,27 +839,14 @@ export class FlyoverController {
   }
 
   private buildStatus(): FlyoverStatus {
-    const route = this.input.route;
-    const session = this.session;
-    const multiplier = FLYOVER_SPEED_STEPS[this.speedIndex];
-    const cachedRail = this.railCache && route && sameRoute(this.railCache.route, route) ? this.railCache.rail : null;
-    const rail = session?.rail ?? cachedRail;
-    const totalM = rail?.lengthM ?? (route ? route.distancesM[route.distancesM.length - 1] ?? 0 : 0);
-    // Un rail déjà tenté et impossible (trace dégénérée) interdit la lecture.
-    const railFailed = this.railCache != null && route != null && sameRoute(this.railCache.route, route) && this.railCache.rail == null;
-    const canPlay = Boolean(route && route.points.length >= 2 && totalM > 1 && !railFailed);
-    const durationAt1x = rail?.durationS ?? playbackDurationForLength(totalM);
-    return {
-      canPlay,
+    return buildFlyoverStatus({
+      route: this.input.route,
+      session: this.session,
+      railCache: this.railCache,
+      speedIndex: this.speedIndex,
       phase: this.phase,
       isPlaying: this.isRunning(),
-      playbackActive: session != null,
-      speedIndex: this.speedIndex,
-      distanceM: session ? session.distanceM : null,
-      totalM,
-      elapsedS: session ? session.transport.playbackTime / multiplier : 0,
-      durationS: durationAt1x / multiplier,
-    };
+    });
   }
 
   private emitStatus(force: boolean): void {
