@@ -253,6 +253,22 @@ export function renderMarkdown(meta: RunMeta, results: PhaseResult[], idle: VpsW
     }
     lines.push('');
   }
+  const entries = results.filter((r) => r.vps?.entry && Object.keys(r.vps.entry).length);
+  if (entries.length) {
+    const names = [...new Set(entries.flatMap((r) => Object.keys(r.vps!.entry!)))].sort();
+    const bound = (ms: number) => (Number.isFinite(ms) ? `≤ ${duration(ms)}` : '> max');
+    lines.push('### Entrées dans une salle vues par le serveur (fenêtre, moyenne / p50 / p95 par seau, n)', '');
+    lines.push(`| Fenêtre | ${names.join(' | ')} |`);
+    lines.push(`|---|${names.map(() => '---').join('|')}|`);
+    for (const r of entries) {
+      const cells = names.map((name) => {
+        const h = r.vps!.entry![name];
+        return h ? `${duration(h.meanMs)} / ${bound(h.p50LeMs)} / ${bound(h.p95LeMs)} (${h.n})` : '—';
+      });
+      lines.push(`| ${r.step} u. ${r.phase} | ${cells.join(' | ')} |`);
+    }
+    lines.push('');
+  }
   // Temps serveur de l'app (journaux pino) : la vérité du VPS, sans le réseau du générateur.
   const withServer = results.filter((r) => r.server && Object.keys(r.server).length);
   if (withServer.length) {

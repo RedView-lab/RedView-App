@@ -25,7 +25,6 @@ const APP_CONTAINER = 'q7lznj8fhunybhvuvm3jcu0u';
 const REMOTE_SCRIPT = [
   'set -u',
   'CG=/sys/fs/cgroup/system.slice',
-  `MP=$(sudo docker ps -q -f name=${MULTIPLAYER_CONTAINER} | head -n1)`,
   'I=0',
   'while true; do',
   '  if [ $((I % 30)) -eq 0 ]; then',
@@ -42,7 +41,12 @@ const REMOTE_SCRIPT = [
   "  S=$(grep -H '' $CG/docker-*.scope/memory.current 2>/dev/null | sed -E 's#^.*/docker-([^/]+)[.]scope/memory[.]current:#\\1:#' | tr '\\n' '|')",
   '  MM=null',
   '  if [ $((I % 5)) -eq 0 ]; then',
-  `    MM=$(sudo docker exec "$MP" wget -qO- -T 3 http://127.0.0.1:17791/metrics.json 2>/dev/null | tr -d '\\n')`,
+  // Résolu à chaque fois : un déploiement pendant la passe remplace le conteneur (l'ancien id faisait échouer tous les relevés suivants).
+  `    MP=$(sudo docker ps -q -f name=${MULTIPLAYER_CONTAINER} | head -n1)`,
+  // Dans l'espace réseau du conteneur, sans `docker exec` : sous une charge hôte de 25–34, `docker exec`
+  // + `wget -T 3` échouait (aucune mesure temps réel à 50 / 100 u. le 08/10) ; nsenter + curl ≈ 50 ms.
+  `    MPID=$(sudo docker inspect -f '{{.State.Pid}}' "$MP" 2>/dev/null)`,
+  `    MM=$(sudo nsenter -t "$MPID" -n curl -s -m 8 http://127.0.0.1:17791/metrics.json 2>/dev/null | tr -d '\\n')`,
   '    [ -z "$MM" ] && MM=null',
   '  fi',
   `  printf '{"t":%s,"load1":%s,"cpu":[%s],"memAvailKb":%s,"swapFreeKb":%s,"diskFree":%s,"cpuUsec":"%s","mem":"%s","mp":%s}\\n' "$T" "$L1" "$CPU" "$MA" "$SF" "$DF" "$C" "$S" "$MM"`,
@@ -158,6 +162,48 @@ export interface VpsWindow {
   /** CPU moyen et maximal (en cœurs) et mémoire maximale par conteneur / service, triés par CPU. */
   processes: Record<string, { cores: number; coresMax: number; memMaxMb: number }>;
   multiplayer: Record<string, number> | null;
+  /**
+   * Entrées dans une salle vues par le serveur temps réel sur la fenêtre
+   * (histogrammes cumulés `<nom>_count/_sum_ms/_le_<borne>` de metrics.json,
+   * dernier relevé − premier) : sans le lien du générateur. Absent quand le
+   * serveur a redémarré pendant la fenêtre.
+   */
+  entry: Record<string, WindowHistogram> | null;
+}
+
+export interface WindowHistogram {
+  n: number;
+  meanMs: number;
+  /** Borne supérieure du seau qui contient le quantile (ms) ; Infinity au-delà de la dernière borne. */
+  p50LeMs: number;
+  p95LeMs: number;
+}
+
+/** Différence de deux histogrammes cumulés de metrics.json, par préfixe `entry_*`. */
+export function entryHistograms(first: Record<string, number>, last: Record<string, number>): Record<string, WindowHistogram> | null {
+  const out: Record<string, WindowHistogram> = {};
+  for (const key of Object.keys(last)) {
+    const match = /^(entry_[a-z_]+?)_count$/.exec(key);
+    if (!match) continue;
+    const prefix = match[1]!;
+    const n = last[key]! - (first[key] ?? 0);
+    if (n < 0) return null;
+    if (n === 0) continue;
+    const bounds = Object.keys(last)
+      .map((name) => (name.startsWith(`${prefix}_le_`) ? /_le_(\d+)$/.exec(name) : null))
+      .filter((m): m is RegExpExecArray => !!m)
+      .map((m) => Number(m[1]))
+      .sort((a, b) => a - b);
+    const quantile = (q: number) => {
+      for (const bound of bounds) {
+        if (last[`${prefix}_le_${bound}`]! - (first[`${prefix}_le_${bound}`] ?? 0) >= q * n) return bound;
+      }
+      return Number.POSITIVE_INFINITY;
+    };
+    const sum = (last[`${prefix}_sum_ms`] ?? 0) - (first[`${prefix}_sum_ms`] ?? 0);
+    out[prefix.slice('entry_'.length)] = { n, meanMs: sum / n, p50LeMs: quantile(0.5), p95LeMs: quantile(0.95) };
+  }
+  return out;
 }
 
 /** Agrégat des relevés entre `from` et `to` (horloge du portable ≈ horloge du VPS, NTP des deux côtés). */
@@ -196,6 +242,8 @@ export function summarizeWindow(all: readonly VpsSample[], from: number, to: num
   }
   const sorted = Object.fromEntries(Object.entries(processes).sort((a, b) => b[1].cores - a[1].cores));
   const mp = [...window].reverse().find((sample) => sample.mp)?.mp ?? null;
+  // Premier relevé un peu avant la fenêtre (un toutes les ~10 s) : les entrées du début y comptent.
+  const mpFirst = [...all].reverse().find((sample) => sample.mp && sample.t < from)?.mp ?? window.find((sample) => sample.mp)?.mp ?? null;
   return {
     samples: window.length,
     cpuAvg: avg(cpuPcts),
@@ -208,5 +256,6 @@ export function summarizeWindow(all: readonly VpsSample[], from: number, to: num
     diskFreeMinGb: Math.min(...window.map((sample) => sample.diskFree)) / 1e9,
     processes: sorted,
     multiplayer: mp,
+    entry: mp && mpFirst && mpFirst !== mp ? entryHistograms(mpFirst, mp) : null,
   };
 }

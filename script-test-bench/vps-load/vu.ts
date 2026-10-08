@@ -564,6 +564,8 @@ class CollabSocket {
   private compress = false;
   private readonly clientId: string;
   private readonly pending = new Map<number, (ok: boolean) => void>();
+  /** Segments de ses propres lots en attente d'accusé : l'écho revient sans eux (`hello.leanEcho`, comme l'app). */
+  private readonly sentBlobs = new Map<number, Record<string, string>>();
   private pointerTimer: ReturnType<typeof setInterval> | null = null;
   private pointerStop = 0;
   ready = false;
@@ -599,7 +601,7 @@ class CollabSocket {
         socket.terminate();
       }, 20_000);
       socket.on('open', () => socket.send(JSON.stringify({
-        type: 'hello', v: PROTOCOL_VERSION, clientId: this.clientId, epoch: null, lastSeq: null, compress: true,
+        type: 'hello', v: PROTOCOL_VERSION, clientId: this.clientId, epoch: null, lastSeq: null, compress: true, leanEcho: true,
       })));
       socket.on('unexpected-response', (_req, res) => {
         clearTimeout(deadline);
@@ -617,6 +619,7 @@ class CollabSocket {
         this.closed = true;
         for (const settle of this.pending.values()) settle(false);
         this.pending.clear();
+        this.sentBlobs.clear();
       });
       socket.on('message', (data, isBinary) => {
         const receivedAt = performance.now();
@@ -638,12 +641,14 @@ class CollabSocket {
           resolve();
         } else if (message.type === 'batch') {
           const { batch } = message;
-          this.applyBatch(batch.ops, batch.blobs);
+          const own = batch.clientId === this.clientId ? this.sentBlobs.get(batch.clientSeq) : undefined;
+          this.applyBatch(batch.ops, own ? { ...own, ...batch.blobs } : batch.blobs);
           const key = `${batch.clientId}#${batch.clientSeq}`;
           const sentAt = this.shared.sentAt.get(key);
           if (batch.clientId === this.clientId) {
             this.pending.get(batch.clientSeq)?.(true);
             this.pending.delete(batch.clientSeq);
+            this.sentBlobs.delete(batch.clientSeq);
             if (sentAt !== undefined) this.shared.record({ name: 'collab.accuse', ms: Math.round(receivedAt - sentAt), ok: true, at: Date.now() });
           } else if (sentAt !== undefined) {
             // Lot de tracé (morceaux de route) et petit lot (réglage) n'ont pas le même coût.
@@ -654,6 +659,7 @@ class CollabSocket {
           this.shared.record({ name: 'collab.refus', ms: 0, ok: false, at: Date.now(), why: message.reason.slice(0, 40) });
           this.pending.get(message.clientSeq)?.(false);
           this.pending.delete(message.clientSeq);
+          this.sentBlobs.delete(message.clientSeq);
         } else if (message.type === 'motion') {
           const latency = receivedAt - message.t;
           if (latency >= 0 && latency < 60_000) this.shared.record({ name: 'collab.pointeur', ms: Math.round(latency), ok: true, at: Date.now() });
@@ -688,9 +694,11 @@ class CollabSocket {
     this.clientSeq += 1;
     const clientSeq = this.clientSeq;
     this.shared.sentAt.set(`${this.clientId}#${clientSeq}`, performance.now());
+    if (Object.keys(blobs).length) this.sentBlobs.set(clientSeq, blobs);
     const done = new Promise<boolean>((resolve) => {
       const timer = setTimeout(() => {
         this.pending.delete(clientSeq);
+        this.sentBlobs.delete(clientSeq);
         resolve(false);
       }, REQUEST_TIMEOUT_MS);
       this.pending.set(clientSeq, (ok) => {
