@@ -26,38 +26,31 @@ import { packSceneUniforms, SCENE_UNIFORM_FLOATS } from './renderer/sceneUniform
 import { EDL_PARAMS_FLOATS, POINT_PARAMS_FLOATS } from './renderer/shaders';
 import type { HeightmapParams, SnowParams } from './renderer/types';
 import { buildSlopeRampData } from './slope/slopeRamp';
-import { buildAltitudeRampData, DEFAULT_MAX_ALTITUDE_M } from './altitude/altitudeRamp';
+import { buildAltitudeRampData } from './altitude/altitudeRamp';
 import type { ViewerSlopeState, ViewerAltitudeState } from './rightPanel/types';
 import type { ViewerPointFilterState } from './pointFilter';
-import { computePointFilterBitmasks } from './pointFilter';
 import type { SolarRenderState } from '../viewer-webgl/sunlightController';
 import { GpuFrameTimer, TIMED_PASS } from './renderer/gpuTimer';
-import {
-  COLOR_MODE_INDEX,
-  type LidarRenderer,
-  type PointColorMode,
-  type RenderSceneOptions,
-  type RendererLostInfo,
+import type {
+  LidarRenderer,
+  PointColorMode,
+  RenderSceneOptions,
+  RendererLostInfo,
 } from './renderer/sceneRenderer';
+import {
+  EYE_LEVEL_POINT_MAX_PX,
+  fillEdlParams,
+  fillPointParams,
+  NODE_POOL_CAPACITY,
+  POINT_MAX_PX,
+  SceneShadingState,
+  type RampFilter,
+} from './renderer/sceneShadingState';
 import { PhotoRenderer } from './photoMode/renderer/photoRenderer';
 import { PHOTO_MODE_ENABLED } from './photoMode/featureFlag';
 import type { PhotoModeRenderer } from './photoMode/renderer/types';
 
 export type { HeightmapParams } from './renderer/types';
-
-/** Projected point diameter bounds (device pixels) for the metre-sized mode. */
-const POINT_MIN_PX = 1.0;
-const POINT_MAX_PX = 64;
-/** Point diameter cap of the eye-level (first-person) view, device px. */
-const EYE_LEVEL_POINT_MAX_PX = 14;
-/**
- * Adaptive size of the finest points on screen, per metre of their node's
- * surface spacing: the same 1.5 × spacing the default point size gives the
- * full-density points (see `pointSizeReference`).
- */
-const ADAPTIVE_SPACING_FACTOR = 1.5;
-/** Uniform slots of the node pool (one per resident LOD node). */
-const NODE_POOL_CAPACITY = 16384;
 
 /**
  * WebGPU point-cloud renderer.
@@ -114,51 +107,26 @@ export class WebGpuLidarRenderer implements LidarRenderer {
   private pointParams = new Float32Array(POINT_PARAMS_FLOATS);
   private edlParams = new Float32Array(EDL_PARAMS_FLOATS);
 
-  private pointFilterEnabled = 0;
-  private pointFilterMask: [number, number, number, number] = [0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff];
-  private colorMode: PointColorMode = 'rgb';
+  /** Overlay and lighting state, shared with the WebGL 2 renderer. */
+  private readonly shading = new SceneShadingState();
 
   private trajectoryBuffer: GPUBuffer | null = null;
   private trajectoryVertexCount = 0;
-  private trajectoryEnabled = false;
-  private sunDiscPos: [number, number, number] | null = null;
-  private sunDiscRadius = 0;
 
   private heightTexture!: GPUTexture;
   private snowTexture!: GPUTexture;
-  private snowMode: 0 | 1 | 2 = 0;
-  private snowOriginX = 0;
-  private snowOriginZ = 0;
-  private snowScaleX = 1;
-  private snowScaleZ = 1;
 
   private slopeTexture!: GPUTexture;
   private slopeSampler!: GPUSampler;
-  private slopeEnabled = 0;
-  private slopeOpacity = 0.5;
-  private slopeFilter: 'linear' | 'nearest' = 'linear';
+  private slopeFilter: RampFilter = 'linear';
 
   private altitudeTexture!: GPUTexture;
   private altitudeSampler!: GPUSampler;
-  private altitudeEnabled = 0;
-  private altitudeOpacity = 0.5;
-  private altitudeFilter: 'linear' | 'nearest' = 'linear';
+  private altitudeFilter: RampFilter = 'linear';
   centerAltitude = 0;
-  private maxAltitude = DEFAULT_MAX_ALTITUDE_M;
 
   private shadowTexture!: GPUTexture;
-  private shadowEnabled = 0;
-  private shadowOpacity = 0.5;
-
   private sunlightMapTexture!: GPUTexture;
-  private sunlightEnabled = 0;
-  private sunlightMapEnabled = 0;
-  private sunlightMapOpacity = 0.5;
-  private sunIntensity = 1.0;
-  private exposure = 1.0;
-  private sunDir: [number, number, number] = [0.28, 0.78, 0.55];
-  private sunColor: [number, number, number] = [1.0, 0.98, 0.95];
-  private skyColor: [number, number, number] = [0.65, 0.75, 0.85];
 
   private _cachedViewProj = new Float32Array(16);
   private _lastView = new Float32Array(16);
@@ -172,10 +140,6 @@ export class WebGpuLidarRenderer implements LidarRenderer {
   private analysisMesh: MeshBuffers | null = null;
   private canvasWidth = 1;
   private canvasHeight = 1;
-  private hmOriginX = 0;
-  private hmOriginZ = 0;
-  private hmScaleX = 1;
-  private hmScaleZ = 1;
   /** Point diameter in metres, identical for every point (projected, clamped in pixels). */
   pointSize = 0.3;
   /** Point diameter in device pixels; 0 = adaptive (world size, clamped in pixels). */
@@ -372,13 +336,13 @@ export class WebGpuLidarRenderer implements LidarRenderer {
   }
 
   setColorMode(mode: PointColorMode): void {
-    if (mode === this.colorMode) return;
-    this.colorMode = mode;
+    if (mode === this.shading.colorMode) return;
+    this.shading.colorMode = mode;
     this.invalidateShading();
   }
 
   getColorMode(): PointColorMode {
-    return this.colorMode;
+    return this.shading.colorMode;
   }
 
   private invalidateShading(): void {
@@ -404,10 +368,7 @@ export class WebGpuLidarRenderer implements LidarRenderer {
   }
 
   setHeightmap(params: HeightmapParams) {
-    this.hmOriginX = params.originX;
-    this.hmOriginZ = params.originZ;
-    this.hmScaleX = params.scaleX;
-    this.hmScaleZ = params.scaleZ;
+    this.shading.setHeightmapFrame(params);
 
     const w = params.width;
     const h = params.height;
@@ -419,23 +380,18 @@ export class WebGpuLidarRenderer implements LidarRenderer {
   setSnow(params: SnowParams) {
     this.snowTexture.destroy();
     this.snowTexture = createFloatTexture(this.device, params.width, params.height, params.data);
-    this.snowOriginX = params.originX;
-    this.snowOriginZ = params.originZ;
-    this.snowScaleX = params.scaleX;
-    this.snowScaleZ = params.scaleZ;
+    this.shading.setSnowFrame(params);
     this.rebuildBindGroups();
   }
 
   setSnowMode(mode: 0 | 1 | 2) {
-    if (this.snowMode !== mode) this.invalidateShading();
-    this.snowMode = mode;
+    if (this.shading.snowMode !== mode) this.invalidateShading();
+    this.shading.snowMode = mode;
   }
 
   setSlopeState(state: ViewerSlopeState): void {
     if (!this.device || this.deviceLost) return;
-    this.slopeEnabled = state.enabled ? 1 : 0;
-    this.slopeOpacity = (state.opacity ?? 50) / 100;
-    const desiredFilter: GPUFilterMode = state.colorization === 'stepped' ? 'nearest' : 'linear';
+    const desiredFilter = this.shading.applySlope(state);
 
     if (state.bands && state.bands.length > 0) {
       writeRampTexture(this.device, this.slopeTexture, buildSlopeRampData(state.bands, state.colorization, 256), 256);
@@ -451,12 +407,10 @@ export class WebGpuLidarRenderer implements LidarRenderer {
 
   setAltitudeState(state: ViewerAltitudeState): void {
     if (!this.device || this.deviceLost) return;
-    this.altitudeEnabled = state.enabled ? 1 : 0;
-    this.altitudeOpacity = (state.opacity ?? 50) / 100;
-    const desiredFilter: GPUFilterMode = state.colorization === 'stepped' ? 'nearest' : 'linear';
+    const desiredFilter = this.shading.applyAltitude(state);
 
     if (state.bands && state.bands.length > 0) {
-      const data = buildAltitudeRampData(state.bands, state.colorization, this.maxAltitude, 512);
+      const data = buildAltitudeRampData(state.bands, state.colorization, this.shading.maxAltitude, 512);
       writeRampTexture(this.device, this.altitudeTexture, data, 512);
     }
 
@@ -469,22 +423,13 @@ export class WebGpuLidarRenderer implements LidarRenderer {
   }
 
   setMaxAltitude(maxAltitude: number): void {
-    this.maxAltitude = maxAltitude;
+    this.shading.maxAltitude = maxAltitude;
     this.invalidateShading();
   }
 
   setSunlightRenderState(renderState: SolarRenderState): void {
     if (!this.device || this.deviceLost) return;
-    this.sunlightEnabled = renderState.enabled ? 1 : 0;
-    this.sunDir = renderState.sunDir;
-    this.sunColor = renderState.sunColor;
-    this.sunIntensity = renderState.sunIntensity;
-    this.skyColor = renderState.skyColor;
-    this.exposure = renderState.exposure;
-    this.shadowEnabled = renderState.shadowEnabled ? 1 : 0;
-    this.shadowOpacity = renderState.shadowOpacity;
-    this.sunlightMapEnabled = renderState.sunlightMapEnabled ? 1 : 0;
-    this.sunlightMapOpacity = renderState.sunlightMapOpacity;
+    this.shading.applySunlight(renderState);
 
     let needsRebind = false;
 
@@ -505,10 +450,6 @@ export class WebGpuLidarRenderer implements LidarRenderer {
     }
 
     if (needsRebind) this.rebuildBindGroups();
-
-    this.trajectoryEnabled = renderState.trajectoryEnabled;
-    this.sunDiscPos = renderState.sunDiscPos;
-    this.sunDiscRadius = renderState.sunDiscRadius;
 
     if (renderState.trajectoryVertices && renderState.trajectoryVertexCount > 0) {
       this.trajectoryBuffer?.destroy();
@@ -594,8 +535,7 @@ export class WebGpuLidarRenderer implements LidarRenderer {
   }
 
   setPointFilterState(state: ViewerPointFilterState): void {
-    this.pointFilterEnabled = state.enabled ? 1.0 : 0.0;
-    this.pointFilterMask = computePointFilterBitmasks(state.enabled, state.categories);
+    this.shading.applyPointFilter(state);
   }
 
   clearRouteMesh(): void {
@@ -676,67 +616,31 @@ export class WebGpuLidarRenderer implements LidarRenderer {
       this.photoShading = photoActive;
       this.invalidateShading();
     }
-    packSceneUniforms(this.uniformCache, this.uniformCacheU32, drawViewProj, vArr, pos, {
+    packSceneUniforms(this.uniformCache, this.uniformCacheU32, drawViewProj, vArr, pos, this.shading.uniformState({
       pointSize: this.pointSize,
       canvasWidth: this.canvasWidth,
       canvasHeight: this.canvasHeight,
-      sunDir: this.sunDir,
-      hmOriginX: this.hmOriginX,
-      hmOriginZ: this.hmOriginZ,
-      hmScaleX: this.hmScaleX,
-      hmScaleZ: this.hmScaleZ,
       density,
       centerAltitude: this.centerAltitude,
-      maxAltitude: this.maxAltitude,
-      colorModeIndex: COLOR_MODE_INDEX[this.colorMode],
-      snowMode: this.snowMode,
-      snowOriginX: this.snowOriginX,
-      snowOriginZ: this.snowOriginZ,
-      snowScaleX: this.snowScaleX,
-      snowScaleZ: this.snowScaleZ,
-      slopeEnabled: this.slopeEnabled,
-      slopeOpacity: this.slopeOpacity,
-      altitudeEnabled: this.altitudeEnabled,
-      altitudeOpacity: this.altitudeOpacity,
-      sunlightEnabled: this.sunlightEnabled,
-      shadowEnabled: this.shadowEnabled,
-      shadowOpacity: this.shadowOpacity,
-      sunlightMapEnabled: this.sunlightMapEnabled,
-      sunlightMapOpacity: this.sunlightMapOpacity,
-      sunIntensity: this.sunIntensity,
-      exposure: this.exposure,
-      sunColor: this.sunColor,
-      skyColor: this.skyColor,
-      sunDiscPos: this.sunDiscPos,
-      sunDiscRadius: this.sunDiscRadius,
-      pointFilterEnabled: this.pointFilterEnabled,
-      pointFilterMask: this.pointFilterMask,
       photoMode: photoActive ? 1 : 0,
-    });
+    }));
     this.device.queue.writeBuffer(this.cameraBuffer, 0, this.uniformCache as Float32Array<ArrayBuffer>);
   }
 
   /** Per-frame sprite and EDL parameters for scene targets of `width`×`height` (`scale` of the canvas). */
   private writeFrameParams(width: number, height: number, scale: number): void {
-    const p = this.pointParams;
-    // Pixel sizes follow the target, so the upscaled image keeps the same point sizes.
-    p[0] = POINT_MIN_PX;
-    p[1] = this.maxPointPixels * scale;
-    p[2] = this.fixedPointPixels * scale;
-    p[3] = Math.abs(this.lastProjScaleY) * height * 0.5;
-    p[4] = width;
-    p[5] = height;
-    p[6] = this.sampleCount > 1 ? 1 : 0;
-    p[7] = this.pointSize;
-    p[8] = this.adaptivePointSize
-      ? ADAPTIVE_SPACING_FACTOR * (this.pointSizeReference > 0 ? this.pointSize / this.pointSizeReference : 1)
-      : 0;
-    this.device.queue.writeBuffer(this.pointParamsBuffer, 0, p as Float32Array<ArrayBuffer>);
+    fillPointParams(this.pointParams, width, height, scale, {
+      maxPointPixels: this.maxPointPixels,
+      fixedPointPixels: this.fixedPointPixels,
+      projScaleY: this.lastProjScaleY,
+      pointSize: this.pointSize,
+      adaptivePointSize: this.adaptivePointSize,
+      pointSizeReference: this.pointSizeReference,
+      msaa: this.sampleCount > 1,
+    });
+    this.device.queue.writeBuffer(this.pointParamsBuffer, 0, this.pointParams as Float32Array<ArrayBuffer>);
 
-    this.edlParams[0] = this.edlStrength;
-    this.edlParams[1] = Math.max(1, this.edlRadiusPx * scale);
-    this.edlParams[2] = this.edlEnabled ? 1 : 0;
-    this.edlParams[3] = scale;
+    fillEdlParams(this.edlParams, { enabled: this.edlEnabled, strength: this.edlStrength, radiusPx: this.edlRadiusPx }, scale);
     this.device.queue.writeBuffer(this.edlParamsBuffer, 0, this.edlParams as Float32Array<ArrayBuffer>);
   }
 
@@ -771,9 +675,7 @@ export class WebGpuLidarRenderer implements LidarRenderer {
     this.lastRenderScale = scale;
     this.writeFrameParams(targets.width, targets.height, scale);
 
-    const clearR = this.sunlightEnabled ? this.skyColor[0] : 0.76;
-    const clearG = this.sunlightEnabled ? this.skyColor[1] : 0.87;
-    const clearB = this.sunlightEnabled ? this.skyColor[2] : 0.96;
+    const [clearR, clearG, clearB] = this.shading.clearColor();
 
     const enc = this.device.createCommandEncoder();
     const timed = this.gpuTimer?.beginFrame() ?? false;
@@ -825,14 +727,14 @@ export class WebGpuLidarRenderer implements LidarRenderer {
       this.lastDrawCallCount += 1;
     }
 
-    if (this.trajectoryEnabled && this.trajectoryVertexCount > 1 && this.trajectoryBuffer) {
+    if (this.shading.trajectoryEnabled && this.trajectoryVertexCount > 1 && this.trajectoryBuffer) {
       pass.setPipeline(this.pipelines.trajectoryPipeline);
       pass.setVertexBuffer(0, this.trajectoryBuffer);
       pass.draw(this.trajectoryVertexCount, 1, 0, 0);
       this.lastDrawCallCount += 1;
     }
 
-    if (this.trajectoryEnabled && this.sunDiscPos) {
+    if (this.shading.trajectoryEnabled && this.shading.sunDiscPos) {
       pass.setPipeline(this.pipelines.sunDiscPipeline);
       pass.draw(6, 1, 0, 0);
       this.lastDrawCallCount += 1;
@@ -948,9 +850,9 @@ export class WebGpuLidarRenderer implements LidarRenderer {
       terrainVisible: this.terrainVisible,
       overlays: { preview: this.previewMesh, route: this.routeMesh, analysis: this.analysisMesh },
       heightTexture: this.heightTexture,
-      heightmap: [this.hmOriginX, this.hmOriginZ, this.hmScaleX, this.hmScaleZ],
+      heightmap: [this.shading.hmOriginX, this.shading.hmOriginZ, this.shading.hmScaleX, this.shading.hmScaleZ],
       pointSizeM: this.pointSize,
-      pointFilter: { enabled: this.pointFilterEnabled > 0.5, mask: this.pointFilterMask },
+      pointFilter: { enabled: this.shading.pointFilterEnabled > 0.5, mask: this.shading.pointFilterMask },
       writePointParams: (width, height, scale) => this.writeFrameParams(width, height, scale),
       timed,
     });
