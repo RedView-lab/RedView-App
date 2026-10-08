@@ -267,6 +267,6 @@ export const Permission = {
   update: (r: string) => `update("${r}")`,
   delete: (r: string) => `delete("${r}")`,
 };
-export const Role = { user: (id: string) => `user:${id}`, any: () => 'any', users: () => 'users' };
+export const Role = { user: (id: string) => `user:${id}`, team: (id: string) => `team:${id}`, any: () => 'any', users: () => 'users' };
 export const OAuthProvider = { Google: 'google' };
 export const ImageFormat = { Webp: 'webp' };
