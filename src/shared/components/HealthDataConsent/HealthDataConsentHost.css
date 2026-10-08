@@ -1,0 +1,33 @@
+/*
+ * Pop-in de consentement aux données de santé (.fit). Cadre, en-tête et
+ * boutons : `.rv-dialog` (shared/styles/dialog.css) ; ici la liste.
+ */
+.rv-health-consent {
+  max-width: 480px;
+}
+
+.rv-health-consent__text {
+  margin: 0;
+  font-size: var(--rv-font-size-md);
+  line-height: 1.45;
+  color: var(--rv-text);
+}
+
+.rv-health-consent__list {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 8px 12px;
+  margin: 0;
+  font-size: var(--rv-font-size-md);
+  line-height: 1.45;
+}
+
+.rv-health-consent__list dt {
+  font-weight: 600;
+  color: var(--rv-text);
+}
+
+.rv-health-consent__list dd {
+  margin: 0;
+  color: rgb(var(--rv-ink) / 0.8);
+}

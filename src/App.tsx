@@ -18,6 +18,7 @@ import { useAppI18n } from './shared/i18n'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { appQueryClient } from './shared/services/queryClient'
 import { AppToaster } from './shared/components/AppToaster/AppToaster'
+import { HealthDataConsentHost } from './shared/components/HealthDataConsent/HealthDataConsentHost'
 import './index.css'
 
 const Dashboard = lazy(() => import('./pages/Dashboard'))
@@ -308,6 +309,7 @@ function App() {
       {content}
       {showNarrowViewportOverlay && <NarrowViewportOverlay onContinue={dismissNarrowViewportOverlay} />}
       <AppToaster />
+      <HealthDataConsentHost />
     </QueryClientProvider>
   )
 }

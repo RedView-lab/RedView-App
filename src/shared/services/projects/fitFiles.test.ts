@@ -7,15 +7,27 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  * possible.
  */
 
-const bucket = vi.hoisted(() => ({ deleted: [] as string[], missing: new Set<string>() }));
+const bucket = vi.hoisted(() => ({
+  deleted: [] as string[],
+  missing: new Set<string>(),
+  /** Fichiers lisibles par le compte (les siens et ceux des projets partagés avec lui). */
+  listed: [] as Array<{ $id: string; $permissions: string[] }>,
+}));
 
 vi.mock('@/shared/services/appwrite', () => ({
   FIT_FILES_BUCKET_ID: 'fit-files',
   ID: { unique: () => 'id' },
   Permission: {},
+  Query: { limit: (n: number) => `limit(${n})`, cursorAfter: (id: string) => `cursorAfter(${id})` },
   Role: {},
   client: {},
   storage: {
+    async listFiles(bucketId: string, queries: string[]) {
+      expect(bucketId).toBe('fit-files');
+      const after = queries.find((query) => query.startsWith('cursorAfter('))?.slice('cursorAfter('.length, -1);
+      const start = after ? bucket.listed.findIndex((file) => file.$id === after) + 1 : 0;
+      return { files: bucket.listed.slice(start, start + 100) };
+    },
     async deleteFile(bucketId: string, fileId: string) {
       expect(bucketId).toBe('fit-files');
       if (bucket.missing.has(fileId)) throw Object.assign(new Error('absent'), { code: 404 });
@@ -26,7 +38,7 @@ vi.mock('@/shared/services/appwrite', () => ({
 vi.mock('./auth', () => ({ getCurrentUserId: async () => 'moi' }));
 vi.mock('./liveSessions', () => ({ isLiveSession: () => false, sharedProjectTeamId: () => null }));
 
-const { collectProjectFitUploads, flushPendingFitDeletions, scheduleFitUploadsDeletion } = await import('./fitFiles');
+const { collectProjectFitUploads, deleteOwnedFitFiles, flushPendingFitDeletions, isFitFileOwnedBy, scheduleFitUploadsDeletion } = await import('./fitFiles');
 
 const upload = (path: string | null, name = `${path}.fit`) => ({ path, name, size: 1, type: '', lastModified: 0 });
 const project = (...itineraries: Array<Array<ReturnType<typeof upload>>>) => ({
@@ -36,6 +48,32 @@ const project = (...itineraries: Array<Array<ReturnType<typeof upload>>>) => ({
 beforeEach(() => {
   bucket.deleted = [];
   bucket.missing.clear();
+  bucket.listed = [];
+});
+
+describe('retrait du consentement : fichiers FIT du compte', () => {
+  const owned = (id: string) => ({ $id: id, $permissions: ['read("user:moi")', 'update("user:moi")', 'delete("user:moi")'] });
+  const sharedByOther = (id: string) => ({ $id: id, $permissions: ['read("user:autre")', 'update("user:autre")', 'delete("user:autre")', 'read("team:p1")'] });
+
+  it('reconnaît le propriétaire par ses permissions, jamais par la seule lecture', () => {
+    expect(isFitFileOwnedBy(owned('a').$permissions, 'moi')).toBe(true);
+    expect(isFitFileOwnedBy(sharedByOther('b').$permissions, 'moi')).toBe(false);
+    expect(isFitFileOwnedBy(['read("user:moi")'], 'moi')).toBe(false);
+    expect(isFitFileOwnedBy(undefined, 'moi')).toBe(false);
+  });
+
+  it('efface tous les fichiers du compte, orphelins compris, sur plusieurs pages, sans toucher à ceux des autres', async () => {
+    bucket.listed = [
+      ...Array.from({ length: 150 }, (_, i) => owned(`mien-${i}`)),
+      sharedByOther('partage-1'),
+      owned('mien-absent'),
+    ];
+    bucket.missing.add('mien-absent');
+    const result = await deleteOwnedFitFiles();
+    expect(result).toEqual({ deleted: 151, failed: 0 });
+    expect(bucket.deleted).toHaveLength(150);
+    expect(bucket.deleted).not.toContain('partage-1');
+  });
 });
 
 describe('collectProjectFitUploads', () => {

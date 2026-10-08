@@ -1,4 +1,5 @@
 import { translateAppText } from '@/shared/i18n';
+import { ensureHealthDataConsent } from '@/shared/services/healthDataConsent';
 import {
   createProject,
   deleteProject,
@@ -53,15 +54,20 @@ export async function duplicateProjectWithAssets(
     );
     duplicateProjectId = row.id;
 
-    duplicateFitUploads = await duplicateProjectItineraryFitFiles(
-      duplicateData.itineraries.map((itinerary) => ({ id: itinerary.id, fitUploads: itinerary.fitUploads })),
-      row.id,
-    );
+    // Données de santé (RGPD art. 9) : sans accord, la copie n'a pas de .fit.
+    const carriesFit = duplicateData.itineraries.some((itinerary) => (itinerary.fitUploads ?? []).length > 0);
+    const copyFit = carriesFit && await ensureHealthDataConsent();
+    if (copyFit) {
+      duplicateFitUploads = await duplicateProjectItineraryFitFiles(
+        duplicateData.itineraries.map((itinerary) => ({ id: itinerary.id, fitUploads: itinerary.fitUploads })),
+        row.id,
+      );
+    }
     await saveProject(row.id, {
       ...duplicateData,
       itineraries: duplicateData.itineraries.map((itinerary) => ({
         ...itinerary,
-        fitUploads: duplicateFitUploads[itinerary.id] ?? itinerary.fitUploads,
+        fitUploads: copyFit ? duplicateFitUploads[itinerary.id] ?? itinerary.fitUploads : [],
       })),
     });
     const thumbnailCopied = await duplicateProjectThumbnail(projectId, row.id);

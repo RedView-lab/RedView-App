@@ -1,6 +1,7 @@
 import { countBucket, trackAnalyticsEvent } from '@/shared/lib/analytics';
 import { useCallback, useRef, type ChangeEvent, type Dispatch, type SetStateAction } from 'react';
 import { translateAppText } from '@/shared/i18n';
+import { ensureHealthDataConsent } from '@/shared/services/healthDataConsent';
 import { deleteFitUploads, uploadProjectItineraryFitFiles } from '@/shared/services/projects';
 import { validateFitFile, type FitFileProblem } from '@/features/fitPredictor/lib/fitFileValidation';
 import { buildFitUploadsSignature } from '../../lib/schedule';
@@ -41,11 +42,18 @@ export function useFitFileHandlers({
 
   const handleUploadFitRequest = useCallback(() => {
     if (!active) return;
-    fitUploadTargetIdRef.current = active.id;
-    if (fitInputRef.current) {
-      fitInputRef.current.value = '';
-      fitInputRef.current.click();
-    }
+    const targetId = active.id;
+    // Données de santé (RGPD art. 9) : accord explicite avant d'ouvrir le
+    // sélecteur, donc aucun fichier n'est lu ni envoyé sans lui. Le clic sur
+    // « J'accepte » garde l'activation utilisateur qu'exige input.click().
+    void ensureHealthDataConsent().then((accepted) => {
+      if (!accepted) return;
+      fitUploadTargetIdRef.current = targetId;
+      if (fitInputRef.current) {
+        fitInputRef.current.value = '';
+        fitInputRef.current.click();
+      }
+    });
   }, [active]);
 
   const handleFitInputChange = useCallback(

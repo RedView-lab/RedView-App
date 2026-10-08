@@ -1,5 +1,6 @@
 import { describeRedviewImportError } from '@/features/redviewFile/lib/messages';
 import { translateAppText } from '@/shared/i18n';
+import { ensureHealthDataConsent } from '@/shared/services/healthDataConsent';
 import type { ProjectSummary } from '@/shared/services/projects';
 
 import { rowToSummary } from './rowToSummary';
@@ -27,7 +28,7 @@ export async function importProjectFiles(
   const failures: string[] = [];
   for (const file of files) {
     try {
-      const result = await importRedviewFile(file, { folderId, siblingNames: names });
+      const result = await importRedviewFile(file, { folderId, siblingNames: names, consentToFitFiles: ensureHealthDataConsent });
       names.push(result.row.name);
       imported.push(rowToSummary(result.row));
       if (result.skippedFitFileCount > 0) {

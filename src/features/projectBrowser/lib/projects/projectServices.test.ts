@@ -16,12 +16,17 @@ vi.mock('@/shared/services/projects', () => ({
 vi.mock('@/features/redviewFile/lib/importProject', () => ({
   importRedviewFile: vi.fn(),
 }));
+// Accord aux données de santé des .fit (RGPD art. 9) : donné par défaut, refusé dans un test.
+vi.mock('@/shared/services/healthDataConsent', () => ({
+  ensureHealthDataConsent: vi.fn(),
+}));
 vi.mock('@/features/redviewFile/lib/messages', () => ({
   describeRedviewImportError: (error: unknown) => (error instanceof Error ? error.message : 'Fichier illisible'),
 }));
 
 import * as projectsApi from '@/shared/services/projects';
 import * as redviewFile from '@/features/redviewFile/lib/importProject';
+import * as healthConsent from '@/shared/services/healthDataConsent';
 import type { ProjectRow } from '@/shared/services/projects';
 
 import { duplicateProjectWithAssets } from './duplicateProject';
@@ -29,6 +34,7 @@ import { importProjectFiles } from './importProjects';
 
 const api = vi.mocked(projectsApi);
 const redview = vi.mocked(redviewFile);
+const consent = vi.mocked(healthConsent);
 
 function row(id: string, name: string, folderId: string | null = 'f1'): ProjectRow {
   return {
@@ -60,6 +66,7 @@ beforeEach(() => {
   api.deleteProject.mockResolvedValue(undefined as never);
   api.deleteFitUploads.mockResolvedValue([]);
   api.deleteProjectThumbnail.mockResolvedValue(undefined as never);
+  consent.ensureHealthDataConsent.mockResolvedValue(true);
 });
 
 describe('duplicateProjectWithAssets', () => {
@@ -81,6 +88,15 @@ describe('duplicateProjectWithAssets', () => {
     }));
     expect(api.duplicateProjectThumbnail).toHaveBeenCalledWith('src', 'copy');
     expect(api.deleteProject).not.toHaveBeenCalled();
+  });
+
+  it('without consent to health data, the copy has no FIT files and none are copied', async () => {
+    consent.ensureHealthDataConsent.mockResolvedValue(false);
+    await duplicateProjectWithAssets('src', () => []);
+    expect(api.duplicateProjectItineraryFitFiles).not.toHaveBeenCalled();
+    expect(api.saveProject).toHaveBeenCalledWith('copy', expect.objectContaining({
+      itineraries: [expect.objectContaining({ fitUploads: [] })],
+    }));
   });
 
   it('never mutates the source document', async () => {

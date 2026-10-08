@@ -33,6 +33,12 @@ export interface RedviewImportOptions {
   folderId: string | null;
   /** Noms des projets déjà présents dans ce dossier : le projet importé prend un nom libre. */
   siblingNames: readonly string[];
+  /**
+   * Accord aux données de santé (RGPD art. 9), demandé seulement si le fichier
+   * contient des .fit ; refusé, le projet est importé sans eux. Absent : les
+   * .fit sont importés (appelants qui ont déjà l'accord, tests).
+   */
+  consentToFitFiles?: () => Promise<boolean>;
 }
 
 export interface RedviewImportResult {
@@ -147,7 +153,16 @@ async function uploadItineraryFitFiles(
 }
 
 export async function importRedviewFile(file: File, options: RedviewImportOptions): Promise<RedviewImportResult> {
-  const parsed = await readRedviewFile(file);
+  const read = await readRedviewFile(file);
+  const carriesFit = read.fitFiles.length > 0
+    || read.project.itineraries.some((itinerary) => (itinerary.fitUploads ?? []).length > 0);
+  const fitAllowed = !carriesFit || !options.consentToFitFiles || await options.consentToFitFiles();
+  const parsed = fitAllowed ? read : {
+    ...read,
+    project: { ...read.project, itineraries: read.project.itineraries.map((itinerary) => ({ ...itinerary, fitUploads: [] })) },
+    fitFiles: [],
+    skippedFitFiles: read.skippedFitFiles + read.fitFiles.length,
+  };
   const name = buildImportedProjectName(parsed.project.name || fileBaseName(file), options.siblingNames);
   const { toSave: profilesToSave, remap } = planRoutingProfileMerge(parsed.routingProfiles);
 

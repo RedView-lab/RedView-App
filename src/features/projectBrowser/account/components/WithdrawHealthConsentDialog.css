@@ -1,0 +1,29 @@
+/*
+ * Retrait du consentement aux données de santé. Cadre, en-tête et boutons :
+ * `.rv-dialog` (shared/styles/dialog.css).
+ */
+.rv-health-withdraw {
+  max-width: 440px;
+}
+
+.rv-health-withdraw__text {
+  margin: 0;
+  font-size: var(--rv-font-size-md);
+  line-height: 1.45;
+  color: var(--rv-text);
+}
+
+.rv-health-withdraw__option {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: var(--rv-font-size-md);
+  line-height: 1.45;
+  color: var(--rv-text);
+  cursor: pointer;
+}
+
+.rv-health-withdraw__option input {
+  margin-top: 3px;
+  accent-color: var(--rv-accent);
+}

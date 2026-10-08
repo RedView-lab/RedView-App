@@ -2,6 +2,7 @@ import {
   FIT_FILES_BUCKET_ID,
   ID,
   Permission,
+  Query,
   client,
   Role,
   storage,
@@ -84,6 +85,42 @@ export async function deleteFitUploads(
     failedIds.push(ids[index]!);
   });
   return failedIds;
+}
+
+const OWNED_FILES_PAGE_SIZE = 100;
+const OWNED_FILES_MAX_PAGES = 200;
+
+/** Le compte possède le fichier : ses permissions lui donnent la modification ou la suppression (comme la purge serveur). */
+export function isFitFileOwnedBy(permissions: readonly string[] | undefined, userId: string): boolean {
+  const role = `user:${userId}`;
+  return Array.isArray(permissions)
+    && (permissions.includes(`update("${role}")`) || permissions.includes(`delete("${role}")`));
+}
+
+/**
+ * Efface tous les fichiers FIT dont le compte connecté est propriétaire, y
+ * compris ceux qu'aucun projet ne référence plus (retrait du consentement aux
+ * données de santé). Les fichiers d'autres éditeurs, lisibles dans un projet
+ * partagé, ne sont pas touchés. Les références restées dans les projets sont
+ * tolérées : un fichier absent est signalé et ignoré par l'hydratation.
+ * Renvoie le nombre de fichiers effacés et ceux qui ont échoué.
+ */
+export async function deleteOwnedFitFiles(): Promise<{ deleted: number; failed: number }> {
+  const userId = await getCurrentUserId();
+  if (!userId) throw new Error('Session utilisateur introuvable.');
+  const owned: string[] = [];
+  let cursor: string | null = null;
+  for (let page = 0; page < OWNED_FILES_MAX_PAGES; page += 1) {
+    const list: { files: Array<{ $id: string; $permissions: string[] }> } = await storage.listFiles(FIT_FILES_BUCKET_ID, [
+      Query.limit(OWNED_FILES_PAGE_SIZE),
+      ...(cursor ? [Query.cursorAfter(cursor)] : []),
+    ]);
+    for (const file of list.files) if (isFitFileOwnedBy(file.$permissions, userId)) owned.push(file.$id);
+    if (list.files.length < OWNED_FILES_PAGE_SIZE) break;
+    cursor = list.files[list.files.length - 1]!.$id;
+  }
+  const failed = await deleteFitUploads(owned.map((path) => ({ path }) as ItineraryFitUpload));
+  return { deleted: owned.length - failed.length, failed: failed.length };
 }
 
 /**
