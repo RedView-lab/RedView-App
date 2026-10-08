@@ -1,0 +1,65 @@
+name: Bug report
+description: Something in RedView does not work as it should.
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. Please **do not paste personal data**:
+        no e-mail address, no project name, no exact home coordinates, no reset link.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - 3D map and overlays (slopes, altitude, weather, snow, sunlight)
+        - Routing and route editing
+        - Moving-time prediction and schedule
+        - POI and roadbook
+        - LiDAR viewer
+        - Co-editing, comments, live presence
+        - Project browser, account, sharing
+        - Export (GPX, FIT, .redview, flyover video)
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you saw, and what you expected instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open a project with …
+        2. Click …
+        3. See …
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: Browser and system
+      placeholder: e.g. Chrome 141 on Windows 11, Firefox on Ubuntu, Safari on macOS
+    validations:
+      required: true
+
+  - type: input
+    id: request-id
+    attributes:
+      label: Request ID or time of the error (optional)
+      description: An `X-Request-ID` from the browser's network tab, or the time it happened, helps find the server log.
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots or console output (optional)

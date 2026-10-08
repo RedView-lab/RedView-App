@@ -1,0 +1,38 @@
+name: Feature request
+description: Suggest an improvement or a new capability.
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to do, and what gets in the way today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like
+      description: How it could work. Sketches and examples from other tools are welcome.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: activity
+    attributes:
+      label: For which activity
+      multiple: true
+      options:
+        - Ultra-cycling / road
+        - Bikepacking / gravel
+        - Trail running / hiking
+        - Mountain / ski touring
+        - Any
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives (optional)
+      description: Workarounds you use today, or other options you considered.
