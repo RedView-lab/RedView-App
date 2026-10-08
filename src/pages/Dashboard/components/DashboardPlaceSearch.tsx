@@ -330,9 +330,10 @@ export function DashboardPlaceSearch({
     scheduleVisualRefresh();
     map.on('zoom', scheduleVisualRefresh);
 
-    // Markers created before DEM tiles finished loading were projected with a
-    // default elevation (sea level); re-setting their LngLat forces a re-projection that
-    // re-samples the loaded 3D terrain elevation and prevents parallax drift.
+    // Les marqueurs créés avant la fin du chargement des tuiles DEM ont été
+    // projetés avec une altitude par défaut (niveau de la mer) ; reposer leur
+    // LngLat force une nouvelle projection qui rééchantillonne l'altitude du
+    // terrain 3D chargé et évite la dérive de parallaxe.
     const reanchorOnIdle = () => {
       for (const { marker } of poiMarkerRegistryRef.current.values()) {
         marker.setLngLat(marker.getLngLat());
@@ -444,7 +445,7 @@ export function DashboardPlaceSearch({
           targetZoom,
         );
       } catch {
-        /* prewarm is best-effort — never block the search teleport */
+        /* le préchauffage est au mieux — ne bloque jamais la téléportation de recherche */
       }
 
       try {
@@ -455,7 +456,7 @@ export function DashboardPlaceSearch({
           preloadOnly: true,
         });
       } catch {
-        /* preloadOnly is best-effort */
+        /* preloadOnly est au mieux */
       }
       map.jumpTo(finalCamera);
     },
@@ -597,9 +598,10 @@ export function DashboardPlaceSearch({
       aria-hidden={!visible}
     >
       {/*
-       * Left drawer toggle. It shares the search wrapper's flex row so the
-       * panel / button / search-bar gutters stay exactly PANEL_PADDING wide
-       * and can never overlap the place-search field.
+       * Bascule du tiroir de gauche. Elle partage la rangée flex de
+       * l'enveloppe de recherche pour que les gouttières panneau / bouton /
+       * barre de recherche gardent exactement PANEL_PADDING et ne puissent
+       * jamais chevaucher le champ de recherche de lieu.
        */}
       {onCollapseLeftPanel || onRestoreLeftPanel ? (
         <div className="rvd-place-search__panel-toggle">

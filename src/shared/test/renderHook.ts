@@ -2,9 +2,9 @@ import { act, createElement, StrictMode, type ComponentType, type ReactNode } fr
 import { createRoot, type Root } from 'react-dom/client';
 
 /**
- * Minimal `renderHook` for Vitest without @testing-library: mounts the hook in
- * a real React DOM root. The test file needs a DOM: start it with
- * `// @vitest-environment happy-dom`.
+ * `renderHook` minimal pour Vitest sans @testing-library : monte le hook dans
+ * une vraie racine React DOM. Le fichier de test a besoin d'un DOM : le faire
+ * commencer par `// @vitest-environment happy-dom`.
  */
 
 declare global {
@@ -12,7 +12,7 @@ declare global {
 }
 
 export interface RenderedHook<Props, Result> {
-  /** Value returned by the last committed render. */
+  /** Valeur renvoyée par le dernier rendu validé. */
   readonly result: { current: Result };
   rerender(props: Props): void;
   unmount(): void;
@@ -21,7 +21,7 @@ export interface RenderedHook<Props, Result> {
 export interface RenderHookOptions<Props> {
   initialProps: Props;
   strict?: boolean;
-  /** Providers around the hook; they get the same props as the hook. */
+  /** Providers autour du hook ; ils reçoivent les mêmes props que le hook. */
   wrapper?: ComponentType<{ children: ReactNode; props: Props }>;
 }
 

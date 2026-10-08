@@ -1,18 +1,20 @@
 /**
- * Capture a downsized JPEG snapshot of the live Mapbox canvas.
+ * Capture un instantané JPEG réduit du canvas Mapbox en direct.
  *
- * Used by the project browser to show a per-project thumbnail.
- * Captures the WebGL canvas synchronously on `render` via `map.triggerRepaint()`,
- * working cleanly without requiring `preserveDrawingBuffer: true`.
+ * Utilisé par le gestionnaire de projets pour afficher une miniature par
+ * projet. Capture le canvas WebGL de façon synchrone sur `render` via
+ * `map.triggerRepaint()`, proprement, sans exiger
+ * `preserveDrawingBuffer: true`.
  *
- * The capture pipeline is:
- *   map canvas (full device-pixel resolution)
- *     → offscreen canvas at `targetWidth` (object-fit: cover)
- *     → JPEG blob
+ * Le pipeline de capture :
+ *   canvas de la carte (pleine résolution en pixels physiques)
+ *     → canvas hors écran à `targetWidth` (object-fit: cover)
+ *     → blob JPEG
  *
- * Returns null if the map isn't ready or the capture failed for any
- * reason (read-back blocked, taint, OOM…). Callers should treat null
- * as "skip thumbnail upload, keep the previous one".
+ * Renvoie null si la carte n'est pas prête ou si la capture a échoué pour une
+ * raison quelconque (relecture bloquée, canvas souillé, mémoire épuisée…). Les
+ * appelants doivent traiter null comme « pas d'envoi de miniature, on garde la
+ * précédente ».
  */
 import type { Map as MapboxMap } from 'mapbox-gl';
 
@@ -36,7 +38,7 @@ export async function captureMapThumbnail(
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
 
-      // Cover: scale to fill, crop excess.
+      // Cover : mise à l'échelle pour remplir, l'excédent est rogné.
       const srcAspect = src.width / src.height;
       let sx = 0;
       let sy = 0;
@@ -74,7 +76,7 @@ export async function captureMapThumbnail(
       resolve(blob);
     };
 
-    // Grab canvas immediately in the render callback before the buffer is cleared
+    // Prend le canvas tout de suite dans le callback de rendu, avant que le tampon soit vidé
     const onRender = () => {
       try {
         const src = map.getCanvas();
@@ -91,7 +93,7 @@ export async function captureMapThumbnail(
     map.once('render', onRender);
     map.triggerRepaint();
 
-    // Fallback: direct attempt or timeout in case map is already painted or unmounted
+    // Repli : tentative directe ou délai, au cas où la carte est déjà peinte ou démontée
     setTimeout(() => {
       if (settled) return;
       const src = map.getCanvas?.();

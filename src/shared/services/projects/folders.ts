@@ -71,7 +71,7 @@ function writeFoldersCache(userId: string, folders: ProjectFolderSummary[]): voi
   try {
     window.localStorage.setItem(`${FOLDERS_CACHE_KEY_PREFIX}${userId}`, JSON.stringify(folders));
   } catch {
-    // cache best effort
+    // cache au mieux
   }
 }
 
@@ -260,7 +260,7 @@ export async function deleteProjectFolder(id: string): Promise<void> {
         if (children.length < CLOUD_LIST_PAGE_SIZE) break;
       }
 
-      // Delete the folder itself
+      // Supprime le dossier lui-même
       await databases.deleteDocument(APPWRITE_DATABASE_ID, FOLDERS_COLLECTION_ID, id);
       return;
     } catch (e) {

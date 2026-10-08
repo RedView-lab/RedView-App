@@ -61,7 +61,7 @@ export function writeStoredAppLocale(locale: AppLocale): void {
       }),
     );
   } catch {
-    // Best effort only.
+    // Au mieux seulement.
   }
 }
 

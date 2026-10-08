@@ -4,17 +4,18 @@ import { RedViewLogo } from '@/shared/components/RedViewLogo';
 import './dashboard-project-loading.css';
 
 type DashboardProjectLoadingProps = {
-  /** Project being opened, shown as a caption under the spinner. */
+  /** Projet en cours d'ouverture, affiché en légende sous l'indicateur de chargement. */
   projectName?: string | null;
 };
 
 /**
- * Full-screen transition page displayed between the project manager and the
- * 3D editor while a project is being created or loaded.
+ * Page de transition plein écran affichée entre le gestionnaire de projets et
+ * l'éditeur 3D pendant la création ou le chargement d'un projet.
  *
- * It deliberately sits above both surfaces (z-index > the project browser
- * overlay) so the switch reads as two distinct full screens with a loading
- * page in between, instead of a hard cut.
+ * Elle se place volontairement au-dessus des deux surfaces (z-index > la
+ * surcouche du gestionnaire de projets) pour que la bascule se lise comme deux
+ * écrans distincts avec une page de chargement entre eux, plutôt qu'une coupe
+ * franche.
  */
 export function DashboardProjectLoading({ projectName }: DashboardProjectLoadingProps) {
   const { t } = useAppI18n();

@@ -45,10 +45,11 @@ interface PendingSave {
 
 interface UseDashboardProjectSyncArgs {
   /**
-   * The editor's map, by ref, never the instance: V8 gives every closure of
-   * one call a single shared context, so the unload/online listeners below
-   * (re-registered per project, not per map) kept the last removed Mapbox map
-   * alive after the editor closed (`bench:dashboard -- --scenario leak`).
+   * La carte de l'éditeur, par réf, jamais l'instance : V8 donne à toutes les
+   * closures d'un même appel un seul contexte partagé, donc les écouteurs
+   * unload / online ci-dessous (réenregistrés par projet, pas par carte)
+   * gardaient en vie la dernière carte Mapbox retirée après la fermeture de
+   * l'éditeur (`bench:dashboard -- --scenario leak`).
    */
   mapInstanceRef: React.RefObject<MapboxMap | null>;
   activeProjectId: string | null;

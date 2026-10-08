@@ -1,49 +1,57 @@
 import type { CSSProperties } from 'react';
 
 /**
- * UI density (canvas scale), shared by the dashboard and the LiDAR viewer.
+ * Densité de l'interface (échelle du canvas), partagée par le tableau de bord
+ * et le visualiseur LiDAR.
  *
- * The UI is laid out in LOGICAL pixels (type scale: shared/styles/typography.css)
- * and rendered at `appScale` CSS pixels per logical pixel.
+ * L'interface est mise en page en pixels LOGIQUES (échelle typographique :
+ * shared/styles/typography.css) et rendue à `appScale` pixels CSS par pixel
+ * logique.
  *
- * Rule: on a standard-density screen the UI is NEVER shrunk below 1:1. A CSS
- * pixel already carries the user's OS scaling (125 %, 150 %…) and browser
- * zoom; shrinking on top of it gave 8–10 px text, blurry on non-HiDPI screens
- * (half-screen 1080p window, 1366×768 laptop, 1080p laptop at 125–150 %).
- * Small or short windows reflow instead (pages/Dashboard/lib/layout.ts: side
- * panels give way, center panel and map tools compact); browser zoom stays
- * the user's density control.
+ * Règle : sur un écran de densité standard, l'interface n'est JAMAIS réduite
+ * sous 1:1. Un pixel CSS porte déjà la mise à l'échelle de l'OS de
+ * l'utilisateur (125 %, 150 %…) et le zoom du navigateur ; réduire par-dessus
+ * donnait du texte de 8 à 10 px, flou sur les écrans non HiDPI (fenêtre 1080p
+ * en demi-écran, portable 1366×768, portable 1080p à 125–150 %). Les fenêtres
+ * petites ou basses se réorganisent à la place (pages/Dashboard/lib/layout.ts :
+ * les panneaux latéraux cèdent, le panneau central et les outils de carte se
+ * compactent) ; le zoom du navigateur reste le réglage de densité de
+ * l'utilisateur.
  *
- * Retina exception (≥ 2 device px per CSS px: MacBook, 4K at 200 %): a text
- * shrunk to 9.5 CSS px is still drawn on 19 device px, sharp. A 13–14"
- * MacBook (≈1440–1512 × 800–870 CSS px) at 1:1 looked oversized and crammed
- * the map/center toolbars onto two rows, so below the design reference the
- * scale follows HIDPI_SHRINK_FACTOR of the deficit, never under HIDPI_MIN
- * (MacBook Air 13" ≈ 0.87, MacBook Pro 14" ≈ 0.89).
+ * Exception Retina (≥ 2 px physiques par px CSS : MacBook, 4K à 200 %) : un
+ * texte réduit à 9,5 px CSS est encore dessiné sur 19 px physiques, net. Un
+ * MacBook 13–14" (≈1440–1512 × 800–870 px CSS) en 1:1 paraissait
+ * surdimensionné et tassait les barres d'outils de la carte et du centre sur
+ * deux lignes : sous la référence de conception, l'échelle suit donc
+ * HIDPI_SHRINK_FACTOR du déficit, jamais sous HIDPI_MIN (MacBook Air 13"
+ * ≈ 0,87, MacBook Pro 14" ≈ 0,89).
  *
- * Above the design reference (DESIGN) the scale grows gently (GROW_FACTOR of
- * the surplus) up to MAX: 1440p and ultrawide monitors gain text comfort
- * without turning into a giant zoom. Extra width on ultrawides goes to the
- * map, not to bigger text (the fit uses the limiting axis).
+ * Au-dessus de la référence de conception (DESIGN), l'échelle croît doucement
+ * (GROW_FACTOR de l'excédent) jusqu'à MAX : les écrans 1440p et ultralarges
+ * gagnent en confort de lecture sans devenir un zoom géant. La largeur en plus
+ * des ultralarges va à la carte, pas à un texte plus gros (l'ajustement
+ * utilise l'axe limitant).
  *
- * The scale is applied with CSS `zoom` (see `appScaleStyle`): text is laid out
- * and rasterised at its final size, borders snap to device pixels. A
- * `transform: scale()` only resamples the 1:1 rendering, which blurs text.
+ * L'échelle est appliquée avec le `zoom` CSS (voir `appScaleStyle`) : le texte
+ * est mis en page et rastérisé à sa taille finale, les bordures s'alignent sur
+ * les pixels physiques. Un `transform: scale()` ne fait que rééchantillonner le
+ * rendu 1:1, ce qui floute le texte.
  */
 export const APP_SCALE_DESIGN_WIDTH = 1920;
 export const APP_SCALE_DESIGN_HEIGHT = 1080;
 export const APP_SCALE_MAX = 1.12;
-/** Fraction of the viewport surplus (above the design reference) applied to the scale. */
+/** Part de l'excédent de la fenêtre (au-dessus de la référence de conception) appliquée à l'échelle. */
 export const APP_SCALE_GROW_FACTOR = 0.55;
 /**
- * Pixel ratio from which the canvas may shrink below 1:1 (Retina). Read with
- * a `resolution` media query: `window.devicePixelRatio` is capped for Mapbox
- * (map3d/hooks/useMap/runtimeProfile.ts) and no longer reports the screen.
+ * Densité de pixels à partir de laquelle le canvas peut être réduit sous 1:1
+ * (Retina). Lue avec une media query `resolution` : `window.devicePixelRatio`
+ * est plafonné pour Mapbox (map3d/hooks/useMap/runtimeProfile.ts) et ne
+ * reflète plus l'écran.
  */
 const HIDPI_QUERY = '(min-resolution: 1.95dppx)';
-/** Fraction of the viewport deficit (below the design reference) applied on Retina. */
+/** Part du déficit de la fenêtre (sous la référence de conception) appliquée sur Retina. */
 export const APP_SCALE_HIDPI_SHRINK_FACTOR = 0.5;
-/** Retina floor: the 11 px text floor shows at 9.35 CSS px, 18.7 device px. */
+/** Plancher Retina : le plancher de texte de 11 px s'affiche à 9,35 px CSS, 18,7 px physiques. */
 export const APP_SCALE_HIDPI_MIN = 0.85;
 
 function clamp(value: number, min: number, max: number) {
@@ -53,11 +61,11 @@ function clamp(value: number, min: number, max: number) {
 export interface AppScaleViewport {
   w: number;
   h: number;
-  /** Screen of ≥ 2 device px per CSS px (Retina); false when unknown. */
+  /** Écran d'au moins 2 px physiques par px CSS (Retina) ; faux si inconnu. */
   hiDpi?: boolean;
 }
 
-/** Current window size and pixel density, as `computeAppScale` takes them. */
+/** Taille et densité de pixels actuelles de la fenêtre, telles que `computeAppScale` les prend. */
 export function readAppScaleViewport(): AppScaleViewport {
   return {
     w: window.innerWidth,
@@ -67,9 +75,9 @@ export function readAppScaleViewport(): AppScaleViewport {
 }
 
 /**
- * Calls `onChange` when the window is resized or crosses the Retina threshold
- * (window moved to a screen of another density fires no `resize`). Returns a
- * cleanup.
+ * Appelle `onChange` quand la fenêtre est redimensionnée ou franchit le seuil
+ * Retina (une fenêtre déplacée sur un écran d'une autre densité ne déclenche
+ * aucun `resize`). Renvoie une fonction de nettoyage.
  */
 export function watchAppScaleViewport(onChange: () => void): () => void {
   const media = window.matchMedia?.(HIDPI_QUERY) ?? null;
@@ -93,18 +101,19 @@ export function computeAppScale(viewport: AppScaleViewport): number {
   } else if (viewport.hiDpi) {
     scale = clamp(1 - (1 - fitDesign) * APP_SCALE_HIDPI_SHRINK_FACTOR, APP_SCALE_HIDPI_MIN, 1);
   }
-  // Rounded so that layout sizes stay on a short decimal grid.
+  // Arrondi pour que les tailles de mise en page restent sur une grille décimale courte.
   return Math.round(scale * 1000) / 1000;
 }
 
 let standardZoomSupport: boolean | null = null;
 
 /**
- * True when CSS `zoom` follows the standardised model (Chromium ≥ 128,
- * Firefox ≥ 126): `getBoundingClientRect()` returns zoomed (visual) values
- * and `offsetWidth`/`clientWidth` logical ones, exactly like a
- * `transform: scale()` ancestor, so pointer/rect code (Mapbox, menus, resize
- * handles) works unchanged. Other engines fall back to the transform.
+ * Vrai quand le `zoom` CSS suit le modèle normalisé (Chromium ≥ 128,
+ * Firefox ≥ 126) : `getBoundingClientRect()` renvoie des valeurs zoomées
+ * (visuelles) et `offsetWidth`/`clientWidth` des valeurs logiques, exactement
+ * comme sous un ancêtre en `transform: scale()`, donc le code de pointeur /
+ * de rectangles (Mapbox, menus, poignées de redimensionnement) fonctionne
+ * tel quel. Les autres moteurs se replient sur la transformation.
  */
 export function supportsStandardZoom(): boolean {
   if (standardZoomSupport != null) return standardZoomSupport;
@@ -129,7 +138,7 @@ export function supportsStandardZoom(): boolean {
   return standardZoomSupport;
 }
 
-/** Style rendering a box (and its subtree) at `scale`, its own position unaffected. */
+/** Style qui rend une boîte (et son sous-arbre) à `scale`, sans changer sa propre position. */
 export function appScaleStyle(scale: number): CSSProperties {
   if (scale === 1) return {};
   if (supportsStandardZoom()) return { zoom: scale };
@@ -137,14 +146,15 @@ export function appScaleStyle(scale: number): CSSProperties {
 }
 
 /**
- * Position + scale of a fixed overlay portaled to <body> (outside the
- * dashboard canvas) that must keep the dashboard density. `top`/`left` are
- * viewport px (from `getBoundingClientRect`) of the overlay's top-left corner
- * on screen; the overlay's own sizes stay in logical px.
+ * Position + échelle d'une surcouche fixe rendue en portail dans <body> (hors
+ * du canvas du tableau de bord) qui doit garder la densité du tableau de bord.
+ * `top`/`left` sont des px de fenêtre (issus de `getBoundingClientRect`) du
+ * coin haut gauche de la surcouche à l'écran ; les tailles propres de la
+ * surcouche restent en px logiques.
  *
- * `inScaledLayer`: portaled into a layer already rendered at `scale`
- * (`.rv-app-scaled-layer`); the overlay inherits the scale and its offsets
- * are logical px with either technique.
+ * `inScaledLayer` : portail dans un calque déjà rendu à `scale`
+ * (`.rv-app-scaled-layer`) ; la surcouche hérite de l'échelle et ses décalages
+ * sont en px logiques avec les deux techniques.
  */
 export function appScaledOverlayStyle(
   {
@@ -160,12 +170,12 @@ export function appScaledOverlayStyle(
 ): CSSProperties {
   if (scale === 1) return { top, left };
   if (inScaledLayer) return { top: top / scale, left: left / scale };
-  // A zoomed box's own offsets are zoomed too: express them in logical px.
+  // Les décalages propres d'une boîte zoomée sont zoomés aussi : on les exprime en px logiques.
   if (supportsStandardZoom()) return { top: top / scale, left: left / scale, zoom: scale };
   return { top, left, transform: `scale(${scale})`, transformOrigin: 'top left' };
 }
 
-/** `--app-scale` read on `el` (inherited from the canvas or :root), 1 when absent. */
+/** `--app-scale` lu sur `el` (hérité du canvas ou de :root), 1 en son absence. */
 export function readAppScale(el: Element | null): number {
   if (!el || typeof window === 'undefined') return 1;
   const raw = Number.parseFloat(window.getComputedStyle(el).getPropertyValue('--app-scale'));
@@ -179,9 +189,10 @@ export function readRootAppScale(): number {
 }
 
 /**
- * Publishes `scale` as `--app-scale` on :root, with `data-rv-scale-mode`
- * (`zoom` | `transform`) so CSS-scaled layers (`.rv-app-scaled-layer`,
- * src/index.css) use the same technique as the JS ones. Returns a cleanup.
+ * Publie `scale` comme `--app-scale` sur :root, avec `data-rv-scale-mode`
+ * (`zoom` | `transform`) pour que les calques mis à l'échelle en CSS
+ * (`.rv-app-scaled-layer`, src/index.css) utilisent la même technique que ceux
+ * en JS. Renvoie une fonction de nettoyage.
  */
 export function publishRootAppScale(scale: number): () => void {
   const root = document.documentElement;
@@ -194,9 +205,10 @@ export function publishRootAppScale(scale: number): () => void {
 }
 
 /**
- * Keeps `--app-scale` on :root in sync with `computeAppScale(window)`. For
- * pages without the dashboard canvas (LiDAR viewer), whose floating panels
- * apply it with `zoom: var(--app-scale)`. Returns a cleanup function.
+ * Garde `--app-scale` sur :root synchronisé avec `computeAppScale(window)`.
+ * Pour les pages sans le canvas du tableau de bord (visualiseur LiDAR), dont
+ * les panneaux flottants l'appliquent avec `zoom: var(--app-scale)`. Renvoie
+ * une fonction de nettoyage.
  */
 export function syncRootAppScale(): () => void {
   let cleanup = publishRootAppScale(computeAppScale(readAppScaleViewport()));

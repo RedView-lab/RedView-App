@@ -27,11 +27,12 @@ function reservedWidth(width: number, collapsed: boolean) {
 export type SidePanelSide = 'left' | 'right';
 
 /**
- * Side panels give way to the center panel when the logical canvas is too
- * narrow for the user's preferred widths (half-screen window, 16:10 laptop:
- * the canvas stays 1:1, see shared/lib/appScale.ts): the right panel shrinks
- * first, then the left one, never below their minimum. The preferred widths
- * stay in state and come back as soon as the canvas is wide enough again.
+ * Les panneaux latéraux cèdent la place au panneau central quand le canvas
+ * logique est trop étroit pour les largeurs préférées de l'utilisateur
+ * (fenêtre en demi-écran, portable 16:10 : le canvas reste en 1:1, voir
+ * shared/lib/appScale.ts) : le panneau de droite rétrécit d'abord, puis celui
+ * de gauche, jamais sous leur minimum. Les largeurs préférées restent dans
+ * l'état et reviennent dès que le canvas est de nouveau assez large.
  */
 function fitSidePanelWidths({
   designW,
@@ -67,19 +68,21 @@ function fitSidePanelWidths({
   return { left, right };
 }
 
-/** Narrowest canvas that holds both side panels (at their minimum) and a comfortable center panel. */
+/** Canvas le plus étroit qui contient les deux panneaux latéraux (à leur minimum) et un panneau central confortable. */
 const BOTH_SIDE_PANELS_MIN_CANVAS_WIDTH =
   reservedWidth(LEFT_PANEL_WIDTH_MIN, false) +
   reservedWidth(PANEL_WIDTH_MIN_FALLBACK, false) +
   CENTER_PANEL_COMFORT_WIDTH;
 
 /**
- * When the minimum widths leave the center panel too narrow (half-screen
- * 1080p window ~960 px, 1280 px laptop), the side panels alternate instead
- * of squeezing the center panel: the one the user opened last (`priority`)
- * stays, the other is shown collapsed.
- * Nothing is written to state: the hidden panel comes back by itself when the
- * canvas widens, or when the user opens it (it then takes the priority).
+ * Quand les largeurs minimales laissent le panneau central trop étroit
+ * (fenêtre 1080p en demi-écran ~960 px, portable 1280 px), les panneaux
+ * latéraux alternent au lieu d'écraser le panneau central : celui que
+ * l'utilisateur a ouvert en dernier (`priority`) reste, l'autre est affiché
+ * replié.
+ * Rien n'est écrit dans l'état : le panneau masqué revient de lui-même quand
+ * le canvas s'élargit, ou quand l'utilisateur l'ouvre (il prend alors la
+ * priorité).
  */
 function resolveSidePanels({
   designW,
@@ -121,7 +124,7 @@ interface DashboardLayoutInput {
   isLeftPanelCollapsed: boolean;
   isCenterPanelCollapsed: boolean;
   isRightPanelCollapsed: boolean;
-  /** Side panel kept when the canvas is too narrow for both (last opened). */
+  /** Panneau latéral gardé quand le canvas est trop étroit pour les deux (le dernier ouvert). */
   sidePanelPriority?: SidePanelSide;
 }
 
@@ -136,7 +139,7 @@ export function getDashboardLayout({
   isRightPanelCollapsed: isRightPanelCollapsedPreference,
   sidePanelPriority = 'left',
 }: DashboardLayoutInput) {
-  // Fluid UI density — see src/shared/lib/appScale.ts.
+  // Densité fluide de l'interface — voir src/shared/lib/appScale.ts.
   const appScale = computeAppScale(viewport);
   const scaledViewportWidth = viewport.w / appScale;
   const scaledViewportHeight = viewport.h / appScale;
@@ -160,7 +163,7 @@ export function getDashboardLayout({
   const isLeftPanelCollapsed = fittedPanels.leftCollapsed;
   const isRightPanelCollapsed = fittedPanels.rightCollapsed;
 
-  // Short canvas: compact map tools, shorter center panel minimum.
+  // Canvas court : outils de carte compacts, minimum du panneau central plus bas.
   const isShortCanvas = designH < SHORT_CANVAS_HEIGHT;
   const mapToolsWidth = isShortCanvas ? MAP_VIEWPORT_CONTROLS_COMPACT_WIDTH : MAP_VIEWPORT_CONTROLS_WIDTH;
   const mapStageMinClearance = isShortCanvas
@@ -170,8 +173,9 @@ export function getDashboardLayout({
   const leftPanelReservedWidth = reservedWidth(fittedPanels.left, isLeftPanelCollapsed);
   const centerPanelBaseRegionLeft = leftPanelReservedWidth;
   const rightPanelReservedWidth = reservedWidth(fittedPanels.right, isRightPanelCollapsed);
-  // Widest each panel may be dragged while the other keeps its width and the
-  // center panel keeps CENTER_PANEL_MIN_WIDTH.
+  // Largeur maximale à laquelle chaque panneau peut être tiré pendant que
+  // l'autre garde sa largeur et que le panneau central garde
+  // CENTER_PANEL_MIN_WIDTH.
   const leftPanelMaxWidth =
     designW - rightPanelReservedWidth - CENTER_PANEL_MIN_WIDTH - PANEL_PADDING * 2;
   const rightPanelMaxWidth =
@@ -196,8 +200,9 @@ export function getDashboardLayout({
     0,
     designH - PANEL_PADDING * 2 - CENTER_TOOLBAR_HEIGHT - CENTER_PANEL_STACK_GAP,
   );
-  // Ensure the top map stage always retains enough vertical clearance for top-level controls
-  // (PlaceSearch on top-left and MapViewportControls on top-right) plus a uniform spacing margin.
+  // Garantit que la scène de carte du haut garde toujours assez de hauteur pour
+  // les contrôles du haut (PlaceSearch en haut à gauche et MapViewportControls
+  // en haut à droite) plus une marge d'espacement uniforme.
   const minMapStageClearance = Math.max(
     mapStageMinClearance,
     Math.round(designH * 0.25),
@@ -250,7 +255,7 @@ export function getDashboardLayout({
     designH,
     isShortCanvas,
     mapToolsWidth,
-    // Collapse states as rendered (see resolveSidePanels).
+    // États de repli tels que rendus (voir resolveSidePanels).
     isLeftPanelCollapsed,
     isRightPanelCollapsed,
     leftPanelWidth: fittedPanels.left,

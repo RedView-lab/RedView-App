@@ -39,8 +39,9 @@ export function getDashboardStyles({
 }: DashboardStylesInput) {
   const isAnyResizing = isResizing || isLeftResizing || isCenterResizing;
 
-  // Shells clip with `overflow: clip`, never `hidden`: a hidden box stays
-  // scrollable by code (scrollIntoView, focus()) and would shift its panel.
+  // Les coques rognent avec `overflow: clip`, jamais `hidden` : une boîte
+  // cachée reste défilable par code (scrollIntoView, focus()) et décalerait
+  // son panneau.
 
   const rightPanelStyle: CSSProperties = {
     position: 'absolute',

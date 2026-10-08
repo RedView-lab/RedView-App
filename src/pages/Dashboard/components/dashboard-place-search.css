@@ -5,9 +5,10 @@
 }
 
 /*
- * Panel toggle slot. The row uses `align-items: flex-start`, so the 40px
- * button's top edge lands on the exact same `top` as the 32px search shell
- * — no vertical nudge needed.
+ * Emplacement de la bascule du panneau. La rangée utilise
+ * `align-items: flex-start`, donc le bord haut du bouton de 40 px tombe
+ * exactement au même `top` que la coque de recherche de 32 px — aucun
+ * ajustement vertical nécessaire.
  */
 .rvd-place-search__panel-toggle {
   flex: 0 0 auto;
@@ -20,10 +21,11 @@
 }
 
 /*
- * Always one row: the search field gives up its width first (down to its
- * minimum), then the filter labels shrink (ellipsis, "Favo…"), then the chips
- * tighten (--tight); only a map stage too narrow even for that drops the
- * labels (--icons). Widths: PLACE_SEARCH_*_WIDTH (DashboardPlaceSearch.constants.ts).
+ * Toujours une seule ligne : le champ de recherche cède d'abord sa largeur
+ * (jusqu'à son minimum), puis les libellés des filtres rétrécissent (ellipse,
+ * « Favo… »), puis les pastilles se resserrent (--tight) ; seule une scène de
+ * carte trop étroite même pour cela retire les libellés (--icons). Largeurs :
+ * PLACE_SEARCH_*_WIDTH (DashboardPlaceSearch.constants.ts).
  */
 .rvd-place-search__row {
   display: flex;
@@ -40,10 +42,11 @@
   display: flex;
   align-items: center;
   /*
-   * Shrinks ×10 faster than the chips: the steps assume the field and the
-   * chips reach their minimums together, but shrinking in proportion to the
-   * bases (180 px vs ~800 px of chips) left the field at ~145 px while the
-   * chips, already at theirs, overflowed under the map tools.
+   * Rétrécit 10× plus vite que les pastilles : les paliers supposent que le
+   * champ et les pastilles atteignent leur minimum ensemble, mais un
+   * rétrécissement proportionnel aux bases (180 px contre ~800 px de
+   * pastilles) laissait le champ à ~145 px pendant que les pastilles, déjà au
+   * leur, débordaient sous les outils de la carte.
    */
   flex: 0 10 180px;
   min-width: 96px;
@@ -129,10 +132,11 @@
 }
 
 /*
- * Labelled chips shrink (label ellipsis) rather than leave the row, down to a
- * 22 px label stub. Explicit minimum: the clipping shells (overflow: hidden)
- * have no automatic one. Padding 8 + 12, checkbox 16, gaps 2 × 6, marker 30,
- * label 22 (+ gap 6 + chevron 15 on the chips with a menu).
+ * Les pastilles avec libellé rétrécissent (ellipse du libellé) plutôt que de
+ * quitter la ligne, jusqu'à une amorce de libellé de 22 px. Minimum explicite :
+ * les coques qui rognent (overflow: hidden) n'en ont pas d'automatique.
+ * Marges 8 + 12, case 16, écarts 2 × 6, marqueur 30, libellé 22 (+ écart 6 +
+ * chevron 15 sur les pastilles à menu).
  */
 .rvd-place-search__filter {
   position: relative;
@@ -144,8 +148,9 @@
   min-width: 121px;
 }
 
-/* Narrow map stage (PLACE_SEARCH_TIGHT_WIDTH): smaller markers, tighter chips,
-   shorter label stubs; the search field may shrink down to its magnifier. */
+/* Scène de carte étroite (PLACE_SEARCH_TIGHT_WIDTH) : marqueurs plus petits,
+   pastilles plus serrées, amorces de libellé plus courtes ; le champ de
+   recherche peut se réduire jusqu'à sa loupe. */
 .rvd-place-search--tight .rvd-place-search__search-shell {
   min-width: 32px;
 }
@@ -154,7 +159,7 @@
   min-width: 16px;
 }
 
-/* Padding 6 + 5, checkbox 14, gaps 2 × 3, marker 24, label 16 (+ 3 + 13). */
+/* Marges 6 + 5, case 14, écarts 2 × 3, marqueur 24, libellé 16 (+ 3 + 13). */
 .rvd-place-search--tight .rvd-place-search__filter {
   min-width: 71px;
 }
@@ -200,7 +205,7 @@
   min-width: 13px;
 }
 
-/* Last resort (PLACE_SEARCH_ICONS_WIDTH): icon-only chips, label in the tooltip. */
+/* Dernier recours (PLACE_SEARCH_ICONS_WIDTH) : pastilles à icône seule, libellé dans l'infobulle. */
 .rvd-place-search--icons .rvd-place-search__filters,
 .rvd-place-search--icons .rvd-place-search__filter {
   flex-shrink: 0;
@@ -346,7 +351,7 @@
 .rvd-place-search__filter-label {
   position: relative;
   z-index: 2;
-  /* Always a stub left ("Fa…"), never an empty ellipsis. */
+  /* Toujours une amorce (« Fa… »), jamais une ellipse vide. */
   min-width: 22px;
   flex: 0 1 auto;
   overflow: hidden;
@@ -430,9 +435,9 @@
 
 /* ── Viewport POI Markers (POIs sur carte) ─────────────────────────── */
 .rvd-viewport-poi-marker {
-  /* CRITICAL: Never set position: relative or static.
-   * Mapbox GL Marker requires position: absolute; left: 0; top: 0;
-   * so markers are detached from document flow and placed at canvas origin. */
+  /* CRITIQUE : ne jamais définir position: relative ni static.
+   * Le Marker de Mapbox GL exige position: absolute; left: 0; top: 0;
+   * pour que les marqueurs soient sortis du flux et placés à l'origine du canvas. */
   display: flex;
   align-items: center;
   justify-content: center;

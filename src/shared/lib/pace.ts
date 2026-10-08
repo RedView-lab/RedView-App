@@ -1,15 +1,15 @@
 import { isFootDiscipline, type SportDiscipline } from './discipline';
 
-/** Slower than this is shown as '—' (standing still, very steep scrambles). */
+/** Plus lent que ceci s'affiche « — » (à l'arrêt, passages très raides). */
 const MAX_DISPLAY_PACE_S_PER_KM = 30 * 60;
 
-/** Pace in seconds per km, or null when the speed is too low to be meaningful. */
+/** Allure en secondes par km, ou null quand la vitesse est trop faible pour avoir un sens. */
 export function kmhToPaceSecPerKm(kmh: number | null | undefined): number | null {
   if (typeof kmh !== 'number' || !Number.isFinite(kmh) || kmh <= 0.5) return null;
   return Math.min(3600 / kmh, MAX_DISPLAY_PACE_S_PER_KM);
 }
 
-/** "5:32 /km" (or "5:32" without unit). */
+/** « 5:32 /km » (ou « 5:32 » sans unité). */
 export function formatPaceSeconds(
   secondsPerKm: number | null | undefined,
   opts: { unit?: boolean } = {},
@@ -28,7 +28,7 @@ function formatPace(kmh: number | null | undefined, opts: { unit?: boolean } = {
   return formatPaceSeconds(kmhToPaceSecPerKm(kmh), opts);
 }
 
-/** km/h for cycling, min/km for running and trail. */
+/** km/h pour le vélo, min/km pour la course à pied et le trail. */
 export function formatSpeedOrPace(
   kmh: number | null | undefined,
   discipline: SportDiscipline,

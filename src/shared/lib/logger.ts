@@ -1,8 +1,8 @@
 /**
- * RedView Centralised Structured Logger
- * 
- * Provides named loggers with consistent styling, level filtering,
- * and runtime toggle via window.setLogLevel() or localStorage.
+ * Journal structuré centralisé de RedView
+ *
+ * Fournit des journaux nommés au style cohérent, un filtrage par niveau et un
+ * réglage à l'exécution via window.setLogLevel() ou localStorage.
  */
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'silent';
@@ -39,7 +39,7 @@ function getInitialLogLevel(): number {
       if (stored) return parseLogLevel(stored);
     }
   } catch {
-    /* ignore storage errors */
+    /* erreurs de stockage ignorées */
   }
   const isDev = Boolean(import.meta.env?.DEV);
   return isDev ? LOG_LEVELS[DEFAULT_DEV_LEVEL.toUpperCase()] : LOG_LEVELS[DEFAULT_PROD_LEVEL.toUpperCase()];
@@ -76,7 +76,7 @@ export function syncLogLevelToServiceWorker(levelStr: LogLevel): void {
       });
     }
   } catch {
-    /* best-effort */
+    /* au mieux */
   }
 }
 
@@ -87,7 +87,7 @@ function setLogLevel(level: LogLevel): void {
       localStorage.setItem(STORAGE_KEY, level.toLowerCase());
     }
   } catch {
-    /* ignore storage error */
+    /* erreur de stockage ignorée */
   }
   syncLogLevelToServiceWorker(level);
   console.info(
@@ -143,7 +143,7 @@ function createLogger(namespace: string, customColor?: string): ScopedLogger {
   };
 }
 
-// Global default loggers
+// Journaux globaux par défaut
 export const logger = {
   map3d: createLogger('Map3D'),
   weather: createLogger('Weather'),
@@ -155,7 +155,7 @@ export const logger = {
   app: createLogger('App'),
 };
 
-// Expose helper on window for developer convenience
+// Expose une aide sur window, par commodité pour les développeurs
 if (typeof window !== 'undefined') {
   (window as unknown as {
     setLogLevel: typeof setLogLevel;

@@ -5,8 +5,9 @@ import {
   type PayloadWorkerResponse,
 } from './payloadEncoding';
 
-// Runs encodeProjectPayload in one shared worker (payloadWorker.ts), the page
-// as a fallback (no Worker, worker failed to load or crashed).
+// Exécute encodeProjectPayload dans un worker partagé (payloadWorker.ts), la
+// page servant de repli (pas de Worker, worker qui n'a pas pu se charger ou a
+// planté).
 
 interface PendingEncode {
   resolve: (value: EncodedProjectPayload) => void;
@@ -30,7 +31,7 @@ function payloadWorker(): Worker | null {
       else request.resolve({ data: event.data.data, gzip: event.data.gzip, compressed: event.data.compressed });
     };
     created.onerror = (event) => {
-      // A worker that cannot load or crashed: every request falls back to the page.
+      // Un worker qui ne peut pas se charger ou a planté : chaque requête se replie sur la page.
       workerBroken = true;
       worker = null;
       created.terminate();
@@ -45,10 +46,11 @@ function payloadWorker(): Worker | null {
 }
 
 /**
- * Gzip + base64 of a project document in a worker: on a 16 M-character
- * project they blocked the page 0.85–1.3 s per autosave (tasks up to 0.76 s,
- * Edge 2026-10-07) — every 4 s while editing. The page only posts the JSON
- * string (a copy, no object graph to clone). Same result as in the page.
+ * Gzip + base64 d'un document de projet dans un worker : sur un projet de 16 M
+ * de caractères, ils bloquaient la page 0,85 à 1,3 s par sauvegarde
+ * automatique (tâches jusqu'à 0,76 s, Edge 2026-10-07) — toutes les 4 s
+ * pendant l'édition. La page n'envoie que la chaîne JSON (une copie, aucun
+ * graphe d'objets à cloner). Même résultat que dans la page.
  */
 export async function encodeProjectPayloadOffThread(json: string): Promise<EncodedProjectPayload> {
   const target = payloadWorker();

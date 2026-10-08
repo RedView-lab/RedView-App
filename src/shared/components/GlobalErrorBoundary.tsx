@@ -34,7 +34,7 @@ export class GlobalErrorBoundary extends Component<Props, State> {
         extra: { componentStack: errorInfo.componentStack },
       });
     } catch {
-      // Ignore if Sentry fails to capture
+      // Ignoré si Sentry échoue à capturer
     }
   }
 

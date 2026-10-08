@@ -1,11 +1,12 @@
 /**
- * IANA time zone of a map position, resolved offline from simplified time-zone
- * polygons (@photostructure/tz-lookup, CC0). The ~70 kB table is loaded on
- * first use so it stays out of the entry bundles.
+ * Fuseau IANA d'une position de la carte, résolu hors ligne à partir de
+ * polygones de fuseaux simplifiés (@photostructure/tz-lookup, CC0). La table
+ * d'~70 Ko est chargée au premier usage pour rester hors des bundles d'entrée.
  *
- * Solar features express date and time on the wall clock of the place shown,
- * not of the machine running the browser: a sunrise in London must not be
- * read in Paris time because the viewer happens to be in Paris.
+ * Les fonctions solaires expriment date et heure à l'horloge du lieu affiché,
+ * pas de la machine qui fait tourner le navigateur : un lever de soleil à
+ * Londres ne doit pas se lire à l'heure de Paris parce que l'utilisateur se
+ * trouve à Paris.
  */
 
 type TzLookup = (latitude: number, longitude: number) => string;
@@ -17,21 +18,21 @@ function loadLookup(): Promise<TzLookup | null> {
     .then((mod) => mod.default)
     .catch((error: unknown) => {
       console.warn('[timeZoneAt] time-zone table unavailable', error);
-      lookupPromise = null; // retry on the next call
+      lookupPromise = null; // nouvel essai au prochain appel
       return null;
     });
   return lookupPromise;
 }
 
-/** Wraps a longitude into [-180, 180] (Mapbox returns world copies beyond it). */
+/** Ramène une longitude dans [-180, 180] (Mapbox renvoie des copies du monde au-delà). */
 function wrapLongitude(lng: number): number {
   return ((((lng + 180) % 360) + 360) % 360) - 180;
 }
 
 /**
- * IANA zone at (lng, lat), e.g. "Europe/London" — "Etc/GMT±N" at sea.
- * Resolves to null when the coordinates are invalid or the table failed to
- * load; callers keep their own fallback.
+ * Fuseau IANA en (lng, lat), p. ex. « Europe/London » — « Etc/GMT±N » en mer.
+ * Résout null quand les coordonnées sont invalides ou que la table n'a pas pu
+ * être chargée ; les appelants gardent leur propre repli.
  */
 export async function resolveTimeZoneAt(lng: number, lat: number): Promise<string | null> {
   if (!Number.isFinite(lng) || !Number.isFinite(lat) || Math.abs(lat) > 90) return null;

@@ -31,6 +31,6 @@ export function removeLocalProjectCacheEntry(id: string): void {
   try {
     window.localStorage.removeItem(`${PROJECT_CACHE_KEY_PREFIX}${id}`);
   } catch {
-    // ignore storage access errors
+    // on ignore les erreurs d'accès au stockage
   }
 }

@@ -107,7 +107,7 @@ export function saveStoredAppwriteSession(user: { id: string; email?: string; na
     };
     window.localStorage.setItem(APPWRITE_AUTH_STORAGE_KEY, JSON.stringify(snapshot));
   } catch {
-    // ignore local storage errors
+    // on ignore les erreurs de stockage local
   }
 }
 

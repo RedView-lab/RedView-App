@@ -89,7 +89,7 @@ export function useIsMobileDevice() {
     try {
       window.sessionStorage.setItem(NARROW_OVERLAY_DISMISS_STORAGE_KEY, 'true');
     } catch {
-      // Ignore storage access errors: dismissal still applies to this page.
+      // On ignore les erreurs d'accès au stockage : la fermeture vaut quand même pour cette page.
     }
     setIsNarrowOverlayDismissed(true);
   }, []);

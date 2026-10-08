@@ -1,9 +1,9 @@
 /**
- * Account sports (Appwrite user prefs `sports[].sport`, stored as French
- * labels).
+ * Sports du compte (préférences utilisateur Appwrite `sports[].sport`, stockés
+ * en libellés français).
  */
 
-/** Labels renamed or merged over time → current label. */
+/** Libellés renommés ou fusionnés au fil du temps → libellé actuel. */
 const LEGACY_SPORT_ALIASES: Record<string, string> = {
   Randonnee: 'Trail',
 };

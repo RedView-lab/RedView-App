@@ -118,7 +118,7 @@ export async function listProjects(): Promise<ProjectSummary[]> {
       return idbRows.map((row) => rowToSummary(row));
     }
   } catch {
-    /* fallback to localStorage */
+    /* repli sur localStorage */
   }
 
   const local = readLocalProjects().filter((row) => isOwnedBy(row, userId));

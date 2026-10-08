@@ -1,7 +1,8 @@
 /// <reference lib="webworker" />
 
-// Encodes a project document's cloud payload (gzip, then base64 when it fits
-// in the document) off the main thread: see payloadEncoding.ts.
+// Encode la charge utile cloud d'un document de projet (gzip, puis base64
+// quand il tient dans le document) hors du fil principal : voir
+// payloadEncoding.ts.
 
 import { encodeProjectPayload, type PayloadWorkerRequest, type PayloadWorkerResponse } from './payloadEncoding';
 

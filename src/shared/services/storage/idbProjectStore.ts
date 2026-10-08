@@ -64,8 +64,8 @@ function getDb(): Promise<IDBDatabase> {
 
     request.onsuccess = () => {
       const db = request.result;
-      // Another tab (or clearProjectStore) wants to delete/upgrade the DB:
-      // release our handle so the request is not blocked.
+      // Un autre onglet (ou clearProjectStore) veut supprimer / mettre à niveau
+      // la base : on relâche notre poignée pour ne pas bloquer la requête.
       db.onversionchange = () => {
         db.close();
         dbPromise = null;
@@ -100,7 +100,7 @@ export async function clearProjectStore(): Promise<void> {
     try {
       (await pending).close();
     } catch {
-      // handle never opened: nothing to close
+      // poignée jamais ouverte : rien à fermer
     }
   }
 
@@ -109,8 +109,8 @@ export async function clearProjectStore(): Promise<void> {
     request.onsuccess = () => resolve();
     request.onerror = () => reject(request.error);
     request.onblocked = () => {
-      // Other tabs are notified through `onversionchange` and close their handle;
-      // the deletion completes once they do.
+      // Les autres onglets sont prévenus par `onversionchange` et ferment leur
+      // poignée ; la suppression se termine quand ils l'ont fait.
       console.warn('[idbProjectStore] IndexedDB delete blocked by other tabs');
     };
   });
@@ -161,7 +161,7 @@ export async function migrateFromLocalStorageIfNeeded(): Promise<void> {
   }
 }
 
-// ── Projects Store ────────────────────────────────────────────────────────
+// ── Stockage des projets ──────────────────────────────────────────────────
 
 /**
  * Contenu d'un projet (cf. shared/services/projects/storedProject.ts), dans le
@@ -376,7 +376,7 @@ export async function idbGetProjectCache(projectId: string): Promise<IdbCacheEnt
   });
 }
 
-// ── Thumbnails Store (Miniatures locales) ──────────────────────────────────
+// ── Stockage des miniatures (miniatures locales) ───────────────────────────
 
 export async function idbSaveThumbnail(projectId: string, blob: Blob): Promise<void> {
   const db = await getDb();

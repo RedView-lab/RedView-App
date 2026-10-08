@@ -12,9 +12,10 @@ import { buildTranslationLookup, observeDomTranslation, translateString } from '
 
 export function AppI18nProvider({ children }: { children: ReactNode }) {
   const [locale, setLocaleState] = useState<AppLocale>(readStoredAppLocale);
-  // Every pair ships with the app (shared/i18n/config/translations): nothing to
-  // fetch. `/api/app-translations` used to send the same dictionary again on
-  // every load (264 KiB uncompressed), then the whole DOM was re-translated.
+  // Toutes les paires sont livrées avec l'application
+  // (shared/i18n/config/translations) : rien à récupérer.
+  // `/api/app-translations` renvoyait le même dictionnaire à chaque chargement
+  // (264 Kio non compressés), puis tout le DOM était retraduit.
   const bundle = useMemo(() => createAppTranslationBundle(locale), [locale]);
 
   const translationLookup = useMemo(() => buildTranslationLookup(bundle.entries), [bundle.entries]);
@@ -24,8 +25,9 @@ export function AppI18nProvider({ children }: { children: ReactNode }) {
     writeStoredAppLocale(locale);
   }, [locale]);
 
-  // document.body, not #root: portals (menus, modals, color picker) mount
-  // directly on <body> and must be translated too.
+  // document.body, pas #root : les portails (menus, fenêtres modales,
+  // sélecteur de couleur) se montent directement dans <body> et doivent être
+  // traduits aussi.
   useEffect(() => observeDomTranslation(document.body, translationLookup), [translationLookup]);
 
   const value = useMemo<AppI18nContextValue>(

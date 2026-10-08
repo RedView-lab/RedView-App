@@ -115,9 +115,10 @@ interface DashboardEditorProps {
   onCollapseRightPanel: () => void;
   onCollapseCenterPanel: () => void;
   /**
-   * Fired the first time the active (empty) project receives traced content
-   * (a placed start point or an imported route). Used to auto-reveal the
-   * center analysis table and the right settings dock.
+   * Déclenché la première fois que le projet actif (vide) reçoit un contenu
+   * tracé (un point de départ placé ou une trace importée). Sert à faire
+   * apparaître automatiquement le tableau d'analyse central et le dock de
+   * réglages de droite.
    */
   onTraceStarted: () => void;
   onLeftResizeStart: (ev: ReactMouseEvent<HTMLDivElement>) => void;
@@ -144,13 +145,13 @@ interface DashboardEditorProps {
 }
 
 /**
- * Side-effect-only bridge: lives inside <ProjectProvider> so it can read the
- * LIVE project state, and fires `onTraceStarted` exactly once when the project
- * transitions from empty (no placed start point / no route) to having traced
- * content. That triggers the auto-reveal of the center table + right dock for
- * projects that started collapsed.
+ * Pont à effet de bord seulement : vit dans <ProjectProvider> pour lire l'état
+ * VIVANT du projet, et déclenche `onTraceStarted` exactement une fois quand le
+ * projet passe de vide (pas de point de départ placé / pas de trace) à un
+ * contenu tracé. Cela fait apparaître le tableau central + le dock de droite
+ * pour les projets qui ont démarré repliés.
  *
- * Renders nothing.
+ * Ne rend rien.
  */
 /**
  * Raccourcis des commentaires (C, Maj+C, Échap), placés sous les outils de la
@@ -349,7 +350,7 @@ export function DashboardEditor({
       sunlightMapEnabled: false,
     },
   });
-  // Genuine, rich glassmorphism showing the blurred 3D map through panels.
+  // Vrai verre dépoli, qui laisse voir la carte 3D floutée à travers les panneaux.
   const shouldRenderPanelMapBlurMirrors = true;
   const shouldRenderToolbarMapBlurMirror = true;
 
@@ -633,8 +634,8 @@ export function DashboardEditor({
                         isMapLoaded={mapLoaded}
                         onRouteStatusChange={onItineraryRouteStatusChange}
                         onRevealCenterPanel={onRestoreCenterPanel}
-                        // Live drag: the panel fills its host (CSS width 100%), so the
-                        // memoized panel does not re-render on every resize frame.
+                        // Glisser en direct : le panneau remplit son hôte (largeur CSS 100 %), donc
+                        // le panneau mémoïsé ne se redessine pas à chaque image de redimensionnement.
                         width={isLeftResizing ? undefined : leftPanelWidth}
                         onResizeStart={onLeftResizeStart}
                         isResizing={isLeftResizing}

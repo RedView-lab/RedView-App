@@ -24,7 +24,7 @@
   display: flex;
   flex-direction: column;
   width: 420px;
-  /* Portal in <body> scaled by --app-scale: bound it in logical px. */
+  /* Portail dans <body> mis à l'échelle par --app-scale : on le borne en px logiques. */
   max-width: calc(100vw / var(--app-scale, 1) - 48px);
   max-height: min(680px, calc(100dvh / var(--app-scale, 1) - 48px));
   overflow: hidden;

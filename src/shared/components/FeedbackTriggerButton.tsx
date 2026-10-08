@@ -8,8 +8,9 @@ function buildFeedbackUrl(): string {
   const params = new URLSearchParams();
   params.set('feedback', 'open');
   params.set('step', '1');
-  // No PII in the URL (it leaks into history, server logs, analytics and
-  // Referer): only non-identifying context is passed to the feedback form.
+  // Pas de donnée personnelle dans l'URL (elle fuit dans l'historique, les
+  // journaux serveur, les statistiques et le Referer) : seul un contexte non
+  // identifiant est transmis au formulaire d'avis.
   params.set('source', 'app');
   params.set('lang', readDocumentAppLocale());
 

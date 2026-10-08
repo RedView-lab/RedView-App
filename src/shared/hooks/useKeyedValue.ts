@@ -1,15 +1,17 @@
 import { useState } from 'react';
 
 /**
- * `value` as it was on the render where `keys` last changed (compared one by
- * one with `Object.is`): later renders give back that same object even when
- * they build a new one, until a key changes.
+ * `value` telle qu'elle était au rendu où `keys` a changé pour la dernière fois
+ * (comparées une à une avec `Object.is`) : les rendus suivants renvoient ce
+ * même objet même s'ils en construisent un nouveau, jusqu'à ce qu'une clé
+ * change.
  *
- * For an object whose identity drives an effect and must follow a narrower
- * notion of change than its own fields (e.g. an upload list compared by its
- * signature). Unlike `useMemo`, whose cache React may drop, the identity is
- * guaranteed. Stored as state (« information from previous renders »): the
- * render where a key changes is restarted once by React before its children.
+ * Pour un objet dont l'identité pilote un effet et doit suivre une notion de
+ * changement plus étroite que ses propres champs (p. ex. une liste d'envois
+ * comparée par sa signature). Contrairement à `useMemo`, dont React peut jeter
+ * le cache, l'identité est garantie. Stockée comme état (« information des
+ * rendus précédents ») : le rendu où une clé change est relancé une fois par
+ * React avant ses enfants.
  */
 export function useKeyedValue<T>(value: T, keys: readonly unknown[]): T {
   const [entry, setEntry] = useState(() => ({ value, keys }));

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import * as Sentry from '@sentry/react';
-// Concrete modules, not the lib/project barrel (merge-itinerary → geocoder on the initial load).
+// Modules concrets, pas le barrel lib/project (merge-itinerary → geocoder au chargement initial).
 import { normalizeItineraryProject } from '@/features/itineraryPanel/lib/project/defaultState';
 import { classifyProjectChange, extractProjectView } from '@/features/itineraryPanel/lib/project/layers';
 import type { ItineraryProject } from '@/features/itineraryPanel/types';
@@ -46,7 +46,7 @@ function clearPendingViewport(projectId: string): void {
   try {
     window.localStorage.removeItem(`${PENDING_VIEWPORT_KEY_PREFIX}${projectId}`);
   } catch {
-    // best effort
+    // au mieux
   }
 }
 
@@ -69,7 +69,7 @@ function readPendingViewport(projectId: string): MapViewport | null {
 
 interface UseDashboardProjectStateArgs {
   initialProjectId?: string | null;
-  /** The editor's map, by ref (see Dashboard: no closure may hold the instance). */
+  /** La carte de l'éditeur, par réf (voir Dashboard : aucune closure ne doit retenir l'instance). */
   mapInstanceRef: React.RefObject<MapboxMap | null>;
   beforeCloseProject?: () => Promise<void> | void;
 }

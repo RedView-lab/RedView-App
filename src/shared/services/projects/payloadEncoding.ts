@@ -1,17 +1,17 @@
 import { encodeGzipPayload, gzipProjectJson } from './compression';
 import { gzipPayloadChars, MAX_CLOUD_PROJECT_PAYLOAD_CHARS } from './limits';
 
-/** Cloud payload of a project document JSON, encoded off the main thread where possible. */
+/** Charge utile cloud du JSON d'un document de projet, encodée hors du fil principal quand c'est possible. */
 export interface EncodedProjectPayload {
-  /** `gz:` + base64 of the gzip when it fits in the document (≤ MAX_CLOUD_PROJECT_PAYLOAD_CHARS). */
+  /** `gz:` + base64 du gzip quand il tient dans le document (≤ MAX_CLOUD_PROJECT_PAYLOAD_CHARS). */
   data: string | null;
-  /** The gzip itself when it does not fit (it goes to the bucket); null with `data` or without CompressionStream. */
+  /** Le gzip lui-même quand il ne tient pas (il part dans le bucket) ; null avec `data` ou sans CompressionStream. */
   gzip: Uint8Array<ArrayBuffer> | null;
-  /** CompressionStream was available. */
+  /** CompressionStream était disponible. */
   compressed: boolean;
 }
 
-/** Pure: what the payload worker computes (and the in-page fallback). */
+/** Pur : ce que calcule le worker de charge utile (et le repli dans la page). */
 export async function encodeProjectPayload(json: string): Promise<EncodedProjectPayload> {
   const gzip = await gzipProjectJson(json);
   if (!gzip) return { data: null, gzip: null, compressed: false };

@@ -13,7 +13,7 @@ export function interpolateAppTranslation(template: string, vars?: AppTranslatio
   });
 }
 
-/** Key used for lookups: NBSP → space, curly → straight apostrophe, collapsed whitespace. */
+/** Clé de recherche : NBSP → espace, apostrophe courbe → droite, espaces réduits. */
 export function canonicalizeAppText(text: string): string {
   return text
     .replace(/\u00a0/g, ' ')
@@ -25,10 +25,10 @@ export function canonicalizeAppText(text: string): string {
 export function createAppTranslationBundle(locale: AppLocale): AppTranslationBundle {
   const entries: Record<string, string> = {};
 
-  // Keys of the other language first, then the locale's own keys: a text
-  // already written in the target language is never swapped for another pair
-  // sharing its translation (e.g. 'Gravel' stays 'Gravel' in French although
-  // { fr: 'Gravier', en: 'Gravel' } exists).
+  // Clés de l'autre langue d'abord, puis les clés propres à la langue : un
+  // texte déjà écrit dans la langue cible n'est jamais échangé contre une autre
+  // paire qui partage sa traduction (p. ex. 'Gravel' reste 'Gravel' en
+  // français bien que { fr: 'Gravier', en: 'Gravel' } existe).
   const sourceLocale: AppLocale = locale === 'fr' ? 'en' : 'fr';
   for (const pair of APP_TRANSLATION_PAIRS) {
     entries[pair[sourceLocale]] = pair[locale];

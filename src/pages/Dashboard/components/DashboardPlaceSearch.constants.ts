@@ -77,23 +77,25 @@ export const DASHBOARD_FILTER_OPTIONS: readonly DashboardFilterOption[] = [
 ] as const;
 
 /*
- * Widths (logical px, panel toggle included) of the search bar's density
- * steps; the row never wraps, labels shrink with an ellipsis in between
- * (dashboard-place-search.css). Computed from the chips above with the
- * minimum widths of that CSS, so a new chip moves the steps with it: they
- * were once written for five chips, and the sixth (« Pente ») pushed the row
- * under the right panel on 1280–1600 px screens.
+ * Largeurs (px logiques, bascule du panneau comprise) des paliers de densité
+ * de la barre de recherche ; la ligne ne passe jamais à la ligne, les libellés
+ * rétrécissent avec une ellipse entre deux (dashboard-place-search.css).
+ * Calculées à partir des pastilles ci-dessus avec les largeurs minimales de ce
+ * CSS, pour qu'une nouvelle pastille déplace les paliers avec elle : ils ont
+ * été écrits un jour pour cinq pastilles, et la sixième (« Pente ») poussait
+ * la ligne sous le panneau de droite sur les écrans de 1280 à 1600 px.
  *
- * TIGHT: regular chips with 22 px label stubs — toggle 40 + gap 12 + search
- * field at its 96 px minimum, then the chips (121 with a chevron, 100
- * otherwise), 4 px apart. Below it the chips tighten (--tight: 87 / 71, 3 px
- * apart, search field down to its 32 px magnifier).
- * ICONS: below that, the labels go (tooltip only).
+ * TIGHT : pastilles normales avec des amorces de libellé de 22 px — bascule 40
+ * + écart 12 + champ de recherche à son minimum de 96 px, puis les pastilles
+ * (121 avec un chevron, 100 sinon), à 4 px d'écart. En dessous, les pastilles
+ * se resserrent (--tight : 87 / 71, à 3 px d'écart, champ de recherche réduit
+ * à sa loupe de 32 px).
+ * ICONS : encore en dessous, les libellés disparaissent (infobulle seulement).
  */
 function placeSearchRowWidth(searchMin: number, chipMin: number, menuChipMin: number, gap: number): number {
   const menus = DASHBOARD_FILTER_OPTIONS.filter((option) => option.hasDropdown).length;
   const chips = DASHBOARD_FILTER_OPTIONS.length;
-  // Toggle + PANEL_PADDING, search field, then the chips; 10 px of slack.
+  // Bascule + PANEL_PADDING, champ de recherche, puis les pastilles ; 10 px de marge.
   return 40 + 12 + searchMin + menus * menuChipMin + (chips - menus) * chipMin + chips * gap + 10;
 }
 

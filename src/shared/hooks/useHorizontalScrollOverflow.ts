@@ -3,8 +3,8 @@ import { useEffect, type RefObject } from 'react';
 const LINE_HEIGHT_PX = 16;
 
 /**
- * Sets `data-overflow` on a horizontal scroller: `start` | `end` | `both`
- * (the edges hiding content), absent when everything fits.
+ * Pose `data-overflow` sur un conteneur à défilement horizontal : `start` |
+ * `end` | `both` (les bords qui cachent du contenu), absent quand tout tient.
  */
 export function syncHorizontalOverflow(el: HTMLElement): void {
   const max = el.scrollWidth - el.clientWidth;
@@ -16,10 +16,10 @@ export function syncHorizontalOverflow(el: HTMLElement): void {
 }
 
 /**
- * Horizontal strip that may overflow its box (toolbar in a half-screen
- * window): a vertical mouse wheel scrolls it sideways, and `data-overflow`
- * (see {@link syncHorizontalOverflow}) tells CSS which edge hides content
- * (fade mask).
+ * Bande horizontale qui peut déborder de sa boîte (barre d'outils dans une
+ * fenêtre en demi-écran) : une molette verticale la fait défiler de côté, et
+ * `data-overflow` (voir {@link syncHorizontalOverflow}) indique au CSS quel
+ * bord cache du contenu (masque de fondu).
  */
 export function useHorizontalScrollOverflow(ref: RefObject<HTMLElement | null>): void {
   useEffect(() => {

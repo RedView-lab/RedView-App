@@ -1,12 +1,12 @@
 /* ==========================================================================
-   Mobile Block Screen — Ultra-simple Minimal Dark Gray
+   Écran de blocage mobile — gris foncé minimal, très simple
    ========================================================================== */
 
 .rv-mobile-block-overlay {
   position: fixed;
-  /* Handled by .rv-fixed-viewport (src/index.css): this overlay is rendered
-       inside the scaled dashboard canvas, where `inset: 0` would span the
-       canvas box instead of the real viewport. */
+  /* Géré par .rv-fixed-viewport (src/index.css) : cette surcouche est rendue
+       dans le canvas mis à l'échelle du tableau de bord, où `inset: 0`
+       couvrirait la boîte du canvas au lieu de la vraie fenêtre. */
   z-index: 999999;
   display: flex;
   align-items: center;

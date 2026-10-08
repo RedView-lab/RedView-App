@@ -1,18 +1,19 @@
 import { useState } from 'react';
 
 /**
- * True on the render where `value` differs (`Object.is`) from the previous
- * render's, false on the first render and while it stays the same.
+ * Vrai au rendu où `value` diffère (`Object.is`) de celle du rendu précédent,
+ * faux au premier rendu et tant qu'elle ne change pas.
  *
- * For « adjusting state when a prop changes » during render, as React
- * recommends, instead of an effect that sets state after the commit (an extra
- * render with the stale state on screen, react-hooks/set-state-in-effect):
+ * Pour « ajuster l'état quand une prop change » pendant le rendu, comme le
+ * recommande React, au lieu d'un effet qui pose l'état après le commit (un
+ * rendu de plus avec l'état périmé à l'écran,
+ * react-hooks/set-state-in-effect) :
  *
  *   const canEditChanged = useHasChanged(canEdit);
  *   if (canEditChanged && !canEdit) setArmed(false);
  *
- * The previous value is state: on a change React restarts the render at once,
- * before the children, and the next render sees no change.
+ * La valeur précédente est un état : sur un changement, React relance aussitôt
+ * le rendu, avant les enfants, et le rendu suivant ne voit plus de changement.
  */
 export function useHasChanged<T>(value: T): boolean {
   const [previous, setPrevious] = useState(value);

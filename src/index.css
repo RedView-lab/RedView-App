@@ -18,8 +18,9 @@ body {
 }
 
 /*
- * Map camera in motion (flag set by useMap on movestart/moveend): skip
- * backdrop blurs, which the compositor would recompute on every WebGL frame.
+ * Caméra de la carte en mouvement (drapeau posé par useMap sur movestart /
+ * moveend) : on saute les flous d'arrière-plan, que le compositeur
+ * recalculerait à chaque image WebGL.
  */
 html[data-rv-map-moving] * {
   -webkit-backdrop-filter: none !important;
@@ -50,18 +51,21 @@ html[data-rv-map-moving] * {
 }
 
 /*
- * Full-viewport overlays (project manager, loading page, modals, mobile block).
+ * Surcouches plein écran (gestionnaire de projets, page de chargement,
+ * fenêtres modales, blocage mobile).
  *
- * These are rendered inside the dashboard's scaled canvas (`appScaleStyle`,
- * shared/lib/appScale.ts). With the `transform: scale()` fallback, a
- * transformed ancestor becomes the containing block for its fixed
- * descendants: `inset: 0` would then span the *canvas* box in logical px
- * rather than the screen. `100%` on both axes fills the screen exactly with
- * either technique (zoom keeps the viewport as containing block), whereas
- * viewport units resolve in a different coordinate space and would disagree.
+ * Elles sont rendues dans le canvas mis à l'échelle du tableau de bord
+ * (`appScaleStyle`, shared/lib/appScale.ts). Avec le repli
+ * `transform: scale()`, un ancêtre transformé devient le bloc conteneur de ses
+ * descendants fixes : `inset: 0` couvrirait alors la boîte du *canvas* en px
+ * logiques plutôt que l'écran. `100%` sur les deux axes remplit exactement
+ * l'écran avec les deux techniques (zoom garde la fenêtre comme bloc
+ * conteneur), alors que les unités de fenêtre se résolvent dans un autre
+ * espace de coordonnées et ne concorderaient pas.
  *
- * Any new full-screen overlay rendered inside the dashboard canvas MUST carry
- * the `rv-fixed-viewport` class instead of relying on `inset: 0`.
+ * Toute nouvelle surcouche plein écran rendue dans le canvas du tableau de
+ * bord DOIT porter la classe `rv-fixed-viewport` au lieu de compter sur
+ * `inset: 0`.
  */
 .rv-fixed-viewport {
   position: fixed;
@@ -73,15 +77,16 @@ html[data-rv-map-moving] * {
 }
 
 /*
- * Full-screen layer portaled to <body>, i.e. OUTSIDE the scaled canvas, that
- * must still render at the dashboard density (same type sizes as the panels).
- * The Dashboard mirrors `--app-scale` and the technique (`data-rv-scale-mode`)
- * on :root; the layer gets the canvas's logical size and the same scale, so
- * it covers the screen exactly.
+ * Calque plein écran rendu en portail dans <body>, donc HORS du canvas mis à
+ * l'échelle, qui doit pourtant s'afficher à la densité du tableau de bord
+ * (mêmes tailles de texte que les panneaux). Le Dashboard reflète
+ * `--app-scale` et la technique (`data-rv-scale-mode`) sur :root ; le calque
+ * reçoit la taille logique du canvas et la même échelle, et couvre donc
+ * exactement l'écran.
  *
- * Inside the canvas, measure the logical layout with `@container rv-canvas`
- * and `var(--rv-canvas-width / --rv-canvas-height)`, never with viewport
- * media queries or vw/vh: those measure the real screen, not the canvas.
+ * Dans le canvas, mesurer la mise en page logique avec `@container rv-canvas`
+ * et `var(--rv-canvas-width / --rv-canvas-height)`, jamais avec des media
+ * queries de fenêtre ni vw / vh : ils mesurent le vrai écran, pas le canvas.
  */
 .rv-app-scaled-layer {
   --rv-canvas-width: calc(100vw / var(--app-scale, 1));
@@ -116,7 +121,7 @@ html[data-rv-map-moving] * {
   to { transform: rotate(360deg); }
 }
 
-/* Fix Mapbox GL Draw cursors being overridden by Mapbox GL JS v3 inline styles */
+/* Empêche les styles en ligne de Mapbox GL JS v3 d'écraser les curseurs de Mapbox GL Draw */
 .mapboxgl-canvas-container.mouse-add .mapboxgl-canvas { cursor: crosshair !important; }
 .mapboxgl-canvas-container.mouse-pointer .mapboxgl-canvas { cursor: pointer !important; }
 .mapboxgl-canvas-container.mouse-move .mapboxgl-canvas { cursor: move !important; }

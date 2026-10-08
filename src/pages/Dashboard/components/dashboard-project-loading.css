@@ -1,7 +1,8 @@
 /*
- * Full-screen project-loading page shown between the project manager and the
- * 3D editor. Self-contained (no dependency on the manager stylesheet) so it can
- * be rendered standalone while the project browser is unmounted.
+ * Page plein écran de chargement de projet, affichée entre le gestionnaire de
+ * projets et l'éditeur 3D. Autonome (aucune dépendance à la feuille de style du
+ * gestionnaire) pour pouvoir s'afficher seule pendant que le gestionnaire de
+ * projets est démonté.
  */
 
 @keyframes rv-loading-spin {
@@ -12,10 +13,11 @@
 
 .rv-loading-screen {
   /*
-   * Size/position come from the shared `.rv-fixed-viewport` rule (see
-   * `src/index.css`): this overlay lives inside the scaled dashboard canvas,
-   * where `inset: 0` would resolve against that box instead of the real
-   * viewport and leave the project manager visible at the edges.
+   * Taille et position viennent de la règle partagée `.rv-fixed-viewport`
+   * (voir `src/index.css`) : cette surcouche vit dans le canvas mis à
+   * l'échelle du tableau de bord, où `inset: 0` se résoudrait par rapport à
+   * cette boîte au lieu de la vraie fenêtre et laisserait voir le
+   * gestionnaire de projets sur les bords.
    */
   z-index: 200;
   display: flex;

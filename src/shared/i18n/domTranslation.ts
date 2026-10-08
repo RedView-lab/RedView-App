@@ -1,10 +1,11 @@
 import { canonicalizeAppText, interpolateAppTranslation, type AppTranslationVars } from './config';
 
 /**
- * DOM translation: text nodes and `aria-label`/`placeholder`/`title`
- * attributes whose (canonicalised) text matches a translation pair are
- * rewritten in place. Shared by `AppI18nProvider` (app, `#root`) and the
- * standalone LiDAR viewer (`viewer.html`, `document.body`).
+ * Traduction du DOM : les nœuds texte et les attributs
+ * `aria-label`/`placeholder`/`title` dont le texte (canonisé) correspond à une
+ * paire de traduction sont réécrits sur place. Partagée par `AppI18nProvider`
+ * (application, `#root`) et le visualiseur LiDAR autonome (`viewer.html`,
+ * `document.body`).
  */
 
 const TRANSLATABLE_ATTRIBUTES = ['aria-label', 'placeholder', 'title'] as const;
@@ -71,16 +72,16 @@ function isNoTranslateElement(node: Node): boolean {
     && (node as Element).getAttribute('data-rv-no-translate') === 'true';
 }
 
-/** `node` lies in a `data-rv-no-translate` subtree (itself included). */
+/** `node` est dans un sous-arbre `data-rv-no-translate` (lui-même compris). */
 function isInsideNoTranslate(node: Node): boolean {
   const element = node.nodeType === Node.ELEMENT_NODE ? (node as Element) : node.parentElement;
   return Boolean(element?.closest(NO_TRANSLATE_SELECTOR));
 }
 
 /**
- * Translates `root` and its descendants (text nodes + translatable
- * attributes) in a single walk; `data-rv-no-translate` subtrees are skipped
- * whole. The caller checks that `root` itself is not inside one.
+ * Traduit `root` et ses descendants (nœuds texte + attributs traduisibles) en
+ * un seul parcours ; les sous-arbres `data-rv-no-translate` sont sautés en
+ * entier. L'appelant vérifie que `root` lui-même n'est pas dans l'un d'eux.
  */
 function translateSubtree(root: Node, lookup: TranslationLookup): void {
   if (root.nodeType === Node.TEXT_NODE) {
@@ -107,13 +108,14 @@ function translateSubtree(root: Node, lookup: TranslationLookup): void {
 }
 
 /**
- * Translates `root` now, then every node a mutation touches (batched per
- * animation frame). Returns the disconnect function.
+ * Traduit `root` tout de suite, puis chaque nœud touché par une mutation
+ * (regroupés par image d'animation). Renvoie la fonction de déconnexion.
  */
 export function observeDomTranslation(root: Node, lookup: TranslationLookup): () => void {
-  // Incremental: only the nodes a mutation touched are re-translated. A
-  // full walk of the root on every mutation cost O(whole DOM) per frame —
-  // with 800 POI rows in the timeline, any tooltip or clock tick paid for it.
+  // Incrémental : seuls les nœuds touchés par une mutation sont retraduits. Un
+  // parcours complet de la racine à chaque mutation coûtait O(tout le DOM) par
+  // image — avec 800 lignes de POI dans la frise, la moindre infobulle ou le
+  // moindre tic d'horloge le payait.
   let frameId = 0;
   const pendingNodes = new Set<Node>();
   const pendingAttributes = new Set<Element>();
@@ -145,8 +147,8 @@ export function observeDomTranslation(root: Node, lookup: TranslationLookup): ()
     }
     pendingNodes.clear();
     pendingAttributes.clear();
-    // Records queued by now come from our own writes (the pass is
-    // synchronous): already translated, drop them.
+    // Les enregistrements en file à ce stade viennent de nos propres écritures
+    // (la passe est synchrone) : déjà traduits, on les jette.
     observer.takeRecords();
   };
 

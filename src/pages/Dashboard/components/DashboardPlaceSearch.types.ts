@@ -16,7 +16,7 @@ export interface DashboardPlaceSearchProps {
   onFilterChange?: (filters: Set<DashboardFilterId>) => void;
   selectedPoiCategories?: Set<DashboardPoiOptionId>;
   onSelectedPoiCategoriesChange?: (categories: Set<DashboardPoiOptionId>) => void;
-  /** Left drawer visibility — drives the mirrored toggle rendered before the search field. */
+  /** Visibilité du tiroir de gauche — pilote la bascule en miroir affichée avant le champ de recherche. */
   isLeftPanelCollapsed?: boolean;
   onRestoreLeftPanel?: () => void;
   onCollapseLeftPanel?: () => void;

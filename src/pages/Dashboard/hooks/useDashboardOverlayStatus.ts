@@ -7,17 +7,18 @@ import {
 } from '@/features/map3d/lib/overlayStatus';
 import { translateAppText } from '@/shared/i18n';
 
-// ── Loading guard ────────────────────────────────────────────────────────
-// Last line of defence so no pill ever sits on "loading" forever: each
-// producer has its own watchdog, but several depend on Mapbox `idle` /
-// `areTilesLoaded()`, which can stay false indefinitely while any source
-// streams. A loading cycle is displayed as finished once it has not advanced
-// for LOADING_STALL_MS, or has lasted LOADING_MAX_MS in total.
+// ── Garde de chargement ──────────────────────────────────────────────────
+// Dernière ligne de défense pour qu'aucune pastille ne reste éternellement sur
+// « chargement » : chaque producteur a son propre garde-fou, mais plusieurs
+// dépendent de `idle` / `areTilesLoaded()` de Mapbox, qui peuvent rester faux
+// indéfiniment tant qu'une source diffuse. Un cycle de chargement est affiché
+// comme terminé dès qu'il n'a pas progressé pendant LOADING_STALL_MS, ou qu'il
+// a duré LOADING_MAX_MS au total.
 const LOADING_STALL_MS = 8_000;
 const LOADING_MAX_MS = 20_000;
-/** A progress drop larger than this means the producer started a new cycle. */
+/** Une baisse de progression plus grande que ceci signifie que le producteur a commencé un nouveau cycle. */
 const LOADING_RESTART_DROP = 15;
-/** Itinerary tracks a real BRouter request with a definite end (and drives the cursor loader). */
+/** L'itinéraire suit une vraie requête BRouter qui a une fin certaine (et pilote l'indicateur du curseur). */
 const LOADING_GUARD_EXEMPT: ReadonlySet<OverlayStatusId> = new Set(['itinerary']);
 
 interface LoadingCycle {
@@ -188,8 +189,8 @@ export function useDashboardOverlayStatus(): UseDashboardOverlayStatusResult {
       });
   }, [mapStatus, overlayStatuses, loadingCycles, guardNow, hasMapReloader]);
 
-  // Wake up exactly when the next loading cycle expires so the pill flips
-  // to "ready" without polling.
+  // Se réveille exactement à l'expiration du prochain cycle de chargement pour
+  // que la pastille passe à « prêt » sans sondage.
   useEffect(() => {
     let nextDeadline = Infinity;
     for (const cycle of Object.values(loadingCycles)) {
@@ -202,12 +203,13 @@ export function useDashboardOverlayStatus(): UseDashboardOverlayStatusResult {
     return () => clearTimeout(timer);
   }, [loadingCycles, guardNow]);
 
-  // IMPORTANT: keep these handler identities stable across renders. Several
-  // overlay hooks (useWind, useWeatherOverlay…) include the reporter/reload
-  // callbacks in their effect dependencies, so a fresh arrow function on
-  // every Dashboard render retriggers their main effects in a loop —
-  // aborting in-flight fetches and producing the "[wind] fetch start" spam
-  // / weather overlay stuck-at-28% symptom.
+  // IMPORTANT : garder l'identité de ces gestionnaires stable d'un rendu à
+  // l'autre. Plusieurs hooks de surcouche (useWind, useWeatherOverlay…) mettent
+  // les callbacks de rapport / rechargement dans les dépendances de leurs
+  // effets : une nouvelle fonction fléchée à chaque rendu du Dashboard
+  // relancerait leurs effets principaux en boucle — avec annulation des
+  // requêtes en cours, le flot de « [wind] fetch start » et la surcouche météo
+  // bloquée à 28 %.
   const handleWeatherOverlayStatusChange = useCallback(
     (status: OverlayStatusSnapshot | null) => setOverlayStatus('weather', status),
     [setOverlayStatus],

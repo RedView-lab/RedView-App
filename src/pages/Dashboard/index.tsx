@@ -40,12 +40,13 @@ export default function Dashboard({
 }: DashboardProps) {
   const [mapInstance, setMapInstance] = useState<MapboxMap | null>(null);
   /**
-   * The map for closures (written with the state, read instead of it): no
-   * closure of this component may capture `mapInstance`. V8 gives every
-   * closure of one render a single shared context, so a closure kept by a
-   * child effect whose dependencies did not change (the project browser's
-   * inline `onRequestClose`) held the last removed Mapbox map after the
-   * editor closed (`bench:dashboard -- --scenario leak`).
+   * La carte pour les closures (écrite avec l'état, lue à sa place) : aucune
+   * closure de ce composant ne doit capturer `mapInstance`. V8 donne à toutes
+   * les closures d'un même rendu un seul contexte partagé, donc une closure
+   * gardée par l'effet d'un enfant dont les dépendances n'avaient pas changé
+   * (le `onRequestClose` en ligne du gestionnaire de projets) retenait la
+   * dernière carte Mapbox retirée après la fermeture de l'éditeur
+   * (`bench:dashboard -- --scenario leak`).
    */
   const mapInstanceRef = useRef<MapboxMap | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
@@ -134,18 +135,20 @@ export default function Dashboard({
     updatePersistedDashboard,
   });
 
-  // Render canvases (Mapbox, charts) at on-screen resolution despite the
-  // canvas scale (`appScaleStyle`). Layout effect: runs before useMap's
-  // passive effect creates the map. The logical size can stay constant while
-  // appScale changes (proportional window resize), so force a map resize.
+  // Rend les canvas (Mapbox, graphiques) à la résolution de l'écran malgré
+  // l'échelle du canvas (`appScaleStyle`). Effet de layout : s'exécute avant
+  // que l'effet passif de useMap crée la carte. La taille logique peut rester
+  // constante pendant que appScale change (redimensionnement proportionnel de
+  // la fenêtre), d'où un redimensionnement forcé de la carte.
   useLayoutEffect(() => {
     setDprLayoutScale(layout.appScale);
     mapInstanceRef.current?.resize();
   }, [layout.appScale, mapInstance]);
 
-  // Mirror the scale on :root for overlays portaled to <body> (outside the
-  // scaled canvas) that must keep the dashboard density: `.rv-app-scaled-layer`
-  // in src/index.css, `appScaledOverlayStyle` in shared/lib/appScale.ts.
+  // Reflète l'échelle sur :root pour les surcouches rendues en portail dans
+  // <body> (hors du canvas mis à l'échelle) qui doivent garder la densité du
+  // tableau de bord : `.rv-app-scaled-layer` dans src/index.css,
+  // `appScaledOverlayStyle` dans shared/lib/appScale.ts.
   useLayoutEffect(() => publishRootAppScale(layout.appScale), [layout.appScale]);
 
   const handleMapReady = useCallback((map: MapboxMap) => {
@@ -161,8 +164,8 @@ export default function Dashboard({
     ? PANEL_PADDING
     : rightDockWidth + PANEL_PADDING;
 
-  // Short canvas: the status dock no longer fits under the map tools in the
-  // map stage height, it moves beside them.
+  // Canvas court : le dock d'état ne tient plus sous les outils de la carte
+  // dans la hauteur de la scène de carte, il passe à côté d'eux.
   const statusDockRight = layout.isShortCanvas
     ? rightDockOffset + layout.mapToolsWidth + PANEL_PADDING
     : rightDockOffset;
@@ -174,9 +177,10 @@ export default function Dashboard({
     ? 0
     : leftPanelWidth + PANEL_PADDING * 2;
 
-  // The search wrapper now starts right after the left drawer and owns the
-  // mirrored panel toggle as its first flex child, so the row reads:
-  // [ drawer ] PANEL_PADDING [ toggle ] PANEL_PADDING [ search bar ]
+  // L'enveloppe de recherche commence juste après le tiroir de gauche et porte
+  // la bascule de panneau en miroir comme premier enfant flex, si bien que la
+  // ligne se lit :
+  // [ tiroir ] PANEL_PADDING [ bascule ] PANEL_PADDING [ barre de recherche ]
   const dashboardSearchLeft = !leftPanelOpen
     ? PANEL_PADDING
     : leftPanelWidth + PANEL_PADDING * 2;
@@ -199,9 +203,10 @@ export default function Dashboard({
 
   const displayName = formatDisplayName(email);
   const editorOpen = !projectBrowserOpen && activeProjectId != null;
-  // Full screen: project manager -> loading page -> 3D editor. We keep the
-  // manager mounted underneath while a project loads so its state survives the
-  // transition, but the loading page covers it entirely.
+  // Plein écran : gestionnaire de projets -> page de chargement -> éditeur 3D.
+  // On garde le gestionnaire monté dessous pendant le chargement d'un projet
+  // pour que son état survive à la transition, mais la page de chargement le
+  // couvre entièrement.
   const loadingProject = projectLoading || isClosingProject;
   const projectBrowserVisible = (projectBrowserOpen || activeProjectId == null) && !loadingProject;
 
@@ -263,9 +268,9 @@ export default function Dashboard({
 
   return (
     <LidarProvider>
-      {/* `clip`, not `hidden`: a hidden box can still be scrolled by code
-          (scrollIntoView, focus()) and would shift the whole UI up, leaving
-          its top unreachable. A clip box never scrolls. */}
+      {/* `clip`, pas `hidden` : une boîte cachée peut encore défiler par code
+          (scrollIntoView, focus()) et décalerait toute l'interface vers le
+          haut, en rendant son haut inaccessible. Une boîte clip ne défile jamais. */}
       <div style={{ position: 'relative', width: '100vw', height: '100dvh', overflow: 'clip' }}>
         <div
           data-rv-canvas=""
@@ -277,12 +282,13 @@ export default function Dashboard({
             width: `${layout.scaledViewportWidth}px`,
             height: `${layout.scaledViewportHeight}px`,
             overflow: 'clip',
-            // 1:1 up to the design reference, gentle growth above with CSS
-            // zoom (text laid out at its final size, never resampled).
+            // 1:1 jusqu'à la référence de conception, croissance douce au-delà
+            // avec le `zoom` CSS (texte mis en page à sa taille finale, jamais
+            // rééchantillonné).
             ...appScaleStyle(layout.appScale),
-            // Logical canvas: `@container rv-canvas (...)` and the
-            // --rv-canvas-* sizes replace viewport media queries and vw/vh
-            // units, which measure the real screen instead (src/index.css).
+            // Canvas logique : `@container rv-canvas (...)` et les tailles
+            // --rv-canvas-* remplacent les media queries de fenêtre et les
+            // unités vw / vh, qui mesurent le vrai écran (src/index.css).
             containerType: 'inline-size',
             containerName: 'rv-canvas',
             ['--app-scale' as string]: String(layout.appScale),

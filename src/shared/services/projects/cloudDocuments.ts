@@ -165,7 +165,7 @@ export async function buildCloudPayload(json: string, sizeBytes: number = utf8By
   if (isProjectTooLarge(sizeBytes)) {
     throw new ProjectCloudError('too-large');
   }
-  // Gzip + base64 in a worker (payloadEncodingClient.ts): ~1 s of main thread on a large project.
+  // Gzip + base64 dans un worker (payloadEncodingClient.ts) : ~1 s de fil principal sur un gros projet.
   const encoded = await encodeProjectPayloadOffThread(json);
   if (!encoded.compressed) {
     // Pas de CompressionStream : JSON brut dans le document s'il tient.

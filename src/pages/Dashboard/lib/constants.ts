@@ -13,9 +13,10 @@ export const LEFT_PANEL_WIDTH_DEFAULT = 360;
 
 export const CENTER_PANEL_MIN_WIDTH = 420;
 /**
- * Center column width under which, with both side panels at their minimum,
- * one side panel gives way (lib/layout.ts): the analysis toolbar then still
- * fits on two rows above the chart.
+ * Largeur de la colonne centrale sous laquelle, avec les deux panneaux
+ * latéraux à leur minimum, un panneau latéral cède la place (lib/layout.ts) :
+ * la barre d'outils d'analyse tient alors encore sur deux lignes au-dessus du
+ * graphique.
  */
 export const CENTER_PANEL_COMFORT_WIDTH = 560;
 export const CENTER_PANEL_MIN_HEIGHT = 390;
@@ -29,20 +30,21 @@ export const DASHBOARD_SEARCH_BAR_HEIGHT = 40;
 export const CENTER_PANEL_STACK_GAP = PANEL_PADDING;
 export const CENTER_PANEL_RESIZE_HIT_AREA = 18;
 
-// Short canvas (1366×768 or 1080p laptop at 125–150 %, the UI stays 1:1 — see
-// shared/lib/appScale.ts): below the height the regular vertical stack needs,
-// the map tools switch to a 2-column grid of 32 px buttons and the center
-// panel gets denser and may get shorter.
+// Canvas court (1366×768 ou portable 1080p à 125–150 %, l'interface reste en
+// 1:1 — voir shared/lib/appScale.ts) : sous la hauteur que demande la pile
+// verticale normale, les outils de la carte passent en grille de 2 colonnes
+// de boutons de 32 px et le panneau central devient plus dense et peut
+// raccourcir.
 export const SHORT_CANVAS_HEIGHT =
   PANEL_PADDING + CENTER_TOOLBAR_HEIGHT + CENTER_PANEL_STACK_GAP + CENTER_PANEL_MIN_MAP_STAGE + CENTER_PANEL_MIN_HEIGHT; // 846px
-/** 4 rows × 32 px + 3 gaps × 4 px (.rvmvc-map-tools--compact, mapViewportControls/styles). */
+/** 4 lignes × 32 px + 3 écarts × 4 px (.rvmvc-map-tools--compact, mapViewportControls/styles). */
 export const MAP_VIEWPORT_CONTROLS_COMPACT_HEIGHT = 140;
 export const MAP_VIEWPORT_CONTROLS_WIDTH = 40;
-/** 2 columns × 32 px + 4 px gap. */
+/** 2 colonnes × 32 px + 4 px d'écart. */
 export const MAP_VIEWPORT_CONTROLS_COMPACT_WIDTH = 68;
 export const CENTER_PANEL_MIN_HEIGHT_COMPACT = 240;
 
 export const IMMERSIVE_TRANSITION_MS = 320;
 export const IMMERSIVE_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)';
 
-// UI density (fluid canvas scale): src/shared/lib/appScale.ts.
+// Densité de l'interface (échelle fluide du canvas) : src/shared/lib/appScale.ts.
