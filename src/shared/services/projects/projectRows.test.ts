@@ -1,7 +1,7 @@
-import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createDefaultItinerary, createDefaultProject } from '@/features/itineraryPanel/lib/project/defaultState';
+import { loadProjectPersistence, reloadProjectSession as reloadTab, type MockAppwriteSdk as MockSdk } from '@/shared/test/projectPersistence';
 
 /**
  * Règles de persistance des projets (projectRows.ts) sur le vrai code : faux
@@ -24,42 +24,14 @@ vi.mock('./limits', async (importOriginal) => {
   };
 });
 
-type MockSdk = typeof import('../../../../script-test-bench/audit/a-mock-appwrite-sdk');
-
 const ME = 'user-A';
 
 async function load() {
-  vi.resetModules();
-  vi.stubGlobal('indexedDB', new IDBFactory());
-  vi.stubGlobal('IDBKeyRange', IDBKeyRange);
-  const local = new Map<string, string>();
-  vi.stubGlobal('window', {
-    localStorage: {
-      getItem: (key: string) => local.get(key) ?? null,
-      setItem: (key: string, value: string) => { local.set(key, value); },
-      removeItem: (key: string) => { local.delete(key); },
-    },
-  });
-  const sdk = (await import('appwrite')) as unknown as MockSdk;
-  sdk.__mock.reset();
-  sdk.__mock.user = { $id: ME, email: 'a@example.test', name: 'A', prefs: {} };
-  (await import('@/shared/services/appwrite')).saveStoredAppwriteSession({ id: ME });
   return {
-    mock: sdk.__mock,
-    /** Écritures d'un autre appareil, directement dans le faux Appwrite. */
-    otherDevice: new sdk.Databases(),
+    ...(await loadProjectPersistence(ME)),
     rows: await import('./projectRows'),
-    idb: await import('@/shared/services/storage/idbProjectStore'),
     live: await import('./liveSessions'),
   };
-}
-
-/** Onglet rechargé : l'état en mémoire de la session est perdu, la copie locale reste. */
-async function reloadTab() {
-  const session = await import('./projectSession');
-  session.knownCloudVersions.clear();
-  session.confirmedDocuments.clear();
-  session.localRevisions.clear();
 }
 
 const project = (name: string) => ({ ...createDefaultProject(), name });
