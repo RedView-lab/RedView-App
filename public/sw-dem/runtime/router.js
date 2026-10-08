@@ -65,7 +65,7 @@ function noTileResponseRouter(reason) {
   });
 }
 
-// Same rule as parseTileCoords() in server/http-security.mjs (radar
+// Same rule as parseTileCoords() in server/lib/http-security.mjs (radar
 // validation): integer z in [0, 22], integer x/y in [0, 2^z). Anything else
 // is answered 204 before reaching a handler, so impossible coordinates never
 // trigger upstream fetches nor land in the (negative) caches.

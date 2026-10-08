@@ -140,7 +140,7 @@ function getOrCreateRadarLookup(pStr) {
   return lookup;
 }
 
-// Même allowlist que server.mjs / server/http-security.mjs : le SW ne doit
+// Même allowlist que server.mjs / server/lib/http-security.mjs : le SW ne doit
 // jamais aller chercher (ni renvoyer sous l'origine de l'app) le contenu d'un
 // hôte arbitraire passé en query string.
 const RADAR_ALLOWED_HOSTS = new Set([

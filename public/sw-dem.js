@@ -23,6 +23,8 @@
 // Cache stamp — bumped on every cache-invalidating change so the browser
 // detects a byte diff in this file and triggers install→activate→purge.
 // Current: dem-tiles-v54-rgb-up-rle / radar-v3 / dem-negative-v30 / slope-tiles-v3-rle / vhr-tiles-v1 / altitude-stale-v1
+// 2026-10-08 comments-only: runtime/router.js and radar-handler.js cite
+// server/lib/http-security.mjs (moved). No cache name changes: nothing purged.
 // 2026-10-07 ortho-transparent-literal: a missing ortho tile is answered with
 // the checked TRANSPARENT_PNG literal (runtime/dem-helpers.js) instead of an
 // OffscreenCanvas encode, which could reject the fetch (audit d-sw-router,
