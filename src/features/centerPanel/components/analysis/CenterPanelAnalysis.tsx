@@ -1,35 +1,24 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useFlyoverSeek, useFlyoverSessionActive } from '../../flyover';
-import { xValueFromDistance } from '../../flyover/playback';
-import { useLivePresenceOptional } from '@/features/livePresence/context/LivePresenceContext';
-import { RemoteChartCursors } from '@/features/livePresence/components/RemoteChartCursors';
 import { useRouteSplitToolOptional } from '../../tools/routeSplit';
 import { useTraceToolOptional } from '../../tools/tracer';
 import { useChartPlacementToolOptional } from '../../tools/chartPlacement';
 import {
   axis2Options,
   axisOptions,
-  CHART_CLICK_FOCUS_PITCH,
-  CHART_CLICK_FOCUS_ZOOM,
   type CenterPanelAnalysisProps,
   DEFAULT_ANALYSIS_AXIS_COLORS,
-  detailOffsetForCenter,
-  detailZoomToVisibleFraction,
   extractRouteSegmentPoints,
   filterAxisOptionsForDiscipline,
   findSplitIndexForChartX,
   lightenColor,
   mapAxisMetricForDiscipline,
   normalizeAnalysisState,
-  normalizeUnitInterval,
   selectInteractiveItineraryForChartX,
 } from './shared';
 import {
-  getRoutePointDistances,
-  interpolateRoutePointAtDistance,
   isWeatherMetric,
   locateRoutePointAtX,
-  projectXToDistanceM,
   SlopeLegend,
   type AxisMetricId,
   type AxisMode,
@@ -38,12 +27,8 @@ import {
   type ChartPoiAnnotation,
   type ItinerarySteepAlert,
 } from '../chart';
-import {
-  dispatchOpenPoiOnMap,
-  findChartXForPoi,
-  listenSelectPoiOnChart,
-} from '@/features/poi/lib/chartPoiSyncBridge';
-import { flyToBounds, flyToLocation, flyToPoi } from '@/features/map3d';
+import { dispatchOpenPoiOnMap } from '@/features/poi/lib/chartPoiSyncBridge';
+import { flyToBounds, flyToPoi } from '@/features/map3d';
 import {
   clearAnalysisSelectedSegment,
   setAnalysisSelectedSegment,
@@ -71,6 +56,10 @@ import {
 } from './AnalysisAlertSectionPopover';
 import { resolveRoadTypeLabel } from './resolveRoadTypeLabel';
 import { AnalysisToolbar, type ToolbarFilterKey } from './AnalysisToolbar';
+import { useRemoteChartCursors } from './useRemoteChartCursors';
+import { useSelectPoiOnChart } from './useSelectPoiOnChart';
+import { flyMapToRouteSegment, flyMapToRoutePoint, lonLatExtent } from './chartMapNavigation';
+import { resolveChartPlacementTarget } from './chartPlacementTarget';
 
 /**
  * Panneau d'analyse centrale des itinéraires (graphique d'élévation, pente, vitesse, puissance, etc.).
@@ -263,44 +252,7 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
     disabled: isMapEditToolArmed,
   });
 
-  // Co-édition : point survolé par les autres (itinéraire, distance depuis son
-  // départ) → abscisse dans le mode d'axe de cet éditeur ; ligne à leur couleur.
-  const livePresence = useLivePresenceOptional();
-  const hasLivePresence = livePresence !== null;
-  const remoteChartContexts = useMemo(() => {
-    const contexts = new Map<string, {
-      prediction: PredictionResult | null;
-      totalDistanceM: number;
-      startTime: string | null;
-      pauseSchedule: ReturnType<typeof buildPauseAwareSchedule> | null;
-      startOffsetKm: number;
-    }>();
-    if (!hasLivePresence) return contexts;
-    for (const itinerary of itineraries) {
-      const points = itinerary.gpxRoute?.points;
-      if (itinerary.analysisVisible === false || !points || points.length < 2) continue;
-      const prediction = ((predictions?.[itinerary.id] as PredictionResult | undefined) ?? itinerary.prediction ?? null) as PredictionResult | null;
-      const distances = getRoutePointDistances(points);
-      contexts.set(itinerary.id, {
-        prediction,
-        totalDistanceM: distances[distances.length - 1] ?? 0,
-        startTime: itinerary.rhythm.startTime ?? null,
-        pauseSchedule: xMode === 'distance' ? null : buildPauseAwareSchedule(itinerary, prediction),
-        startOffsetKm: xMode === 'distance' ? getItineraryStartDistanceKm(itinerary) : 0,
-      });
-    }
-    return contexts;
-  }, [hasLivePresence, itineraries, predictions, xMode]);
-  const remoteToChartX = useCallback((itineraryId: string, distanceM: number): number | null => {
-    const context = remoteChartContexts.get(itineraryId);
-    if (!context) return null;
-    const x = xValueFromDistance(distanceM, { ...context, xMode });
-    return Number.isFinite(x) ? x + context.startOffsetKm : null;
-  }, [remoteChartContexts, xMode]);
-  const renderRemoteChartCursors = useCallback(
-    ({ xDomain }: { xDomain: { min: number; max: number } }) => <RemoteChartCursors xDomain={xDomain} toChartX={remoteToChartX} />,
-    [remoteToChartX],
-  );
+  const { hasLivePresence, renderRemoteChartCursors } = useRemoteChartCursors(itineraries, predictions, xMode);
 
   // Pendant un flyover, le curseur du graphique suit la tête de lecture
   // (AnalysisChartWithFlyoverCursor) et le point de la carte est la tête : ici
@@ -440,16 +392,7 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
       clearAnalysisSelectedSegment(map);
       const points = activeItinerary?.gpxRoute?.points ?? [];
       if (points.length >= 2) {
-        let minLon = Infinity;
-        let maxLon = -Infinity;
-        let minLat = Infinity;
-        let maxLat = -Infinity;
-        for (const pt of points) {
-          if (pt.lon < minLon) minLon = pt.lon;
-          if (pt.lon > maxLon) maxLon = pt.lon;
-          if (pt.lat < minLat) minLat = pt.lat;
-          if (pt.lat > maxLat) maxLat = pt.lat;
-        }
+        const { minLon, maxLon, minLat, maxLat } = lonLatExtent(points);
         if (Number.isFinite(minLon) && Number.isFinite(maxLon)) {
           flyToBounds(map, [
             [minLon, minLat],
@@ -499,34 +442,7 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
 
       if (segmentPoints.length >= 2) {
         setAnalysisSelectedSegment(map, segmentPoints, '#ffffff');
-
-        let minLon = Infinity;
-        let maxLon = -Infinity;
-        let minLat = Infinity;
-        let maxLat = -Infinity;
-        for (const pt of segmentPoints) {
-          if (pt.lon < minLon) minLon = pt.lon;
-          if (pt.lon > maxLon) maxLon = pt.lon;
-          if (pt.lat < minLat) minLat = pt.lat;
-          if (pt.lat > maxLat) maxLat = pt.lat;
-        }
-
-        const currentPitch = map.getPitch();
-        const is2D = currentPitch <= 8;
-        const targetPitch = is2D ? 0 : Math.max(currentPitch, CHART_CLICK_FOCUS_PITCH);
-
-        flyToBounds(
-          map,
-          [
-            [minLon, minLat],
-            [maxLon, maxLat],
-          ],
-          {
-            pitch: targetPitch,
-            maxZoom: 13.8,
-            padding: { top: 80, bottom: 80, left: 80, right: 80 },
-          },
-        );
+        flyMapToRouteSegment(map, segmentPoints);
       }
     },
     [activeItinerary, map, predictions, visibleChartNodes, xMode],
@@ -540,50 +456,19 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
     };
   }, [map]);
 
-  useEffect(() => {
-    return listenSelectPoiOnChart((payload) => {
-      const targetX = findChartXForPoi({
-        poi: payload,
-        poiAnnotations,
-        activeItinerary,
-        visibleChartNodes,
-        xMode,
-        predictions,
-      });
-
-      if (targetX != null && Number.isFinite(targetX)) {
-        setSelectedChartX(targetX);
-        updateHoverPoint(targetX);
-
-        if (detailZoom > 0 && routeXDomainClamp) {
-          const fullSpan = routeXDomainClamp.max - routeXDomainClamp.min;
-          if (fullSpan > 0) {
-            const visibleFraction = detailZoomToVisibleFraction(normalizeUnitInterval(detailZoom));
-            const visibleSpan = fullSpan * visibleFraction;
-            const currentMin = routeXDomainClamp.min + detailOffset * (fullSpan - visibleSpan);
-            const currentMax = currentMin + visibleSpan;
-
-            if (targetX < currentMin + visibleSpan * 0.08 || targetX > currentMax - visibleSpan * 0.08) {
-              const centerNorm = (targetX - routeXDomainClamp.min) / fullSpan;
-              const nextOffset = detailOffsetForCenter(centerNorm, visibleFraction);
-              handleOffsetChange(nextOffset);
-            }
-          }
-        }
-      }
-    });
-  }, [
-    activeItinerary,
-    detailOffset,
-    detailZoom,
-    handleOffsetChange,
+  useSelectPoiOnChart({
     poiAnnotations,
-    predictions,
-    routeXDomainClamp,
-    updateHoverPoint,
+    activeItinerary,
     visibleChartNodes,
     xMode,
-  ]);
+    predictions,
+    detailZoom,
+    detailOffset,
+    routeXDomainClamp,
+    handleOffsetChange,
+    setSelectedChartX,
+    updateHoverPoint,
+  });
 
   const handlePoiAnnotationClick = useCallback(
     (annotation: ChartPoiAnnotation) => {
@@ -670,62 +555,29 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
   const handleChartClick = useCallback((xValue: number) => {
     chartClickImplRef.current(xValue);
   }, []);
-  const flyMapToRoutePoint = (point: { lat: number; lon: number }) => {
-    if (!map) return;
-    const currentPitch = map.getPitch();
-    const is2D = currentPitch <= 8;
-    const targetPitch = is2D ? 0 : Math.max(currentPitch, CHART_CLICK_FOCUS_PITCH);
-
-    flyToLocation(
-      map,
-      { lon: point.lon, lat: point.lat },
-      {
-        zoom: CHART_CLICK_FOCUS_ZOOM,
-        pitch: targetPitch,
-      },
-    );
-  };
-
   // « Ajouter » armé : le clic pose l'élément sur la trace de l'itinéraire actif,
   // au point du profil sous le curseur.
   const placeOnActiveRoute = (xValue: number) => {
     const points = activeItinerary?.gpxRoute?.points ?? null;
     if (!chartPlacementTool || !activeItinerary || !points || points.length < 2) return;
-    if (activeChartXRange) {
-      const margin = (activeChartXRange.max - activeChartXRange.min) * 0.002;
-      if (xValue < activeChartXRange.min - margin || xValue > activeChartXRange.max + margin) {
-        chartPlacementTool.rejectOutsideRoute();
-        return;
-      }
-    }
-
-    const distances = getRoutePointDistances(points);
-    const totalM = distances[distances.length - 1] ?? 0;
-    const localXValue = xMode === 'distance' ? xValue - getItineraryStartDistanceKm(activeItinerary) : xValue;
-    const prediction = predictions?.[activeItinerary.id] ?? activeItinerary.prediction ?? null;
-    const distanceM = projectXToDistanceM(
+    const target = resolveChartPlacementTarget({
+      xValue,
+      activeChartXRange,
+      itinerary: activeItinerary,
       points,
-      prediction,
+      prediction: predictions?.[activeItinerary.id] ?? activeItinerary.prediction ?? null,
       xMode,
-      localXValue,
-      activeItinerary.rhythm.startTime,
-      buildPauseAwareSchedule(activeItinerary, prediction),
-    );
-    // Hors du profil actif (portion d'une autre variante, au-delà de l'arrivée).
-    const toleranceM = Math.max(25, totalM * 0.002);
-    if (!Number.isFinite(distanceM) || distanceM < -toleranceM || distanceM > totalM + toleranceM) {
+    });
+    if (target?.kind === 'outside') {
       chartPlacementTool.rejectOutsideRoute();
       return;
     }
-
-    const routeDistanceM = Math.min(totalM, Math.max(0, distanceM));
-    const point = interpolateRoutePointAtDistance(points, routeDistanceM);
-    if (!point) return;
+    if (!target) return;
 
     setSelectedChartX(xValue);
     updateHoverPoint(xValue);
-    flyMapToRoutePoint(point);
-    chartPlacementTool.placeAt({ lat: point.lat, lon: point.lon, distanceM: routeDistanceM });
+    if (map) flyMapToRoutePoint(map, target.point);
+    chartPlacementTool.placeAt({ lat: target.point.lat, lon: target.point.lon, distanceM: target.routeDistanceM });
   };
 
   const handleChartClickImpl = (xValue: number) => {
@@ -783,7 +635,7 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
     );
     if (!point) return;
 
-    flyMapToRoutePoint(point);
+    flyMapToRoutePoint(map, point);
     updateHoverPoint(xValue);
   };
   useLayoutEffect(() => {
