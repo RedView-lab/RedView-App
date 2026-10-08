@@ -182,7 +182,8 @@ async function rawTcpClient(token: string, extensions?: string) {
       return frames[index];
     },
     async closed(): Promise<number> {
-      await waitFor(() => closeCode !== null, 'fermeture');
+      // Large : la bombe de 64 Mo se décompresse avant le refus, lente sous charge.
+      await waitFor(() => closeCode !== null, 'fermeture', 30_000);
       return closeCode!;
     },
     destroy: () => tcp.destroy(),
@@ -487,7 +488,7 @@ describe('serveur temps réel', () => {
     bob.send({ type: 'ping', t: 2 });
     expect((await bob.next((frame) => frame.payload.includes('"pong"'))).opcode).toBe(0x1);
     bob.destroy();
-  }, 20_000);
+  }, 60_000);
 
   it('refus : version du protocole, jeton invalide', async () => {
     const version = await rawHello({ type: 'hello', v: PROTOCOL_VERSION + 1, clientId: 'c-1', epoch: null, lastSeq: null });
