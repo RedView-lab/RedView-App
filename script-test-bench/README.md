@@ -12,7 +12,7 @@ tests unitaires sont des fichiers Vitest à côté du code (`foo.ts` →
 ## Commencer ici
 
 ```bash
-npm run check:full     # la porte lance aussi le parcours utilisateur sur le build de prod et quatre régressions hors ligne
+npm run check:full     # le contrôle lance aussi le parcours utilisateur sur le build de prod et quatre régressions hors ligne
 npm run bench:quick    # toutes les suites de performance, avec moins d'itérations
 npm run bench:<suite>  # une seule suite, p. ex. bench:pente, bench:flyover, bench:collab
 ```
@@ -26,7 +26,7 @@ npm run bench:<suite>  # une seule suite, p. ex. bench:pente, bench:flyover, ben
 | [`flyover/`](flyover), [`follow/`](follow) | Caméra du survol 3D de la route ; restitution du suivi en présence en direct, en pur et rejouée image par image dans un navigateur virtuel | `bench:flyover`, `bench:follow`, `bench:follow-frames` |
 | [`avalanche/`](avalanche), [`lidar-lod/`](lidar-lod), [`snow-quality/`](snow-quality) | Analyses et niveau de détail du visualiseur LiDAR ; le moteur de hauteur de neige face aux contrôles physiques et au moteur v1 figé | `bench:avalanche`, `bench:lidar-lod`, `bench:snow` |
 | [`pace-accuracy/`](pace-accuracy) | Moteur de temps en mouvement face à de vraies sorties FIT, à des scénarios physiques synthétiques et à des références publiques | `bench:pace`, `bench:pace:prep`, `bench:pace:realism` |
-| [`routing-quality/`](routing-quality), [`route-continuity/`](route-continuity) | Environ 660 scénarios de routage contre le BRouter de production, et la règle selon laquelle une route enregistrée ne contient jamais de ligne droite | `bench:routing`, `bench:routing:sweep`, `bench:routing:compare`, `bench:routing:report` |
+| [`routing-quality/`](routing-quality), [`route-continuity/`](route-continuity) | Environ 660 scénarios de routage contre le BRouter de production, et la règle selon laquelle un tracé enregistré ne contient jamais de ligne droite | `bench:routing`, `bench:routing:sweep`, `bench:routing:compare`, `bench:routing:report` |
 | [`collab-load/`](collab-load), [`collab-e2e/`](collab-e2e) | Serveur temps réel sous charge et à travers les redémarrages ; parcours à deux utilisateurs dans un vrai navigateur, sur le serveur de dev ou avec les comptes de test de production | `bench:collab-load`, `bench:collab-e2e`, `bench:collab-prod` |
 | [`user-journey/`](user-journey), [`dashboard-perf/`](dashboard-perf), [`screen-audit/`](screen-audit) | Build de production dans un navigateur sans interface face à un Appwrite en mémoire : le parcours utilisateur principal ; chargement, fluidité et fuites sur réseaux bridés ; mise en page sur 15 tailles d'écran | `e2e:journey`, `bench:dashboard`, `bench:screens` |
 | [`lidar-viewer-engines/`](lidar-viewer-engines), [`lidar-viewer-perf/`](lidar-viewer-perf), [`lidar-viewer-shots/`](lidar-viewer-shots) | Visualiseur LiDAR en WebGPU et WebGL 2 dans Chromium, Firefox et WebKit ; fréquence d'images ; captures à vue fixe | `bench:lidar-engines`, `bench:lidar-fps`, `bench:lidar-shots` |

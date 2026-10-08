@@ -16,7 +16,7 @@ leurs identifiants dans `.env`, jamais commité (partir de
 
 ```bash
 npm run dev          # données i18n de l'API, puis Vite + services locaux + tunnel SSH vers le VPS
-npm run check        # porte qualité : types, lint, tests unitaires, knip, cycles d'import, traductions
+npm run check        # contrôle qualité : types, lint, tests unitaires, knip, cycles d'import, traductions
 npm run check:full   # + build de production, serveurs bundlés, régressions hors ligne (lancé par la CI et deploy)
 npm run build        # build de production (les erreurs de type le font échouer)
 ```
@@ -30,8 +30,8 @@ lancent que délibérément, jamais au sein d'un changement (voir
 | Dossier | Contenu | Commandes principales |
 |---|---|---|
 | [`build/`](build) | Étapes de build : données i18n de l'API, serveurs bundlés (esbuild), précompression des statiques, envoi des sourcemaps à GlitchTip | `npm run build`, `npm run build:server` (les `Dockerfile` les lancent aussi) |
-| [`quality/`](quality) | La porte qualité et ses contrôles : budget du bundle de chargement initial, serveurs bundlés réellement démarrés, couverture i18n | `npm run check`, `npm run check:full`, `npm run bundle:check`, `npm run server:check`, `npm run i18n:check` |
-| [`release/`](release) | Mise en production (porte + vérification du schéma + push + Coolify) et retour à une image conservée | `npm run deploy`, `npm run rollback` |
+| [`quality/`](quality) | Le contrôle qualité et ses vérifications : budget du bundle de chargement initial, serveurs bundlés réellement démarrés, couverture i18n | `npm run check`, `npm run check:full`, `npm run bundle:check`, `npm run server:check`, `npm run i18n:check` |
+| [`release/`](release) | Mise en production (contrôle qualité + vérification du schéma + push + Coolify) et retour à une image conservée | `npm run deploy`, `npm run rollback` |
 | [`dev/`](dev) | Serveurs locaux BRouter, POI et temps réel, et tunnel SSH vers le VPS (`npm run dev` les démarre) | `npm run services`, `npm run services:stop` |
 | [`appwrite/`](appwrite) | Opérations sur la base de production : schéma (vérifié par deploy), audits et migrations de permissions, audit de sécurité des projets partagés, suppressions de compte interrompues, comptes de test de co-édition | `node --env-file=.env scripts/appwrite/setup-appwrite-schema.mjs --check` |
 | [`analytics/`](analytics) | Rapport d'activation tiré de la base, étiquettes des comptes internes, tableaux et entonnoirs Umami sous forme de code (`umami/`) | `npm run analytics:report`, `npm run analytics:sync` |
@@ -58,7 +58,7 @@ La procédure complète est dans [`CLAUDE.md`](../CLAUDE.md).
 ## Ajouter un script
 
 - Le placer dans le dossier de son rôle et le nommer d'après ce qu'il fait (les
-  scripts de `probes/` sont des diagnostics, pas des tests lancés par la porte).
+  scripts de `probes/` sont des diagnostics, pas des tests lancés par le contrôle).
 - S'il est fait pour être relancé, le relier à une commande `npm run`.
 - Lire les secrets dans `.env` ou dans un fichier hors du dépôt, jamais sur la
   ligne de commande ni dans le code.

@@ -24,15 +24,15 @@ npm run dev
 | [`server/`](server/README.md) | Modules serveur partagés (`lib/`), serveur de co-édition en temps réel (`multiplayer/`), services du VPS et configuration de l'hôte. Point d'entrée de production : [`server.mjs`](server.mjs). |
 | [`public/`](public) | Ressources statiques et Service Worker des tuiles (`sw-dem.js` + `sw-dem/`). |
 | [`vendor/`](vendor) | Crates Rust compilées en WebAssembly ; leurs sorties sont commitées. |
-| [`scripts/`](scripts/README.md) | Outils de build, porte qualité, mise en production et exploitation. |
+| [`scripts/`](scripts/README.md) | Outils de build, contrôle qualité, mise en production et exploitation. |
 | [`script-test-bench/`](script-test-bench/README.md) | Bancs de performance, parcours de bout en bout et suites de régression sur données réelles. |
 | [`test/`](test) | Tests du code qui ne peut pas héberger les siens (le Service Worker de `public/`). |
 | [`docs/`](docs/README.md) | Notes d'architecture, procédures d'exploitation et audits datés. |
 
 ## 3. Faire le changement
 
-- **Le code, ses commentaires et la documentation sont en français.** Les
-  identifiants restent en anglais, comme les noms de l'écosystème.
+- **Les commentaires et la documentation sont en français ; les identifiants
+  restent en anglais, comme les noms de l'écosystème.**
 - **Les tests sont à côté du code.** `foo.ts` → `foo.test.ts`, avec un
   `import { describe, it, expect } from 'vitest'` explicite. Les tests serveur
   vont dans `server/lib/__tests__/`, les tests d'API dans `api/_lib/__tests__/`.
@@ -54,7 +54,7 @@ npm run dev
 | `npm run check:full` | Avant une pull request : ajoute le build de production, le budget du bundle, les serveurs bundlés réellement démarrés, le parcours de bout en bout et les suites de régression. La CI lance la même chose. |
 | `npm run bench:<suite>` | Quand un changement touche une zone mesurée : voir [`script-test-bench/`](script-test-bench/README.md) |
 
-La porte est stricte à dessein :
+Le contrôle est volontairement strict :
 
 - **Cliquet ESLint.** Les erreurs préexistantes sont figées dans
   `eslint-suppressions.json` et aucune nouvelle erreur ne peut entrer. Corriger les
@@ -70,19 +70,21 @@ La porte est stricte à dessein :
 un sujet par commit :
 
 ```text
-fix(chart,map): garder le curseur de survol sur la route après un reroutage
+fix(chart,map): garder le curseur de survol sur le tracé après un reroutage
 refactor(scripts): regrouper les outils d'exploitation par domaine
 docs(readme): relier les cartes de dossiers
 ```
 
 Plusieurs sessions peuvent partager un même arbre de travail. N'indexer et ne
-commiter que ses propres chemins (`git commit -- <chemins>`) ; jamais
-`git add .`, `git stash` ni `git checkout .`.
+commiter que ses propres chemins (`git commit -- <chemins>`) ; un fichier
+nouveau s'indexe d'abord avec `git add -- <chemins>` (un commit à pathspec
+refuse un fichier jamais suivi). Jamais `git add .`, `git stash` ni
+`git checkout .`.
 
 ## 6. Livrer
 
 Ouvrir une pull request vers `main` avec le modèle, et attendre la CI.
 Le déploiement est une étape distincte et délibérée : `npm run deploy` ne déploie
-que le travail commité, après la porte complète et une vérification du schéma de
+que le travail commité, après le contrôle complet et une vérification du schéma de
 production. Lire `CLAUDE.md` avant de le lancer, et ne jamais le lancer au sein
 d'un changement.

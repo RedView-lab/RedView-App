@@ -42,7 +42,7 @@ documents ci-dessous approfondissent un sujet.
 | Document | Contenu |
 |---|---|
 | [stats-guide.md](analytics/stats-guide.md) | Guide des statistiques en langage simple pour toute l'équipe : où regarder, glossaire, les questions à se poser chaque semaine |
-| [measurement.md](analytics/measurement.md) | Référence technique : Umami first-party anonyme + rapports issus de la base, règles de confidentialité, dictionnaire des événements, entonnoirs, tableaux de bord |
+| [measurement.md](analytics/measurement.md) | Référence technique : Umami anonyme, servi depuis notre propre domaine, + rapports issus de la base, règles de confidentialité, dictionnaire des événements, entonnoirs, tableaux de bord |
 
 ## Audits datés — [`audits/`](audits)
 
@@ -55,7 +55,7 @@ sorties brutes auxquelles ils renvoient sont dans [`audits/data/`](audits/data).
 | 2026-09-22 | [Audit et reconstruction de la base de POI](audits/2026-09-22-poi-database.md) |
 | 2026-09-22 | [Usage des données du cycliste dans le moteur d'allure](audits/2026-09-22-prediction-data.md) |
 | 2026-09-23 | [Compléter la base de POI avec quatre sources externes](audits/2026-09-23-poi-external-sources.md) |
-| 2026-10-01 | [Audit avant lancement du parcours de l'utilisateur connecté](audits/2026-10-01-launch.md) |
+| 2026-10-01 | [Audit avant lancement : parcours de l'utilisateur connecté](audits/2026-10-01-launch.md) |
 
 ## Écrire un nouveau document
 
