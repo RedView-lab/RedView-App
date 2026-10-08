@@ -1,12 +1,12 @@
 // ============================================
-// Terrain mesh LOD — WebGL 2 drawer
+// LOD du maillage du terrain — dessin WebGL 2
 // ============================================
 //
-// Levels, stitching and push-back come from `TerrainLodSelector` (see
-// ../terrainLodCore.ts), as for WebGPU. WebGL 2 has no base vertex in core
-// (the draw-base-vertex extension is optional), so each chunk moves the
-// attribute pointers to its first vertex instead; the index patterns are
-// relative to it either way. The push-back is a uniform per chunk.
+// Niveaux, couture et recul viennent de `TerrainLodSelector` (voir
+// ../terrainLodCore.ts), comme en WebGPU. WebGL 2 n'a pas de base vertex dans
+// le cœur (l'extension draw-base-vertex est optionnelle) : chaque chunk déplace
+// donc les pointeurs d'attributs sur son premier sommet ; les motifs d'indices
+// lui sont relatifs dans les deux cas. Le recul est un uniform par chunk.
 
 import {
   TERRAIN_VERTEX_FLOATS,
@@ -20,7 +20,7 @@ const VERTEX_BYTES = TERRAIN_VERTEX_FLOATS * 4;
 
 interface GlIndexPattern {
   buffer: WebGLBuffer;
-  /** Byte offset in `buffer`. */
+  /** Décalage en octets dans `buffer`. */
   offset: number;
   count: number;
 }
@@ -33,7 +33,7 @@ export class GlTerrainLod {
   private readonly vao: WebGLVertexArrayObject;
   private readonly patterns = new Map<string, GlIndexPattern>();
   private readonly ownedBuffers: WebGLBuffer[] = [];
-  /** Triangles drawn last frame (stats). */
+  /** Triangles dessinés à la dernière image (statistiques). */
   lastTriangles = 0;
 
   constructor(gl: WebGL2RenderingContext, mesh: TerrainMeshData) {
@@ -54,7 +54,7 @@ export class GlTerrainLod {
     this.uploadSharedPatterns();
   }
 
-  /** Attribute pointers starting at vertex `base` (terrain VAO bound). */
+  /** Pointeurs d'attributs commençant au sommet `base` (VAO du terrain lié). */
   private attributesAt(base: number): void {
     const gl = this.gl;
     gl.bindBuffer(gl.ARRAY_BUFFER, this.vertexBuffer);
@@ -95,8 +95,8 @@ export class GlTerrainLod {
   }
 
   /**
-   * Draws the visible chunks with the terrain program (current, scene
-   * uniforms bound); `pushBackLocation` = its `u_pushBack`. Returns the draw count.
+   * Dessine les chunks visibles avec le programme du terrain (courant, uniforms
+   * de scène liés) ; `pushBackLocation` = son `u_pushBack`. Renvoie le nombre de draws.
    */
   draw(
     pushBackLocation: WebGLUniformLocation | null,
@@ -108,7 +108,7 @@ export class GlTerrainLod {
     const selector = this.selector;
     if (selector.chunks.length === 0) return 0;
     selector.select(viewProj, camera[0]!, camera[1]!, camera[2]!, focalPx);
-    // Patterns created on first use bind the element array outside the VAO.
+    // Les motifs créés au premier usage lient l'element array hors du VAO.
     const patterns = new Array<GlIndexPattern | null>(selector.chunks.length);
     for (let i = 0; i < selector.chunks.length; i++) {
       patterns[i] = selector.visible[i] ? this.pattern(selector.chunks[i]!, selector.levels[i]!, selector.stitchOf(i)) : null;

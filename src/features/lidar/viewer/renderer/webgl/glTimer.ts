@@ -1,14 +1,14 @@
 // ============================================
-// GPU frame timing of the WebGL 2 backend
+// Chronométrage GPU des images du backend WebGL 2
 // ============================================
 //
-// With EXT_disjoint_timer_query_webgl2 (Chrome/ANGLE on most desktops; off
-// in Firefox), each timed pass of a frame gets a TIME_ELAPSED query, read
-// back a few frames later, as the WebGPU timestamps (../gpuTimer.ts): the
-// draw passes drive the point budget, the shading pass is reported apart.
-// Without it nothing is measured (`usesQueries` false): the budget then
-// trusts the CPU time and the real cadence, as on WebGPU without
-// `timestamp-query`.
+// Avec EXT_disjoint_timer_query_webgl2 (Chrome/ANGLE sur la plupart des
+// ordinateurs de bureau ; absent de Firefox), chaque passe chronométrée d'une
+// image reçoit une requête TIME_ELAPSED, relue quelques images plus tard, comme
+// les horodatages WebGPU (../gpuTimer.ts) : les passes de dessin pilotent le
+// budget de points, la passe d'ombrage est comptée à part. Sans elle rien n'est
+// mesuré (`usesQueries` faux) : le budget se fie alors au temps CPU et à la
+// cadence réelle, comme en WebGPU sans `timestamp-query`.
 
 import { TIMED_PASS } from '../gpuTimer';
 
@@ -23,7 +23,7 @@ interface TimerQueryExtension {
 
 interface FrameSlot {
   queries: WebGLQuery[];
-  /** Passes (bit per index) measured in the frame the slot holds. */
+  /** Passes (un bit par indice) mesurées dans l'image que contient l'emplacement. */
   passes: number;
   pending: boolean;
 }
@@ -64,7 +64,7 @@ export class GlFrameTimer {
     return this.hasSample ? this.shadeMs : 0;
   }
 
-  /** Reads finished frames, then reserves a slot for this one; false when all are still in flight. */
+  /** Lit les images terminées, puis réserve un emplacement pour celle-ci ; false quand tous sont encore en vol. */
   beginFrame(): boolean {
     if (!this.ext) return false;
     this.collect();
@@ -100,7 +100,7 @@ export class GlFrameTimer {
       const last = [...slot.queries.keys()].reverse().find((pass) => (slot.passes & (1 << pass)) !== 0);
       if (last === undefined || !gl.getQueryParameter(slot.queries[last]!, gl.QUERY_RESULT_AVAILABLE)) continue;
       slot.pending = false;
-      // A disjoint event (clock change, context switch) voids the results in flight.
+      // Un événement disjoint (changement d'horloge, changement de contexte) annule les résultats en vol.
       if (gl.getParameter(ext.GPU_DISJOINT_EXT)) continue;
       const passNs = (pass: number): number => ((slot.passes & (1 << pass)) !== 0
         ? Number(gl.getQueryParameter(slot.queries[pass]!, gl.QUERY_RESULT)) || 0

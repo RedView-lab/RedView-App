@@ -1,22 +1,23 @@
 // ============================================
-// WebGL 2 point-cloud renderer
+// Renderer de nuage de points WebGL 2
 // ============================================
 //
-// The viewer's second backend, for browsers without WebGPU (Firefox and
-// most Chrome builds on Linux in 2026, blocklisted drivers, older Safari):
-// the same frame as `WebGpuLidarRenderer` — lazy per-node shading,
-// instanced sprites with the adaptive size, chunked terrain LOD, overlays,
-// route and analysis meshes, sun trajectory, EDL, reduced resolution while
-// moving, MSAA with alpha-to-coverage on discrete GPUs and progressive
-// anti-aliasing of still frames — so every viewer feature (tools,
-// comments, route editing, snow) runs unchanged on top of it.
+// Le second backend du viewer, pour les navigateurs sans WebGPU (Firefox et
+// la plupart des builds de Chrome sous Linux en 2026, pilotes en liste noire,
+// Safari ancien) : la même image que `WebGpuLidarRenderer` — ombrage paresseux
+// par nœud, sprites instanciés à taille adaptative, LOD du terrain par chunks,
+// surcouches, maillages de tracé et d'analyse, trajectoire du soleil, EDL,
+// résolution réduite en mouvement, MSAA avec alpha-to-coverage sur les GPU
+// dédiés et anticrénelage progressif des images fixes — pour que chaque
+// fonction du viewer (outils, commentaires, édition de tracé, neige) tourne
+// telle quelle par-dessus.
 //
-// Frame = shading pass (transform feedback, nodes that are new or stale)
-// → scene pass into an offscreen target (MSAA renderbuffers resolved into
-// textures when enabled) → one full-screen pass to the canvas: copy, EDL,
-// upscale, or accumulation into an rgba16float running mean then present.
-// Depth is conventional with a finite projection built from the camera's
-// near/far (`setDepthRange`), see glShaders.ts.
+// Image = passe d'ombrage (transform feedback, nœuds nouveaux ou périmés)
+// → passe de scène dans une cible hors écran (renderbuffers MSAA résolus en
+// textures quand il est activé) → une passe plein écran vers le canvas : copie,
+// EDL, agrandissement, ou accumulation dans une moyenne courante rgba16float
+// puis présentation. La profondeur est conventionnelle, avec une projection
+// finie construite à partir du near/far de la caméra (`setDepthRange`), voir glShaders.ts.
 
 import { translateAppText } from '@/shared/i18n/config';
 import type { PlatformProfile } from '../../lod/types';
@@ -95,9 +96,10 @@ import {
 import { GlFrameTimer } from './glTimer';
 
 /**
- * Slope-scaled depth offset of the terrain mesh (conventional depth:
- * positive pushes it back), the WebGPU `depthBiasSlopeScale` of −4 in
- * reversed-Z: the mesh only fills the holes between the ground returns.
+ * Décalage de profondeur proportionnel à la pente du maillage du terrain
+ * (profondeur conventionnelle : positif le repousse), le `depthBiasSlopeScale`
+ * de −4 de WebGPU en Z inversé : le maillage ne fait que boucher les trous
+ * entre les retours sol.
  */
 const TERRAIN_POLYGON_OFFSET_FACTOR = 4;
 const SLOPE_RAMP_WIDTH = 256;
@@ -116,7 +118,7 @@ interface GlPrograms {
   present: WebGLProgram;
 }
 
-/** Indexed mesh with its vertex array (preview: position + normal; route/analysis: position). */
+/** Maillage indexé avec son vertex array (aperçu : position + normale ; tracé/analyse : position). */
 interface GlMesh {
   vao: WebGLVertexArrayObject;
   buffers: WebGLBuffer[];
@@ -132,7 +134,7 @@ interface SceneTextures {
   sunlightMapTex: WebGLTexture;
 }
 
-/** Vendor/renderer strings: `RENDERER` first (Firefox exposes the real, sanitised name there), the debug extension otherwise. */
+/** Chaînes vendor/renderer : `RENDERER` d'abord (Firefox y expose le vrai nom, assaini), l'extension de débogage sinon. */
 function readContextStrings(gl: WebGL2RenderingContext): { vendor: string; renderer: string } {
   const generic = /^(webkit|mozilla)( webgl)?$/i;
   let vendor = String(gl.getParameter(gl.VENDOR) ?? '');
@@ -151,10 +153,10 @@ export class WebGlLidarRenderer implements LidarRenderer {
   readonly backend = 'webgl' as const;
   readonly canvas: HTMLCanvasElement;
   readonly platform: PlatformProfile;
-  /** GPU named by the context (logs, stats). */
+  /** GPU nommé par le contexte (logs, statistiques). */
   readonly rendererName: string;
   onDeviceLost: ((info: RendererLostInfo) => void) | null = null;
-  /** The photo mode needs WebGPU (compute passes, storage textures). */
+  /** Le mode photo a besoin de WebGPU (passes de calcul, storage textures). */
   readonly photo = null;
 
   motionScale = 1;
@@ -180,7 +182,7 @@ export class WebGlLidarRenderer implements LidarRenderer {
   private readonly timer: GlFrameTimer;
   private readonly textures: SceneTextures;
   private readonly maxTextureSize: number;
-  /** Half-float targets are renderable: still frames get the progressive anti-aliasing. */
+  /** Les cibles demi-flottantes sont rendables : les images fixes ont l'anticrénelage progressif. */
   private readonly canAccumulate: boolean;
   private nodePool: GlNodePool | null;
   private sampleCount: number;
@@ -210,12 +212,12 @@ export class WebGlLidarRenderer implements LidarRenderer {
   private edlEnabled = false;
   private edlStrength = 1.0;
   private edlRadiusPx = 1.4;
-  /** EDL uniforms of the frame being drawn: strength, radius px, enabled, target/canvas scale. */
+  /** Uniforms EDL de l'image en cours : force, rayon px, activé, échelle cible/canvas. */
   private readonly edlUniform = new Float32Array(4);
 
   private maxPointPixels = POINT_MAX_PX;
 
-  /** Overlay and lighting state, shared with the WebGPU renderer. */
+  /** État de surcouche et d'éclairage, partagé avec le renderer WebGPU. */
   private readonly shading = new SceneShadingState();
   private slopeFilter: GlFilter = 'linear';
   private altitudeFilter: GlFilter = 'linear';
@@ -226,7 +228,7 @@ export class WebGlLidarRenderer implements LidarRenderer {
   private routeMesh: GlMesh | null = null;
   private analysisMesh: GlMesh | null = null;
 
-  /** @throws when WebGL 2 is unavailable or a shader fails on this driver (the caller falls back). */
+  /** @throws quand WebGL 2 est indisponible ou qu'un shader échoue sur ce pilote (l'appelant se rabat). */
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
     const gl = canvas.getContext('webgl2', {
@@ -256,7 +258,7 @@ export class WebGlLidarRenderer implements LidarRenderer {
     this.platform = profile;
     this.canAccumulate = !!(gl.getExtension('EXT_color_buffer_float') ?? gl.getExtension('EXT_color_buffer_half_float'));
     const maxSamples = Number(gl.getParameter(gl.MAX_SAMPLES)) || 0;
-    // MSAA ×4 (with alpha-to-coverage on point edges) only where fill rate is cheap, as on WebGPU.
+    // MSAA ×4 (avec alpha-to-coverage sur les bords des points) seulement là où le fill-rate est bon marché, comme en WebGPU.
     this.sampleCount = profile.tier === 'discrete' && maxSamples >= 4 ? 4 : 1;
 
     this.programs = {
@@ -317,7 +319,7 @@ export class WebGlLidarRenderer implements LidarRenderer {
     this.onDeviceLost?.({ reason: 'context-lost', message: translateAppText('Contexte WebGL perdu') });
   };
 
-  // --- Stats & capabilities ---
+  // --- Statistiques et capacités ---
 
   getGpuFrameMs(): number {
     return this.timer.getFrameMs();
@@ -388,7 +390,7 @@ export class WebGlLidarRenderer implements LidarRenderer {
     this.nodePool?.invalidateShading();
   }
 
-  /** Replaces a scene texture (same unit), dropping the previous one. */
+  /** Remplace une texture de scène (même unité), en libérant la précédente. */
   private replaceTexture(key: keyof SceneTextures, texture: WebGLTexture): void {
     this.gl.deleteTexture(this.textures[key]);
     this.textures[key] = texture;
@@ -467,7 +469,7 @@ export class WebGlLidarRenderer implements LidarRenderer {
 
     this.deleteTrajectory();
     if (renderState.trajectoryVertices && renderState.trajectoryVertexCount > 0) {
-      // Line strip of pos.xyz + colour.rgba (floats).
+      // Line strip de pos.xyz + couleur.rgba (flottants).
       const buffer = createStaticBuffer(gl, gl.ARRAY_BUFFER, renderState.trajectoryVertices);
       const vao = gl.createVertexArray();
       if (vao) {
@@ -507,8 +509,8 @@ export class WebGlLidarRenderer implements LidarRenderer {
   }
 
   /**
-   * Indexed mesh: `withNormals` = 6 floats per vertex (position + normal,
-   * terrain layout), else 3 (position); RGBA8 colours; uint32 indices.
+   * Maillage indexé : `withNormals` = 6 flottants par sommet (position +
+   * normale, disposition du terrain), sinon 3 (position) ; couleurs RGBA8 ; indices uint32.
    */
   private createMesh(vertices: Float32Array, colors: Uint8Array, indices: Uint32Array, count: number, withNormals: boolean): GlMesh | null {
     const gl = this.gl;
@@ -537,7 +539,7 @@ export class WebGlLidarRenderer implements LidarRenderer {
       gl.deleteBuffer(colorBuffer);
       return null;
     }
-    // Element array binding recorded in the VAO.
+    // Liaison de l'element array enregistrée dans le VAO.
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
     gl.bindVertexArray(null);
@@ -589,7 +591,7 @@ export class WebGlLidarRenderer implements LidarRenderer {
   resize(width: number, height: number): void {
     if (this.lost || this.destroyed) return;
     const gl = this.gl;
-    // The browser may cap the drawing buffer below the canvas size.
+    // Le navigateur peut borner le drawing buffer sous la taille du canvas.
     this.canvasWidth = Math.max(1, Math.min(width, gl.drawingBufferWidth || width));
     this.canvasHeight = Math.max(1, Math.min(height, gl.drawingBufferHeight || height));
     destroyGlSceneTargets(gl, this.fullTargets);
@@ -610,8 +612,8 @@ export class WebGlLidarRenderer implements LidarRenderer {
   // --- Camera ---
 
   setSubpixelJitter(x: number, y: number): void {
-    // Without an accumulation target the still frames are not averaged:
-    // jittering them would only make the image shimmer.
+    // Sans cible d'accumulation, les images fixes ne sont pas moyennées :
+    // les décaler ne ferait que faire scintiller l'image.
     this.jitterX = this.canAccumulate ? x : 0;
     this.jitterY = this.canAccumulate ? y : 0;
   }
@@ -631,10 +633,10 @@ export class WebGlLidarRenderer implements LidarRenderer {
     this.lastProjScaleY = proj[5]!;
     const pos = camPos && camPos.length >= 3 ? vec3Of(camPos) : cameraPositionFromView(view);
     this.lastCamPos = pos;
-    // LOD selection and culling read the render projection, as on WebGPU.
+    // La sélection LOD et l'élagage lisent la projection de rendu, comme en WebGPU.
     mat4MultiplyInto(this.lastViewProj, proj, view);
 
-    // Drawn with the same lens and a finite depth range (no clip control in WebGL).
+    // Dessiné avec la même optique et une plage de profondeur finie (pas de clip control en WebGL).
     const near = this.depthNear;
     const far = this.depthFar;
     const draw = this.drawProj;
@@ -647,7 +649,7 @@ export class WebGlLidarRenderer implements LidarRenderer {
     draw[15] = 0;
     const vp = mat4MultiplyInto(this.drawViewProj, draw, view);
     if (this.jitterX !== 0 || this.jitterY !== 0) {
-      // Clip-space shift by (dx, dy)·w: the whole image moves by the offset in pixels.
+      // Décalage en espace clip de (dx, dy)·w : toute l'image bouge du décalage en pixels.
       const dx = (2 * this.jitterX) / this.canvasWidth;
       const dy = (2 * this.jitterY) / this.canvasHeight;
       for (let col = 0; col < 4; col++) {
@@ -668,7 +670,7 @@ export class WebGlLidarRenderer implements LidarRenderer {
     gl.bindBuffer(gl.UNIFORM_BUFFER, null);
   }
 
-  /** Per-frame sprite and EDL parameters for scene targets of `width`×`height` (`scale` of the canvas). */
+  /** Paramètres des sprites et de l'EDL par image pour des cibles de scène de `width`×`height` (`scale` du canvas). */
   private writeFrameParams(width: number, height: number, scale: number): void {
     const p = this.pointParams;
     fillPointParams(p, width, height, scale, {
@@ -737,7 +739,7 @@ export class WebGlLidarRenderer implements LidarRenderer {
     this.nodePool.prepareFrame(nodes, this.programs.shading);
     if (timed) this.timer.endPass();
 
-    // Scene pass.
+    // Passe de scène.
     const msaa = targets.msFbo !== null;
     gl.bindFramebuffer(gl.FRAMEBUFFER, targets.msFbo ?? targets.fbo);
     gl.viewport(0, 0, targets.width, targets.height);
@@ -751,7 +753,7 @@ export class WebGlLidarRenderer implements LidarRenderer {
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     if (timed) this.timer.beginPass(TIMED_PASS.scene);
 
-    // Points first (front to back), then the terrain only fills what is left.
+    // Les points d'abord (de l'avant vers l'arrière), puis le terrain ne remplit que ce qui reste.
     const roundPoints = !(options.motion && this.motionSquares);
     gl.useProgram(roundPoints ? this.programs.point : this.programs.pointSquare);
     if (roundPoints && msaa) gl.enable(gl.SAMPLE_ALPHA_TO_COVERAGE);
@@ -764,7 +766,7 @@ export class WebGlLidarRenderer implements LidarRenderer {
       gl.cullFace(gl.BACK);
       gl.enable(gl.POLYGON_OFFSET_FILL);
       gl.polygonOffset(TERRAIN_POLYGON_OFFSET_FACTOR, 0);
-      // Levels picked at the canvas resolution, like the points.
+      // Niveaux choisis à la résolution du canvas, comme les points.
       const focalPx = Math.abs(this.lastProjScaleY) * this.canvasHeight * 0.5;
       this.lastDrawCallCount += this.terrain.draw(this.pushBackLocation, this.lastViewProj, this.lastCamPos, focalPx);
       gl.disable(gl.POLYGON_OFFSET_FILL);
@@ -778,7 +780,7 @@ export class WebGlLidarRenderer implements LidarRenderer {
       this.drawMesh(this.previewMesh);
     }
 
-    // Overlays: depth-tested, no depth write.
+    // Surcouches : test de profondeur, sans écriture de profondeur.
     gl.depthMask(false);
     gl.enable(gl.BLEND);
     if (this.shading.trajectoryEnabled && this.trajectory && this.trajectory.count > 1) {
@@ -813,14 +815,14 @@ export class WebGlLidarRenderer implements LidarRenderer {
 
     resolveGlSceneTargets(gl, targets, this.edlEnabled);
 
-    // Full-screen pass(es) to the canvas.
+    // Passe(s) plein écran vers le canvas.
     if (timed) this.timer.beginPass(TIMED_PASS.edl);
     gl.bindVertexArray(this.emptyVao);
     this.bindPassTexture(PASS_TEXTURE_UNITS.colorTex, targets.colorTex);
     this.bindPassTexture(PASS_TEXTURE_UNITS.depthTex, targets.depthTex);
     if (accumulateSample >= 0 && this.accum) {
-      // EDL (or a plain copy) in linear light, blended into the running mean:
-      // weight 1 / (n + 1), the first sample replaces the history.
+      // EDL (ou copie simple) en lumière linéaire, mélangé dans la moyenne courante :
+      // poids 1 / (n + 1), le premier échantillon remplace l'historique.
       gl.bindFramebuffer(gl.FRAMEBUFFER, this.accum.fbo);
       gl.viewport(0, 0, this.canvasWidth, this.canvasHeight);
       if (accumulateSample === 0) {
@@ -879,7 +881,7 @@ export class WebGlLidarRenderer implements LidarRenderer {
     gl.deleteBuffer(this.sceneUbo);
     gl.deleteBuffer(this.pointParamsUbo);
     gl.deleteVertexArray(this.emptyVao);
-    // Frees the GPU memory now rather than at garbage collection.
+    // Libère la mémoire GPU maintenant plutôt qu'au ramasse-miettes.
     gl.getExtension('WEBGL_lose_context')?.loseContext();
   }
 }

@@ -1,23 +1,24 @@
 // ============================================
-// Offscreen render targets of the WebGL 2 backend
+// Cibles de rendu hors écran du backend WebGL 2
 // ============================================
 //
-// The scene is always drawn offscreen, then a full-screen pass (copy, EDL,
-// upscale or accumulation) writes the canvas: the default framebuffer is
-// created without depth or multisampling, which keeps every path on
-// formats WebGL 2 guarantees. With MSAA the scene goes into multisampled
-// renderbuffers and is resolved (`blitFramebuffer`) into the single-sample
-// textures; depth is resolved only when the EDL pass reads it.
+// La scène est toujours dessinée hors écran, puis une passe plein écran
+// (copie, EDL, agrandissement ou accumulation) écrit le canvas : le
+// framebuffer par défaut est créé sans profondeur ni multiéchantillonnage, ce
+// qui garde chaque chemin sur des formats que WebGL 2 garantit. Avec le MSAA,
+// la scène va dans des renderbuffers multiéchantillonnés et est résolue
+// (`blitFramebuffer`) dans les textures mono-échantillon ; la profondeur n'est
+// résolue que quand la passe EDL la lit.
 
 import { createTargetTexture } from './glUtils';
 
 export interface GlSceneTargets {
   width: number;
   height: number;
-  /** Single-sample colour (RGBA8, linear filtering for the upscale) and depth (DEPTH_COMPONENT24). */
+  /** Couleur mono-échantillon (RGBA8, filtrage linéaire pour l'agrandissement) et profondeur (DEPTH_COMPONENT24). */
   colorTex: WebGLTexture;
   depthTex: WebGLTexture;
-  /** Framebuffer of the two textures: drawn into without MSAA, resolve target with it. */
+  /** Framebuffer des deux textures : on y dessine sans MSAA, cible de résolution avec. */
   fbo: WebGLFramebuffer;
   msFbo: WebGLFramebuffer | null;
   msColor: WebGLRenderbuffer | null;
@@ -63,7 +64,7 @@ export function createGlSceneTargets(gl: WebGL2RenderingContext, width: number, 
   return { width, height, colorTex, depthTex, fbo, msFbo, msColor, msDepth };
 }
 
-/** Resolves the multisampled scene into the textures (no-op without MSAA). */
+/** Résout la scène multiéchantillonnée dans les textures (sans effet sans MSAA). */
 export function resolveGlSceneTargets(gl: WebGL2RenderingContext, targets: GlSceneTargets, withDepth: boolean): void {
   if (!targets.msFbo) return;
   gl.bindFramebuffer(gl.READ_FRAMEBUFFER, targets.msFbo);
@@ -85,16 +86,16 @@ export function destroyGlSceneTargets(gl: WebGL2RenderingContext, targets: GlSce
   if (targets.msDepth) gl.deleteRenderbuffer(targets.msDepth);
 }
 
-/** Running mean of the still frames (linear light). */
+/** Moyenne courante des images fixes (lumière linéaire). */
 export interface GlAccumTarget {
   texture: WebGLTexture;
   fbo: WebGLFramebuffer;
 }
 
 /**
- * RGBA16F accumulation target, or null where half floats are not
- * renderable (no EXT_color_buffer_float / _half_float): the still frames
- * are then left as they are, without the progressive anti-aliasing.
+ * Cible d'accumulation RGBA16F, ou null là où les demi-flottants ne sont pas
+ * rendables (pas d'EXT_color_buffer_float / _half_float) : les images fixes
+ * restent alors telles quelles, sans l'anticrénelage progressif.
  */
 export function createGlAccumTarget(gl: WebGL2RenderingContext, width: number, height: number): GlAccumTarget | null {
   const texture = createTargetTexture(gl, gl.RGBA16F, width, height, 'nearest');

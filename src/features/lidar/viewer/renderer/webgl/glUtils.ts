@@ -1,5 +1,5 @@
 // ============================================
-// WebGL 2 helpers of the WebGL backend: programs, textures, buffers
+// Outils WebGL 2 du backend WebGL : programmes, textures, buffers
 // ============================================
 
 import { PASS_TEXTURE_UNITS, SCENE_TEXTURE_UNITS, UBO_BINDING } from './glShaders';
@@ -18,10 +18,10 @@ function compileShader(gl: WebGL2RenderingContext, type: number, source: string,
 }
 
 /**
- * Compiles and links a program, binds its uniform blocks and samplers to
- * the fixed bindings/units (`UBO_BINDING`, `SCENE_TEXTURE_UNITS`,
- * `PASS_TEXTURE_UNITS`). `feedbackVaryings`: outputs captured by
- * transform feedback (one buffer each).
+ * Compile et lie un programme, lie ses blocs d'uniforms et ses samplers aux
+ * liaisons/unités fixes (`UBO_BINDING`, `SCENE_TEXTURE_UNITS`,
+ * `PASS_TEXTURE_UNITS`). `feedbackVaryings` : sorties capturées par transform
+ * feedback (un buffer chacune).
  */
 export function createGlProgram(
   gl: WebGL2RenderingContext,
@@ -62,7 +62,7 @@ export function createGlProgram(
 
 export type GlFilter = 'linear' | 'nearest';
 
-/** 2D texture with immutable storage, clamped, no mipmaps (complete for `texelFetch`). */
+/** Texture 2D à stockage immuable, bornée, sans mipmaps (complète pour `texelFetch`). */
 function allocateTexture(
   gl: WebGL2RenderingContext,
   internalFormat: number,
@@ -87,7 +87,7 @@ export function setTextureFilter(gl: WebGL2RenderingContext, texture: WebGLTextu
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, mode);
 }
 
-/** Pixel-store state for uploads of tightly packed CPU arrays. */
+/** État pixel-store pour l'envoi de tableaux CPU sans bourrage. */
 function prepareUpload(gl: WebGL2RenderingContext): void {
   gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
   gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
@@ -95,7 +95,7 @@ function prepareUpload(gl: WebGL2RenderingContext): void {
   gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
 }
 
-/** r32float grid read with `texelFetch` (heightmap, snow depth, cast shadow). */
+/** Grille r32float lue avec `texelFetch` (heightmap, hauteur de neige, ombre portée). */
 export function createFloatTexture(gl: WebGL2RenderingContext, width: number, height: number, data: Float32Array): WebGLTexture {
   const texture = allocateTexture(gl, gl.R32F, width, height, 'nearest');
   prepareUpload(gl);
@@ -122,7 +122,7 @@ export function writeRgbaTexture(gl: WebGL2RenderingContext, texture: WebGLTextu
   gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, data);
 }
 
-/** Render-target texture (colour or depth), filtered as given. */
+/** Texture cible de rendu (couleur ou profondeur), filtrée comme indiqué. */
 export function createTargetTexture(
   gl: WebGL2RenderingContext,
   internalFormat: number,
@@ -134,10 +134,10 @@ export function createTargetTexture(
 }
 
 /**
- * Grid resampled (nearest node) to at most `maxSize` nodes per side:
- * WebGL 2 only guarantees 2048 texels per side (WebGPU 8192). The shaders
- * address grids by their edge-to-edge node span, so the first and last
- * nodes are kept and the coarser grid covers the same bounds.
+ * Grille rééchantillonnée (nœud le plus proche) à au plus `maxSize` nœuds par
+ * côté : WebGL 2 ne garantit que 2048 texels par côté (WebGPU 8192). Les shaders
+ * adressent les grilles par leur étendue de nœud à nœud : le premier et le
+ * dernier nœud sont gardés et la grille plus grossière couvre la même emprise.
  */
 export function fitGridToTextureSize<T extends Float32Array | Uint8Array>(
   data: T,
@@ -165,11 +165,11 @@ export function fitGridToTextureSize<T extends Float32Array | Uint8Array>(
 export function createStaticBuffer(gl: WebGL2RenderingContext, target: number, data: ArrayBufferView): WebGLBuffer {
   const buffer = gl.createBuffer();
   if (!buffer) throw new Error('createBuffer failed');
-  // The element-array binding belongs to the bound vertex array object.
+  // La liaison de l'element array appartient au vertex array object lié.
   if (target === gl.ELEMENT_ARRAY_BUFFER) gl.bindVertexArray(null);
   gl.bindBuffer(target, buffer);
   gl.bufferData(target, data, gl.STATIC_DRAW);
-  // A buffer left bound to ARRAY_BUFFER may not be written by transform feedback.
+  // Un buffer laissé lié à ARRAY_BUFFER ne peut pas être écrit par transform feedback.
   gl.bindBuffer(target, null);
   return buffer;
 }

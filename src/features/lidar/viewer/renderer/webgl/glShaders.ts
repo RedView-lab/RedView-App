@@ -1,23 +1,23 @@
 // ============================================
-// GLSL ES 3.00 shaders of the WebGL 2 backend
+// Shaders GLSL ES 3.00 du backend WebGL 2
 // ============================================
 //
-// Line-for-line ports of the WGSL shaders (../shaders/*): same scene
-// uniform block (std140 gives the WGSL `Camera` struct's offsets, so
-// `packSceneUniforms` fills both), same overlays, lighting and shading.
-// Differences imposed by WebGL 2:
-//  - the point shading compute pass is a vertex shader captured by
-//    transform feedback (one RGBA8 word per point, rasterisation off);
-//  - per-node parameters are a uniform block bound per draw at the node's
-//    slot (`bindBufferRange`, the WebGPU dynamic offset), the child mask
-//    lives in it instead of a storage buffer;
-//  - depth is conventional ([0, 1], cleared to 1, `LESS`) with a finite
-//    projection: WebGL has no standard clip control (Firefox lacks
-//    EXT_clip_control), so reversed-Z would gain nothing. The EDL pass
-//    linearises it with the frame's near/far;
-//  - render-target textures are bottom-up, so the passes need no y flip.
+// Portages ligne à ligne des shaders WGSL (../shaders/*) : même bloc
+// d'uniforms de scène (std140 donne les décalages de la struct WGSL `Camera`,
+// donc `packSceneUniforms` remplit les deux), mêmes surcouches, éclairage et ombrage.
+// Différences imposées par WebGL 2 :
+//  - la passe de calcul d'ombrage des points est un vertex shader capturé par
+//    transform feedback (un mot RGBA8 par point, rastérisation coupée) ;
+//  - les paramètres par nœud sont un bloc d'uniforms lié à chaque draw à
+//    l'emplacement du nœud (`bindBufferRange`, le décalage dynamique de
+//    WebGPU), le masque d'enfants y vit au lieu d'un storage buffer ;
+//  - la profondeur est conventionnelle ([0, 1], effacée à 1, `LESS`) avec une
+//    projection finie : WebGL n'a pas de clip control standard (Firefox n'a pas
+//    EXT_clip_control), le Z inversé n'apporterait donc rien. La passe EDL la
+//    linéarise avec le near/far de l'image ;
+//  - les textures cibles de rendu sont de bas en haut, les passes n'ont donc pas besoin d'inverser y.
 
-/** Texture units of the scene textures (fixed for every program). */
+/** Unités de texture des textures de scène (fixes pour chaque programme). */
 export const SCENE_TEXTURE_UNITS = {
   heightTex: 0,
   snowTex: 1,
@@ -26,10 +26,10 @@ export const SCENE_TEXTURE_UNITS = {
   shadowTex: 4,
   sunlightMapTex: 5,
 } as const;
-/** Texture units of the full-screen passes' inputs. */
+/** Unités de texture des entrées des passes plein écran. */
 export const PASS_TEXTURE_UNITS = { colorTex: 6, depthTex: 7, accumTex: 6 } as const;
 
-/** Uniform block bindings. */
+/** Liaisons des blocs d'uniforms. */
 export const UBO_BINDING = { scene: 0, node: 1, pointParams: 2 } as const;
 
 const HEADER = /* glsl */ `#version 300 es
@@ -94,7 +94,7 @@ uniform sampler2D shadowTex;
 uniform sampler2D sunlightMapTex;
 `;
 
-/** Per-node record (32 bytes, one slot per resident node). */
+/** Enregistrement par nœud (32 octets, un emplacement par nœud résident). */
 const NODE_BLOCK = /* glsl */ `
 layout(std140) uniform NodeParams {
   vec3 origin;
@@ -345,7 +345,7 @@ void main() {
 }
 `;
 
-/** While the camera moves: plain squares, no discard, so depth is tested before shading. */
+/** Pendant que la caméra bouge : carrés simples, sans discard, pour que la profondeur soit testée avant l'ombrage. */
 export const POINT_SQUARE_FS = `${HEADER}
 flat in vec3 v_color;
 in vec2 v_uv;
@@ -357,14 +357,14 @@ void main() {
 }
 `;
 
-/** Transform-feedback output of the shading pass. */
+/** Sortie transform feedback de la passe d'ombrage. */
 export const SHADING_VARYINGS = ['v_shaded'];
 
 /**
- * Point shading (the WGSL compute pass `shade_main`): one pre-shaded RGBA8
- * word per point, rgb = final colour, a = classification. See
- * POINT_SHADING_SHADER for the rules (ground lighting, cell-filtered
- * colours where no child is drawn).
+ * Ombrage des points (la passe de calcul WGSL `shade_main`) : un mot RGBA8
+ * pré-ombré par point, rgb = couleur finale, a = classification. Voir
+ * POINT_SHADING_SHADER pour les règles (éclairage du sol, couleurs filtrées
+ * par cellule là où aucun enfant n'est dessiné).
  */
 export const SHADING_VS = `${HEADER}${SCENE_BLOCK}${SCENE_TEXTURES}${NODE_BLOCK}${COLOR_HELPERS}${OVERLAY_HELPERS}${HEIGHT_HELPERS}${LIGHTING_HELPERS}
 // Words: x|y, z|class|intensity, rgb|filtered intensity, filtered rgb.
@@ -439,7 +439,7 @@ void main() {
 }
 `;
 
-/** Rasterisation is off during the shading pass; a program still needs a fragment stage. */
+/** La rastérisation est coupée pendant la passe d'ombrage ; un programme a quand même besoin d'un étage fragment. */
 export const SHADING_FS = `${HEADER}
 out vec4 fragColor;
 void main() {
@@ -447,12 +447,12 @@ void main() {
 }
 `;
 
-// ── Terrain and meshes ────────────────────────────────────────────────────
+// ── Terrain et maillages ──────────────────────────────────────────────────
 
 /**
- * Terrain (chunked LOD and the tile preview): `u_pushBack` moves the chunk
- * away from the eye along the view rays by its height error (0 for the
- * preview), see terrainLodCore.ts.
+ * Terrain (LOD par chunks et aperçu de tuile) : `u_pushBack` éloigne le chunk
+ * de l'œil le long des rayons de vue de son erreur de hauteur (0 pour
+ * l'aperçu), voir terrainLodCore.ts.
  */
 export const TERRAIN_VS = `${HEADER}${SCENE_BLOCK}
 layout(location = 0) in vec3 a_position;
@@ -474,7 +474,7 @@ void main() {
 }
 `;
 
-/** Lit exactly like the ground points (same shadeSurface). */
+/** Éclairé exactement comme les points sol (même shadeSurface). */
 export const TERRAIN_FS = `${HEADER}${SCENE_BLOCK}${SCENE_TEXTURES}${COLOR_HELPERS}${OVERLAY_HELPERS}${LIGHTING_HELPERS}
 in vec4 v_color;
 in vec3 v_normal;
@@ -490,7 +490,7 @@ void main() {
 }
 `;
 
-/** Route ribbon, analysis zones and the sun trajectory: position + colour, drawn as is. */
+/** Ruban du tracé, zones d'analyse et trajectoire du soleil : position + couleur, dessinés tels quels. */
 export const COLOR_MESH_VS = `${HEADER}${SCENE_BLOCK}
 layout(location = 0) in vec3 a_position;
 layout(location = 1) in vec4 a_color;
@@ -548,9 +548,9 @@ void main() {
 }
 `;
 
-// ── Full-screen passes ────────────────────────────────────────────────────
+// ── Passes plein écran ────────────────────────────────────────────────────
 
-/** One triangle covering the target; `v_uv` = texture coordinates (bottom-up, as GL targets). */
+/** Un triangle couvrant la cible ; `v_uv` = coordonnées de texture (de bas en haut, comme les cibles GL). */
 export const FULLSCREEN_VS = `${HEADER}
 out vec2 v_uv;
 
@@ -561,7 +561,7 @@ void main() {
 }
 `;
 
-/** Upscales a scene rendered below the canvas resolution (or copies it 1:1). */
+/** Agrandit une scène rendue sous la résolution du canvas (ou la copie en 1:1). */
 export const BLIT_FS = `${HEADER}
 uniform sampler2D colorTex;
 in vec2 v_uv;
@@ -573,9 +573,9 @@ void main() {
 `;
 
 /**
- * Eye-Dome Lighting (see ../shaders/edlShader.ts). The log of the eye
- * distance is rebuilt from the conventional depth with the frame's near/far.
- * `u_edl` = (strength, radius px, enabled, scene target / canvas scale).
+ * Eye-Dome Lighting (voir ../shaders/edlShader.ts). Le log de la distance à
+ * l'œil est reconstruit à partir de la profondeur conventionnelle avec le
+ * near/far de l'image. `u_edl` = (force, rayon px, activé, échelle cible de scène / canvas).
  */
 const EDL_COMMON = /* glsl */ `
 uniform sampler2D colorTex;
@@ -621,7 +621,7 @@ void main() {
 }
 `;
 
-/** EDL (or a plain copy) of a still frame in linear light, blended into the running mean. */
+/** EDL (ou copie simple) d'une image fixe en lumière linéaire, mélangé dans la moyenne courante. */
 export const EDL_ACCUMULATE_FS = `${HEADER}${EDL_COMMON}
 out vec4 fragColor;
 
@@ -632,10 +632,10 @@ void main() {
 }
 `;
 
-/** Strength of the sharpening of accumulated still frames (as PRESENT_SHADER). */
+/** Force de l'accentuation des images fixes accumulées (comme PRESENT_SHADER). */
 const PRESENT_SHARPNESS = 0.3;
 
-/** Accumulation target (linear running mean) → canvas, with the light contrast-adaptive sharpening. */
+/** Cible d'accumulation (moyenne courante linéaire) → canvas, avec la légère accentuation adaptative au contraste. */
 export const PRESENT_FS = `${HEADER}
 uniform sampler2D accumTex;
 out vec4 fragColor;

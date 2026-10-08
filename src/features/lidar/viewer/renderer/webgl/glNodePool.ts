@@ -1,42 +1,42 @@
 // ============================================
-// GPU residency of streamed LOD nodes — WebGL 2
+// Résidence GPU des nœuds LOD chargés en flux — WebGL 2
 // ============================================
 //
-// Same model as the WebGPU pool (../nodePool.ts): each resident node owns
-// its packed point buffer (16 B/point, uploaded as read from the LOD cache)
-// and a pre-shaded colour buffer (4 B/point). Shading is lazy (epoch +
-// child mask, re-shaded the next time the node is drawn) and runs as a
-// vertex shader whose output is captured by transform feedback, with
-// rasterisation off: the WebGL 2 form of the compute pass.
-// Per-node parameters live in one uniform buffer, one aligned slot per
-// node, bound per draw with `bindBufferRange` (the dynamic offset of the
-// WebGPU path); the child mask is part of the record.
-// WebGL forbids a buffer bound for transform feedback to be bound anywhere
-// else at the same time: the colour buffer is only referenced by the node's
-// draw VAO, never left on a generic binding.
+// Même modèle que le pool WebGPU (../nodePool.ts) : chaque nœud résident
+// possède son buffer de points empaquetés (16 o/point, envoyé tel que lu dans
+// le cache LOD) et un buffer de couleurs pré-ombrées (4 o/point). L'ombrage est
+// paresseux (époque + masque d'enfants, ré-ombré la prochaine fois que le nœud
+// est dessiné) et tourne comme un vertex shader dont la sortie est capturée par
+// transform feedback, rastérisation coupée : la forme WebGL 2 de la passe de calcul.
+// Les paramètres par nœud vivent dans un seul uniform buffer, un emplacement
+// aligné par nœud, lié à chaque draw avec `bindBufferRange` (le décalage
+// dynamique du chemin WebGPU) ; le masque d'enfants fait partie de l'enregistrement.
+// WebGL interdit qu'un buffer lié au transform feedback soit lié ailleurs en
+// même temps : le buffer de couleurs n'est référencé que par le VAO de dessin
+// du nœud, jamais laissé sur une liaison générique.
 
 import type { SceneNode } from '../../lod/sceneLod';
 import { LOD_POINT_STRIDE } from '../../lod/lodTile';
 import { UBO_BINDING } from './glShaders';
 
-/** Bytes of the `NodeParams` block (std140). */
+/** Octets du bloc `NodeParams` (std140). */
 const GL_NODE_UNIFORM_BYTES = 32;
-/** Byte offset of `childMask` in the record. */
+/** Décalage en octets de `childMask` dans l'enregistrement. */
 const CHILD_MASK_OFFSET = 24;
 
 interface NodeGl {
   packed: WebGLBuffer;
   shaded: WebGLBuffer;
-  /** Instanced sprites: packed (unorm16x4) + shaded colour (unorm8x4), one instance per point. */
+  /** Sprites instanciés : enregistrement empaqueté (unorm16x4) + couleur ombrée (unorm8x4), une instance par point. */
   drawVao: WebGLVertexArrayObject;
-  /** Shading input: packed record as four u32 words per vertex. */
+  /** Entrée de l'ombrage : enregistrement empaqueté en quatre mots u32 par sommet. */
   shadeVao: WebGLVertexArrayObject;
   slot: number;
   count: number;
   childMask: number;
-  /** Shading epoch the colours were written for (−1: never shaded). */
+  /** Époque d'ombrage pour laquelle les couleurs ont été écrites (−1 : jamais ombré). */
   shadedEpoch: number;
-  /** Child mask the colours were written for. */
+  /** Masque d'enfants pour lequel les couleurs ont été écrites. */
   shadedMask: number;
 }
 
@@ -44,7 +44,7 @@ export class GlNodePool {
   private readonly gl: WebGL2RenderingContext;
   private readonly uniformBuffer: WebGLBuffer;
   private readonly feedback: WebGLTransformFeedback;
-  /** Slot stride: the record rounded up to UNIFORM_BUFFER_OFFSET_ALIGNMENT. */
+  /** Pas d'un emplacement : l'enregistrement arrondi à UNIFORM_BUFFER_OFFSET_ALIGNMENT. */
   private readonly stride: number;
   readonly capacity: number;
   private readonly freeSlots: number[] = [];
@@ -71,7 +71,7 @@ export class GlNodePool {
     for (let slot = capacity - 1; slot >= 0; slot--) this.freeSlots.push(slot);
   }
 
-  /** Every node must be re-shaded (colour mode, overlay, lighting or heightmap change). */
+  /** Chaque nœud doit être ré-ombré (changement de mode de couleur, de surcouche, d'éclairage ou de heightmap). */
   invalidateShading(): void {
     this.shadingEpoch++;
   }
@@ -151,10 +151,10 @@ export class GlNodePool {
   }
 
   /**
-   * Prepares the nodes about to be drawn: writes the child masks that
-   * changed and re-shades the nodes whose colours are stale. `shadeProgram`
-   * must be current with the scene uniforms and textures bound; returns the
-   * number of nodes shaded.
+   * Prépare les nœuds sur le point d'être dessinés : écrit les masques
+   * d'enfants qui ont changé et ré-ombre les nœuds dont les couleurs sont
+   * périmées. `shadeProgram` doit être courant avec les uniforms et textures de
+   * la scène liés ; renvoie le nombre de nœuds ombrés.
    */
   prepareFrame(nodes: readonly SceneNode[], shadeProgram: WebGLProgram): number {
     const gl = this.gl;
@@ -200,7 +200,7 @@ export class GlNodePool {
     return shaded;
   }
 
-  /** Draws the given nodes as instanced sprites (point program current); returns the draw count. */
+  /** Dessine les nœuds donnés en sprites instanciés (programme des points courant) ; renvoie le nombre de draws. */
   draw(nodes: readonly SceneNode[]): number {
     const gl = this.gl;
     let draws = 0;

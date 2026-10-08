@@ -8,7 +8,7 @@ describe('WebGL 2 shaders', () => {
   it('declare GLSL ES 3.00 on their first line', () => {
     expect(sources.length).toBeGreaterThan(10);
     for (const [name, source] of sources) {
-      // Anything before #version (even a newline) fails to compile.
+      // Quoi que ce soit avant #version (même un saut de ligne) fait échouer la compilation.
       expect(source.startsWith('#version 300 es\n'), name).toBe(true);
     }
   });
@@ -42,7 +42,7 @@ describe('fitGridToTextureSize', () => {
     const fitted = fitGridToTextureSize(data, width, height, 1, 3);
     expect(fitted.width).toBe(3);
     expect(fitted.height).toBe(3);
-    // Corners of the source grid.
+    // Coins de la grille source.
     expect(fitted.data[0]).toBe(0);
     expect(fitted.data[2]).toBe(4);
     expect(fitted.data[6]).toBe(10);
