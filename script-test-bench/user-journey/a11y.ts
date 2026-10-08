@@ -33,6 +33,8 @@ export interface A11yFinding {
   targets: string[];
   /** Explication d'axe par élément (contraste mesuré, enfant attendu…), dans le rapport. */
   details: string[];
+  /** Début du HTML de chaque élément en défaut (identifier un id généré par React). */
+  html: string[];
 }
 
 /** (écran, règle) → nombre d'éléments en défaut tolérés. */
@@ -40,11 +42,31 @@ export type A11yBaseline = Record<string, number>;
 
 const baselineKey = (finding: Pick<A11yFinding, 'screen' | 'rule'>) => `${finding.screen} | ${finding.rule}`;
 
+/**
+ * Attend la fin des animations et transitions finies (ouverture d'une pop-in,
+ * dépliage d'un panneau) : axe mesurerait sinon le contraste d'un texte encore
+ * en fondu. Les animations infinies (indicateurs de chargement) sont ignorées,
+ * et l'attente est bornée.
+ */
+async function settleAnimations(page: Page): Promise<void> {
+  await page.evaluate(async () => {
+    const finite = document.getAnimations().filter((animation) => {
+      const timing = animation.effect?.getComputedTiming();
+      return timing != null && Number.isFinite(timing.endTime as number);
+    });
+    await Promise.race([
+      Promise.all(finite.map((animation) => animation.finished.catch(() => undefined))),
+      new Promise((resolve) => setTimeout(resolve, 2_000)),
+    ]);
+  });
+}
+
 export async function auditScreen(page: Page, screen: string): Promise<A11yFinding[]> {
+  await settleAnimations(page);
   const loaded = await page.evaluate(() => typeof (window as { axe?: unknown }).axe === 'object');
   if (!loaded) await page.evaluate(AXE_SOURCE);
   const violations = await page.evaluate(async (tags) => {
-    const axe = (window as unknown as { axe: { run: (context: unknown, options: unknown) => Promise<{ violations: Array<{ id: string; impact: string | null; help: string; nodes: Array<{ target: unknown[]; failureSummary?: string }> }> }> } }).axe;
+    const axe = (window as unknown as { axe: { run: (context: unknown, options: unknown) => Promise<{ violations: Array<{ id: string; impact: string | null; help: string; nodes: Array<{ target: unknown[]; failureSummary?: string; html?: string }> }> }> } }).axe;
     const result = await axe.run(document, { runOnly: { type: 'tag', values: tags }, resultTypes: ['violations'] });
     return result.violations.map((violation) => ({
       rule: violation.id,
@@ -52,6 +74,7 @@ export async function auditScreen(page: Page, screen: string): Promise<A11yFindi
       help: violation.help,
       targets: violation.nodes.map((node) => node.target.map(String).join(' ')),
       details: violation.nodes.map((node) => node.failureSummary ?? ''),
+      html: violation.nodes.map((node) => (node.html ?? '').slice(0, 300)),
     }));
   }, WCAG_TAGS);
   return violations.map((violation) => ({ screen, ...violation }));

@@ -29,9 +29,12 @@
  * ou chemin de projet dans une seule charge utile (src/shared/lib/analytics/).
  *
  * Accessibilité : chaque écran du parcours (connexion, projets, éditeur avec
- * l'itinéraire, compte, suppression du compte) audité par axe-core (WCAG A/AA),
- * comparé au cliquet a11y-baseline.json (cf. a11y.ts) ; après une correction,
- * `--update-a11y-baseline` le fait redescendre.
+ * l'itinéraire, panneau Exporter, outil Tracer armé, mode commentaire, réglages,
+ * dialogue de partage, compte, suppression du compte) audité par axe-core
+ * (WCAG A/AA), comparé au cliquet a11y-baseline.json (cf. a11y.ts) ; après une
+ * correction, `--update-a11y-baseline` le fait redescendre. Les outils de
+ * carte (Tracer, Commenter) sont atteints et activés au clavier seul, avec un
+ * contour de focus visible.
  *
  * Contrôles globaux : aucune erreur de page, aucun appel Appwrite non simulé,
  * aucune violation CSP, aucune erreur envoyée à GlitchTip.
@@ -128,6 +131,32 @@ function pageWatch(page: Page, label: string, errors: string[]) {
       consoleErrors.push(`[${label}] ${message.text().slice(0, 400)}`);
     }
   });
+}
+
+/**
+ * Tabulation jusqu'au contrôle nommé `label` (aria-label ou texte), au clavier
+ * seul ; échoue s'il n'est pas atteint en `maxTabs` appuis, ou si son focus
+ * n'est pas visible (ni contour ni ombre : WCAG 2.4.7).
+ */
+async function tabTo(page: Page, label: string, maxTabs = 250) {
+  for (let i = 0; i < maxTabs; i += 1) {
+    await page.keyboard.press('Tab');
+    const focused = await page.evaluate((wanted) => {
+      const el = document.activeElement as HTMLElement | null;
+      if (!el || el === document.body) return null;
+      const name = el.getAttribute('aria-label') ?? el.textContent?.trim() ?? '';
+      if (name !== wanted) return null;
+      const style = getComputedStyle(el);
+      const outline = style.outlineStyle !== 'none' && parseFloat(style.outlineWidth) > 0;
+      const ring = style.boxShadow !== 'none';
+      return { visible: outline || ring, focusVisible: el.matches(':focus-visible') };
+    }, label);
+    if (focused) {
+      check(focused.focusVisible && focused.visible, `« ${label} » atteint au clavier sans contour de focus visible`);
+      return i + 1;
+    }
+  }
+  throw new CheckError(`« ${label} » non atteint au clavier en ${maxTabs} tabulations`);
 }
 
 async function step(name: string, run: () => Promise<string | void>) {
@@ -232,7 +261,7 @@ async function main() {
     });
 
     await step('enregistrement au cloud', async () => {
-      await p.getByRole('button', { name: 'Enregistrer le projet' }).click();
+      await p.getByRole('button', { name: /^(Enregistrer|Enregistré|Synchronisation en attente)$/ }).click();
       const deadline = Date.now() + 30_000;
       for (;;) {
         const doc = [...(appwrite.state.collections.get('projects')?.values() ?? [])][0] as Record<string, unknown> | undefined;
@@ -250,12 +279,32 @@ async function main() {
       if (await showRight.isVisible().catch(() => false)) await showRight.click();
       const expand = p.getByRole('button', { name: 'Développer le module exporter' });
       if (await expand.isVisible().catch(() => false)) await expand.click();
+      await auditA11y(p, 'exporter');
       const { name, bytes } = await readDownload(p, () => p.locator('.rvc-exporter-panel button', { hasText: 'Exporter' }).last().click());
       const xml = bytes.toString('utf8');
       const points = xml.match(/<trkpt\b/g)?.length ?? 0;
       check(/\.gpx$/i.test(name), `fichier exporté inattendu : ${name}`);
       check(points >= TRACK_POINTS * 0.98 && points <= TRACK_POINTS * 1.02, `${points} points exportés pour ${TRACK_POINTS} importés`);
       return `${name}, ${points} points`;
+    });
+
+    await step('outils de carte au clavier (Tracer, Commenter)', async () => {
+      // Le focus part du haut de la page, comme pour un utilisateur qui arrive au clavier.
+      await p.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+      const tabsToTrace = await tabTo(p, 'Tracer');
+      await p.keyboard.press('Enter');
+      const trace = p.getByRole('button', { name: 'Tracer', exact: true });
+      check(await trace.getAttribute('aria-pressed') === 'true', 'Tracer non armé par Entrée');
+      await auditA11y(p, 'outil-tracer');
+      await p.keyboard.press('Enter');
+      check(await trace.getAttribute('aria-pressed') === 'false', 'Tracer non désarmé par Entrée');
+      const tabsToComment = await tabTo(p, 'Commenter');
+      await p.keyboard.press(' ');
+      await p.getByRole('region', { name: 'Commentaires' }).waitFor({ timeout: 10_000 });
+      await auditA11y(p, 'commentaires');
+      await p.keyboard.press('Escape');
+      await p.getByRole('region', { name: 'Commentaires' }).waitFor({ state: 'detached', timeout: 10_000 });
+      return `Tracer en ${tabsToTrace} tabulations, Commenter ${tabsToComment} plus loin`;
     });
 
     // ── Appareil 2 : profil vierge, même compte ─────────────────────────
@@ -278,8 +327,33 @@ async function main() {
       return 'itinéraire et 25,2 km retrouvés';
     });
 
-    await step('« Télécharger mes données »', async () => {
+    await step('réglages et dialogue de partage', async () => {
       await p.getByRole('button', { name: 'Retour au gestionnaire de projet' }).click();
+      await p.getByRole('button', { name: 'Réglages', exact: true }).click();
+      await auditA11y(p, 'reglages');
+      // « Partager… » n'est proposé que si le serveur temps réel répond (sa
+      // santé, puis les membres du projet par l'API de partage) : réponses
+      // fixes, puis rechargement pour relire la santé.
+      await context.route(`${server.origin}/multiplayer/health`, (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' }));
+      await context.route(`${server.origin}/api/projects/share**`, (route) => route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ isOwner: true, members: [] }),
+      }));
+      await p.reload();
+      await p.getByRole('button', { name: 'Projets', exact: true }).click({ timeout: 30_000 });
+      await p.getByRole('button', { name: 'Créer un projet' }).waitFor({ timeout: 30_000 });
+      await p.getByRole('button', { name: 'Actions du projet' }).first().click();
+      await p.getByRole('menuitem', { name: 'Partager…' }).click();
+      const dialog = p.getByRole('dialog', { name: `Partager « ${PROJECT_NAME} »` });
+      await dialog.waitFor({ timeout: 10_000 });
+      await auditA11y(p, 'partage');
+      await p.keyboard.press('Escape');
+      await dialog.waitFor({ state: 'detached', timeout: 10_000 });
+      return 'réglages et partage audités';
+    });
+
+    await step('« Télécharger mes données »', async () => {
       await p.getByRole('button', { name: 'Compte', exact: true }).click();
       await p.getByRole('button', { name: 'Télécharger', exact: true }).waitFor({ timeout: 30_000 });
       await auditA11y(p, 'compte');
@@ -380,7 +454,17 @@ async function main() {
       for (const forbidden of ['bench@redview.test', '@', PROJECT_NAME, ITINERARY_NAME, '/project/', 'boucle-e2e']) {
         check(!all.includes(forbidden), `donnée personnelle dans la mesure : « ${forbidden} »`);
       }
-      check(!/[0-9a-f]{20}/i.test(all.replace(/"tag":"[^"]*"/g, '')), 'identifiant (20 caractères hexadécimaux) dans la mesure');
+      // Seulement les valeurs texte (hors `tag`, la release) : un nombre long
+      // (Web Vital non arrondi) ne doit pas passer pour un identifiant.
+      const strings: string[] = [];
+      const collect = (value: unknown, key?: string) => {
+        if (typeof value === 'string') { if (key !== 'tag') strings.push(value); return; }
+        if (Array.isArray(value)) { for (const item of value) collect(item); return; }
+        if (value && typeof value === 'object') for (const [k, v] of Object.entries(value)) collect(v, k);
+      };
+      collect(sent.map((s) => s.payload));
+      const hexId = strings.find((s) => /[0-9a-f]{20}/i.test(s));
+      check(!hexId, `identifiant (20 caractères hexadécimaux) dans la mesure : « ${hexId} »`);
       return `${sent.length} envois, ${[...new Set(screens)].length} écrans, ${new Set(names).size} sortes d’événements`;
     });
 
