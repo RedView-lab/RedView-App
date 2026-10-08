@@ -1,15 +1,15 @@
 /**
- * RedView Weather Proxy (prod server.mjs and dev Vite plugin)
- * Relays weather tiles and metadata to the self-hosted Oracle VPS.
+ * Proxy météo de RedView (server.mjs en prod et plugin Vite en dev).
+ * Relaie les tuiles et métadonnées météo vers le VPS Oracle auto-hébergé.
  *
- * Endpoints:
+ * Points d'accès :
  *   GET /api/weather/meta.json
  *   GET /api/weather/tiles/:variable/:hour.(webp|png)
  *   GET /api/weather/point?lat=...&lon=...
  *   GET /api/weather/radar.json (images radar RainViewer, relayées et mises en cache)
  *
- * Upstream env var (obligatoire pour le relais VPS ; si absente, seul le
- * fallback local `dist_weather/` est servi, sinon 503) :
+ * Variable d'environnement amont (obligatoire pour le relais VPS ; si absente,
+ * seul le repli local `dist_weather/` est servi, sinon 503) :
  *   WEATHER_UPSTREAM=http://<vps-ip>/weather
  */
 import type { ApiRequest, ApiResponse } from './_lib/types.js';

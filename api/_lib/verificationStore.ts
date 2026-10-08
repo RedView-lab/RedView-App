@@ -91,7 +91,7 @@ function writeDiskStore(data: PersistedStore) {
   }
 }
 
-// Global in-memory state to survive Vite SSR module invalidations in dev.
+// État global en mémoire pour survivre aux invalidations de modules SSR de Vite en dev.
 // Le disque n'est lu qu'une fois au démarrage : la mémoire fait foi ensuite
 // (un process unique en prod), ce qui évite de « ressusciter » un code
 // consommé/invalidé tant que l'écriture différée n'a pas eu lieu.

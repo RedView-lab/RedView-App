@@ -33,8 +33,8 @@ function mnsWmsSupersampleFactor() {
   return 1;
 }
 
-// One GetMap raster, metre-square geometry (see mnsWmsRequestSize), raw
-// srcWidth × srcHeight floats. null on any HTTP / size failure.
+// Un raster GetMap, géométrie en mètres carrés (voir mnsWmsRequestSize), flottants
+// bruts srcWidth × srcHeight. null sur tout échec HTTP / de taille.
 async function fetchWmsElevationRaster(layer, mercZ, mercX, mercY, supersample, init) {
   const { width, height } = mnsWmsRequestSize(mercZ, mercX, mercY, supersample);
   const url = buildMnsWmsTileURL(mercZ, mercX, mercY, layer, width, height);

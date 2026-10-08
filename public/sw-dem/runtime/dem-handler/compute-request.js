@@ -269,8 +269,8 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile, options 
         norwayHadSomeData = true;
         await acquireComposite();
         try {
-          // Raw, LOD-invariant Norway DTM datum on interior tiles (see
-          // Swiss branch / compositeIGNMapbox comment).
+          // Référence MNT norvégienne brute, indépendante du LOD, sur les tuiles intérieures
+          // (voir la branche suisse / le commentaire de compositeIGNMapbox).
           pngBlob = await compositeIGNMapbox(
             norwayResult.elevations,
             norwayResult.coverage,
