@@ -16,6 +16,11 @@ updates:
     commit-message:
       prefix: chore(deps)
     groups:
+      # Mapbox GL JS à part : l'app utilise des API privées (version épinglée,
+      # garde dans src/features/map3d/lib/mapboxInternals.test.ts) ; chaque
+      # montée se relit seule, carte affichée.
+      carte-mapbox:
+        patterns: ["mapbox-gl", "@mapbox/*"]
       dependencies-mineures:
         dependency-type: production
         update-types: [minor, patch]
