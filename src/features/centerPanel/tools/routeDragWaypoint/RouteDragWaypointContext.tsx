@@ -186,7 +186,7 @@ export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointPr
           });
         })
         .catch(() => {
-          /* keep default fallback label */
+          /* garder le libellé de repli par défaut */
         });
     },
     [],

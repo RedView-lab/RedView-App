@@ -21,10 +21,10 @@ import {
   type ChartPlacementToolContextValue,
 } from './useChartPlacementTool';
 
-/** Confirmation shown in the toolbar after a placement, then cleared. */
+/** Confirmation affichée dans la barre d'outils après une pose, puis effacée. */
 const DONE_MESSAGE_MS = 4_000;
 
-/** Same names as the « + » menu of the feuille de route. */
+/** Mêmes noms que le menu « + » de la feuille de route. */
 const KIND_LABELS: Record<TimelineAddItemKind, string> = {
   step: 'Étape',
   waypoint: 'Waypoint',
@@ -52,10 +52,11 @@ function initialRowLabel(kind: Exclude<TimelineAddItemKind, 'poi'>, target: Char
 }
 
 /**
- * « Ajouter » of the center toolbar: the user picks a type (same menu as the
- * feuille de route's « + »), then clicks the analysis chart where it goes.
- * Steps, pauses and endpoints are applied by the itinerary panel (map action
- * bridge, which also selects the new row); a POI opens the map's draft card.
+ * « Ajouter » de la barre d'outils centrale : l'utilisateur choisit un type
+ * (même menu que le « + » de la feuille de route), puis clique sur le graphique
+ * d'analyse là où il va. Étapes, pauses et extrémités sont appliquées par le
+ * panneau d'itinéraire (pont d'actions de la carte, qui sélectionne aussi la
+ * nouvelle ligne) ; un POI ouvre la carte de brouillon de la carte.
  */
 export function ChartPlacementToolProvider({ children }: { children: ReactNode }) {
   const store = useProjectStoreOptional();
@@ -70,7 +71,7 @@ export function ChartPlacementToolProvider({ children }: { children: ReactNode }
   const canPlace = (activeItinerary?.gpxRoute?.points.length ?? 0) >= 2;
   const armedKind = canPlace ? armedKindState : null;
 
-  // Another itinerary selected: the pending placement was meant for the previous one.
+  // Un autre itinéraire sélectionné : la pose en attente visait le précédent.
   const [trackedItineraryId, setTrackedItineraryId] = useState(activeItineraryId);
   if (trackedItineraryId !== activeItineraryId) {
     setTrackedItineraryId(activeItineraryId);
@@ -131,7 +132,7 @@ export function ChartPlacementToolProvider({ children }: { children: ReactNode }
             });
           })
           .catch(() => {
-            /* keep the initial label */
+            /* garder le libellé initial */
           });
       }
     }

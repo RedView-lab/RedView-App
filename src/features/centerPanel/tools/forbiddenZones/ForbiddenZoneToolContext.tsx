@@ -211,7 +211,7 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
     draftHistoryIndexRef.current = -1;
   }, [canEdit, clearDraftOverlay]);
 
-  // Click & contextmenu listeners for forbidden zone vertices
+  // Écouteurs de clic et de menu contextuel pour les sommets des zones interdites
   useEffect(() => {
     if (!map || !armed || !canEdit) return;
 

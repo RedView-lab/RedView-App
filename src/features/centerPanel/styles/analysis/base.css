@@ -7,8 +7,8 @@
   gap: 12px;
   font-family: inherit;
   min-width: 0;
-  /* 235 px at the regular 390 px panel; less on a short canvas, where the
-     dashboard layout allows a 220 px panel (pages/Dashboard/lib/layout.ts). */
+  /* 235 px dans le panneau habituel de 390 px ; moins sur un canvas bas, où la
+     mise en page du tableau de bord autorise un panneau de 220 px (pages/Dashboard/lib/layout.ts). */
   min-height: clamp(100px, calc(var(--rvc-center-panel-height, 390px) - 155px), 235px);
 }
 
@@ -27,9 +27,9 @@
   --rvc-tb-radius: 5px;
 
   display: flex;
-  /* Narrow center column (half-screen window): wraps onto a second row
-     instead of running under the panel edge. Not a scroller: the axis and
-     surface dropdowns are positioned inside and must not be clipped. */
+  /* Colonne centrale étroite (fenêtre en demi-écran) : revient sur une seconde
+     ligne au lieu de passer sous le bord du panneau. Pas une zone de défilement :
+     les menus déroulants d'axe et de surface sont positionnés dedans et ne doivent pas être rognés. */
   flex-wrap: wrap;
   align-items: center;
   flex: 0 0 auto;
@@ -86,7 +86,7 @@
   transition: all 0.15s ease;
 }
 
-/* Ellipsis target of the compaction steps (responsive.css). */
+/* Cible des points de suspension des étapes de compaction (responsive.css). */
 .rvc-center-analysis__segment-text {
   min-width: 0;
   overflow: hidden;

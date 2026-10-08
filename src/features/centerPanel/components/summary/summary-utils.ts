@@ -94,7 +94,7 @@ export function buildSummaryTree(visualNodes: ItineraryVisualNode[]): SummaryTre
 
   return roots;
 }
-/** Ids of the branches enclosing `itineraryId`, outermost first (empty for a root or an unknown id). */
+/** Ids des branches qui englobent `itineraryId`, la plus extérieure d'abord (vide pour une racine ou un id inconnu). */
 export function findSummaryAncestorIds(tree: SummaryTreeNode[], itineraryId: string): string[] {
   const walk = (branches: SummaryTreeNode[], path: string[]): string[] | null => {
     for (const branch of branches) {

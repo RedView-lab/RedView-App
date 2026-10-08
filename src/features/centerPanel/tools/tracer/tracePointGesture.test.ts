@@ -16,7 +16,7 @@ describe('trace point gesture', () => {
   });
 
   it('drops the marker anchor, not the pointer: a flag grabbed by its top lands under its tip', () => {
-    // Pin anchored at its bottom (tip at y = 230), grabbed 28 px higher.
+    // Épingle ancrée par le bas (pointe à y = 230), saisie 28 px plus haut.
     const press = beginTracePointPress({ x: 500, y: 400 }, { x: 200, y: 202 }, { x: 200, y: 230 });
 
     expect(draggedAnchorPoint(press, { x: 260, y: 302 })).toEqual({ x: 260, y: 330 });

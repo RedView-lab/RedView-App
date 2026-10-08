@@ -75,9 +75,10 @@
 }
 
 /*
- * Center panel toggle. Same convention as the map-viewport panel toggles:
- * panel shown -> engaged, filled with 60% black; panel hidden -> red, to pull
- * the eye back to the control. Icon: line-chart-up-01 (the analysis chart).
+ * Bascule du panneau central. Même convention que les bascules de panneau de la
+ * vue carte : panneau affiché -> engagée, remplie de noir à 60 % ; panneau
+ * masqué -> rouge, pour ramener l'œil vers le contrôle. Icône : line-chart-up-01
+ * (le graphique d'analyse).
  */
 .rvc-center-toolbar__button--panel-toggle {
   width: 32px;
@@ -122,7 +123,7 @@
   color: var(--rv-on-accent);
 }
 
-/* Type chosen, waiting for the click on the chart (a second click cancels). */
+/* Type choisi, en attente du clic sur le graphique (un second clic annule). */
 .rvc-center-toolbar__button--accent-armed,
 .rvc-center-toolbar__button--accent-armed:hover {
   background: var(--rvc-center-red-strong);
@@ -215,7 +216,7 @@
     border-radius: 7px;
   }
 
-  /* Ajouter / Tracer: icon only (aria-label + title kept). */
+  /* Ajouter / Tracer : icône seule (aria-label + title gardés). */
   .rvc-center-toolbar__button-text {
     display: none;
   }
@@ -244,9 +245,9 @@
 }
 
 /*
- * Narrow center column (half-screen window): the track scrolls horizontally
- * (wheel included, CenterPanelToolbar.tsx); the clipped edge fades out so the
- * hidden controls read as reachable.
+ * Colonne centrale étroite (fenêtre en demi-écran) : la piste défile à
+ * l'horizontale (molette comprise, CenterPanelToolbar.tsx) ; le bord rogné
+ * s'estompe pour que les contrôles cachés se lisent comme atteignables.
  */
 .rvc-center-toolbar__viewport[data-overflow='end'] {
   mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent);

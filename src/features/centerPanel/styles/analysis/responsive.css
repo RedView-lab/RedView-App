@@ -1,23 +1,23 @@
 /*
- * Compaction steps of the analysis toolbar. useToolbarFitDensity measures the
- * real layout and sets the first step that keeps it on one row:
- * data-density="1 … n", so `[data-density~='n']` means "step n or denser".
- * Each step drops the least informative pixels first; past the last one the
- * toolbar wraps.
+ * Étapes de compaction de la barre d'outils de l'analyse. useToolbarFitDensity
+ * mesure la vraie mise en page et pose la première étape qui la garde sur une
+ * ligne : data-density="1 … n", donc `[data-density~='n']` signifie « étape n
+ * ou plus dense ». Chaque étape retire d'abord les pixels les moins
+ * informatifs ; au-delà de la dernière, la barre revient à la ligne.
  */
 
-/* While measuring (useToolbarFitDensity): each step's spacing applies at once. */
+/* Pendant la mesure (useToolbarFitDensity) : l'espacement de chaque étape s'applique d'un coup. */
 .rvc-center-analysis__toolbar[data-fitting] *,
 .rvc-center-analysis__toolbar[data-fitting] {
   transition: none !important;
 }
 
-/* 1. The "Analyse" title: the controls speak for themselves. */
+/* 1. Le titre « Analyse » : les contrôles parlent d'eux-mêmes. */
 .rvc-center-analysis__toolbar[data-density~='1'] .rvc-center-analysis__label {
   display: none;
 }
 
-/* 2. Tighter spacing, no separator. */
+/* 2. Espacement plus serré, pas de séparateur. */
 .rvc-center-analysis__toolbar[data-density~='2'] {
   column-gap: 4px;
 }
@@ -52,7 +52,7 @@
   padding: 3px 5px 3px 4px;
 }
 
-/* 3. "Axe 1 / Axe 2": the solid/dashed swatch matches the curve (label kept as tooltip). */
+/* 3. « Axe 1 / Axe 2 » : la pastille pleine/en tirets correspond à la courbe (libellé gardé en infobulle). */
 .rvc-center-analysis__toolbar[data-density~='3'] .rvc-center-analysis__axis-label {
   display: none;
 }
@@ -65,9 +65,9 @@
   max-width: 96px;
 }
 
-/* 4. (no rule: the icon chips — slope, alerts — moved to the map filter bar.) */
+/* 4. (pas de règle : les puces à icône — pente, alertes — sont passées dans la barre de filtres de la carte.) */
 
-/* 5. Long labels give way: ellipsis on the filter chip and axis values (full text in the tooltip). */
+/* 5. Les libellés longs cèdent : points de suspension sur la puce de filtre et les valeurs d'axe (texte complet dans l'infobulle). */
 .rvc-center-analysis__toolbar[data-density~='5'] .rvc-center-analysis__filter-label {
   max-width: 64px;
 }
@@ -94,7 +94,7 @@
   padding: 3px 4px 3px 3px;
 }
 
-/* 7. Narrow column (wide side panels): the x-axis modes give way too ("Dist…", "Tem…"). */
+/* 7. Colonne étroite (panneaux latéraux larges) : les modes de l'axe x cèdent aussi (« Dist… », « Tem… »). */
 .rvc-center-analysis__toolbar[data-density~='7'] .rvc-center-analysis__segment {
   padding: 0 3px;
 }
@@ -112,7 +112,7 @@
   padding-left: 4px;
 }
 
-/* 8. Last step before wrapping: shortest stubs, tightest spacing. */
+/* 8. Dernière étape avant le retour à la ligne : abréviations les plus courtes, espacement le plus serré. */
 .rvc-center-analysis__toolbar[data-density~='8'] {
   column-gap: 3px;
 }

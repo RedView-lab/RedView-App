@@ -7,21 +7,22 @@
   --rvc-center-red-strong: #700000;
   --rvc-center-red-accent: #c50000;
   --rvc-center-font-family: var(--rv-font-sans);
-  /* --rvc-center-panel-height is inherited from the dashboard shell
-     (lib/dashboardStyles.ts); uses fall back to 390px. */
+  /* --rvc-center-panel-height est hérité du shell du tableau de bord
+     (lib/dashboardStyles.ts) ; les usages se rabattent sur 390px. */
 
   width: 100%;
   height: 100%;
   min-width: 0;
-  /* Height comes from the dashboard layout (390 px minimum, 220 px on a short
-     canvas), never more than the shell it fills. */
+  /* La hauteur vient de la mise en page du tableau de bord (390 px minimum,
+     220 px sur un canvas bas), jamais plus que le shell qu'il remplit. */
   min-height: 0;
   padding: 12px;
   border-radius: 8px;
   background: var(--rvc-center-bg);
-  /* No backdrop-filter: the dashboard already paints a blurred copy of the map
-     behind this panel (MapBlurMirror). A second backdrop blur here was recomputed
-     on every map frame and every resize frame for no visible difference. */
+  /* Pas de backdrop-filter : le tableau de bord peint déjà une copie floutée de
+     la carte derrière ce panneau (MapBlurMirror). Un second flou d'arrière-plan
+     ici était recalculé à chaque image de la carte et du redimensionnement, sans
+     différence visible. */
   color: var(--rvc-center-text);
   display: flex;
   flex-direction: column;
@@ -37,7 +38,7 @@
     0 8px 32px light-dark(rgba(16, 18, 24, 0.08), rgba(0, 0, 0, 0.35));
 }
 
-/* Short canvas (pages/Dashboard/lib/layout.ts): every pixel goes to the chart. */
+/* Canvas bas (pages/Dashboard/lib/layout.ts) : chaque pixel va au graphique. */
 .rvc-center-panel--compact {
   padding: 8px;
   gap: 8px;
@@ -61,8 +62,9 @@
   box-sizing: border-box;
 }
 
-/* Zero specificity: a reset must not outrank component classes (it used to
-   force the analysis toolbar to 16 px and white over its 12 px dimmed role). */
+/* Spécificité nulle : une réinitialisation ne doit pas l'emporter sur les classes
+   des composants (elle forçait la barre d'outils de l'analyse en 16 px et blanc
+   au lieu de son rôle 12 px atténué). */
 :where(.rvc-center-panel) :where(button, label) {
   font-family: inherit;
   font-size: inherit;
@@ -72,14 +74,14 @@
   color: inherit;
 }
 
-/* Summary + analysis, moved as one node between the docked and the fullscreen
-   panel (CenterPanel.tsx): lays out as direct children of either. */
+/* Résumé + analyse, déplacés comme un seul nœud entre le panneau ancré et le
+   plein écran (CenterPanel.tsx) : mis en page comme enfants directs de l'un ou l'autre. */
 .rvc-center-panel__content {
   display: contents;
 }
 
-/* Portaled into .rvi-panel-fullscreen-root (.rv-app-scaled-layer), like the
-   feuille de route's fullscreen: the whole center panel takes the canvas. */
+/* Portalé dans .rvi-panel-fullscreen-root (.rv-app-scaled-layer), comme le plein
+   écran de la feuille de route : tout le panneau central prend le canvas. */
 .rvc-center-panel.rvc-center-panel--fullscreen {
   --rvc-center-panel-height: calc(var(--rv-canvas-height, 100vh) - 24px);
   position: relative;

@@ -1,12 +1,12 @@
 import type { Map as MapboxMap } from 'mapbox-gl';
 
 /**
- * Screen-space snapping helpers shared between the split tool's click and
- * hover handlers. Extracted from RouteSplitToolContext so the same math feeds
- * both the commit path (click) and the preview path (hover marker).
+ * Outils d'accroche en espace écran partagés par les gestionnaires de clic et de
+ * survol de l'outil de découpe. Extraits de RouteSplitToolContext pour que le
+ * même calcul alimente le chemin de validation (clic) et celui d'aperçu (marqueur de survol).
  */
 
-/** Max pixel distance from the trace for a click/hover to count as "on it". */
+/** Distance maximale en pixels au tracé pour qu'un clic/survol compte comme « dessus ». */
 const MAX_ROUTE_CLICK_DISTANCE_PX = 20;
 
 export interface RouteSnapPoint {
@@ -20,9 +20,9 @@ export interface PointToSegmentProjection {
 }
 
 /**
- * Project a query point (in screen pixels) onto a segment [a→b] and return the
- * clamped parametric position `t` plus the squared pixel distance to the
- * projected point.
+ * Projette un point de requête (en pixels écran) sur un segment [a→b] et renvoie
+ * la position paramétrique bornée `t` plus le carré de la distance en pixels au
+ * point projeté.
  */
 export function projectPointToSegment(
   px: number,
@@ -53,10 +53,11 @@ export function projectPointToSegment(
 }
 
 /**
- * Resolve the route vertex index a map click should split at, in screen space.
- * Returns null when the click is farther than MAX_ROUTE_CLICK_DISTANCE_PX from
- * the trace (or the geometry is too short to split). The result is clamped to
- * `[1, length-2]` so both halves keep at least 2 points.
+ * Résout l'indice du sommet du tracé où un clic sur la carte doit découper, en
+ * espace écran. Renvoie null quand le clic est plus loin que
+ * MAX_ROUTE_CLICK_DISTANCE_PX du tracé (ou que la géométrie est trop courte pour
+ * être découpée). Le résultat est borné à `[1, length-2]` pour que les deux
+ * moitiés gardent au moins 2 points.
  */
 export function findSplitIndexForMapClick(
   map: MapboxMap,
@@ -71,22 +72,22 @@ export function findSplitIndexForMapClick(
 }
 
 export interface RouteHoverProjection {
-  /** Squared pixel distance from the cursor to the nearest segment. */
+  /** Carré de la distance en pixels du curseur au segment le plus proche. */
   distanceSq: number;
-  /** Snapped vertex index (`t <= 0.5 ? i : i+1`). */
+  /** Indice du sommet accroché (`t <= 0.5 ? i : i+1`). */
   vertexIndex: number;
-  /** True when the cursor is within the click tolerance of the trace. */
+  /** Vrai quand le curseur est dans la tolérance de clic du tracé. */
   withinTolerance: boolean;
-  /** Snapped geographic coordinates of the marker (nearest vertex). */
+  /** Coordonnées géographiques accrochées du marqueur (sommet le plus proche). */
   snapped: RouteSnapPoint;
 }
 
 /**
- * Same screen-space search as {@link findSplitIndexForMapClick}, but returns
- * enough info to drive the hover marker: the snapped point + whether a click
- * at this position would be accepted. Unlike the click helper it does NOT
- * reject out-of-range positions — the caller uses `withinTolerance` to dim the
- * marker instead.
+ * Même recherche en espace écran que {@link findSplitIndexForMapClick}, mais
+ * renvoie de quoi piloter le marqueur de survol : le point accroché + si un clic
+ * à cette position serait accepté. Contrairement à l'outil de clic, il ne rejette
+ * PAS les positions hors tolérance — l'appelant utilise `withinTolerance` pour
+ * atténuer le marqueur à la place.
  */
 export function findSplitProjectionForMapHover(
   map: MapboxMap,

@@ -1,7 +1,7 @@
 import { createContext } from 'react';
 
 export interface RouteDragWaypointContextValue {
-  /** True while a route point is actively being dragged. */
+  /** Vrai pendant qu'un point du tracé est en train d'être glissé. */
   dragging: boolean;
 }
 

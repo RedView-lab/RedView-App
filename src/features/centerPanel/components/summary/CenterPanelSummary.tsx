@@ -29,7 +29,7 @@ import type { InlineRenameState } from './types';
 import { useCenterActiveSummaryRow } from './useCenterActiveSummaryRow';
 
 interface CenterPanelSummaryProps {
-  /** The whole center panel is shown fullscreen (toggle owned by `CenterPanel`). */
+  /** Tout le panneau central est affiché en plein écran (bascule gérée par `CenterPanel`). */
   fullscreen?: boolean;
   onToggleFullscreen?: () => void;
 }
@@ -52,9 +52,9 @@ export function CenterPanelSummary({ fullscreen = false, onToggleFullscreen }: C
   } | null>(null);
   const rowsRef = useRef<HTMLDivElement>(null);
 
-  // Row clicked in the table: it is under the pointer, no need to scroll to it.
+  // Ligne cliquée dans le tableau : elle est sous le pointeur, inutile d'y faire défiler.
   const [pickedRowId, setPickedRowId] = useState<string | null>(null);
-  // New active itinerary (picked here or elsewhere): unfold the branches hiding it.
+  // Nouvel itinéraire actif (choisi ici ou ailleurs) : déplier les branches qui le cachent.
   const [trackedActiveId, setTrackedActiveId] = useState(activeItineraryId);
   if (trackedActiveId !== activeItineraryId) {
     setTrackedActiveId(activeItineraryId);
@@ -101,7 +101,7 @@ export function CenterPanelSummary({ fullscreen = false, onToggleFullscreen }: C
   }
 
   const handleToggleFullscreen = () => {
-    // An open menu or rename is placed for the panel being left.
+    // Un menu ouvert ou un renommage est placé pour le panneau qu'on quitte.
     setMenuState(null);
     setEditingState(null);
     onToggleFullscreen?.();

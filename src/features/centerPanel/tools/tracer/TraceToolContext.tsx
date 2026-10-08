@@ -103,7 +103,7 @@ export function TraceToolProvider({ children, map }: TraceToolProviderProps) {
           currentRow.label = resolvedLabel;
         });
       } catch {
-        // Keep the GPS fallback label.
+        // Garder le libellé de repli GPS.
       }
     },
     [store],

@@ -33,9 +33,9 @@ import {
 import { ToolbarIconButton } from './ToolbarIconButton';
 
 interface CenterPanelToolbarProps {
-  /** Visibility of the center analysis panel this toolbar belongs to. */
+  /** Visibilité du panneau d'analyse central auquel appartient cette barre d'outils. */
   isPanelVisible?: boolean;
-  /** Collapses / restores the center panel. */
+  /** Replie / rétablit le panneau central. */
   onTogglePanel?: () => void;
 }
 
@@ -44,7 +44,7 @@ export const CenterPanelToolbar = memo(function CenterPanelToolbar({
   onTogglePanel,
 }: CenterPanelToolbarProps) {
   const { t } = useAppI18n();
-  // Half-screen window: the track overflows, wheel scrolls it, edges fade.
+  // Fenêtre en demi-écran : la piste déborde, la molette la fait défiler, les bords s'estompent.
   const viewportRef = useRef<HTMLDivElement>(null);
   useHorizontalScrollOverflow(viewportRef);
   const store = useProjectStoreOptional();
@@ -262,8 +262,8 @@ export const CenterPanelToolbar = memo(function CenterPanelToolbar({
       <div ref={viewportRef} className="rvc-center-toolbar__viewport">
         <div className="rvc-center-toolbar__track" role="toolbar" aria-label={t("Outils d'édition du parcours")}>
           {/*
-           * Center panel toggle — mirrors the map-side panel toggles:
-           * engaged (shown) = 60% black fill, hidden = red.
+           * Bascule du panneau central — reprend les bascules de panneau côté carte :
+           * engagée (affiché) = remplissage noir à 60 %, masqué = rouge.
            */}
           {onTogglePanel ? (
             <>

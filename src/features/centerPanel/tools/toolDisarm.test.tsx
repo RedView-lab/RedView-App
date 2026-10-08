@@ -14,14 +14,15 @@ import { TraceToolProvider } from './tracer/TraceToolContext';
 import { useTraceToolOptional } from './tracer/useTraceTool';
 
 /**
- * The map tools disarm when their target disappears and stay disarmed when it
- * comes back; arming again starts from a clean state. These used to be effects
- * setting state after the commit, now adjustments during render.
+ * Les outils de carte se désarment quand leur cible disparaît et restent
+ * désarmés quand elle revient ; réarmer repart d'un état propre. C'étaient des
+ * effets qui posaient l'état après le commit, ce sont maintenant des ajustements
+ * pendant le rendu.
  */
 
 type ItineraryShape = Partial<Itinerary> & { id: string };
 
-/** Fake store: only what the providers read at render (no map, no edit). */
+/** Faux store : seulement ce que les providers lisent au rendu (pas de carte, pas d'édition). */
 function fakeStore(itineraries: ItineraryShape[], activeItineraryId: string | null): ProjectStoreValue {
   return { project: { itineraries, activeItineraryId } } as unknown as ProjectStoreValue;
 }
@@ -176,8 +177,9 @@ describe('Zone interdite (ForbiddenZoneToolProvider)', () => {
   });
 
   it('arming again after such a reset starts a fresh draft session', () => {
-    // The draft history mirrors read by the handlers must have been reset too:
-    // left at index 0, arming would skip the new session (no prompt).
+    // Les miroirs d'historique du brouillon lus par les gestionnaires doivent
+    // aussi avoir été réinitialisés : laissés à l'indice 0, l'armement sauterait
+    // la nouvelle session (pas de demande).
     const { result, rerender } = renderZone();
     act(() => result.current.toggle());
     rerender({ store: withActive(null) });

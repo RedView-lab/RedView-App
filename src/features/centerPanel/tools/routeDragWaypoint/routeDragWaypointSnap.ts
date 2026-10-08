@@ -124,7 +124,7 @@ function getScreenProjections(
       xs[i] = s.x;
       ys[i] = s.y;
     } catch {
-      /* ignore projection error on out-of-world points */
+      /* ignorer l'erreur de projection des points hors du monde */
     }
   }
 
@@ -235,6 +235,6 @@ export function findRouteGrabHit(
   };
 }
 
-/** Re-exported tolerance so the drag tool shares the split tool's hit radius. */
+/** Tolérance réexportée pour que l'outil de glisser partage le rayon d'impact de l'outil de découpe. */
 ;
 

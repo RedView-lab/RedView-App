@@ -37,8 +37,8 @@ export function RouteSplitToolProvider({ children, map }: RouteSplitToolProvider
   const routePoints = activeItinerary?.gpxRoute?.points ?? null;
   const canSplit = (routePoints?.length ?? 0) >= 4;
 
-  // Hover-preview marker: snaps to the nearest route vertex while armed, dims
-  // when the cursor is outside the click tolerance.
+  // Marqueur d'aperçu au survol : s'accroche au sommet du tracé le plus proche
+  // tant que l'outil est armé, s'atténue quand le curseur est hors de la tolérance de clic.
   useRouteHoverPreview({
     map,
     armed: armed && canSplit,

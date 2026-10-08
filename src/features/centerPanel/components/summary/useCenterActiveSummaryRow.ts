@@ -1,11 +1,12 @@
 import { useEffect, useRef, type RefObject } from 'react';
 
-/** `Collapse` unfolds in 220 ms: a row revealed by it is at its final place after that. */
+/** `Collapse` se déplie en 220 ms : une ligne qu'il révèle est à sa place finale après ce délai. */
 const REVEAL_SETTLE_MS = 260;
 
 /**
- * Centres the row of `rowId` in the summary's scroll box. Rects are screen px
- * (the dashboard canvas is CSS-zoomed by appScale), `scrollTop` is layout px.
+ * Centre la ligne de `rowId` dans la boîte de défilement du résumé. Les rects
+ * sont en px écran (le canvas du tableau de bord est zoomé en CSS par appScale),
+ * `scrollTop` en px de mise en page.
  */
 function centerSummaryRow(container: HTMLElement, rowId: string, behavior: ScrollBehavior): void {
   const row = container.querySelector<HTMLElement>(`[data-summary-row-id="${CSS.escape(rowId)}"]`);
@@ -24,11 +25,12 @@ function centerSummaryRow(container: HTMLElement, rowId: string, behavior: Scrol
 }
 
 /**
- * Keeps the active itinerary's row centred in the summary table: selected from
- * the map, the tabs or a split, it would otherwise sit outside the visible
- * rows. The table is placed instantly on mount and whenever `layout` changes
- * (docked ↔ fullscreen), then follows the selection smoothly — except when
- * `follow` is off (a row just clicked in the table is already under the pointer).
+ * Garde la ligne de l'itinéraire actif centrée dans le tableau du résumé :
+ * sélectionnée depuis la carte, les onglets ou une découpe, elle serait sinon
+ * hors des lignes visibles. Le tableau est placé instantanément au montage et à
+ * chaque changement de `layout` (ancré ↔ plein écran), puis suit la sélection en
+ * douceur — sauf quand `follow` est désactivé (une ligne qu'on vient de cliquer
+ * dans le tableau est déjà sous le pointeur).
  */
 export function useCenterActiveSummaryRow(
   containerRef: RefObject<HTMLElement | null>,
@@ -49,7 +51,7 @@ export function useCenterActiveSummaryRow(
 
     const behavior: ScrollBehavior = firstPlacement ? 'auto' : 'smooth';
     const frame = window.requestAnimationFrame(() => centerSummaryRow(container, activeId, behavior));
-    // Second pass once a branch unfolded to reveal the row has settled (no-op otherwise).
+    // Seconde passe une fois stabilisée une branche dépliée pour révéler la ligne (sans effet sinon).
     const settle = window.setTimeout(() => centerSummaryRow(container, activeId, behavior), REVEAL_SETTLE_MS);
     return () => {
       window.cancelAnimationFrame(frame);

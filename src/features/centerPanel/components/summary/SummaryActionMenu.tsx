@@ -12,8 +12,8 @@ const MENU_ROW_HEIGHT = 30;
 const MENU_GAP = 6;
 
 /**
- * Portaled into the fullscreen summary when it is open (it renders above the
- * page and is already scaled), on <body> otherwise.
+ * Portalé dans le résumé plein écran quand il est ouvert (il s'affiche au-dessus
+ * de la page et est déjà mis à l'échelle), dans <body> sinon.
  */
 function resolvePortalTarget(anchorEl: HTMLElement): HTMLElement {
   const fullscreenRoot = anchorEl.closest('.rvi-panel-fullscreen-root');
@@ -58,7 +58,7 @@ export function SummaryActionMenu({
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
-      // Consumed: the fullscreen summary behind stays open.
+      // Consommé : le résumé plein écran derrière reste ouvert.
       event.preventDefault();
       onClose();
     };

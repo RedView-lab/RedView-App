@@ -12,34 +12,35 @@ import {
 } from '../tools/routeSplit/routeSnap';
 
 /**
- * Hover-preview marker shared by the central-panel tools.
+ * Marqueur d'aperçu au survol partagé par les outils du panneau central.
  *
- * While a tool is armed this attaches a `mousemove` listener that renders a
- * single point marker over the route, showing where the next click will land:
+ * Tant qu'un outil est armé, ceci attache un écouteur `mousemove` qui affiche un
+ * seul marqueur ponctuel sur le tracé, montrant où tombera le prochain clic :
  *
- *  - **Split mode** (`snap` provided): the marker snaps to the nearest route
- *    vertex. Within the click tolerance it's full-strength; outside it the
- *    marker dims to signal "a click here does nothing" while still tracking
- *    the cursor.
- *  - **Trace mode** (no `snap`): the marker follows the cursor verbatim, never
- *    dimmed, since every position is a valid click target.
+ *  - **Mode découpe** (`snap` fourni) : le marqueur s'accroche au sommet du tracé
+ *    le plus proche. Dans la tolérance de clic il est à pleine intensité ; en
+ *    dehors il s'atténue pour signaler « un clic ici ne fait rien » tout en
+ *    suivant le curseur.
+ *  - **Mode tracé** (pas de `snap`) : le marqueur suit exactement le curseur,
+ *    jamais atténué, puisque chaque position est une cible de clic valide.
  *
- * Performance follows the established chart-hover pattern (AnalysisFlyoverContext):
- * `mousemove` only schedules a `requestAnimationFrame`, and writes are skipped
- * when the marker moved less than {@link MIN_MOVE_M} since the last update.
+ * Les performances suivent le schéma établi du survol du graphique
+ * (AnalysisFlyoverContext) : `mousemove` ne fait que programmer un
+ * `requestAnimationFrame`, et les écritures sont sautées quand le marqueur a
+ * bougé de moins de {@link MIN_MOVE_M} depuis la dernière mise à jour.
  */
 
-/** Skip setData when the marker moved less than this since the last write. */
+/** Sauter setData quand le marqueur a bougé de moins que ceci depuis la dernière écriture. */
 const MIN_MOVE_M = 8;
 
 export interface UseRouteHoverPreviewArgs {
   map: MapboxMap | null;
   armed: boolean;
-  /** Marker fill color (route color). Falls back to the layer default. */
+  /** Couleur de remplissage du marqueur (couleur du tracé). À défaut, celle de la couche. */
   color?: string;
   /**
-   * Route vertices to snap to. Omit / null for free-follow (trace) mode;
-   * provide for snap-to-trace (split) mode.
+   * Sommets du tracé auxquels s'accrocher. Omis / null pour le mode suivi libre
+   * (tracé) ; fournis pour le mode accroché au tracé (découpe).
    */
   snapRoutePoints?: RouteSnapPoint[] | null;
 }
@@ -121,8 +122,8 @@ export function useRouteHoverPreview({
 
     map.on('mousemove', scheduleSync);
     map.on('mouseleave', handleMouseLeave);
-    // Clear on the first move so a stale marker from a previous arming can't
-    // linger before the cursor actually moves.
+    // Effacer au premier mouvement pour qu'un marqueur périmé d'un armement
+    // précédent ne traîne pas avant que le curseur ne bouge vraiment.
     clearRouteHoverPreview(map);
 
     return () => {
