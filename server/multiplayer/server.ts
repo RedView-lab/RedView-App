@@ -103,6 +103,13 @@ function routeOf(pathname: string): string {
 }
 
 function listenOn(server: http.Server, port: number, hostname?: string): Promise<number> {
+  // Slowloris, comme server.mjs : en-têtes en 20 s, requête complète en 30 s (les
+  // seules requêtes HTTP sont la santé, les mesures et la révocation signée, de
+  // quelques Ko). Les défauts de Node (60 s / 300 s) gardaient une connexion
+  // lente ouverte cinq minutes. Une WebSocket n'est plus concernée une fois
+  // l'upgrade fait.
+  server.headersTimeout = 20_000;
+  server.requestTimeout = 30_000;
   return new Promise((resolve, reject) => {
     server.once('error', reject);
     server.listen(port, hostname, () => resolve((server.address() as AddressInfo).port));
