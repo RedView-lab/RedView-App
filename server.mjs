@@ -116,8 +116,9 @@ const MAX_TILE_REQUESTS = 600;
 // bucket dédié pour qu'une série de téléchargements n'épuise pas le quota
 // général (BRouter, POI…).
 const MAX_POINTCLOUD_REQUESTS = 120;
-// Facturation (/api/billing/*) : chaque souscription crée des objets chez
-// Stripe ; un parcours complet fait moins de 10 appels.
+// Actions de facturation (POST /api/billing/*) : chaque souscription crée des
+// objets chez Stripe ; un parcours complet en fait moins de 10. Les lectures
+// (GET overview) restent sur le quota général.
 const MAX_BILLING_REQUESTS = 30;
 // Webhook Stripe : Stripe livre en rafales depuis quelques IP (horloges de
 // test, relivraisons) ; un 429 retarderait les e-mails d'abonnement.
@@ -267,7 +268,7 @@ const server = http.createServer(async (req, res) => {
       const isAuth = apiRoute?.isAuth ?? false;
       const isWeather = apiRoute?.route === 'weather';
       const isPointcloud = apiRoute?.route === 'pointcloud';
-      const isBilling = apiRoute?.route.startsWith('billing/') ?? false;
+      const isBilling = req.method !== 'GET' && (apiRoute?.route.startsWith('billing/') ?? false);
       const isStripeWebhook = apiRoute?.route === 'stripe/webhook';
       const [bucket, max] = isAuth
         ? ['auth', MAX_AUTH_REQUESTS]

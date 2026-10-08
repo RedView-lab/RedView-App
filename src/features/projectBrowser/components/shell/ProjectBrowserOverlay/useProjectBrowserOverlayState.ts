@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 
 import { useHasChanged } from '@/shared/hooks/useHasChanged';
 import { useAppI18n } from '@/shared/i18n';
@@ -51,6 +52,15 @@ import type {
 } from '../../../billing/components/BillingActionModal/BillingActionModal';
 
 const PROJECT_BROWSER_ACTIVE_TAB_STORAGE_KEY = 'redview:project-browser:active-tab';
+
+/**
+ * Vue d'ensemble de la facturation en cache TanStack Query (30 s, appels
+ * simultanés fusionnés) : rouvrir le gestionnaire de projets ou le remonter
+ * ne rappelle pas le serveur à chaque fois (chaque appel lit Stripe ; le
+ * quota par IP renvoyait 429 à un navigateur qui rouvrait souvent l'overlay).
+ */
+const billingOverviewKey = (userId: string) => ['billing', 'overview', userId] as const;
+const BILLING_OVERVIEW_STALE_MS = 30_000;
 
 function getProjectBrowserActiveTabStorageKey(userId: string | null): string {
   return userId
@@ -132,6 +142,7 @@ export function useProjectBrowserOverlayState({
   const syncedContactPreferenceRef = useRef<string | null>(null);
   const contactHydratedRef = useRef(false);
   const billingReturnHandledRef = useRef(false);
+  const queryClient = useQueryClient();
   const projects = useProjectBrowserProjects({
     open,
     onOpenProject,
@@ -222,10 +233,16 @@ export function useProjectBrowserOverlayState({
     setBillingActionError(null);
   }, []);
 
+  /** Lecture fraîche après une action (souscription, résiliation…) : le cache est remplacé. */
   const refreshBillingOverview = useCallback(async () => {
-    const overview = await fetchBillingOverview();
+    if (!userId) return;
+    const overview = await queryClient.fetchQuery({
+      queryKey: billingOverviewKey(userId),
+      queryFn: fetchBillingOverview,
+      staleTime: 0,
+    });
     applyBillingOverview(overview);
-  }, [applyBillingOverview]);
+  }, [applyBillingOverview, queryClient, userId]);
 
   useEffect(() => {
     if (!open || !userId) return;
@@ -233,7 +250,11 @@ export function useProjectBrowserOverlayState({
     let cancelled = false;
     void (async () => {
       try {
-        const overview = await fetchBillingOverview();
+        const overview = await queryClient.fetchQuery({
+          queryKey: billingOverviewKey(userId),
+          queryFn: fetchBillingOverview,
+          staleTime: BILLING_OVERVIEW_STALE_MS,
+        });
 
         if (cancelled) return;
 
@@ -256,7 +277,7 @@ export function useProjectBrowserOverlayState({
     return () => {
       cancelled = true;
     };
-  }, [applyBillingOverview, open, t, userId]);
+  }, [applyBillingOverview, open, queryClient, t, userId]);
 
   useEffect(() => {
     if (!open) return;
