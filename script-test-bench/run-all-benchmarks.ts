@@ -28,7 +28,7 @@ import {
   saveJsonReport,
 } from './core/reporter.ts';
 
-// Feature suites
+// Suites par fonction
 import { runMeteoBenchmark } from './suites/meteo.ts';
 import { runSlopeBenchmark } from './suites/pente.ts';
 import { runAltiBenchmark } from './suites/alti.ts';
@@ -138,7 +138,7 @@ async function main(): Promise<void> {
 
   const elapsedSec = ((Date.now() - startTime) / 1000).toFixed(2);
 
-  // Scorecard Global
+  // Bilan global
   let totalMetrics = 0;
   let passCount = 0;
   let warnCount = 0;

@@ -117,7 +117,7 @@ export async function runSnowBenchmark(options: { quick?: boolean } = {}): Promi
   return suite;
 }
 
-// Standalone execution
+// Exécution autonome
 if (process.argv[1]?.replaceAll('\\', '/').endsWith('/suites/neige.ts')) {
   const quick = process.argv.includes('--quick');
   runSnowBenchmark({ quick }).then((suite) => {

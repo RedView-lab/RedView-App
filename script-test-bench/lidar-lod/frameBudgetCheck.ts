@@ -14,7 +14,7 @@ export function runFrameClockCheck(): void {
     const period = 1000 / hz;
     let now = 0;
     for (let i = 0; i < 400; i++) {
-      // 30 % of the frames miss one or two vsyncs, with a little timer jitter.
+      // 30 % des images ratent une ou deux synchronisations verticales, avec un peu de gigue de minuteur.
       const vsyncs = rand() < 0.3 ? (rand() < 0.5 ? 2 : 3) : 1;
       now += vsyncs * period + (rand() - 0.5) * 0.4;
       clock.frame(now);
@@ -39,9 +39,10 @@ const BUDGET_PROFILE: PlatformProfile = {
 };
 
 /**
- * Drives the budget with a modelled GPU at 60 Hz: `gpuMs(points)` for the
- * draw passes, plus `overheadMs` the timestamps do not see (compositor,
- * panels' blur). A frame lands on the next vsync after both.
+ * Pilote le budget avec un GPU modélisé à 60 Hz : `gpuMs(points)` pour les
+ * passes de dessin, plus `overheadMs` que les horodatages ne voient pas
+ * (compositeur, flou des panneaux). Une image tombe sur la synchronisation
+ * verticale qui suit les deux.
  */
 function simulateBudget(gpuMs: (points: number) => number, overheadMs: number, frames: number, rest = false) {
   const budget = new AdaptivePointBudget(BUDGET_PROFILE, { preciseGpu: true });
@@ -66,9 +67,9 @@ function simulateBudget(gpuMs: (points: number) => number, overheadMs: number, f
 }
 
 /**
- * The former controller (before the real-cadence one), same GPU model: a
- * fixed 16.6 ms target on the measured cost, shrinking above 19.1 ms and
- * growing below 12.5 ms, blind to the vsync.
+ * L'ancien contrôleur (avant celui à cadence réelle), même modèle de GPU : une
+ * cible fixe de 16,6 ms sur le coût mesuré, qui diminue au-dessus de 19,1 ms et
+ * augmente sous 12,5 ms, aveugle à la synchronisation verticale.
  */
 function simulateLegacyBudget(gpuMs: (points: number) => number, overheadMs: number, frames: number) {
   const target = 16.6;
@@ -98,15 +99,15 @@ function simulateLegacyBudget(gpuMs: (points: number) => number, overheadMs: num
 }
 
 export function runBudgetCheck(): void {
-  // Linear GPU, 5 ms the timestamps do not see: frames miss the vsync above ~2.9 M points.
+  // GPU linéaire, 5 ms que les horodatages ne voient pas : les images ratent la synchronisation au-delà de ~2,9 M points.
   const linear = (points: number) => 3 + points * 3e-6;
   const overheadMs = 5;
   const limited = simulateBudget(linear, overheadMs, 3000);
   const legacy = simulateLegacyBudget(linear, overheadMs, 3000);
   const limitPoints = (1000 / 60 - 3 - overheadMs) / 3e-6;
-  // DVFS: the GPU lowers its clock, so its pass time stays ~11 ms whatever the load.
+  // DVFS : le GPU baisse sa fréquence, donc la durée de sa passe reste ~11 ms quelle que soit la charge.
   const dvfs = simulateBudget(() => 11, 3, 3000);
-  // Still frames at full resolution cost 1.5× the interval: they must not cut the moving budget.
+  // Les images fixes en pleine résolution coûtent 1,5× l'intervalle : elles ne doivent pas réduire le budget en mouvement.
   const rest = simulateBudget(() => 25, 3, 600, true);
   check(
     'Budget de points : calé sur la cadence réelle, pas sur 16,6 ms de GPU',

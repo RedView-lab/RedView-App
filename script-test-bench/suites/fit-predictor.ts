@@ -94,7 +94,7 @@ export async function runFitPredictorBenchmark(options: { quick?: boolean } = {}
   return suite;
 }
 
-// Standalone execution
+// Exécution autonome
 if (process.argv[1]?.replaceAll('\\', '/').endsWith('/suites/fit-predictor.ts')) {
   const quick = process.argv.includes('--quick');
   runFitPredictorBenchmark({ quick }).then((suite) => {

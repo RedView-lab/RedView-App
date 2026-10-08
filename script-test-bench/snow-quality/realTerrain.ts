@@ -1,14 +1,17 @@
 // ============================================================================
-// Real-terrain scene for the before/after image: Aiguilles Rouges (Chamonix),
-// 3 km around Lac Blanc, IGN LiDAR HD DTM. The snow inputs are a plausible
-// mid-winter situation, not measurements (there is no snow on 4 October):
-//   - "AROME" cells hold a Chamonix-north mid-February profile (snow line
-//     ~900 m, 95 cm at 1500 m, 215 cm at 2500 m), read at the model orography
-//     (mean RGE ALTI over each 0.01° cell), 20 % low — AROME's usual kind of
-//     bias that only measurements can reveal;
-//   - flat-field stations at the real positions of the Météo-France and
-//     Nivôse posts around (values from the same profile + 4 cm noise);
-//   - NW storms, then a sunny week (drift and melt by exposure).
+// Scène sur terrain réel pour l'image avant / après : Aiguilles Rouges
+// (Chamonix), 3 km autour du lac Blanc, MNT LiDAR HD de l'IGN. Les entrées
+// neige sont une situation de plein hiver plausible, pas des mesures (il n'y a
+// pas de neige le 4 octobre) :
+//   - les cellules « AROME » portent un profil de mi-février au nord de
+//     Chamonix (limite de la neige ~900 m, 95 cm à 1500 m, 215 cm à 2500 m), lu
+//     à l'orographie du modèle (RGE ALTI moyen sur chaque cellule de 0,01°),
+//     20 % trop bas — le genre de biais habituel d'AROME que seules les mesures
+//     peuvent révéler ;
+//   - stations de terrain plat aux vraies positions des postes Météo-France et
+//     Nivôse alentour (valeurs du même profil + 4 cm de bruit) ;
+//   - tempêtes de NO, puis une semaine ensoleillée (congères et fonte selon
+//     l'exposition).
 // ============================================================================
 
 import proj4 from 'proj4';
@@ -92,7 +95,7 @@ export async function buildRealScene(cacheDir: string): Promise<RealScene> {
   const c1 = toLL(CENTER_X, CENTER_Y + 1000);
   const gridNorthBearingDeg = (Math.atan2((c1.lon - c0.lon) * Math.cos((c0.lat * Math.PI) / 180), c1.lat - c0.lat) * 180) / Math.PI;
 
-  // Coarse cells and the wide DEM for the model orography and the far field.
+  // Cellules grossières et DEM large pour l'orographie du modèle et le champ lointain.
   const lonMin = Math.round((c0.lon - 0.4) * 100) / 100;
   const latMin = Math.round((c0.lat - 0.3) * 100) / 100;
   const aw = 81, ah = 61;
@@ -112,7 +115,7 @@ export async function buildRealScene(cacheDir: string): Promise<RealScene> {
   }
   const coarse: CoarseSnowGrid = { source: 'arome', width: aw, height: ah, lonMin, latMin, dLon: 0.01, dLat: 0.01, hsCm: hs, orographyM: oro, resolutionM: 1100 };
 
-  // Far field ±7 km at 50 m, scene-local metres.
+  // Champ lointain ±7 km à 50 m, mètres locaux de la scène.
   const margin = 7000, fcell = 50;
   const fw = Math.round((SIZE_M + 2 * margin) / fcell) + 1;
   const farData = new Float32Array(fw * fw);
@@ -143,7 +146,7 @@ export async function buildRealScene(cacheDir: string): Promise<RealScene> {
     config: { ...DEFAULT_SNOW_ENGINE_CONFIG, maxResolution: N },
   };
 
-  // v1 took the AROME bbox as an axis-aligned box in the scene CRS.
+  // La v1 prenait l'emprise AROME comme une boîte alignée sur les axes dans le CRS de la scène.
   const envPts = [[lonMin, latMin], [lonMin + (aw - 1) * 0.01, latMin], [lonMin + (aw - 1) * 0.01, latMin + (ah - 1) * 0.01], [lonMin, latMin + (ah - 1) * 0.01]]
     .map(([lo, la]) => proj4('EPSG:4326', 'EPSG:2154', [lo, la]) as [number, number]);
   const env: [number, number, number, number] = [

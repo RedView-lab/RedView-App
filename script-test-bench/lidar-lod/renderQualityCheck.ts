@@ -16,10 +16,11 @@ import { syntheticTile } from './lodTileCheck.ts';
 // ---------------------------------------------------------------------------
 
 /**
- * Filtered colour of every point of a node with children = mean red of its
- * subtree's points in its cell. The reference re-quantizes decoded positions,
- * so a point within a quantum (≈ 1 cm) of a cell edge may land in the
- * neighbour cell: errors are counted, not required to be all zero.
+ * Couleur filtrée de chaque point d'un nœud qui a des enfants = rouge moyen
+ * des points de son sous-arbre dans sa cellule. La référence requantifie les
+ * positions décodées, donc un point à moins d'un quantum (≈ 1 cm) d'un bord de
+ * cellule peut tomber dans la cellule voisine : les erreurs sont comptées, sans
+ * exiger qu'elles soient toutes nulles.
  */
 function filterError(tile: LodTile): { checked: number; within: number; inner: number } {
   const view = new DataView(tile.packed.buffer, tile.packed.byteOffset, tile.packed.byteLength);
@@ -36,7 +37,7 @@ function filterError(tile: LodTile): { checked: number; within: number; inner: n
     if (subtree.length <= 1 || node.count === 0) continue;
     inner++;
     const cube = lodNodeCube(tile.header, node);
-    // Sums per cell of this node's grid over the subtree (positions decoded in their own cubes).
+    // Sommes par cellule de la grille de ce nœud sur le sous-arbre (positions décodées dans leurs propres cubes).
     const sums = new Map<number, [number, number]>();
     for (const other of subtree) {
       const otherCube = lodNodeCube(tile.header, other);
@@ -67,8 +68,9 @@ function filterError(tile: LodTile): { checked: number; within: number; inner: n
 }
 
 /**
- * Edge vertices (grid positions along one chunk side) used by a pattern:
- * a stitched fine edge must use exactly the coarse neighbour's vertices.
+ * Sommets de bord (positions de grille le long d'un côté de chunk) utilisés
+ * par un motif : un bord fin recousu doit utiliser exactement les sommets du
+ * voisin grossier.
  */
 function edgeVertices(indices: Uint32Array, gridWidth: number, quads: number, side: 'rowMin' | 'colMax'): number[] {
   const used = new Set<number>();
@@ -82,7 +84,7 @@ function edgeVertices(indices: Uint32Array, gridWidth: number, quads: number, si
 }
 
 function runFilterCheck(): void {
-  // Two-colour synthetic tile: a 2 m checkerboard, so the coarse cells mix both colours.
+  // Tuile synthétique bicolore : un damier de 2 m, pour que les cellules grossières mélangent les deux couleurs.
   const input = syntheticTile(3, 2, 400_000);
   for (let i = 0; i < input.count; i++) {
     const x = input.positions[i * 3]!, y = input.positions[i * 3 + 1]!;
@@ -92,7 +94,7 @@ function runFilterCheck(): void {
   const tile = buildLodTile(input);
   const buildMs = performance.now() - t0;
   const { checked, within, inner } = filterError(tile);
-  // Root points: own colour is 20 or 230, filtered colour a cell mean in between.
+  // Points de la racine : couleur propre 20 ou 230, couleur filtrée une moyenne de cellule entre les deux.
   const root = tile.nodes.find((node) => node.depth === 0)!;
   let mixed = 0;
   for (let k = 0; k < root.count; k++) {
@@ -123,7 +125,7 @@ function runTerrainStitchCheck(): void {
     if (coarse.join(',') !== stitchedRow.join(',') || coarseCol.join(',') !== stitchedCol.join(',')) pass = false;
     worstTriangles = Math.max(worstTriangles, buildChunkIndices(gridWidth, quads, quads, stride, 15).length / 3);
   }
-  // Partial chunk (grid edge not a multiple of the chunk size) keeps its last row/column.
+  // Un chunk partiel (bord de grille non multiple de la taille de chunk) garde sa dernière ligne / colonne.
   const partial = buildChunkIndices(gridWidth, 77, 50, 4, 0);
   const lastCol = edgeVertices(partial, gridWidth, 77, 'colMax');
   if (!lastCol.includes(0) || !lastCol.includes(50)) pass = false;
@@ -139,12 +141,12 @@ function runTerrainStitchCheck(): void {
 }
 
 function runRestRefinementCheck(): void {
-  // Simulated GPU: cost grows linearly with the drawn points (3 ms per million on top of 4 ms).
+  // GPU simulé : le coût croît linéairement avec les points dessinés (3 ms par million en plus de 4 ms).
   const costMs = (points: number) => 4 + (points / 1e6) * 3;
   const rest = new RestRefinement(true);
   const moving = 1_500_000;
   const ceiling = 20_000_000;
-  const target = 30_000_000; // points the view would need at full density
+  const target = 30_000_000; // points dont la vue aurait besoin à pleine densité
   rest.startRefine();
   let frames = 0;
   let budget = moving;

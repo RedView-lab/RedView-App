@@ -1,6 +1,7 @@
-// Real terrain for the before/after image: IGN LiDAR HD bare-earth DTM from
-// the Géoplateforme WMS-R, Lambert 93, float32 BIL. Cached in the bench
-// reports folder (git-ignored) so the image can be rebuilt offline.
+// Terrain réel pour l'image avant / après : MNT sol nu LiDAR HD de l'IGN via
+// le WMS-R de la Géoplateforme, Lambert 93, BIL float32. Mis en cache dans le
+// dossier des rapports du banc (ignoré par git) pour pouvoir reconstruire
+// l'image hors ligne.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -11,7 +12,7 @@ export interface IgnDem {
   data: Float32Array;
   width: number;
   height: number;
-  /** Lambert 93 bounds of the node grid. */
+  /** Emprise Lambert 93 de la grille de nœuds. */
   minX: number;
   minY: number;
   maxX: number;
@@ -28,7 +29,7 @@ export interface IgnDemWgs84 {
   latMax: number;
 }
 
-/** Coarse RGE ALTI over a WGS84 box (cell grid, row 0 = south), for the model orography and the far field. */
+/** RGE ALTI grossier sur une boîte WGS84 (grille de cellules, ligne 0 = sud), pour l'orographie du modèle et le champ lointain. */
 export async function fetchIgnDemWgs84(lonMin: number, latMin: number, lonMax: number, latMax: number, width: number, height: number, cacheDir: string): Promise<IgnDemWgs84> {
   mkdirSync(cacheDir, { recursive: true });
   const file = join(cacheDir, `ignw-${lonMin}-${latMin}-${lonMax}-${latMax}-${width}x${height}.f32`);
@@ -49,14 +50,14 @@ export async function fetchIgnDemWgs84(lonMin: number, latMin: number, lonMax: n
   }
   const data = new Float32Array(width * height);
   for (let y = 0; y < height; y++) data.set(raw.subarray((height - 1 - y) * width, (height - y) * width), y * width);
-  // Outside France the service answers a no-data value: fill with the mean.
+  // Hors de France, le service répond une valeur sans donnée : on remplit avec la moyenne.
   let s = 0, k = 0;
   for (const v of data) if (v > -500 && v < 9000) { s += v; k++; }
   for (let i = 0; i < data.length; i++) if (!(data[i] > -500 && data[i] < 9000)) data[i] = k > 0 ? s / k : 0;
   return { data, width, height, lonMin, latMin, lonMax, latMax };
 }
 
-/** Bilinear height of a WGS84 point in a cell-centred grid. */
+/** Hauteur bilinéaire d'un point WGS84 dans une grille centrée sur les cellules. */
 export function sampleWgs84(d: IgnDemWgs84, lon: number, lat: number): number {
   const fx = ((lon - d.lonMin) / (d.lonMax - d.lonMin)) * d.width - 0.5;
   const fy = ((lat - d.latMin) / (d.latMax - d.latMin)) * d.height - 0.5;
@@ -71,8 +72,9 @@ export function sampleWgs84(d: IgnDemWgs84, lon: number, lat: number): number {
 }
 
 /**
- * Node grid of n × n over [minX, maxX] × [minY, maxY] (row 0 = south). The WMS
- * resamples nearest-neighbour: asked 4× finer, then box-averaged.
+ * Grille de nœuds n × n sur [minX, maxX] × [minY, maxY] (ligne 0 = sud). Le WMS
+ * rééchantillonne au plus proche voisin : demandé 4× plus fin, puis moyenné
+ * par blocs.
  */
 export async function fetchIgnDem(minX: number, minY: number, maxX: number, maxY: number, n: number, cacheDir: string): Promise<IgnDem> {
   mkdirSync(cacheDir, { recursive: true });
@@ -84,7 +86,7 @@ export async function fetchIgnDem(minX: number, minY: number, maxX: number, maxY
   } else {
     const k = 4;
     const m = n * k;
-    // WMS pixels are cells: widen by half a node so each k×k block centres on a node.
+    // Les pixels du WMS sont des cellules : élargi d'un demi-nœud pour que chaque bloc k×k soit centré sur un nœud.
     const cell = (maxX - minX) / (n - 1);
     const bbox = [minX - cell / 2, minY - cell / 2, maxX + cell / 2, maxY + cell / 2].join(',');
     const url = `${WMS}?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=${encodeURIComponent(LAYER)}&STYLES=`
@@ -103,7 +105,7 @@ export async function fetchIgnDem(minX: number, minY: number, maxX: number, maxY
     }
     writeFileSync(file, Buffer.from(raw.buffer));
   }
-  // WMS rows run north → south: flip to row 0 = south.
+  // Les lignes du WMS vont du nord au sud : retournement pour que la ligne 0 soit au sud.
   const data = new Float32Array(n * n);
   for (let y = 0; y < n; y++) data.set(raw.subarray((n - 1 - y) * n, (n - y) * n), y * n);
   return { data, width: n, height: n, minX, minY, maxX, maxY };

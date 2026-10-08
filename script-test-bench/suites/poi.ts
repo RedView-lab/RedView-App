@@ -127,7 +127,7 @@ export async function runPoiBenchmark(options: { quick?: boolean } = {}): Promis
   return suite;
 }
 
-// Standalone execution
+// Exécution autonome
 if (process.argv[1]?.replaceAll('\\', '/').endsWith('/suites/poi.ts')) {
   const quick = process.argv.includes('--quick');
   runPoiBenchmark({ quick }).then((suite) => {

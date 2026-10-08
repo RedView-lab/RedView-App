@@ -1,5 +1,5 @@
-// Frozen copy of the v1 snow engine (src/features/snow before the v2 rewrite),
-// kept only as the "before" of the snow-quality bench. Not used by the app.
+// Copie figée du moteur neige v1 (src/features/snow avant la réécriture v2),
+// gardée seulement comme « avant » du banc de qualité neige. Non utilisée par l'application.
 
 // ============================================================================
 // Snow redistribution — TypeScript port of RedView v0.1
@@ -233,7 +233,7 @@ export function computeSnowRedistribution(
   const pixelSize = (terrainSize[0] / workW + terrainSize[1] / workH) * 0.5;
   console.log(`[snow] work ${workW}×${workH}, AROME ${aromeW}×${aromeH}, px=${pixelSize.toFixed(1)}m`);
 
-  // Phase A — Terrain analysis
+  // Phase A — analyse du terrain
   report(2, 'Pente & exposition');
   const { slope: slopeDeg, aspect: aspectDeg } = computeSlopeAndAspect(workHm, tw, th, pixelSize);
 
@@ -298,7 +298,7 @@ export function computeSnowRedistribution(
     }
   }
 
-  // Cold pool
+  // Lac d'air froid
   const coldPoolFactor = new Float32Array(total).fill(1);
   for (let i = 0; i < total; i++) {
     if (tpiCombined[i] < -0.3) {
@@ -369,7 +369,7 @@ export function computeSnowRedistribution(
   // Solar
   for (let i = 0; i < total; i++) snow[i] *= solarFactor[i];
 
-  // Pre-gravity normalization
+  // Normalisation avant gravité
   let postRegrTotal = 0;
   for (let i = 0; i < total; i++) postRegrTotal += snow[i];
   if (postRegrTotal > 0.1 && originalTotal > 0.1) {
@@ -392,7 +392,7 @@ export function computeSnowRedistribution(
     }
   }
 
-  // Sort indices by elevation desc (in-place typed array sort)
+  // Trie les indices par altitude décroissante (tri sur place du tableau typé)
   const sortedIdx = new Int32Array(total);
   for (let i = 0; i < total; i++) sortedIdx[i] = i;
   sortedIdx.sort((a, b) => workHm[b] - workHm[a]);
@@ -454,7 +454,7 @@ export function computeSnowRedistribution(
     report(32 + Math.round(33 * (it + 1) / config.gravityIterations), 'Transport gravitationnel');
   }
 
-  // Phase C-bis — outliers SAT
+  // Phase C-bis — valeurs aberrantes SAT
   report(66, 'Suppression outliers');
   capLocalOutliers(snow, tw, th, pixelSize, 50, 2.5);
   capLocalOutliers(snow, tw, th, pixelSize, 200, 2.0);
@@ -467,11 +467,11 @@ export function computeSnowRedistribution(
   report(75, 'Sublimation');
   applyExposedSublimation(snow, tpiCombined, profCurv, total);
 
-  // Phase F — Cliff + smoothing
+  // Phase F — falaises + lissage
   report(82, 'Falaises & lissage');
   const finalSnow = applyCliffAndSmoothing(snow, slopeDeg, tpiCombined, profCurv, originalMean, tw, th, config);
 
-  // Phase G — Mass conservation
+  // Phase G — conservation de la masse
   report(92, 'Conservation masse');
   let curTotal = 0;
   for (let i = 0; i < total; i++) curTotal += finalSnow[i];

@@ -1,22 +1,28 @@
 // ============================================================================
-// Synthetic snow world for the snow-quality bench
+// Monde neigeux synthétique du banc de qualité neige
 // ----------------------------------------------------------------------------
-// A 48 km alpine relief (ridged fBm, 60 m) holds a 2.4 km "LiDAR" scene
-// (3.76 m, with metre-scale ribs and couloirs). The weather of the last 75
-// days (storms, foehn, fair days) drives a reference snow model written here,
-// independently of the engine and with different formulations and parameters:
-//   - flat snowpack per altitude: classic degree-day (no radiation term),
-//     orographic precipitation +5 %/100 m, lapse −0.6 °C/100 m, ρ = 300;
-//   - wind: Winstral-type multiplier on Sx(100 m) along the storm wind plus a
-//     curvature term, renormalised (statistical, Grünewald/Winstral style);
-//   - gravity: exponential holding depth 20·e^(−0.065·S) m (holds 25–55 % less
-//     than CHM's power law on steep faces), trigger 28°, multiple-flow routing
-//     ∝ drop⁴ on the depression-filled DEM, deposits ≤ 6 m spread laterally;
-//   - melt by exposure: degree-day × (1 + 0.9·sin S·(−cos aspect)), no horizons;
-//   - forest −35 % of accumulation; correlated multiplicative noise σ ≈ 12 %.
-// "AROME" is the flat reference snowpack at a smoothed model orography, with a
-// precipitation and snow-line bias; stations are flat-field reference values
-// plus 3 cm noise. The engine sees only what the app would see.
+// Un relief alpin de 48 km (fBm en crêtes, 60 m) contient une scène « LiDAR »
+// de 2,4 km (3,76 m, avec nervures et couloirs d'échelle métrique). La météo
+// des 75 derniers jours (tempêtes, foehn, beaux jours) pilote un modèle de
+// neige de référence écrit ici, indépendamment du moteur et avec d'autres
+// formulations et paramètres :
+//   - manteau en terrain plat par altitude : degré-jour classique (sans terme
+//     de rayonnement), précipitations orographiques +5 %/100 m, gradient
+//     −0,6 °C/100 m, ρ = 300 ;
+//   - vent : multiplicateur de type Winstral sur Sx(100 m) selon le vent de
+//     tempête plus un terme de courbure, renormalisé (statistique, façon
+//     Grünewald / Winstral) ;
+//   - gravité : hauteur de maintien exponentielle 20·e^(−0,065·S) m (retient
+//     25 à 55 % de moins que la loi de puissance de CHM sur les faces raides),
+//     déclenchement à 28°, écoulement à directions multiples ∝ dénivelé⁴ sur
+//     le DEM aux cuvettes comblées, dépôts ≤ 6 m étalés latéralement ;
+//   - fonte selon l'exposition : degré-jour × (1 + 0,9·sin S·(−cos orientation)),
+//     sans horizons ;
+//   - forêt −35 % de l'accumulation ; bruit multiplicatif corrélé σ ≈ 12 %.
+// « AROME » est le manteau de référence en terrain plat sur une orographie de
+// modèle lissée, avec un biais de précipitations et de limite de la neige ;
+// les stations sont des valeurs de référence en terrain plat plus 3 cm de
+// bruit. Le moteur ne voit que ce que verrait l'application.
 // ============================================================================
 
 import type {
@@ -36,7 +42,7 @@ const DAY_MS = 86_400_000;
 const M_PER_DEG_LAT = 110_540;
 
 export interface StormSpec {
-  /** Days before the analysis. */
+  /** Jours avant l'analyse. */
   daysAgo: number;
   hours: number;
   windFromDeg: number;
@@ -49,16 +55,16 @@ export interface WorldSpec {
   name: string;
   seed: number;
   analysisIso: string;
-  /** Temperature at 1500 m: seasonal mean over the 75 days, and its trend (°C per day). */
+  /** Température à 1500 m : moyenne saisonnière sur les 75 jours, et sa tendance (°C par jour). */
   temp1500C: number;
   tempTrendCPerDay: number;
   storms: StormSpec[];
-  /** Foehn: dry strong southerly wind hours. */
+  /** Foehn : heures de vent du sud sec et fort. */
   foehnDaysAgo: number[];
-  /** Horizontal precipitation anomaly amplitude. */
+  /** Amplitude de l'anomalie horizontale de précipitations. */
   precipAnomaly: number;
   forest: boolean;
-  /** Reference-model wind effect (Sx multiplier per degree). */
+  /** Effet du vent du modèle de référence (multiplicateur Sx par degré). */
   truthWindPerDeg: number;
   noiseSigma: number;
   aromePrecipBias: number;
@@ -66,28 +72,28 @@ export interface WorldSpec {
   orographyNoiseM: number;
   stationCount: number;
   braNoiseCm: number | null;
-  /** Perturbation of the weather handed to the engine (σ of temperature noise, °C). */
+  /** Perturbation de la météo confiée au moteur (σ du bruit de température, °C). */
   weatherNoiseC: number;
 }
 
 export interface World {
   spec: WorldSpec;
-  /** Engine input (what the app would assemble). */
+  /** Entrée du moteur (ce que l'application assemblerait). */
   input: SnowEngineInput;
-  /** Reference snow depth on the scene grid, cm. */
+  /** Hauteur de neige de référence sur la grille de la scène, cm. */
   truth: Float32Array;
-  /** Reference flat-field depth on the scene grid (before terrain processes), cm. */
+  /** Hauteur de référence en terrain plat sur la grille de la scène (avant les processus de terrain), cm. */
   truthFlat: Float32Array;
   sceneW: number;
   sceneH: number;
   sceneCell: number;
   sceneZ: Float32Array;
   canopy: Float32Array;
-  /** Coarse grid as scene-local metre bounds, for the legacy engine. */
+  /** Grille grossière en emprise métrique locale de la scène, pour l'ancien moteur. */
   legacy: { aromeData: Float32Array; aromeW: number; aromeH: number; aromeBounds: [number, number, number, number] };
   centerLon: number;
   centerLat: number;
-  /** Reference-model components on the scene grid (diagnostics only). */
+  /** Composantes du modèle de référence sur la grille de la scène (diagnostic seulement). */
   parts: { windMul: Float32Array; gravityChange: Float32Array; meltFactor: Float32Array; noise: Float32Array };
 }
 
@@ -145,11 +151,11 @@ function slopeAspect(z: Float32Array, w: number, h: number, cell: number) {
   return { slope, aspect };
 }
 
-/** Priority-flood depression filling with an ε gradient (every cell drains to the edge). */
+/** Comblement des cuvettes par inondation à priorité avec un gradient ε (chaque cellule s'écoule vers le bord). */
 function fillDepressions(z: Float32Array, w: number, h: number): Float64Array {
   const out = Float64Array.from(z);
   const done = new Uint8Array(w * h);
-  // Binary heap of (elevation, index).
+  // Tas binaire de (altitude, indice).
   const heapZ: number[] = [];
   const heapI: number[] = [];
   const push = (zz: number, i: number) => {
@@ -202,7 +208,7 @@ function fillDepressions(z: Float32Array, w: number, h: number): Float64Array {
   return out;
 }
 
-/** Reference flat snowpack table: depth (cm) by altitude and precipitation multiplier. */
+/** Table du manteau de référence en terrain plat : hauteur (cm) selon l'altitude et le multiplicateur de précipitations. */
 class FlatSnowTable {
   readonly z0 = 300;
   readonly dz = 50;
@@ -258,9 +264,9 @@ export function buildWorld(spec: WorldSpec): World {
   const forestNoise = new GradientNoise(spec.seed * 7 + 4);
   const snowNoise = new GradientNoise(spec.seed * 7 + 5);
 
-  // ---- Far relief -----------------------------------------------------------
-  // Continuous relief function: the far grid samples it, the scene evaluates
-  // it at full resolution (no bilinear facets in the slopes).
+  // ---- Relief lointain --------------------------------------------------------
+  // Fonction de relief continue : la grille lointaine l'échantillonne, la scène
+  // l'évalue à pleine résolution (pas de facettes bilinéaires dans les pentes).
   const reliefAt = (x: number, y: number) => {
     const wx = x + 2500 * relief.fbm(x / 9000, y / 9000, 3);
     const wy = y + 2500 * relief.fbm(x / 9000 + 5, y / 9000 - 3, 3);
@@ -275,7 +281,7 @@ export function buildWorld(spec: WorldSpec): World {
     for (let i = 0; i < farN; i++) far[j * farN + i] = reliefAt(-half + i * FAR_CELL, -half + j * FAR_CELL);
   }
 
-  // Scene centre: high relief, mean altitude ~2000–2700 m, in the central 16 km.
+  // Centre de la scène : relief marqué, altitude moyenne ~2000–2700 m, dans les 16 km centraux.
   let best = -Infinity;
   let cx = 0;
   let cy = 0;
@@ -295,9 +301,10 @@ export function buildWorld(spec: WorldSpec): World {
     }
   }
 
-  // ---- Scene DTM: far relief + ribs, couloirs and roughness -----------------
-  // The reference snow is computed on the scene plus a 400 m margin (snow
-  // sliding or blowing in from outside the tile), then cropped.
+  // ---- MNT de la scène : relief lointain + nervures, couloirs et rugosité -----
+  // La neige de référence est calculée sur la scène plus une marge de 400 m
+  // (neige qui glisse ou est soufflée depuis l'extérieur de la tuile), puis
+  // rognée.
   const sceneCell = SCENE_SIZE_M / (SCENE_N - 1);
   const PAD = Math.round(400 / sceneCell);
   const TN = SCENE_N + 2 * PAD;
@@ -323,7 +330,7 @@ export function buildWorld(spec: WorldSpec): World {
   };
   const sceneZ = crop(tz);
 
-  // ---- Weather of the last 75 days -------------------------------------------
+  // ---- Météo des 75 derniers jours -------------------------------------------
   const analysisMs = Date.parse(spec.analysisIso);
   const hours = 75 * 24;
   const startMs = analysisMs - (hours - 1) * HOUR_MS;
@@ -352,7 +359,7 @@ export function buildWorld(spec: WorldSpec): World {
       windDir[t] = s.windFromDeg + 25 * rng.normal();
       temp1500[t] += s.tempOffsetC;
     }
-    // Post-frontal wind with the storm direction.
+    // Vent post-frontal dans la direction de la tempête.
     for (let k = s.hours; k < s.hours + 12; k++) {
       const t = t0 + k;
       if (t < 0 || t >= hours) continue;
@@ -372,7 +379,7 @@ export function buildWorld(spec: WorldSpec): World {
   }
   for (let t = 0; t < hours; t++) snowfall[t] = temp1500[t] < 1 ? precip[t] * 1.1 : 0;
 
-  // ---- Reference snowpack ---------------------------------------------------
+  // ---- Manteau de référence ---------------------------------------------------
   const rhoTruth = 300;
   const table = new FlatSnowTable({ temp1500, precip }, rhoTruth);
   const anomaly = (x: number, y: number) => 1 + spec.precipAnomaly * 1.6 * climate.fbm(x / 12000, y / 12000, 3);
@@ -392,7 +399,7 @@ export function buildWorld(spec: WorldSpec): World {
   }
   const { slope, aspect } = slopeAspect(tz, TN, TN, sceneCell);
 
-  // Canopy: below a ragged tree line, not on steep rock.
+  // Canopée : sous une limite des arbres irrégulière, pas sur la roche raide.
   const tCanopy = new Float32Array(tn);
   if (spec.forest) {
     for (let j = 0; j < TN; j++) {
@@ -408,7 +415,7 @@ export function buildWorld(spec: WorldSpec): World {
     }
   }
 
-  // Reference wind: Winstral-type multiplier on Sx(100 m) along the storm wind.
+  // Vent de référence : multiplicateur de type Winstral sur Sx(100 m) selon le vent de tempête.
   const windFrom = spec.storms.length > 0 ? spec.storms[0].windFromDeg : 300;
   const ux = Math.sin(windFrom * DEG);
   const uy = Math.cos(windFrom * DEG);
@@ -445,7 +452,7 @@ export function buildWorld(spec: WorldSpec): World {
   for (let i = 0; i < tn; i++) lapScale = Math.max(lapScale, Math.abs(lap[i]));
   lapScale = lapScale * 0.3 || 1;
 
-  // Accumulation before melt, with forest and wind (mass kept over the domain).
+  // Accumulation avant la fonte, avec forêt et vent (masse conservée sur le domaine).
   const acc = new Float32Array(tn);
   const tWindMul = new Float32Array(tn);
   let accBefore = 0, accAfter = 0;
@@ -460,10 +467,11 @@ export function buildWorld(spec: WorldSpec): World {
   const renorm = accAfter > 0 ? accBefore / accAfter : 1;
   for (let i = 0; i < tn; i++) acc[i] *= renorm;
 
-  // Gravity: exponential holding depth, multiple-flow-direction routing on the
-  // depression-filled DEM (priority flood with ε, Barnes et al. 2014) so a
-  // release always runs out downhill; deposits cap at 6 m per cell (the excess
-  // runs on); deposits spread laterally.
+  // Gravité : hauteur de maintien exponentielle, écoulement à directions
+  // multiples sur le DEM aux cuvettes comblées (inondation à priorité avec ε,
+  // Barnes et al. 2014) pour qu'un déclenchement s'écoule toujours vers le bas ;
+  // les dépôts sont plafonnés à 6 m par cellule (l'excédent continue) et
+  // s'étalent latéralement.
   const beforeGravity = new Float32Array(acc);
   const routeZ = fillDepressions(tz, TN, TN);
   const order = Array.from({ length: tn }, (_, i) => i).sort((a, b) => routeZ[b] - routeZ[a]);
@@ -473,7 +481,7 @@ export function buildWorld(spec: WorldSpec): World {
     if (acc[i] <= hold) continue;
     const x = i % TN;
     const y = (i - x) / TN;
-    // Multiple flow directions, weights ∝ (drop/dist)^4 (concentrated, not a single line).
+    // Directions d'écoulement multiples, poids ∝ (dénivelé/dist)^4 (concentré, pas une seule ligne).
     let wsum = 0;
     const wts: number[] = [];
     const tgt: number[] = [];
@@ -503,7 +511,7 @@ export function buildWorld(spec: WorldSpec): World {
   const tMeltF = new Float32Array(tn);
   const tNoise = new Float32Array(tn);
 
-  // Melt by exposure (strength by month, northern hemisphere), correlated noise.
+  // Fonte selon l'exposition (intensité selon le mois, hémisphère nord), bruit corrélé.
   const seasonRad = [0.2, 0.35, 0.6, 0.85, 1, 1, 1, 1, 1, 0.3, 0.2, 0.15][new Date(analysisMs).getUTCMonth()];
   const tTruth = new Float32Array(tn);
   for (let j = 0; j < TN; j++) {
@@ -536,7 +544,7 @@ export function buildWorld(spec: WorldSpec): World {
     { lon: toLon(ox), lat: toLat(oy + SCENE_SIZE_M) },
   ];
 
-  // ---- "AROME": flat reference snowpack at a smoothed model orography ------
+  // ---- « AROME » : manteau de référence en terrain plat sur une orographie de modèle lissée ----
   const dLon = 0.01, dLat = 0.01;
   const lonMin = Math.ceil(toLon(-half + 1500) / dLon) * dLon;
   const lonMax = Math.floor(toLon(half - 1500) / dLon) * dLon;
@@ -573,7 +581,7 @@ export function buildWorld(spec: WorldSpec): World {
     resolutionM: 1100,
   };
 
-  // ---- Far DEM handed to the engine: ±7 km around the scene -------------------
+  // ---- DEM lointain confié au moteur : ±7 km autour de la scène ---------------
   const farHalf = 7000;
   const fw = Math.round((2 * farHalf + SCENE_SIZE_M) / FAR_CELL) + 1;
   const farData = new Float32Array(fw * fw);
@@ -587,7 +595,7 @@ export function buildWorld(spec: WorldSpec): World {
   }
   const farDem: FarDem = { data: farData, width: fw, height: fw, originX: fox, originY: fox, cell: FAR_CELL };
 
-  // ---- Stations on flat open ground within 35 km --------------------------------
+  // ---- Stations sur terrain plat dégagé à moins de 35 km ------------------------
   const observations: SnowObservation[] = [];
   let tries = 0;
   while (observations.length < spec.stationCount && tries < 20000) {
@@ -615,7 +623,7 @@ export function buildWorld(spec: WorldSpec): World {
     });
   }
 
-  // ---- BRA: north / south 30° slopes of the massif at three altitudes -----------
+  // ---- BRA : versants nord / sud à 30° du massif à trois altitudes --------------
   let bra: BraSnowProfile | null = null;
   if (spec.braNoiseCm != null) {
     const levels = [1500, 2000, 2500].map((alt) => {
@@ -632,7 +640,7 @@ export function buildWorld(spec: WorldSpec): World {
     bra = { massif: 'SYNTHETIQUE', date: spec.analysisIso, levels, limitNorthM: null, limitSouthM: null };
   }
 
-  // ---- Weather handed to the engine: at 1500 m, perturbed -------------------------
+  // ---- Météo confiée au moteur : à 1500 m, perturbée ------------------------------
   const weather: WeatherHistory = {
     startMs,
     elevationM: 1500,

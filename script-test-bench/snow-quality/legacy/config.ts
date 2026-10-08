@@ -1,5 +1,5 @@
-// Frozen copy of the v1 snow engine (src/features/snow before the v2 rewrite),
-// kept only as the "before" of the snow-quality bench. Not used by the app.
+// Copie figée du moteur neige v1 (src/features/snow avant la réécriture v2),
+// gardée seulement comme « avant » du banc de qualité neige. Non utilisée par l'application.
 
 // ============================================================================
 // Snow redistribution config
@@ -9,7 +9,7 @@
 // ============================================================================
 
 export interface SnowRedistributionConfig {
-  // ---- Gravitational transport (SnowSlide) ----
+  // ---- Transport gravitaire (SnowSlide) ----
   /** Angle de friction interne du manteau (°). 35–45 frais, 50–60 tassé. */
   frictionAngleDeg: number;
   /** Holding depth de référence sur terrain plat (cm). */
@@ -34,10 +34,10 @@ export interface SnowRedistributionConfig {
   profileCurvatureStrength: number;
   /** Force ancrage rugosité (TRI). */
   roughnessAnchoringStrength: number;
-  /** Force cold-air pooling. */
+  /** Force du lac d'air froid. */
   coldPoolStrength: number;
 
-  // ---- Wind transport (Winstral Sx) ----
+  // ---- Transport par le vent (Sx de Winstral) ----
   /** Direction vent dominant (0=N, 90=E, 180=S, 270=W). */
   windDirectionDeg: number;
   /** Force transport éolien. */

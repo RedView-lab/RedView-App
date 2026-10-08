@@ -1,4 +1,4 @@
-// Minimal PNG writer + map rendering (hillshade, snow-depth palette) for the bench images.
+// Rédacteur PNG minimal + rendu de carte (ombrage, palette de hauteur de neige) pour les images du banc.
 import { deflateSync } from 'node:zlib';
 
 const CRC_TABLE = (() => {
@@ -27,7 +27,7 @@ function chunk(type: string, data: Uint8Array): Uint8Array {
   return out;
 }
 
-/** RGB image (row 0 = top) → PNG bytes. */
+/** Image RGB (ligne 0 = haut) → octets PNG. */
 export function encodePng(rgb: Uint8Array, w: number, h: number): Uint8Array {
   const raw = new Uint8Array((w * 3 + 1) * h);
   for (let y = 0; y < h; y++) {
@@ -49,7 +49,7 @@ export function encodePng(rgb: Uint8Array, w: number, h: number): Uint8Array {
   return out;
 }
 
-/** Hillshade (0–1) of a node grid, row 0 = south, sun from the NW at 45°. */
+/** Ombrage (0–1) d'une grille de nœuds, ligne 0 = sud, soleil du NO à 45°. */
 export function hillshade(z: Float32Array, w: number, h: number, cell: number): Float32Array {
   const out = new Float32Array(w * h);
   const az = (315 * Math.PI) / 180;
@@ -69,7 +69,7 @@ export function hillshade(z: Float32Array, w: number, h: number, cell: number): 
   return out;
 }
 
-// Snow depth palette: bare ground, thin (grey-lavender) → deep (deep blue), perceptually ordered.
+// Palette de hauteur de neige : sol nu, mince (gris lavande) → épaisse (bleu profond), dans un ordre perceptif.
 const STOPS: Array<[number, [number, number, number]]> = [
   [0, [236, 240, 245]],
   [25, [203, 220, 240]],
@@ -94,7 +94,7 @@ export function depthColor(cm: number): [number, number, number] {
   return STOPS[STOPS.length - 1][1];
 }
 
-/** Diverging palette for errors (cm): blue = model too deep, red = too shallow. */
+/** Palette divergente pour les erreurs (cm) : bleu = modèle trop épais, rouge = trop mince. */
 export function errorColor(cm: number, range = 150): [number, number, number] {
   const t = Math.max(-1, Math.min(1, cm / range));
   if (t >= 0) return [247 - 200 * t, 247 - 150 * t, 247 - 40 * t];
@@ -103,13 +103,14 @@ export function errorColor(cm: number, range = 150): [number, number, number] {
 }
 
 /**
- * Renders a depth map over its hillshade. Bare ground (< 1 cm) shows the
- * terrain in warm grey; snow is drawn with the palette, shaded by the relief.
+ * Rend une carte de hauteurs sur son ombrage. Le sol nu (< 1 cm) montre le
+ * terrain en gris chaud ; la neige est dessinée avec la palette, ombrée par le
+ * relief.
  */
 export function renderDepth(hs: Float32Array, shade: Float32Array, w: number, h: number, mode: 'depth' | 'error' = 'depth', errorRange = 150): Uint8Array {
   const rgb = new Uint8Array(w * h * 3);
   for (let y = 0; y < h; y++) {
-    const src = (h - 1 - y) * w; // row 0 = south → image top = north
+    const src = (h - 1 - y) * w; // ligne 0 = sud → haut de l'image = nord
     for (let x = 0; x < w; x++) {
       const v = hs[src + x];
       const s = 0.55 + 0.6 * shade[src + x];

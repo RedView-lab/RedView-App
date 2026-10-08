@@ -37,25 +37,26 @@ const SW_MODULES = [
   'runtime/dem-health.js',
 ];
 
-// The SW modules are classic scripts evaluated in THIS realm, once per
-// process (core/sw-context.ts): a contextified vm global made sandboxed code
-// look 10-30x slower than the in-realm legacy copies.
+// Les modules du SW sont des scripts classiques évalués dans CE royaume, une
+// fois par processus (core/sw-context.ts) : une globale vm contextualisée
+// faisait paraître le code isolé 10 à 30× plus lent que les anciennes copies
+// du même royaume.
 function loadSwContext(): SwContext {
   const g = globalThis as unknown as SwContext;
-  // Other national pipelines are out of scope for this bench.
+  // Les autres pipelines nationaux sont hors du périmètre de ce banc.
   g.tileOverlapsSwitzerland = () => false;
   g.tileOverlapsNorway = () => false;
   g.tileOverlapsSpain = () => false;
   return loadSwModules(SW_MODULES);
 }
 
-// ── Synthetic data ────────────────────────────────────────────────────
+// ── Données synthétiques ──────────────────────────────────────────────
 function makeRng(seed: number): () => number {
   let s = seed;
   return () => ((s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
 }
 
-/** MNS-like surface: relief + canopy/building noise, 0.1 m quantisation-hostile. */
+/** Surface de type MNS : relief + bruit de canopée / bâtiments, hostile à une quantification à 0,1 m. */
 function syntheticSurface(size: number, seed = 42): Float32Array {
   const rnd = makeRng(seed);
   const e = new Float32Array(size * size);
@@ -70,14 +71,14 @@ function syntheticSurface(size: number, seed = 42): Float32Array {
   return e;
 }
 
-/** Metre-square WMS raster (width = 256/cos(45°)) with duplicated rows + NODATA holes. */
+/** Raster WMS à mailles carrées en mètres (largeur = 256/cos(45°)) avec lignes dupliquées + trous NODATA. */
 function syntheticWmsRaster(): { raw: Float32Array; w: number; h: number } {
   const h = SIZE;
   const w = Math.round(SIZE / Math.cos((45 * Math.PI) / 180));
   const rnd = makeRng(7);
   const raw = new Float32Array(w * h);
   for (let y = 0; y < h; y++) {
-    const srcY = y % 3 === 2 ? y - 1 : y; // nearest-neighbour row duplication
+    const srcY = y % 3 === 2 ? y - 1 : y; // duplication de lignes au plus proche voisin
     for (let x = 0; x < w; x++) {
       raw[y * w + x] = 500 + 50 * Math.sin(x / 25) + 40 * Math.cos(srcY / 19) + 3 * rnd();
     }
@@ -87,7 +88,7 @@ function syntheticWmsRaster(): { raw: Float32Array; w: number; h: number } {
   return { raw, w, h };
 }
 
-// ── Reference (pre-change) implementations ────────────────────────────
+// ── Implémentations de référence (avant changement) ───────────────────
 async function legacyBuildRawPng(width: number, height: number, rgba: Uint8Array, ctx: SwContext): Promise<Blob> {
   const rowLen = width * 4;
   const rowBytes = 1 + rowLen;
@@ -118,8 +119,8 @@ async function legacyEncodeTerrainRGBPng(elevations: Float32Array, ctx: SwContex
 }
 
 function legacyMnsWmsResample(raw: Float32Array, srcWidth: number, srcHeight: number, ctx: SwContext): Float32Array {
-  // Top-level `const`s of classic scripts live in the context's lexical scope,
-  // not on the global object — read them through the context.
+  // Les `const` de premier niveau des scripts classiques vivent dans la portée
+  // lexicale du contexte, pas sur l'objet global — on les lit via le contexte.
   const MIN = readSwConstant<number>('MIN_VALID_ELEVATION_M');
   const MAX = readSwConstant<number>('MAX_VALID_ELEVATION_M');
   const out = new Float32Array(SIZE * SIZE);
@@ -146,8 +147,8 @@ function legacyMnsWmsResample(raw: Float32Array, srcWidth: number, srcHeight: nu
   return out;
 }
 
-// ── PNG decode (Node) for bit-exact verification ──────────────────────
-/** Elevations of a Terrain-RGB PNG (8-bit RGB or RGBA, any PNG filter), as a decoder reads them. */
+// ── Décodage PNG (Node) pour une vérification au bit près ─────────────
+/** Altitudes d'un PNG Terrain-RGB (RGB ou RGBA 8 bits, tout filtre PNG), telles qu'un décodeur les lit. */
 function decodePngTerrainRgb(bytes: Uint8Array): Float32Array {
   let pos = 8;
   const idat: Buffer[] = [];
@@ -200,7 +201,7 @@ function sameBits(a: Float32Array, b: Float32Array): boolean {
   const ua = new Uint32Array(a.buffer, a.byteOffset, a.length);
   const ub = new Uint32Array(b.buffer, b.byteOffset, b.length);
   for (let i = 0; i < ua.length; i++) {
-    // NaN payloads may differ; treat any NaN == NaN.
+    // Les charges utiles NaN peuvent différer ; on considère NaN == NaN.
     if (ua[i] !== ub[i] && !(Number.isNaN(a[i]) && Number.isNaN(b[i]))) return false;
   }
   return true;
@@ -245,9 +246,9 @@ export async function runDemSwBenchmark(options: { quick?: boolean } = {}): Prom
   assert(sameBits(resample(raw.slice(), w, h), legacyMnsWmsResample(raw.slice(), w, h, ctx)),
     `WMS resample ${w}x${h} -> 256² bit-identical to legacy`);
 
-  // Guard stats: France tile z16 with its z15 parent in the hot tier.
+  // Statistiques de la garde : tuile France z16 avec son parent z15 dans le niveau chaud.
   const z = 16;
-  const x = 33 * 1024 + 300; // ~Alps/Lyon range, inside FRANCE_BOUNDS
+  const x = 33 * 1024 + 300; // plage ~Alpes/Lyon, dans FRANCE_BOUNDS
   const y = 23 * 1024 + 400;
   const pZ = 15;
   const pX = x >> 1;
@@ -264,7 +265,7 @@ export async function runDemSwBenchmark(options: { quick?: boolean } = {}): Prom
   const legacyGuardStats = async () => {
     const pe = decodedGet(parentBlob) ?? parentElev;
     const out = overzoom(pe, pZ, pX, pY, z, x, y) as Float32Array;
-    const png = await encode(out); // legacy path encoded, then decoded (decode now seeded)
+    const png = await encode(out); // chemin hérité encodé, puis décodé (le décodage est maintenant amorcé)
     return summarize(decodedGet(png) ?? out);
   };
   const newInfo = await findCachedParentStats(emptyCache, z, x, y, 'default');
@@ -304,7 +305,7 @@ export async function runDemSwBenchmark(options: { quick?: boolean } = {}): Prom
   return suite;
 }
 
-// Standalone execution
+// Exécution autonome
 if (process.argv[1]?.replaceAll('\\', '/').endsWith('/suites/dem-sw.ts')) {
   const quick = process.argv.includes('--quick');
   runDemSwBenchmark({ quick }).then((suite) => {

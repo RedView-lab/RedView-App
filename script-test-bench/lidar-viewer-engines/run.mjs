@@ -49,7 +49,7 @@ const REPORT_DIR = join(ROOT, 'script-test-bench', 'reports', 'lidar-viewer-engi
 const TILE = { xKm: 965, yKm: 6500 };
 const TILE_NAME = `LHD_FXX_0${TILE.xKm}_${TILE.yKm}_PTS_LAMB93_IGN69.copc.laz`;
 const VIEWPORT = { width: 1280, height: 800 };
-/** Clear colour of the scene pass without sunlight (0.76, 0.87, 0.96). */
+/** Couleur d'effacement de la passe de scène sans ensoleillement (0.76, 0.87, 0.96). */
 const SKY = [194, 222, 245];
 const LOAD_TIMEOUT_MS = 180_000;
 const IDLE_TIMEOUT_MS = 60_000;
@@ -58,7 +58,7 @@ const TYPES = {
   '.json': 'application/json', '.wasm': 'application/wasm', '.png': 'image/png', '.svg': 'image/svg+xml',
   '.ico': 'image/x-icon', '.jpg': 'image/jpeg', '.woff2': 'font/woff2', '.webmanifest': 'application/manifest+json',
 };
-/** Console lines that reveal a rendering fault. */
+/** Lignes de console qui révèlent un défaut de rendu. */
 const GL_FAULT_RE = /GL_INVALID|INVALID_OPERATION|INVALID_VALUE|INVALID_ENUM|WebGL: |WebGL warning|shader compile failed|program link failed|framebuffer incomplete|Uncaptured error|context lost/i;
 
 function parseArgs(argv) {
@@ -88,9 +88,9 @@ function parseArgs(argv) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/** Smallest valid WebAssembly module (magic + version): compiles only where CSP allows it. */
+/** Plus petit module WebAssembly valide (magic + version) : ne compile que là où la CSP le permet. */
 const EMPTY_WASM = [0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00];
-/** Same probe in a page and in a worker: [WebAssembly compiles, eval refused]. */
+/** Même sonde dans une page et dans un worker : [WebAssembly compile, eval refusé]. */
 const CSP_PROBE = `(async () => {
   let wasm = false;
   let evalBlocked = false;
@@ -101,7 +101,7 @@ const CSP_PROBE = `(async () => {
 
 function startServer(dist, tile) {
   const root = normalize(dist + sep);
-  /** CSP violation reports POSTed by the browsers (pages and workers). */
+  /** Rapports de violation de CSP envoyés en POST par les navigateurs (pages et workers). */
   const cspReports = [];
   let csp = '';
   const server = createServer(async (req, res) => {
@@ -145,7 +145,7 @@ function startServer(dist, tile) {
     try {
       const body = await readFile(file);
       const headers = { 'content-type': TYPES[extname(file)] ?? 'application/octet-stream' };
-      // As server.mjs: the policy rides on HTML pages and worker scripts.
+      // Comme server.mjs : la politique accompagne les pages HTML et les scripts de worker.
       if (extname(file) === '.html' || isWorker) headers['content-security-policy'] = csp;
       res.writeHead(200, headers);
       res.end(body);
@@ -155,7 +155,7 @@ function startServer(dist, tile) {
     }
   });
   return new Promise((r) => server.listen(0, '127.0.0.1', () => {
-    // Production policy, reported here instead of GlitchTip, without the https upgrade of a local http origin.
+    // Politique de production, rapportée ici au lieu de GlitchTip, sans la montée en https d'une origine http locale.
     csp = buildCspHeader({ reportUri: `http://127.0.0.1:${server.address().port}/__csp-report`, upgradeInsecureRequests: false });
     server.cspReports = cspReports;
     r(server);
@@ -185,7 +185,7 @@ async function launch(browserName, args, profileDir) {
       channel: args.channel,
       viewport: VIEWPORT,
       deviceScaleFactor: 1,
-      // Machines without GPU acceleration (VMs, CI) draw WebGL in software.
+      // Les machines sans accélération GPU (VM, CI) dessinent le WebGL en logiciel.
       args: ['--enable-unsafe-swiftshader', ...(args.webgpu ? ['--enable-unsafe-webgpu'] : [])],
     });
   }
@@ -197,14 +197,14 @@ async function launch(browserName, args, profileDir) {
     viewport: VIEWPORT,
     deviceScaleFactor: 1,
     firefoxUserPrefs: {
-      // Software GL (CI) is blocklisted for WebGL by default.
+      // Le GL logiciel (CI) est sur liste noire pour WebGL par défaut.
       'webgl.force-enabled': true,
       ...(args.firefoxNoWebgpu ? { 'dom.webgpu.enabled': false } : {}),
     },
   });
 }
 
-/** Returns the backend the viewer ran on ('webgl', 'webgpu'), or null when it never got ready. */
+/** Renvoie le moteur sur lequel le visualiseur a tourné ('webgl', 'webgpu'), ou null s'il n'a jamais été prêt. */
 async function runCase(browserName, engine, args, origin, checks, cspReports) {
   const reportsBefore = cspReports.length;
   const profileDir = await mkdtemp(join(tmpdir(), `rv-viewer-${browserName}-`));
@@ -214,7 +214,7 @@ async function runCase(browserName, engine, args, origin, checks, cspReports) {
   const outDir = join(REPORT_DIR, `${browserName}-${engine}`);
   await mkdir(outDir, { recursive: true });
   try {
-    // Only the local server: fonts, imagery and APIs are cut, as offline.
+    // Seul le serveur local : polices, imagerie et API sont coupées, comme hors ligne.
     await context.route('**/*', (route) => (route.request().url().startsWith(origin) ? route.continue() : route.abort()));
     const page = context.pages()[0] ?? await context.newPage();
     page.on('console', (msg) => {
@@ -232,9 +232,10 @@ async function runCase(browserName, engine, args, origin, checks, cspReports) {
       if (/\[Viewer\] Fatal/.test(msg.text())) fatal ??= msg.text().slice(0, 300);
     });
 
-    // 1. Tile stored as the app's downloader stores it (lib/storage.ts saveTile):
-    // OPFS, size read back, CacheStorage when OPFS kept less (WebKit on Windows
-    // reports the write and leaves an empty file).
+    // 1. Tuile stockée comme le fait le téléchargeur de l'application
+    // (lib/storage.ts saveTile) : OPFS, taille relue, CacheStorage quand OPFS a
+    // gardé moins (WebKit sous Windows signale l'écriture et laisse un fichier
+    // vide).
     await page.goto(`${origin}/__blank`);
     const stored = await page.evaluate(async (name) => {
       const buf = await (await fetch('/__tile')).arrayBuffer();
@@ -248,7 +249,7 @@ async function runCase(browserName, engine, args, origin, checks, cspReports) {
         if ((await handle.getFile()).size === buf.byteLength) return { bytes: buf.byteLength, where: 'OPFS' };
         await dir.removeEntry(name);
       } catch {
-        // No OPFS writer in this browser.
+        // Pas d'écrivain OPFS dans ce navigateur.
       }
       const cache = await caches.open('redview-lidar-hd-v1');
       await cache.put(`/lidar-hd/${name}`, new Response(buf, { headers: { 'Content-Type': 'application/octet-stream' } }));
@@ -260,7 +261,7 @@ async function runCase(browserName, engine, args, origin, checks, cspReports) {
     const engineParam = engine === 'webgl' ? '&engine=webgl' : '';
     const startedAt = Date.now();
     await page.goto(`${origin}/viewer.html?x=${TILE.xKm}&y=${TILE.yKm}&crs=LAMB93&alt=IGN69&bench=shots${engineParam}`);
-    // A fatal error ends the wait at once (it used to hold the case for the whole timeout).
+    // Une erreur fatale met fin à l'attente tout de suite (elle bloquait le cas pendant tout le délai).
     const loadDeadline = Date.now() + LOAD_TIMEOUT_MS;
     let ready = false;
     while (!ready && !fatal && Date.now() < loadDeadline) {
@@ -285,7 +286,7 @@ async function runCase(browserName, engine, args, origin, checks, cspReports) {
       return null;
     }
 
-    // The production CSP really applies, in the page and in a worker: WebAssembly yes, eval no.
+    // La CSP de production s'applique vraiment, dans la page et dans un worker : WebAssembly oui, eval non.
     const pageProbe = await page.evaluate(CSP_PROBE);
     const workerProbe = await page.evaluate(() => new Promise((done) => {
       const worker = new Worker('/__csp-worker.js');
@@ -344,7 +345,7 @@ async function runCase(browserName, engine, args, origin, checks, cspReports) {
     const covered = coverage(base, SKY);
     checks.record('scène affichée', covered > 0.3, `${(covered * 100).toFixed(0)} % de l'image hors ciel`);
 
-    // 3. Rendering paths. The EDL switch's thumb covers its checkbox when on: click the input itself.
+    // 3. Chemins de rendu. Le bouton de l'interrupteur EDL couvre sa case quand il est activé : on clique l'input lui-même.
     const toggleEdl = () => page.locator('#panel-edl-toggle').evaluate((input) => input.click());
     await toggleEdl();
     changed('EDL (profondeur relue)', base, await shot('edl'));
@@ -369,17 +370,17 @@ async function runCase(browserName, engine, args, origin, checks, cspReports) {
     await sectionSwitch(/Ensoleillement|Sunlight/).click();
     overlayDiffs.push(changed('ensoleillement (soleil, ombres portées)', base, await shot('ensoleillement')));
     await sectionSwitch(/Ensoleillement|Sunlight/).click();
-    // The learnt still budget may differ from the first view (slow GPUs halve it), so the
-    // density can change a little; an overlay left on would differ as much as when shown.
+    // Le budget à l'arrêt appris peut différer de la première vue (les GPU lents le divisent par deux),
+    // donc la densité peut changer un peu ; une surcouche restée activée différerait autant qu'affichée.
     const restoredDiff = meanDifference(base, await shot('restauree'));
     checks.record('overlays retirés', restoredDiff < 0.5 * Math.min(...overlayDiffs), `écart ${restoredDiff.toFixed(2)} (overlays ≥ ${Math.min(...overlayDiffs).toFixed(2)})`);
 
-    // 4. Input (each gesture starts on an idle viewer: a software rasteriser takes seconds per still frame).
+    // 4. Entrées (chaque geste démarre sur un visualiseur au repos : un rastériseur logiciel prend des secondes par image fixe).
     const cx = VIEWPORT.width / 2;
     const cy = VIEWPORT.height / 2;
     const menu = page.locator('.rv-lidar-ctx');
-    // Linux delivers `contextmenu` on the press (Windows on the release): it must be
-    // cancelled (no native menu) and must not open the tools menu by itself.
+    // Linux envoie `contextmenu` à l'appui (Windows au relâchement) : il doit
+    // être annulé (pas de menu natif) et ne doit pas ouvrir seul le menu des outils.
     await waitIdle();
     await page.mouse.move(cx, cy);
     const nativeMenuBlocked = await page.evaluate(([x, y]) => !document.getElementById('canvas').dispatchEvent(
@@ -416,9 +417,9 @@ async function runCase(browserName, engine, args, origin, checks, cspReports) {
     checks.record('aucune erreur WebGL (getError)', !errors || errors.length === 0, errors?.join(', ') ?? 'contexte illisible');
     checks.record('aucune erreur de rendu en console', consoleFaults.length === 0, consoleFaults.slice(0, 3).join(' | '));
     checks.record('aucune exception', pageErrors.length === 0, pageErrors.slice(0, 2).join(' | '));
-    await sleep(1000); // reports leave asynchronously
-    // The probes' own refused eval must have been reported (proof the report
-    // channel works); anything else is a real violation.
+    await sleep(1000); // les rapports partent de façon asynchrone
+    // L'eval refusé des sondes elles-mêmes doit avoir été rapporté (preuve que
+    // le canal de rapport fonctionne) ; tout le reste est une vraie violation.
     const reports = cspReports.slice(reportsBefore);
     const isProbeEval = (line) => /^script-src(-elem)? ← eval /.test(line);
     const violations = reports.filter((line) => !isProbeEval(line));

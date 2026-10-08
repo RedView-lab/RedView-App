@@ -8,7 +8,7 @@
  * 4. Export FIT Course (Garmin, buildItineraryFitCourse) et KML (buildItineraryKml) sur 50k points
  * 5. Micro-benchmark d'échappement XML (1 000 chaînes)
  */
-// Shim Vite import.meta.env for Node.js / TSX runtime
+// Substitut de import.meta.env de Vite pour le runtime Node.js / TSX
 if (typeof (import.meta as unknown as Record<string, unknown>).env === 'undefined') {
   (import.meta as unknown as Record<string, unknown>).env = {
     ...process.env,
@@ -24,7 +24,7 @@ import { parseGpxText } from '../../src/features/poi/lib/gpx-parse.ts';
 import type { Itinerary } from '../../src/features/itineraryPanel/types/index.ts';
 
 export async function runExporterBenchmark(options: { quick?: boolean } = {}): Promise<BenchmarkSuite> {
-  // Dynamically import buildItineraryGpx and helpers after env shim
+  // Importe dynamiquement buildItineraryGpx et ses aides après le substitut d'env
   const { buildItineraryGpx } = await import('../../src/features/exporter/lib/exportGpx.ts');
   const { escapeXml } = await import('../../src/features/exporter/lib/exportHelpers.ts');
   const { buildItineraryFitCourse } = await import('../../src/features/exporter/lib/exportFit.ts');
@@ -220,7 +220,7 @@ function createMockItinerary(name: string, routePoints: TrackPoint[]): Itinerary
   } as unknown as Itinerary;
 }
 
-// Standalone execution
+// Exécution autonome
 if (process.argv[1]?.replaceAll('\\', '/').endsWith('/suites/exporter.ts')) {
   const quick = process.argv.includes('--quick');
   runExporterBenchmark({ quick }).then((suite) => {

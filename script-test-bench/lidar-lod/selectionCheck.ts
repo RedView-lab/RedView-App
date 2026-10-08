@@ -26,7 +26,7 @@ function selectedIds(scene: SceneLod): string {
   return scene.getSelectedNodes().map((node) => node.id).join(',');
 }
 
-/** Points of a node in the render frame (x east, y up, z = −north), relative to `center`. */
+/** Points d'un nœud dans le repère de rendu (x à l'est, y vers le haut, z = −nord), relatifs à `center`. */
 function nodePoints(tile: LodTile, node: SceneNode, center: { x: number; y: number; z: number }): Float64Array {
   const view = new DataView(tile.packed.buffer, tile.packed.byteOffset, tile.packed.byteLength);
   const cube = lodNodeCube(tile.header, node.entry);
@@ -41,7 +41,7 @@ function nodePoints(tile: LodTile, node: SceneNode, center: { x: number; y: numb
 }
 
 export async function runSelectionCheck(): Promise<void> {
-  // Denser than the streaming scene: deeper octrees (≈ 0.9 m spacing).
+  // Plus dense que la scène de diffusion : octrees plus profonds (espacement ≈ 0,9 m).
   const built: LodTile[] = [];
   for (let ty = -1; ty <= 1; ty++) {
     for (let tx = -1; tx <= 1; tx++) built.push(buildLodTile(syntheticTile(tx, ty, 1_200_000)));
@@ -64,7 +64,7 @@ export async function runSelectionCheck(): Promise<void> {
     scene.update(viewProj, proj[5]!, eye[0], eye[1], eye[2], 1080);
   };
 
-  // 5. A fresh scene and a still camera load exactly what is drawn, then stop changing.
+  // 5. Une scène neuve et une caméra immobile chargent exactement ce qui est dessiné, puis cessent de changer.
   const oblique = frameAt(700, 0.4, 1.1);
   await settle(scene, oblique);
   const loads = uploader.uploads;
@@ -82,7 +82,7 @@ export async function runSelectionCheck(): Promise<void> {
     `${loads} blocs lus pour ${drawnNodes} nœuds affichés, sélection figée sur 30 frames`,
   );
 
-  // 6. Grazing view with a tiny budget: no visible tile goes blank.
+  // 6. Vue rasante avec un tout petit budget : aucune tuile visible ne devient vide.
   scene.setPointBudget(150_000);
   const grazing = frameAt(450, 0.4, 1.47);
   await settle(scene, grazing);
@@ -102,7 +102,7 @@ export async function runSelectionCheck(): Promise<void> {
     `${drawnRoots}/${visibleRoots} tuiles visibles en vue rasante avec 150 k pts de budget`,
   );
 
-  // 7. Octant masks of the adaptive point size match the drawn children.
+  // 7. Les masques d'octants de la taille de point adaptative correspondent aux enfants dessinés.
   scene.setPointBudget(2_000_000);
   const close = frameAt(150, 1.2, 0.8);
   await settle(scene, close);
@@ -127,7 +127,7 @@ export async function runSelectionCheck(): Promise<void> {
     `${scene.getSelectedNodes().length} nœuds, ${partialMasks} masques partiels, ${maskErrors} incohérence(s)`,
   );
 
-  // 8. Bounds shrunk to the loaded points still hold every point of the subtree.
+  // 8. Les emprises réduites aux points chargés contiennent toujours chaque point du sous-arbre.
   await settle(scene, frameAt(900, 2.5, 0.05));
   await settle(scene, frameAt(60, 4.0, 1.0));
   let checkedPoints = 0;

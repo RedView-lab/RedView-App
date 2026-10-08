@@ -25,12 +25,12 @@ export async function runRealTile(path: string): Promise<void> {
   const file = readFileSync(path);
   const buffer = file.buffer.slice(file.byteOffset, file.byteOffset + file.byteLength) as ArrayBuffer;
   const wasmModule = await WebAssembly.compile(readFileSync(resolvePath('public/laz-perf.wasm')));
-  // The viewer's decoder (laz-perf stays its fallback).
+  // Le décodeur du visualiseur (laz-perf reste son repli).
   const redviewLazModule = await WebAssembly.compile(readFileSync(resolvePath('src/features/lidar/lib/laz/pkg/redviewlaz_bg.wasm')));
   const t0 = performance.now();
   const pc: PointCloudData = await parseLazBuffer(buffer, undefined, undefined, wasmModule, redviewLazModule);
   const decodeMs = performance.now() - t0;
-  // Neutral colour: orthophoto colourisation needs the network and is not under test.
+  // Couleur neutre : la colorisation par orthophoto a besoin du réseau et n'est pas testée ici.
   pc.colors.fill(128);
   const t1 = performance.now();
   const tile = buildLodTile({ ...pc, embeddedRgb: false });
@@ -45,8 +45,9 @@ export async function runRealTile(path: string): Promise<void> {
     `${(tile.packed.byteLength / 1e6).toFixed(0)} Mo (${LOD_POINT_STRIDE} o/pt, couleurs filtrées incluses)`,
   );
 
-  // The LOD shrinks a node's bounds to its own points plus CONTENT_MARGIN_CELLS
-  // cells: every point of its subtree must fall within that margin.
+  // Le LOD réduit l'emprise d'un nœud à ses propres points plus
+  // CONTENT_MARGIN_CELLS cellules : chaque point de son sous-arbre doit tomber
+  // dans cette marge.
   const view = new DataView(tile.packed.buffer, tile.packed.byteOffset, tile.packed.byteLength);
   const own = tile.nodes.map((node) => {
     const cube = lodNodeCube(tile.header, node);

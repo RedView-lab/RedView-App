@@ -58,7 +58,7 @@ function check(fixture: string, name: string, ok: boolean, detail = ''): void {
 
 const round = (value: number, digits = 1) => Number(value.toFixed(digits));
 
-/** Grid from an altitude function of (x, y) in metres, with the viewer's Horn slope. */
+/** Grille à partir d'une fonction d'altitude de (x, y) en mètres, avec la pente de Horn du visualiseur. */
 function makeGrid(width: number, height: number, altitudeAt: (x: number, y: number) => number): AvalancheGridInput {
   const altitude = new Float32Array(width * height);
   for (let r = 0; r < height; r++) for (let c = 0; c < width; c++) altitude[r * width + c] = altitudeAt(c * CELL, r * CELL);
@@ -77,7 +77,7 @@ function makeGrid(width: number, height: number, altitudeAt: (x: number, y: numb
   return { width, height, cell: CELL, originX: 0, originY: 0, altitude, slopeDeg };
 }
 
-/** Small deterministic micro-relief: flows are never perfectly degenerate. */
+/** Petit microrelief déterministe : les écoulements ne sont jamais parfaitement dégénérés. */
 const rough = (x: number, y: number) => 0.3 * Math.sin(y * 0.07) + 0.2 * Math.cos(x * 0.13);
 
 // ── Fixtures ────────────────────────────────────────────────────────────────
@@ -86,12 +86,12 @@ const FACE_DEG = 38;
 const FOOT_X = 600;
 const FACE_H = FOOT_X * Math.tan(FACE_DEG * DEG);
 
-/** 38° planar face (x 0 → 600 m), then a flat floor. */
+/** Face plane à 38° (x de 0 à 600 m), puis un fond plat. */
 function faceAndFloor(): AvalancheGridInput {
   return makeGrid(160, 60, (x, y) => (x < FOOT_X ? 1000 + FACE_H - x * Math.tan(FACE_DEG * DEG) : 1000) + rough(x, y));
 }
 
-/** Same face, a 200 m floor, then a 25° counter-slope. */
+/** Même face, un fond de 200 m, puis une contre-pente à 25°. */
 function faceAndCounterSlope(): AvalancheGridInput {
   return makeGrid(140, 60, (x, y) => {
     let z = 1000;
@@ -148,8 +148,8 @@ function energyLineChecks(): void {
   const onFlat = computeAvalancheTerrain({ grid: flat, canopyPct: null, projX: 400, projY: 200 })!;
   check('flat', 'terrain plat : classe 0, rien n\'atteint', onFlat.ates.atesClass === 0 && !onFlat.scenarios.infrequent.reached);
 
-  // Forest: dense canopy on the floor lowers the runout class (Table 3);
-  // a densely forested face no longer releases frequent avalanches.
+  // Forêt : une canopée dense sur le fond abaisse la classe de dépôt (tableau 3) ;
+  // une face densément boisée ne déclenche plus d'avalanches fréquentes.
   const floorForest = Float32Array.from({ length: grid.width * grid.height }, (_, i) => ((i % grid.width) * CELL > FOOT_X + 50 ? 80 : 0));
   const forested = computeAvalancheTerrain({ grid, canopyPct: floorForest, projX: 700, projY: 300 })!;
   check('forest', 'forêt dense sur l\'écoulement : classe abaissée (Table 3)', forested.ates.canopyClass === 'dense' && forested.ates.atesClass < forested.ates.terrainClass,
@@ -163,7 +163,7 @@ function energyLineChecks(): void {
 function counterSlopeChecks(): void {
   console.log('\n■ Contre-pente : remontée de l\'écoulement');
   const grid = faceAndCounterSlope();
-  const x = FOOT_X + 200 + 60; // 60 m up the counter-slope, 28 m above the floor
+  const x = FOOT_X + 200 + 60; // 60 m en haut de la contre-pente, 28 m au-dessus du fond
   const r = computeAvalancheTerrain({ grid, canopyPct: null, projX: x, projY: 300 })!;
   check('counter', 'atteint 28 m plus haut sur le versant opposé', r.scenarios.infrequent.reached,
     `angle de parcours ${r.scenarios.infrequent.travelAngleDeg != null ? round(r.scenarios.infrequent.travelAngleDeg) : '—'}°`);
@@ -171,7 +171,7 @@ function counterSlopeChecks(): void {
 
 function windShelterChecks(): void {
   console.log('\n■ Abri au vent (Plattner et al., 2006)');
-  // A bowl (hollow) and a ridge, each 300 m wide.
+  // Une combe (creux) et une crête, de 300 m de large chacune.
   const bowl = makeGrid(60, 60, (x, y) => 1000 + 0.002 * ((x - 300) ** 2 + (y - 300) ** 2));
   const ridge = makeGrid(60, 60, (x) => 1000 - 0.4 * Math.abs(x - 300));
   const centre = 30 * 60 + 30;
@@ -210,9 +210,9 @@ function exactnessChecks(): void {
   }
 }
 
-/** The viewer's Flow-Py pool on worker_threads (same handler as the Web Workers). */
+/** Le pool Flow-Py du visualiseur sur worker_threads (même gestionnaire que les Web Workers). */
 function nodeFlowPyPool(size: number): { ports: FlowPyPort[]; close: () => Promise<void> } {
-  // tsx's loader is per thread: the .mjs entry registers it in the worker.
+  // Le chargeur de tsx est par thread : l'entrée .mjs l'enregistre dans le worker.
   const workers = Array.from({ length: size }, () => new Worker(new URL('./flowPyNodeWorker.mjs', import.meta.url)));
   const ports = workers.map((worker): FlowPyPort => ({
     postMessage: (message) => worker.postMessage(message),
@@ -237,7 +237,7 @@ function nodeFlowPyPool(size: number): { ports: FlowPyPort[]; close: () => Promi
 
 async function timingChecks(suite: BenchmarkSuite, quick: boolean): Promise<void> {
   console.log('\n■ Temps de calcul (3 km × 3 km à 10 m)');
-  // A 1 200 m high, 3 km wide mountain side with gullies, then a valley floor.
+  // Un versant de montagne de 1 200 m de haut et 3 km de large avec des ravines, puis un fond de vallée.
   const grid = makeGrid(300, 300, (x, y) => {
     const base = x < 1800 ? 1000 + (1800 - x) * Math.tan(32 * DEG) * (0.85 + 0.15 * Math.cos(x / 300)) : 1000;
     return base + 25 * Math.sin(y / 90) * Math.min(1, Math.max(0, (1800 - x) / 400)) + rough(x, y);
@@ -248,7 +248,7 @@ async function timingChecks(suite: BenchmarkSuite, quick: boolean): Promise<void
   const ms = performance.now() - t0;
   console.log(`  info un seul thread (sans workers) — ${round(ms, 0)} ms${r.incomplete ? ' (calcul partiel : plafond atteint)' : ''}, ${r.scenarios.infrequent.releaseCellCount} cellules de départ l'atteignent`);
 
-  // The viewer's path: Flow-Py over the worker pool (cores − 1, at most 8).
+  // Le chemin du visualiseur : Flow-Py sur le pool de workers (cœurs − 1, 8 au plus).
   const threads = Math.min(8, availableParallelism() - 1);
   const pool = nodeFlowPyPool(threads);
   const input = { grid, canopyPct: null, projX: 1900, projY: 1500 };

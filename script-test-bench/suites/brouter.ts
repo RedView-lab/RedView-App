@@ -148,7 +148,7 @@ export async function runBrouterBenchmark(options: { quick?: boolean } = {}): Pr
     () => cleanGpxGlitches(route),
   );
 
-  // --- BENCHMARK 7 & 8 : Test Live HTTP BRouter One-Pass (pass2=-1) vs Standard (pass2=1.2) ---
+  // --- BENCHMARK 7 & 8 : test HTTP réel de BRouter en une passe (pass2=-1) contre standard (pass2=1.2) ---
   const upstream = getBrouterUpstream();
   try {
     const isLive = await checkBrouterHealth(upstream);
@@ -222,7 +222,7 @@ export async function runBrouterBenchmark(options: { quick?: boolean } = {}): Pr
         to: { lat: 45.9237, lon: 6.8694 },
       };
 
-      // Mesure 1 : Full Route
+      // Mesure 1 : route complète
       await suite.measureAsync(
         {
           name: 'Live One-Pass: Gien→Orléans (Full Route)',
@@ -234,7 +234,7 @@ export async function runBrouterBenchmark(options: { quick?: boolean } = {}): Pr
         async () => fetchBrouterRoute(upstream, idFullRoute, gienOrleans.from, gienOrleans.to),
       );
 
-      // Mesure 2 : Full VTT / Offroad
+      // Mesure 2 : VTT / hors route complet
       await suite.measureAsync(
         {
           name: 'Live One-Pass: Gien→Orléans (Full VTT/Sentiers)',
@@ -402,7 +402,7 @@ async function fetchBrouterRoute(
   }
 }
 
-// Standalone execution
+// Exécution autonome
 if (process.argv[1]?.replaceAll('\\', '/').endsWith('/suites/brouter.ts')) {
   const quick = process.argv.includes('--quick');
   runBrouterBenchmark({ quick }).then((suite) => {

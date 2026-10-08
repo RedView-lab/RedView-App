@@ -206,15 +206,15 @@ export async function runMeteoBenchmark(options: { quick?: boolean } = {}): Prom
 function createSynthetic512x512Png(): Buffer {
   const width = 512;
   const height = 512;
-  // Scanlines RGBA: 512 rows, each has 1 filter byte + 512 * 4 bytes = 2049 bytes
+  // Lignes RGBA : 512 lignes, chacune a 1 octet de filtre + 512 * 4 octets = 2049 octets
   const rawScanlines = Buffer.alloc(height * (1 + width * 4));
 
   for (let y = 0; y < height; y++) {
     const rowOffset = y * (1 + width * 4);
-    rawScanlines[rowOffset] = 0; // Filter None
+    rawScanlines[rowOffset] = 0; // Filtre None
     for (let x = 0; x < width; x++) {
       const pxOffset = rowOffset + 1 + x * 4;
-      // Rain cell simulation
+      // Simulation de cellules de pluie
       const dist = Math.hypot(x - 256, y - 256);
       if (dist < 120) {
         rawScanlines[pxOffset] = 220; // R
@@ -251,7 +251,7 @@ function createSynthetic512x512Png(): Buffer {
   ]);
 }
 
-// Standalone execution
+// Exécution autonome
 if (process.argv[1]?.replaceAll('\\', '/').endsWith('/suites/meteo.ts')) {
   const quick = process.argv.includes('--quick');
   runMeteoBenchmark({ quick }).then((suite) => {

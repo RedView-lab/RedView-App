@@ -38,19 +38,20 @@ const TYPES = {
 };
 
 /**
- * Poses in the render frame (x east, z = −north, metres from the scene centre),
- * `extent` = largest scene dimension. The target sits on the ground.
+ * Poses dans le repère de rendu (x à l'est, z = −nord, mètres depuis le centre
+ * de la scène), `extent` = plus grande dimension de la scène. La cible est au
+ * sol.
  */
 const VIEWS = {
-  // Default framing of the viewer (whole scene).
+  // Cadrage par défaut du visualiseur (toute la scène).
   ensemble: (e) => ({ theta: Math.PI / 4, phi: Math.PI / 3, radius: e * 0.72, at: [0, 0] }),
-  // Three-quarter view across the scene: near ground and the far tiles.
+  // Vue de trois quarts à travers la scène : sol proche et tuiles lointaines.
   oblique: (e) => ({ theta: 0.9, phi: 1.12, radius: e * 0.3, at: [-e * 0.1, e * 0.07] }),
-  // Low over one edge, looking across the whole scene (far field).
+  // Bas au-dessus d'un bord, regardant à travers toute la scène (champ lointain).
   rasant: (e) => ({ theta: 2.5, phi: 1.36, radius: e * 0.2, at: [e * 0.18, e * 0.2] }),
-  // Close to the ground (full density), looking down enough to stay above steep slopes.
+  // Près du sol (pleine densité), en regardant assez vers le bas pour rester au-dessus des pentes raides.
   proche: (e) => ({ theta: 0.4, phi: 0.5, radius: e * 0.075, at: [e * 0.07, -e * 0.05] }),
-  // Nearly level, towards the horizon: sky and clouds behind the relief (photo mode).
+  // Presque à l'horizontale, vers l'horizon : ciel et nuages derrière le relief (mode photo).
   horizon: (e) => ({ theta: 2.6, phi: 1.36, radius: e * 0.55, at: [0, 0] }),
 };
 
@@ -156,7 +157,7 @@ async function run(args) {
     await send('Page.enable');
     await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
 
-    // 1. Tiles into OPFS as the app's downloader stores them (kept across runs).
+    // 1. Les tuiles vont dans OPFS comme le téléchargeur de l'application les stocke (gardées d'une exécution à l'autre).
     await send('Page.navigate', { url: `${origin}/favicon.ico` });
     await sleep(800);
     for (const tile of [primary, ...others]) {
@@ -194,7 +195,7 @@ async function run(args) {
     }
     if (!ready) throw new Error(`viewer pas prêt après ${((Date.now() - t0) / 1000).toFixed(0)} s`);
     console.log(`Scène prête en ${((Date.now() - t0) / 1000).toFixed(1)} s`);
-    // Only the 3D view in the captures.
+    // Seulement la vue 3D dans les captures.
     await evaluate(`(() => {
       const canvas = document.getElementById('canvas');
       for (const el of document.body.querySelectorAll('*')) {
@@ -223,7 +224,7 @@ async function run(args) {
         s.setPose({ theta: ${pose.theta}, phi: ${pose.phi}, radius: ${pose.radius}, targetX: x, targetY: s.groundAt(x, z), targetZ: z });
         return 'ok';
       })()`);
-      // Resting quality: the render loop has stopped for a while.
+      // Qualité au repos : la boucle de rendu est arrêtée depuis un moment.
       let quietSince = 0;
       for (let i = 0; i < 600; i++) {
         await sleep(250);

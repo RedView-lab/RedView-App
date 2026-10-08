@@ -7,7 +7,7 @@ import { check } from './harness.ts';
 // 2. Taille écran indépendante de l'inclinaison
 // ---------------------------------------------------------------------------
 
-/** Same orbit math as viewer/camera.ts. */
+/** Même calcul d'orbite que viewer/camera.ts. */
 export function orbitViewMatrix(radius: number, theta: number, phi: number, target: [number, number, number] = [0, 0, 0]): {
   view: Float32Array;
   eye: [number, number, number];
@@ -38,7 +38,7 @@ export function orbitViewMatrix(radius: number, theta: number, phi: number, targ
   return { view, eye };
 }
 
-/** Reversed-Z infinite projection, as camera.getRenderProjMatrix(). */
+/** Projection infinie en Z inversé, comme camera.getRenderProjMatrix(). */
 export function renderProjection(aspect: number): Float32Array {
   const f = 1 / Math.tan(Math.PI / 8);
   const m = new Float32Array(16);

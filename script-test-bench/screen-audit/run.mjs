@@ -50,16 +50,16 @@ const ONLY = argValue('only')?.split(',');
 const OUT = path.join(ROOT, 'script-test-bench', 'reports', 'screen-audit', LABEL);
 const MEASURE = fs.readFileSync(new URL('./measure.js', import.meta.url), 'utf8');
 
-/** Smallest window the dashboard supports (shared/hooks/useIsMobileDevice.ts). */
+/** Plus petite fenêtre que le tableau de bord prend en charge (shared/hooks/useIsMobileDevice.ts). */
 const MIN_W = 820;
 const MIN_H = 500;
-/** Text floor (shared/styles/typography.css); ±2 % box-rounding noise. */
+/** Plancher de texte (shared/styles/typography.css) ; ±2 % de bruit d'arrondi des boîtes. */
 const MIN_TEXT_PX = 11 - 0.25;
-/** Retina floor of the canvas scale (APP_SCALE_HIDPI_MIN, HIDPI_QUERY in shared/lib/appScale.ts). */
+/** Plancher Retina de l'échelle du canvas (APP_SCALE_HIDPI_MIN, HIDPI_QUERY dans shared/lib/appScale.ts). */
 const HIDPI_MIN_SCALE = 0.85;
 const minScaleFor = (dpr) => (dpr >= 1.95 ? HIDPI_MIN_SCALE : 1);
 
-// Viewports in CSS px as a maximised / snapped browser window leaves them.
+// Fenêtres en px CSS telles que les laisse une fenêtre de navigateur maximisée / ancrée.
 const SCREENS = [
   { id: 'fhd-full', label: '1080p plein écran (100 %)', w: 1920, h: 950, dpr: 1 },
   { id: 'fhd-half', label: '1080p demi-écran (100 %)', w: 958, h: 950, dpr: 1 },
@@ -104,8 +104,9 @@ function writeGpx(file) {
 async function openEditorWithRoute(session, gpxFile) {
   await session.send('Page.enable');
   await session.send('Runtime.enable');
-  // Vite would full-reload the page on any edit made meanwhile in the repo
-  // (and drop the dev demo session): keep its HMR socket from connecting.
+  // Vite rechargerait toute la page à chaque modification faite entre-temps
+  // dans le dépôt (et perdrait la session de démo de dev) : on empêche sa
+  // socket HMR de se connecter.
   await session.send('Page.addScriptToEvaluateOnNewDocument', {
     source: `(() => {
       const Real = window.WebSocket;
@@ -123,9 +124,10 @@ async function openEditorWithRoute(session, gpxFile) {
   });
   await session.send('Emulation.setDeviceMetricsOverride', { width: 1920, height: 950, deviceScaleFactor: 1, mobile: false });
   await session.send('Page.navigate', { url: APP_URL });
-  // On a fresh profile the map Service Worker installs and reloads the page
-  // once (map cache epoch): a click before that reload is lost. Wait for the
-  // controller, then click until the project browser shows up.
+  // Sur un profil neuf, le Service Worker de la carte s'installe et recharge
+  // la page une fois (époque du cache de carte) : un clic avant ce rechargement
+  // est perdu. On attend le contrôleur, puis on clique jusqu'à ce que le
+  // gestionnaire de projets apparaisse.
   await waitFor(session, `!!navigator.serviceWorker?.controller`, { timeout: 90000 });
   await sleep(3000);
   for (let attempt = 0; attempt < 4; attempt++) {
@@ -142,16 +144,17 @@ async function openEditorWithRoute(session, gpxFile) {
   const { nodeIds } = await session.send('DOM.querySelectorAll', { nodeId: root.nodeId, selector: 'input[type=file][accept*=".gpx"]' });
   await session.send('DOM.setFileInputFiles', { nodeId: nodeIds[0], files: [gpxFile] });
   await sleep(6000);
-  // Right panel open too (a new project starts with it collapsed).
+  // Panneau de droite ouvert aussi (un nouveau projet démarre avec lui replié).
   await session.evaluate(`document.querySelector('.rvmvc-map-tools__button--panel.is-panel-hidden')?.click()`);
   await sleep(1200);
 }
 
 /**
- * `styledata` events fired by the map while nothing happens. A handler that
- * mutates the style on every `styledata` re-fires it each frame — the map is
- * never idle and Mapbox flushes its terrain drape cache every frame. The map
- * instance is reached through the React fiber of its container (no app global).
+ * Événements `styledata` émis par la carte pendant que rien ne se passe. Un
+ * gestionnaire qui modifie le style à chaque `styledata` le relance à chaque
+ * image — la carte n'est jamais au repos et Mapbox vide son cache de drapé du
+ * terrain à chaque image. L'instance de carte est atteinte par la fibre React
+ * de son conteneur (pas de globale de l'application).
  */
 const STYLE_REST_WINDOW_MS = 2500;
 const MAX_STYLE_EVENTS_AT_REST = 2;
@@ -245,7 +248,7 @@ async function auditScreen(session, screen) {
   return { screen, scale, texts: effs.length, minText: effs[0], regions: R };
 }
 
-/** Drags the left panel's resize handle by `dx` px (DOM events, like `interactions`). */
+/** Tire la poignée de redimensionnement du panneau de gauche de `dx` px (événements DOM, comme `interactions`). */
 async function dragLeftPanel(session, dx) {
   return session.evaluate(`(async () => {
     const region = document.querySelector('[data-rv-region="left-panel"]');
@@ -264,7 +267,7 @@ async function dragLeftPanel(session, dx) {
   })()`);
 }
 
-/** 1080p window with the left panel dragged to its widest (~800 px): narrow center column. */
+/** Fenêtre 1080p avec le panneau de gauche tiré au maximum (~800 px) : colonne centrale étroite. */
 async function auditWideLeftPanel(session) {
   const id = 'fhd-wide-left';
   await session.send('Emulation.setDeviceMetricsOverride', { width: 1920, height: 945, deviceScaleFactor: 1, mobile: false });
@@ -294,7 +297,7 @@ async function escape(session) {
   await session.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
 }
 
-/** Columns menu: right-aligned to its trigger, 6 logical px below (or above when short of room). */
+/** Menu des colonnes : aligné à droite sur son déclencheur, 6 px logiques dessous (ou dessus quand la place manque). */
 function columnsMenuAligned(menu, anchor, s) {
   if (!menu) return false;
   const above = menu.b <= anchor.y + 1;
@@ -341,7 +344,7 @@ async function interactions(session, screen) {
     await sleep(400);
   }
 
-  // DOM events: the handle's centre sits under the panel scroller for hit-testing.
+  // Événements DOM : le centre de la poignée est sous le conteneur défilant du panneau pour le test de clic.
   const resize = await session.evaluate(`(async () => {
     const region = document.querySelector('[data-rv-region="left-panel"]');
     const handle = document.querySelector('.rvi-panel__resize-handle');

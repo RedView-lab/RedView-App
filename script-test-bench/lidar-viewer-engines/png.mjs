@@ -1,6 +1,6 @@
 /**
- * Minimal PNG reader (8-bit RGB/RGBA, non-interlaced: browser screenshots)
- * and the image measures of the engine test.
+ * Lecteur PNG minimal (RGB / RGBA 8 bits, non entrelacé : captures d'écran de
+ * navigateur) et mesures d'image du test des moteurs.
  */
 import { inflateSync } from 'node:zlib';
 
@@ -60,7 +60,7 @@ export function decodePng(buf) {
   return { width, height, rgb };
 }
 
-/** Share of pixels farther than `tolerance` from `colour` (what the scene covers over the sky). */
+/** Part des pixels plus loin que `tolerance` de `colour` (ce que la scène couvre sur le ciel). */
 export function coverage(image, colour, tolerance = 12) {
   let covered = 0;
   const n = image.width * image.height;
@@ -75,7 +75,7 @@ export function coverage(image, colour, tolerance = 12) {
   return covered / n;
 }
 
-/** Mean absolute channel difference of two same-size images (0–255). */
+/** Différence absolue moyenne par canal de deux images de même taille (0–255). */
 export function meanDifference(a, b) {
   if (a.width !== b.width || a.height !== b.height) return 255;
   let sum = 0;

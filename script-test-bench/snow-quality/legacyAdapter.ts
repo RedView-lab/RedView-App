@@ -1,4 +1,4 @@
-// Runs the frozen v1 engine on a synthetic world (same scene grid, same AROME cells).
+// Exécute le moteur v1 figé sur un monde synthétique (même grille de scène, mêmes cellules AROME).
 
 import { computeSnowRedistribution } from './legacy/redistribute';
 import { DEFAULT_SNOW_CONFIG } from './legacy/config';

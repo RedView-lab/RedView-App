@@ -17,7 +17,7 @@ interface SyntheticRecords {
   cls: Uint8Array;
 }
 
-/** Minimal stand-in for the laz-perf module: getPoint() writes the next synthetic PDRF 6 record. */
+/** Substitut minimal du module laz-perf : getPoint() écrit l'enregistrement PDRF 6 synthétique suivant. */
 function createMockLazPerf(records: SyntheticRecords) {
   const HEAPU8 = new Uint8Array(1 << 20);
   const view = new DataView(HEAPU8.buffer);
@@ -57,7 +57,7 @@ export function runPrecisionCheck(): void {
     Z: new Int32Array(count),
     cls: new Uint8Array(count),
   };
-  // One IGN-like 1 km tile in the Alps (Lambert-93), centimetre resolution, LAS offset 0.
+  // Une tuile IGN type de 1 km dans les Alpes (Lambert-93), résolution centimétrique, décalage LAS 0.
   const rand = createRandom(12345);
   for (let i = 0; i < count; i++) {
     records.X[i] = Math.round((1_000_000 + rand() * 1000) / scale[0]!);

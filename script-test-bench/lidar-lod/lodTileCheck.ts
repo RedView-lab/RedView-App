@@ -12,7 +12,7 @@ import { check, createRandom } from './harness.ts';
 // 3–4. Octree LOD et streaming multi-tuiles
 // ---------------------------------------------------------------------------
 
-/** Rolling terrain with tree-like clusters, positions relative to a km-aligned origin. */
+/** Terrain vallonné avec des bouquets façon arbres, positions relatives à une origine alignée sur le km. */
 export function syntheticTile(tileX: number, tileY: number, count: number): LodTileInput {
   const rand = createRandom(1000 + tileX * 31 + tileY * 17);
   const positions = new Float32Array(count * 3);
@@ -64,7 +64,7 @@ export function runLodTileCheck(): void {
   let sumErr = 0;
   let samples = 0;
   let withinBound = true;
-  // Every packed point must decode near an original point; sample by nearest grid bucket.
+  // Chaque point empaqueté doit se décoder près d'un point d'origine ; échantillonnage par case de grille la plus proche.
   const bucket = new Map<string, number[]>();
   for (let i = 0; i < count; i++) {
     const key = `${Math.floor(positions[i * 3]!)}:${Math.floor(positions[i * 3 + 1]!)}`;
@@ -75,7 +75,7 @@ export function runLodTileCheck(): void {
   const view = new DataView(tile.packed.buffer);
   for (const node of tile.nodes) {
     const cube = lodNodeCube(tile.header, node);
-    // Rounding to the u16 grid of the node cube: at most half a step per axis.
+    // Arrondi à la grille u16 du cube du nœud : au plus un demi-pas par axe.
     const bound = (cube.size / 65535) * (Math.sqrt(3) / 2) + 1e-4;
     for (let k = 0; k < node.count; k += 97) {
       const [x, y, z] = unpackLodPosition(view, node.byteOffset + k * LOD_POINT_STRIDE, cube);

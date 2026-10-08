@@ -1,17 +1,19 @@
 // ============================================================================
-// Snow quality bench: v1 (frozen) vs v2 engine on synthetic alpine worlds
+// Banc de qualité neige : moteur v1 (figé) contre v2 sur des mondes alpins synthétiques
 // ----------------------------------------------------------------------------
-//   npm run bench:snow                 physics checks + 4 scenarios + report
-//   npm run bench:snow -- --quick      2 scenarios
-//   npm run bench:snow -- --only=a,b   named scenarios
-// Writes script-test-bench/reports/snow-quality/SNOW_QUALITY_REPORT.md and
-// results.json. Exit code 1 when a physics check fails or v2 does not beat v1
-// on its hard criteria (mass, altitude-band bias, correlation, station LOO).
+//   npm run bench:snow                 contrôles physiques + 4 scénarios + rapport
+//   npm run bench:snow -- --quick      2 scénarios
+//   npm run bench:snow -- --only=a,b   scénarios nommés
+// Écrit script-test-bench/reports/snow-quality/SNOW_QUALITY_REPORT.md et
+// results.json. Code de sortie 1 quand un contrôle physique échoue ou que la v2
+// ne bat pas la v1 sur ses critères stricts (masse, biais par bande
+// d'altitude, corrélation, validation croisée des stations).
 //
-// Honest scope: the reference snow comes from a model written in this bench
-// (world.ts) with formulations and parameters different from the engine's;
-// it tests downscaling, assimilation, conservation and process directions, not
-// the real-world accuracy of the fine drift patterns (no measured maps yet).
+// Portée honnête : la neige de référence vient d'un modèle écrit dans ce banc
+// (world.ts) avec des formulations et des paramètres différents de ceux du
+// moteur ; il teste la descente en échelle, l'assimilation, la conservation et
+// le sens des processus, pas la justesse réelle des motifs fins de congères
+// (pas encore de cartes mesurées).
 // ============================================================================
 
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -115,14 +117,14 @@ export function runScenario(name: string): ScenarioRun {
   return { world, v1, v2, result };
 }
 
-/** Hard criteria v2 must meet on every scenario. */
+/** Critères stricts que la v2 doit tenir sur chaque scénario. */
 function criteria(r: ScenarioResult): string[] {
   const fails: string[] = [];
   if (Math.abs(r.v2.massRatio - 1) > 0.3) fails.push(`masse v2 ${r.v2.massRatio.toFixed(2)} hors [0,7 ; 1,3]`);
   if (r.v2.bandBiasCm > r.v1.bandBiasCm) fails.push(`biais par tranche d'altitude v2 ${r.v2.bandBiasCm.toFixed(0)} > v1 ${r.v1.bandBiasCm.toFixed(0)} cm`);
   if (r.v2.r < r.v1.r) fails.push(`corrélation v2 ${r.v2.r.toFixed(2)} < v1 ${r.v1.r.toFixed(2)}`);
   if (r.v2.rmseCm > r.v1.rmseCm) fails.push(`RMSE v2 ${r.v2.rmseCm.toFixed(0)} > v1 ${r.v1.rmseCm.toFixed(0)} cm`);
-  // Within the 3 cm station noise when AROME is already right.
+  // Dans le bruit de 3 cm des stations quand AROME est déjà juste.
   if (r.stations && r.stations.looRmseCm > Math.max(1.1 * r.stations.backgroundRmseCm, r.stations.backgroundRmseCm + 3)) {
     fails.push(`stations : LOO ${r.stations.looRmseCm.toFixed(0)} > AROME ${r.stations.backgroundRmseCm.toFixed(0)} cm`);
   }

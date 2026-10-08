@@ -1,4 +1,4 @@
-// Scenarios of the snow-quality bench.
+// Scénarios du banc de qualité neige.
 
 import type { WorldSpec } from './world';
 

@@ -1,5 +1,5 @@
 // ============================================================================
-// Snow engine v2 — deterministic physics checks (idealised terrains)
+// Moteur neige v2 — contrôles physiques déterministes (terrains idéalisés)
 // ============================================================================
 
 import { DEFAULT_SNOW_ENGINE_CONFIG, type SnowEngineConfig } from '../../src/features/snow/lib/engine/config';
@@ -73,7 +73,7 @@ function stats(a: Float32Array) {
   return { mean: s / a.length, min: mn, max: mx, bad };
 }
 
-/** Weather history: cold storms then, optionally, a warm sunny fortnight. */
+/** Historique météo : tempêtes froides puis, en option, une quinzaine chaude et ensoleillée. */
 function weather(analysisMs: number, warmDays: number, windFrom = 270): WeatherHistory {
   const hours = 60 * 24;
   const start = analysisMs - (hours - 1) * 3_600_000;
@@ -96,7 +96,7 @@ export function runPhysicsChecks(): CheckResult[] {
   const out: CheckResult[] = [];
   const add = (name: string, pass: boolean, detail: string) => out.push({ name, pass, detail });
 
-  // 1. Flat ground, uniform 100 cm → 100 cm everywhere, nothing invented.
+  // 1. Terrain plat, 100 cm uniformes → 100 cm partout, rien d'inventé.
   {
     const input = idealInput(() => 1800, 1200, 161, () => 100, () => 1800);
     const r = computeSnowDistribution(input);
@@ -105,8 +105,9 @@ export function runPhysicsChecks(): CheckResult[] {
       `moyenne ${s.mean.toFixed(1)} cm, min ${s.min.toFixed(1)}, max ${s.max.toFixed(1)}`);
   }
 
-  // 2. Elevation downscaling: cells follow HS = 0.12·(z − 1200); a 1 km
-  //    tilted plane from 1700 to 2300 m inside one cell at 2000 m.
+  // 2. Descente en échelle selon l'altitude : les cellules suivent
+  //    HS = 0.12·(z − 1200) ; un plan incliné de 1 km de 1700 à 2300 m dans une
+  //    seule cellule à 2000 m.
   {
     const profile = (z: number) => Math.max(0, 0.12 * (z - 1200));
     const input = idealInput((x) => 2000 + 0.6 * x, 1000, 161, (_lon, _lat, o) => profile(o), (x, y) => 1500 + 0.02 * x + 0.015 * y + 600 * Math.sin(x / 4000) * Math.cos(y / 5000), {}, { maxWindRedistribution: 0, defaultWindRedistribution: 0, triggerSlopeDeg: 91 });
@@ -118,7 +119,7 @@ export function runPhysicsChecks(): CheckResult[] {
       `bas ${low.toFixed(0)} cm (attendu ${profile(zLow).toFixed(0)}) à ${zLow.toFixed(0)} m, haut ${high.toFixed(0)} cm (attendu ${profile(zHigh).toFixed(0)}) à ${zHigh.toFixed(0)} m`);
   }
 
-  // 3. Holding depth curve.
+  // 3. Courbe de hauteur de maintien.
   {
     const c = DEFAULT_SNOW_ENGINE_CONFIG;
     const h = [30, 40, 50, 60, 75].map((s) => holdingDepthCm(s, c) / 100);
@@ -126,7 +127,7 @@ export function runPhysicsChecks(): CheckResult[] {
       h.map((v) => v.toFixed(2)).join(' / '));
   }
 
-  // 4. SnowSlide: a 50° couloir over a flat floor; mass kept, deposit at the foot.
+  // 4. SnowSlide : un couloir à 50° au-dessus d'un fond plat ; masse conservée, dépôt au pied.
   {
     const n = 121, cell = 2;
     const z = new Float32Array(n * n);
@@ -139,7 +140,7 @@ export function runPhysicsChecks(): CheckResult[] {
     const before = hs.reduce((a, v) => a + v, 0);
     const res = snowSlide(hs, grid, DEFAULT_SNOW_ENGINE_CONFIG);
     const after = hs.reduce((a, v) => a + v, 0);
-    // Toe ring (19–23 cells = 38–46 m from the centre) and mid-wall (70 m).
+    // Anneau du pied (19–23 cellules = 38–46 m du centre) et mi-paroi (70 m).
     let foot = 0;
     for (let k = 19; k <= 23; k++) foot = Math.max(foot, hs[60 * n + 60 + k]);
     const wall = hs[60 * n + 60 + 35];
@@ -147,8 +148,8 @@ export function runPhysicsChecks(): CheckResult[] {
       `pied ${foot.toFixed(0)} cm, paroi 50° ${wall.toFixed(0)} cm (rétention 127 cm), sortie ${(res.lost * 100).toFixed(1)} %`);
   }
 
-  // 5. Wind: a N–S ridge, storms from the west → west flank and crest
-  //    scoured, east (lee) flank loaded.
+  // 5. Vent : une crête N–S, tempêtes d'ouest → flanc ouest et crête érodés,
+  //    flanc est (sous le vent) chargé.
   {
     const ridge = (x: number) => 2200 + 150 * Math.exp(-((x / 180) ** 2));
     const t = Date.parse('2026-02-01T06:00:00Z');
@@ -162,19 +163,19 @@ export function runPhysicsChecks(): CheckResult[] {
       `versant ouest ${west.toFixed(0)} cm, crête ${crest.toFixed(0)} cm, versant est ${east.toFixed(0)} cm (rose ${r.diagnostics.wind.source})`);
   }
 
-  // 6. Melt by exposure: E–W ridge after a warm sunny fortnight in April.
+  // 6. Fonte selon l'exposition : crête E–O après une quinzaine chaude et ensoleillée en avril.
   {
     const t = Date.parse('2026-04-10T06:00:00Z');
     const input = idealInput((_x, y) => 2000 + 0.7 * Math.abs(y), 1000, 101, () => 120, () => 2200, { weather: weather(t, 14, 270), analysisTimeMs: t }, { maxWindRedistribution: 0, defaultWindRedistribution: 0, triggerSlopeDeg: 91 });
     const r = computeSnowDistribution(input);
     const w = r.width;
-    // V valley along x: the northern half faces south, the southern half faces north.
+    // Vallée en V selon x : la moitié nord regarde le sud, la moitié sud regarde le nord.
     const facingSouth = r.hsCm[90 * w + 50], facingNorth = r.hsCm[10 * w + 50];
     add('Fonte différentielle : versant sud < versant nord', facingSouth < facingNorth - 10,
       `exposé nord ${facingNorth.toFixed(0)} cm, exposé sud ${facingSouth.toFixed(0)} cm, fonte à plat ${r.diagnostics.melt.flatMeltCm.toFixed(0)} cm`);
   }
 
-  // 7. Forest: full canopy, mid-winter, no melt → −39.6 % of accumulation.
+  // 7. Forêt : canopée complète, plein hiver, pas de fonte → −39,6 % de l'accumulation.
   {
     const input = idealInput(() => 1500, 800, 81, () => 100, () => 1500, { canopy: { data: new Float32Array(81 * 81).fill(1), width: 81, height: 81 } }, { maxWindRedistribution: 0, defaultWindRedistribution: 0 });
     const r = computeSnowDistribution(input);
@@ -182,8 +183,8 @@ export function runPhysicsChecks(): CheckResult[] {
     add('Forêt dense, plein hiver : −40 % (Varhola 2010)', Math.abs(s.mean - 60.4) < 4, `moyenne ${s.mean.toFixed(1)} cm (attendu ≈ 60)`);
   }
 
-  // 8. Assimilation: AROME 40 % low, 6 exact stations + 1 faulty → corrected,
-  //    leave-one-out accurate, the faulty one rejected.
+  // 8. Assimilation : AROME 40 % trop bas, 6 stations exactes + 1 défaillante →
+  //    corrigé, validation croisée juste, la défaillante rejetée.
   {
     const truth = (z: number) => Math.max(0, 0.15 * (z - 1100));
     const obs: SnowObservation[] = [];
@@ -201,7 +202,7 @@ export function runPhysicsChecks(): CheckResult[] {
       `champ ${s.mean.toFixed(0)} cm (vrai ${truth(2000)}), LOO RMSE ${looRmse.toFixed(1)} cm, k = ${r.diagnostics.assimilation.precipitationFactor.toFixed(2)}, station fautive ${faulty?.used ? 'gardée' : 'rejetée'}`);
   }
 
-  // 9. In-scene probe: the field passes through the measurement.
+  // 9. Sondage dans la scène : le champ passe par la mesure.
   {
     const probe: SnowObservation = { id: 'p', source: 'sonde', lon: LON0, lat: LAT0, elevationM: null, hsCm: 180, kind: 'point' };
     const input = idealInput(() => 1800, 600, 121, () => 100, () => 1800, { observations: [probe] }, { maxWindRedistribution: 0, defaultWindRedistribution: 0 });
@@ -211,7 +212,7 @@ export function runPhysicsChecks(): CheckResult[] {
     add('Sondage dans la scène : le champ passe par la mesure', Math.abs(centre - 180) < 8 && Math.abs(far - 100) < 5, `au sondage ${centre.toFixed(0)} cm (mesuré 180), à 275 m ${far.toFixed(0)} cm`);
   }
 
-  // 10. No snow anywhere → zeros, fast.
+  // 10. Pas de neige nulle part → des zéros, vite.
   {
     const input = idealInput((x) => 1500 + 0.3 * x, 800, 81, () => 0, () => 1500);
     const t0 = performance.now();
@@ -231,7 +232,7 @@ export function runPhysicsChecks(): CheckResult[] {
     add('Déterminisme (deux calculs identiques)', diff === 0, `écart max ${diff}`);
   }
 
-  // 12. Sun position: Grenoble, 21 June, solar noon.
+  // 12. Position du soleil : Grenoble, 21 juin, midi solaire.
   {
     const p = sunPosition(Date.parse('2026-06-21T11:37:00Z'), 45.19, 5.72);
     add('Position du soleil (Grenoble, solstice, midi solaire)', Math.abs(p.azimuthDeg - 180) < 3 && Math.abs(p.elevationDeg - (90 - 45.19 + 23.44)) < 0.6,

@@ -1,4 +1,4 @@
-// Deterministic gradient noise + fBm / ridged fBm for the synthetic snow world.
+// Bruit de gradient déterministe + fBm / fBm en crêtes pour le monde neigeux synthétique.
 
 export class Rng {
   private s: number;
@@ -40,7 +40,7 @@ export class GradientNoise {
     }
   }
 
-  /** Perlin-style gradient noise, ~[-0.7, 0.7]. */
+  /** Bruit de gradient façon Perlin, ~[-0.7, 0.7]. */
   at(x: number, y: number): number {
     const xi = Math.floor(x);
     const yi = Math.floor(y);
@@ -77,7 +77,7 @@ export class GradientNoise {
     return sum / norm;
   }
 
-  /** Ridged multifractal in [0, 1]: sharp crests, rounded valleys. */
+  /** Multifractal en crêtes dans [0, 1] : crêtes vives, vallées arrondies. */
   ridged(x: number, y: number, octaves: number, gain = 0.5, lacunarity = 2.1): number {
     let sum = 0;
     let amp = 1;

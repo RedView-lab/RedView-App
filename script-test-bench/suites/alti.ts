@@ -70,7 +70,7 @@ export async function runAltiBenchmark(options: { quick?: boolean } = {}): Promi
     elevationM: p.elevationM,
   }));
 
-  // ── Overlay altitude ────────────────────────────────────────────────
+  // ── Surcouche d'altitude ────────────────────────────────────────────
   suite.measureSync(
     {
       name: 'Overlay altitude : encodeDem tuile 512',
@@ -165,7 +165,7 @@ export async function runAltiBenchmark(options: { quick?: boolean } = {}): Promi
   return suite;
 }
 
-// Standalone execution
+// Exécution autonome
 if (process.argv[1]?.replaceAll('\\', '/').endsWith('/suites/alti.ts')) {
   const quick = process.argv.includes('--quick');
   runAltiBenchmark({ quick }).then((suite) => {

@@ -1,5 +1,6 @@
-// worker_threads twin of src/features/lidar/workers/flowPyWorker.ts for
-// bench-avalanche: the same handler, so the bench times the viewer's pool.
+// Jumeau worker_threads de src/features/lidar/workers/flowPyWorker.ts pour
+// bench-avalanche : le même gestionnaire, pour que le banc chronomètre le pool
+// du visualiseur.
 import { parentPort } from 'node:worker_threads';
 import {
   createFlowPyWorkerHandler,

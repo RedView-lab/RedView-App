@@ -1,4 +1,4 @@
-// Minimal CDP driver for headless Edge (Node ≥ 22 global WebSocket), throw-away profile.
+// Pilote CDP minimal pour Edge sans interface (WebSocket global de Node ≥ 22), profil jetable.
 import { spawn, spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -36,12 +36,13 @@ export async function launch({ port = 9333, headless = true, extraArgs = [] } = 
   const page = targets.find((t) => t.type === 'page');
   const session = await connect(page.webSocketDebuggerUrl);
   const close = async () => {
-    // Graceful first (Browser.close ends renderer/GPU children), then the
-    // whole tree, then the throw-away profile (SW tile caches grow fast).
+    // En douceur d'abord (Browser.close termine les enfants rendu / GPU), puis
+    // tout l'arbre, puis le profil jetable (les caches de tuiles du SW
+    // grossissent vite).
     try {
       await Promise.race([session.send('Browser.close'), new Promise((r) => setTimeout(r, 3000))]);
     } catch {
-      /* already gone */
+      /* déjà parti */
     }
     try {
       session.ws.close();
@@ -116,7 +117,7 @@ export async function waitFor(session, expression, { timeout = 30000, interval =
       const v = await session.evaluate(expression);
       if (v) return v;
     } catch {
-      /* page navigating */
+      /* page en cours de navigation */
     }
     await sleep(interval);
   }

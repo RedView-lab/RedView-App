@@ -29,7 +29,7 @@ function mulberry32(seed: number): () => number {
   };
 }
 
-/** 1 km tile of terrain + canopy (Mont-Blanc area), positions relative to a km-aligned origin. */
+/** Tuile de 1 km de terrain + canopée (secteur du Mont-Blanc), positions relatives à une origine alignée sur le km. */
 function syntheticTile(count: number): LodTileInput {
   const rand = mulberry32(42);
   const positions = new Float32Array(count * 3);
@@ -158,7 +158,7 @@ export async function runLidarBenchmark(options: { quick?: boolean } = {}): Prom
   return suite;
 }
 
-// Standalone execution
+// Exécution autonome
 if (process.argv[1]?.replaceAll('\\', '/').endsWith('/suites/lidar.ts')) {
   const quick = process.argv.includes('--quick');
   runLidarBenchmark({ quick }).then((suite) => {

@@ -46,7 +46,7 @@ export async function settle(scene: SceneLod, frame: () => void): Promise<number
   return frames;
 }
 
-/** Share of the points near (x, z) that the selection draws. */
+/** Part des points proches de (x, z) que la sélection dessine. */
 function densityNear(scene: SceneLod, x: number, z: number, radius: number): number {
   const selected = new Set(scene.getSelectedNodes().map((node) => node.id));
   let drawn = 0;
@@ -56,7 +56,7 @@ function densityNear(scene: SceneLod, x: number, z: number, radius: number): num
     const dx = Math.max(node.minX - x, 0, x - node.maxX);
     const dz = Math.max(node.minZ - z, 0, z - node.maxZ);
     if (Math.hypot(dx, dz) > radius) continue;
-    // Only nodes small enough to be "local" measure density, big ones span the area.
+    // Seuls les nœuds assez petits pour être « locaux » mesurent la densité, les gros couvrent la zone.
     if (node.size > radius * 4) continue;
     total += node.entry.count;
     if (selected.has(node.id)) drawn += node.entry.count;
@@ -64,7 +64,7 @@ function densityNear(scene: SceneLod, x: number, z: number, radius: number): num
   return total > 0 ? drawn / total : 1;
 }
 
-/** Historical multi-tile cap (resolveMultiTilePointCap, 8 GB, discrete GPU), kept to report the "before". */
+/** Ancien plafond multituile (resolveMultiTilePointCap, 8 Go, GPU dédié), gardé pour rapporter l'« avant ». */
 function legacyMultiTileCap(tileCount: number): number {
   let cap = 8_000_000;
   const boost = tileCount >= 8 ? 0.25 : tileCount >= 6 ? 0.5 : tileCount >= 4 ? 0.75 : 1;
@@ -103,7 +103,7 @@ export async function runStreamingCheck(): Promise<void> {
     scene.update(viewProj, proj[5]!, eye[0], eye[1], eye[2], 1080);
   };
 
-  // Close-up over the centre tile, then a wide view, then back.
+  // Vue rapprochée au-dessus de la tuile centrale, puis une vue large, puis retour.
   const near = frameAt([0, 0, 0], 60, 0.9);
   const t0 = performance.now();
   const framesNear = await settle(scene, near);

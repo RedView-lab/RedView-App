@@ -1,4 +1,4 @@
-// Evaluated in the page. Returns text-size and layout metrics in CSS px of the real viewport.
+// Évalué dans la page. Renvoie des mesures de taille de texte et de mise en page en px CSS de la vraie fenêtre.
 (() => {
   const vw = innerWidth, vh = innerHeight;
   const texts = [];
@@ -11,7 +11,7 @@
     const el = node.parentElement;
     if (!el || seen.has(el)) continue;
     seen.add(el);
-    // Map markers (POI badges, 2xs/3xs by design) and Mapbox attribution are not UI text.
+    // Les marqueurs de carte (badges de POI, 2xs/3xs par conception) et l'attribution Mapbox ne sont pas du texte d'interface.
     if (el.closest('script,style,noscript,.mapboxgl-ctrl-attrib,.mapboxgl-ctrl-logo,.mapboxgl-marker')) continue;
     if (el.checkVisibility && !el.checkVisibility({ opacityProperty: true, visibilityProperty: true, contentVisibilityAuto: true })) continue;
     const range = document.createRange();
@@ -19,7 +19,7 @@
     const r = range.getBoundingClientRect();
     if (r.width < 2 || r.height < 2) continue;
     if (r.right <= 0 || r.bottom <= 0 || r.left >= vw || r.top >= vh) continue;
-    // Actually on top (not covered by an overlay / collapsed panel)?
+    // Vraiment au-dessus (pas couvert par une surcouche / un panneau replié) ?
     const cx = Math.min(vw - 1, Math.max(0, r.left + Math.min(r.width, 6) / 2));
     const cy = Math.min(vh - 1, Math.max(0, r.top + r.height / 2));
     const hit = document.elementFromPoint(cx, cy);
@@ -49,7 +49,7 @@
       scaled: !!ancestorTransform,
     });
   }
-  // Interactive targets
+  // Cibles interactives
   const targets = [...document.querySelectorAll('button, [role=button], input:not([type=hidden]), select, a[href], [role=tab], [role=menuitem], [role=checkbox]')]
     .filter((el) => el.checkVisibility?.({ opacityProperty: true, visibilityProperty: true }))
     .map((el) => ({ el, r: el.getBoundingClientRect() }))
@@ -80,7 +80,7 @@
   const canvas = document.querySelector('[data-rv-canvas]') ?? document.querySelector('#root div[style*="container-name"]');
   const canvasStyle = canvas ? { transform: canvas.style.transform, zoom: canvas.style.zoom } : null;
   const docOverflow = { sw: document.documentElement.scrollWidth, sh: document.documentElement.scrollHeight };
-  // Analysis toolbar of the center panel: rows actually used (useToolbarFitDensity).
+  // Barre d'outils d'analyse du panneau central : lignes réellement utilisées (useToolbarFitDensity).
   const analysisBar = document.querySelector('.rvc-center-analysis__toolbar');
   let analysisToolbar = null;
   if (analysisBar && analysisBar.checkVisibility?.()) {
@@ -94,7 +94,7 @@
       w: +analysisBar.getBoundingClientRect().width.toFixed(1),
     };
   }
-  // Map search bar + filter chips (DashboardPlaceSearch): one row, nothing clipped.
+  // Barre de recherche de la carte + pastilles de filtre (DashboardPlaceSearch) : une ligne, rien de rogné.
   const searchRow = document.querySelector('.rvd-place-search__row');
   let placeSearch = null;
   if (searchRow && searchRow.checkVisibility?.({ opacityProperty: true })) {
@@ -110,8 +110,8 @@
       w: +searchRow.getBoundingClientRect().width.toFixed(1),
     };
   }
-  // 3D map: the Mapbox canvas must cover its container exactly (under the
-  // canvas CSS zoom it used to cover appScale² of it, map3d/lib/mapContainerZoom.ts).
+  // Carte 3D : le canvas Mapbox doit couvrir exactement son conteneur (sous le
+  // zoom CSS du canvas, il en couvrait appScale², map3d/lib/mapContainerZoom.ts).
   const mapEl = document.querySelector('.mapboxgl-map');
   const mapCanvas = mapEl?.querySelector('.mapboxgl-canvas');
   let mapFill = null;

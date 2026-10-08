@@ -240,7 +240,7 @@ export async function runSlopeBenchmark(options: { quick?: boolean } = {}): Prom
   return suite;
 }
 
-// Standalone execution
+// Exécution autonome
 if (process.argv[1]?.replaceAll('\\', '/').endsWith('/suites/pente.ts')) {
   const quick = process.argv.includes('--quick');
   runSlopeBenchmark({ quick }).then((suite) => {

@@ -1,22 +1,22 @@
-// Skill metrics of a snow-depth map against the reference.
+// Indicateurs de justesse d'une carte de hauteur de neige face à la référence.
 
 export interface SkillMetrics {
   rmseCm: number;
   maeCm: number;
   biasCm: number;
-  /** Pearson correlation. */
+  /** Corrélation de Pearson. */
   r: number;
-  /** Nash–Sutcliffe efficiency. */
+  /** Efficacité de Nash–Sutcliffe. */
   nse: number;
-  /** Model σ / reference σ. */
+  /** σ du modèle / σ de la référence. */
   sigmaRatio: number;
-  /** Mass ratio model / reference. */
+  /** Rapport de masse modèle / référence. */
   massRatio: number;
   /** Snow / no-snow agreement (threshold 5 cm): Cohen's kappa. */
   kappa: number;
   /** Mean structural similarity on 30 m blocks (Wang et al. 2004), as used by Quéno et al. (2024). */
   ssim: number;
-  /** Mean absolute bias per 100 m altitude band, cm. */
+  /** Biais absolu moyen par bande d'altitude de 100 m, cm. */
   bandBiasCm: number;
 }
 
@@ -36,7 +36,7 @@ function blockMean(a: Float32Array, w: number, h: number, b: number): { data: Fl
 }
 
 function ssim(a: Float32Array, b: Float32Array, w: number, h: number): number {
-  // 7×7 windows on the block maps, dynamic range from the reference.
+  // Fenêtres 7×7 sur les cartes par blocs, dynamique tirée de la référence.
   let range = 0;
   for (let i = 0; i < b.length; i++) range = Math.max(range, b[i]);
   const c1 = (0.01 * range) ** 2;
@@ -86,7 +86,7 @@ export function skill(model: Float32Array, ref: Float32Array, z: Float32Array, w
   const po = (a + d) / n;
   const pe = ((a + b) * (a + c) + (c + d) * (b + d)) / (n * n);
   const kappa = pe < 1 ? (po - pe) / (1 - pe) : 1;
-  // Altitude bands.
+  // Bandes d'altitude.
   const bands = new Map<number, { m: number; r: number; k: number }>();
   for (let i = 0; i < n; i++) {
     const key = Math.floor(z[i] / 100);

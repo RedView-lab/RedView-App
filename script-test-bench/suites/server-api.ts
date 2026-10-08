@@ -487,7 +487,7 @@ export async function runServerApiBenchmark(options: { quick?: boolean; http?: b
   return suite;
 }
 
-// Standalone execution
+// Exécution autonome
 if (process.argv[1]?.replaceAll('\\', '/').endsWith('/suites/server-api.ts')) {
   const args = process.argv.slice(2);
   const valueOf = (flag: string) => {

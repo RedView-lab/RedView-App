@@ -242,7 +242,7 @@ export async function runCenterPanelBenchmark(options: { quick?: boolean } = {})
   return suite;
 }
 
-// Standalone execution
+// Exécution autonome
 if (process.argv[1]?.replaceAll('\\', '/').endsWith('/suites/center-panel.ts')) {
   const quick = process.argv.includes('--quick');
   runCenterPanelBenchmark({ quick }).then((suite) => {

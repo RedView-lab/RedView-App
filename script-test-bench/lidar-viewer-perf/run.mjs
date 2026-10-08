@@ -68,7 +68,7 @@ function parseArgs(argv) {
   return args;
 }
 
-/** Lambert-93 → WGS84 (GRS80, inverse Lambert conformal conic), enough to place a synthetic route. */
+/** Lambert-93 → WGS84 (GRS80, conique conforme de Lambert inverse), assez pour placer une route synthétique. */
 function lambert93ToWgs84(x, y) {
   const a = 6378137;
   const e = 0.0818191910428158;
@@ -91,9 +91,10 @@ function lambert93ToWgs84(x, y) {
 }
 
 /**
- * Route overlay state as the app stores it (lib/routeOverlaySync.ts): a
- * straight 200 km line of `count` points through the tile centre, so most
- * points lie outside the scene, like a real itinerary.
+ * État de la surcouche de route tel que l'application le stocke
+ * (lib/routeOverlaySync.ts) : une ligne droite de 200 km de `count` points
+ * passant par le centre de la tuile, donc la plupart des points sont hors de la
+ * scène, comme pour un vrai itinéraire.
  */
 function syntheticRouteState(count, xKm, yKm) {
   const cx = xKm * 1000 + 500;
@@ -115,9 +116,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const pct = (ratio) => `${(ratio * 100).toFixed(1)} %`;
 
 /**
- * Load steps of the viewer as the user sees them (the detailed status kept in
- * the title of `#status`), recorded in the page from its first script on,
- * plus the moment the loading overlay hides.
+ * Étapes de chargement du visualiseur telles que l'utilisateur les voit (l'état
+ * détaillé gardé dans le title de `#status`), enregistrées dans la page dès son
+ * premier script, plus le moment où la surcouche de chargement se masque.
  */
 const LOAD_LOG_SCRIPT = `(() => {
   const log = window.__rvLoadLog = [];
@@ -134,7 +135,7 @@ const LOAD_LOG_SCRIPT = `(() => {
   observer.observe(document, { subtree: true, childList: true, attributes: true, characterData: true });
 })();`;
 
-/** Steps with their start and duration; consecutive messages of one step (progress counters) merged. */
+/** Étapes avec leur début et leur durée ; les messages consécutifs d'une même étape (compteurs de progression) sont fusionnés. */
 function loadPhases(log, readyAt) {
   const phases = [];
   for (const [t, msg] of log) {
@@ -205,7 +206,7 @@ async function compare(labels) {
   console.table(rows);
 }
 
-/** Tiles of the run: one file (LIDAR_TILE) or the IGN tiles of a folder (LIDAR_TILES_DIR, centre first). */
+/** Tuiles de l'exécution : un fichier (LIDAR_TILE) ou les tuiles IGN d'un dossier (LIDAR_TILES_DIR, le centre d'abord). */
 async function benchTiles() {
   const dir = process.env.LIDAR_TILES_DIR;
   if (dir) {
@@ -254,8 +255,9 @@ async function run(args) {
       res.end();
     }
   });
-  // Fixed origin (OPFS is per origin): tiles and their caches are reused, and
-  // runs never pile up one origin each in the profile.
+  // Origine fixe (OPFS est par origine) : les tuiles et leurs caches sont
+  // réutilisés, et les exécutions n'empilent jamais une origine chacune dans le
+  // profil.
   await new Promise((r) => server.listen(Number(process.env.PERF_HTTP_PORT ?? (multi ? 18972 : 18973)), '127.0.0.1', r));
   const origin = `http://127.0.0.1:${server.address().port}`;
 
@@ -306,12 +308,12 @@ async function run(args) {
     await send('Runtime.enable');
     await send('Page.enable');
     if (args.quotaMb) {
-      // A small disk: the tiles may fit, their LOD caches not (the viewer then streams from memory).
+      // Un petit disque : les tuiles peuvent tenir, leurs caches LOD non (le visualiseur diffuse alors depuis la mémoire).
       await send('Storage.overrideQuotaForOrigin', { origin, quotaSize: args.quotaMb * 1024 * 1024 });
       console.log(`Quota de stockage forcé : ${args.quotaMb} Mo`);
     }
 
-    // 1. Tiles go into OPFS as the app's downloader stores them (kept across runs).
+    // 1. Les tuiles vont dans OPFS comme le téléchargeur de l'application les stocke (gardées d'une exécution à l'autre).
     await send('Page.navigate', { url: `${origin}/favicon.ico` });
     await sleep(800);
     for (const tile of tiles) {
@@ -330,8 +332,8 @@ async function run(args) {
       console.log(`Tuile ${tile.name} : ${stored}`);
     }
     if (args.cold) {
-      // Every derived cache of this profile: the viewer keys them on the tile
-      // name of its own convention (y + 1 km for the IGN names written here).
+      // Chaque cache dérivé de ce profil : le visualiseur les indexe sur le nom
+      // de tuile de sa propre convention (y + 1 km pour les noms IGN écrits ici).
       const removed = await evaluate(`(async () => {
         const dir = await (await navigator.storage.getDirectory()).getDirectoryHandle('lidar-hd', { create: true });
         const names = [];
@@ -348,7 +350,7 @@ async function run(args) {
       : `localStorage.removeItem('redview:lidar:route_overlay'), 'ok'`);
     if (routeState) console.log(`Trace synthétique : ${args.route} points`);
 
-    // 2. Viewer with the scripted path.
+    // 2. Visualiseur avec le parcours scripté.
     const extra = args.params ? `&${args.params}` : '';
     await send('Page.addScriptToEvaluateOnNewDocument', { source: LOAD_LOG_SCRIPT });
     const t0 = Date.now();
@@ -393,8 +395,8 @@ async function run(args) {
       console.log(`Rapport : ${out}`);
     }
   } finally {
-    // Kill the whole tree: on Windows `kill()` only ends the browser process,
-    // and its GPU/renderer children may linger.
+    // Tue tout l'arbre : sous Windows, `kill()` ne termine que le processus du
+    // navigateur, et ses enfants GPU / rendu peuvent traîner.
     if (process.platform === 'win32' && browser.pid) {
       spawnSync('taskkill', ['/PID', String(browser.pid), '/T', '/F'], { stdio: 'ignore' });
     } else {

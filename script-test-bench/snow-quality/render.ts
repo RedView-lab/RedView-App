@@ -1,11 +1,11 @@
 // ============================================================================
-// Before/after image of the snow engine
+// Image avant / après du moteur neige
 //   npm run bench:snow:image
-// Writes script-test-bench/reports/snow-quality/avant-apres.{html,png}:
-//   1. real relief (IGN LiDAR HD, Aiguilles Rouges) with a plausible
-//      mid-winter situation: v1 vs v2;
-//   2. synthetic world with a known reference: reference / v1 / v2 / errors.
-// The PNG is a headless Edge screenshot of the HTML page.
+// Écrit script-test-bench/reports/snow-quality/avant-apres.{html,png} :
+//   1. relief réel (LiDAR HD de l'IGN, Aiguilles Rouges) avec une situation de
+//      plein hiver plausible : v1 contre v2 ;
+//   2. monde synthétique à référence connue : référence / v1 / v2 / erreurs.
+// Le PNG est une capture d'écran Edge sans interface de la page HTML.
 // ============================================================================
 
 import { spawnSync } from 'node:child_process';

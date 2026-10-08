@@ -1,3 +1,3 @@
-// Frozen copy of the v1 snow engine (before the v2 rewrite), kept only as the
-// "before" of the snow-quality bench. Not used by the app.
+// Copie figée du moteur neige v1 (avant la réécriture v2), gardée seulement
+// comme « avant » du banc de qualité neige. Non utilisée par l'application.
 export type SnowProgress = (pct: number, label: string) => void;

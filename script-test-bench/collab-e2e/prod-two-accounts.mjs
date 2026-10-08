@@ -271,7 +271,7 @@ const waitInPage = (expression, timeoutMs = 10_000) => `new Promise((resolve) =>
 
 const { session: firstTab, close } = await launch({ port: PORT });
 let projectId = null;
-/** When B clicked « Quitter » (Infinity before): the server's 4403 after it is the expected revocation. */
+/** Moment où B a cliqué « Quitter » (Infinity avant) : le 4403 du serveur après lui est la révocation attendue. */
 let leaveAt = Infinity;
 const benchStart = new Date().toISOString();
 /** Pages ouvertes (diagnostic final, même après une erreur). */
