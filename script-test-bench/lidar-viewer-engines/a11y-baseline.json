@@ -1,0 +1,12 @@
+{
+  "menu-outils | aria-hidden-focus": 1,
+  "menu-outils | aria-required-children": 2,
+  "menu-outils | aria-required-parent": 9,
+  "menu-outils | label": 10,
+  "menu-outils | label-content-name-mismatch": 6,
+  "visualiseur | aria-hidden-focus": 2,
+  "visualiseur | aria-required-children": 1,
+  "visualiseur | aria-required-parent": 9,
+  "visualiseur | label": 9,
+  "visualiseur | label-content-name-mismatch": 4
+}

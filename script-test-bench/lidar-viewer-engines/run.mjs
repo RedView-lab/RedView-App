@@ -16,7 +16,11 @@
  *   - CSP de production (server/lib/csp.mjs) sur les pages et les scripts de
  *     workers : WebAssembly compilé et `eval` refusé dans la page comme dans
  *     un worker, et aucune violation rapportée (le `report-uri` pointe sur ce
- *     serveur local) pendant tout le parcours.
+ *     serveur local) pendant tout le parcours ;
+ *   - accessibilité (axe-core, WCAG A/AA, même cliquet que le parcours
+ *     utilisateur : ../user-journey/a11y.ts) sur le viewer chargé et son menu
+ *     du clic droit, au premier cas lancé (le DOM ne dépend pas du moteur) ;
+ *     référence : a11y-baseline.json, `--update-a11y-baseline` la réécrit.
  * Sous Linux (CI), c'est le chemin réel des utilisateurs : Firefox n'a pas
  * WebGPU et Chrome ne l'active que sur certains GPU. Quand le moteur
  * automatique d'un navigateur est déjà WebGL 2, le cas « webgl » forcé
@@ -30,7 +34,7 @@
  *   node script-test-bench/lidar-viewer-engines/run.mjs
  *     [--browsers chromium,firefox,webkit] [--engines auto,webgl] [--dist dist]
  *     [--channel msedge] [--webgpu] [--firefox-no-webgpu] [--headed]
- *     [--expect-auto webgl|webgpu]
+ *     [--expect-auto webgl|webgpu] [--update-a11y-baseline]
  * Captures et résumé : script-test-bench/reports/lidar-viewer-engines/.
  * Code de sortie non nul au premier contrôle en échec.
  */
@@ -43,9 +47,17 @@ import { chromium, firefox, webkit } from 'playwright';
 import { buildCspHeader } from '../../server/lib/csp.mjs';
 import { buildSyntheticLas } from './syntheticTile.mjs';
 import { coverage, decodePng, meanDifference } from './png.mjs';
+import { auditScreen, buildBaseline, compareWithBaseline, readBaseline } from '../user-journey/a11y.ts';
 
 const ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 const REPORT_DIR = join(ROOT, 'script-test-bench', 'reports', 'lidar-viewer-engines');
+const A11Y_BASELINE = join(ROOT, 'script-test-bench', 'lidar-viewer-engines', 'a11y-baseline.json');
+/** Audit axe : fait au premier cas qui charge le viewer (le DOM ne dépend pas du moteur). */
+const a11y = { done: false, findings: [], screens: [] };
+async function auditA11y(page, screen) {
+  a11y.findings.push(...await auditScreen(page, screen));
+  a11y.screens.push(screen);
+}
 const TILE = { xKm: 965, yKm: 6500 };
 const TILE_NAME = `LHD_FXX_0${TILE.xKm}_${TILE.yKm}_PTS_LAMB93_IGN69.copc.laz`;
 const VIEWPORT = { width: 1280, height: 800 };
@@ -71,6 +83,7 @@ function parseArgs(argv) {
     firefoxNoWebgpu: false,
     headed: false,
     expectAuto: null,
+    updateA11yBaseline: false,
   };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -82,6 +95,7 @@ function parseArgs(argv) {
     else if (arg === '--firefox-no-webgpu') args.firefoxNoWebgpu = true;
     else if (arg === '--headed') args.headed = true;
     else if (arg === '--expect-auto') args.expectAuto = argv[++i];
+    else if (arg === '--update-a11y-baseline') args.updateA11yBaseline = true;
   }
   return args;
 }
@@ -285,6 +299,9 @@ async function runCase(browserName, engine, args, origin, checks, cspReports) {
       await page.screenshot({ path: join(outDir, 'echec.png') }).catch(() => undefined);
       return null;
     }
+    const auditHere = !a11y.done;
+    a11y.done = true;
+    if (auditHere) await auditA11y(page, 'visualiseur');
 
     // La CSP de production s'applique vraiment, dans la page et dans un worker : WebAssembly oui, eval non.
     const pageProbe = await page.evaluate(CSP_PROBE);
@@ -392,6 +409,7 @@ async function runCase(browserName, engine, args, origin, checks, cspReports) {
     await page.mouse.up({ button: 'right' });
     const opened = await menu.waitFor({ state: 'visible', timeout: 20_000 }).then(() => true, () => false);
     checks.record('clic droit : menu des outils au relâchement', opened);
+    if (auditHere && opened) await auditA11y(page, 'menu-outils');
     await page.keyboard.press('Escape');
     const closed = await menu.waitFor({ state: 'hidden', timeout: 10_000 }).then(() => true, () => false);
     checks.record('menu des outils fermé par Échap', closed);
@@ -469,6 +487,21 @@ async function main() {
     }
   } finally {
     server.close();
+  }
+  if (a11y.screens.length > 0) {
+    const checks = new Checks('accessibilité');
+    const elements = a11y.findings.reduce((sum, finding) => sum + finding.targets.length, 0);
+    const detail = `${a11y.screens.length} écran(s), ${a11y.findings.length} règle(s) en défaut, ${elements} élément(s)`;
+    if (args.updateA11yBaseline) {
+      await writeFile(A11Y_BASELINE, `${JSON.stringify(buildBaseline(a11y.findings), null, 2)}\n`);
+      checks.record('axe (WCAG A/AA) : référence réécrite', true, detail);
+    } else {
+      const { regressions, stale } = compareWithBaseline(a11y.findings, readBaseline(A11Y_BASELINE), a11y.screens);
+      checks.record('axe (WCAG A/AA) : aucun défaut nouveau', regressions.length === 0,
+        regressions.length > 0 ? regressions.join(' ; ') : stale.length > 0 ? `${detail} — moins qu'en référence : ${stale.join(' ; ')}` : detail);
+    }
+    failures += checks.failed.length;
+    summary.push({ browser: 'tous', engine: 'axe', platform: process.platform, results: checks.results, a11y: a11y.findings });
   }
   await mkdir(REPORT_DIR, { recursive: true });
   await writeFile(join(REPORT_DIR, 'summary.json'), JSON.stringify(summary, null, 2));
