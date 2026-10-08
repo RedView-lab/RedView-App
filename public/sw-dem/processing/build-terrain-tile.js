@@ -74,7 +74,7 @@ async function buildIGNTerrainTile(mercZ, mercX, mercY, options) {
         }
       }
     } catch {
-      /* best-effort */
+      /* au mieux */
     }
   }
 

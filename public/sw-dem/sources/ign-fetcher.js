@@ -23,7 +23,7 @@ function cacheNull(key, errorType) {
 function getCached(key) {
   if (!ignTileCache.has(key)) return { hit: false };
   const entry = ignTileCache.get(key);
-  // Valid tile data (Float32Array)
+  // Données de tuile valides (Float32Array)
   if (entry instanceof Float32Array) return { hit: true, data: entry };
   // Entrée nulle avec TTL
   if (entry && entry._null) {
@@ -34,7 +34,7 @@ function getCached(key) {
     ignTileCache.delete(key);
     return { hit: false };
   }
-  // Legacy null (no metadata) — evict
+  // null hérité (sans métadonnées) — évincé
   if (entry === null) {
     ignTileCache.delete(key);
     return { hit: false };

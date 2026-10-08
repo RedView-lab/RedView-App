@@ -98,7 +98,7 @@ const DESPIKE_THRESHOLD_M = 80;
 const IGN_DEM_MINZOOM = 11;
 const IGN_DEM_MAXZOOM = 17;
 
-// France HD engage gates (z >= 11).
+// Seuils d'activation de la HD France (z >= 11).
 const IGN_HIGHRES_ENGAGE_MPP = 80;
 const IGN_MNS_ENGAGE_MPP = 80;
 const IGN_TERRAIN_WMS_ENGAGE_MPP = 80;
@@ -144,7 +144,7 @@ const IGN_MNS_MIDZOOM_SMOOTH_VARIANCE_M = 5;
 
 function mercatorMetersPerPixel(mercZ, lat) {
   const cosLat = Math.cos((lat * Math.PI) / 180);
-  // Earth circumference at equator in metres
+  // Circonférence de la Terre à l'équateur, en mètres
   return (40075016.686 * Math.abs(cosLat)) / (256 * (1 << mercZ));
 }
 
@@ -351,7 +351,7 @@ const ORTHO_INFLIGHT_PROMOTE_MS = 800;
 
 // TTL du cache nul (ms) — distinguent les erreurs passagères des 404 définitives
 const IGN_NULL_TTL_TRANSIENT = 10_000;   // 10s — timeout, 5xx, network error
-const IGN_NULL_TTL_PERMANENT = 3600_000; // 1h  — 404, invalid size
+const IGN_NULL_TTL_PERMANENT = 3600_000; // 1 h — 404, taille invalide
 
 // TTL du cache négatif au niveau de CacheStorage (secondes)
 const NEGATIVE_TTL_CONFIRMED = 3600;     // 1 h — la tuile n'existe vraiment pas
@@ -403,4 +403,4 @@ function ignSoftDeadlineMs(mercZ) {
   if (mercZ === 15) return 6_000;
   return 10_000;
 }
-const IGN_SUBTILE_SOFT_DEADLINE_MS = 14_000; // fallback/legacy const
+const IGN_SUBTILE_SOFT_DEADLINE_MS = 14_000; // constante de repli / héritée

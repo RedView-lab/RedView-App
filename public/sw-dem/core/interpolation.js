@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// BIL decoder, elevation sanitizer, NODATA-aware interpolation
+// Décodeur BIL, assainissement des altitudes, interpolation tenant compte du NODATA
 // ---------------------------------------------------------------------------
 
 function decodeBIL32(buffer) {
@@ -96,7 +96,7 @@ function bicubicSample(data, fx, fy) {
     if (p10v) return sampleAt(data, ix + 1, iy);
     if (p01v) return sampleAt(data, ix, iy + 1);
     if (p11v) return sampleAt(data, ix + 1, iy + 1);
-    return NaN; // Propagate as NODATA — prevents 0m sea-level cliffs at borders
+    return NaN; // Propagé en NODATA — évite des falaises au niveau de la mer (0 m) aux bordures
   }
 
   // Bilinéaire pondéré : remplace les pixels invalides par la moyenne des valides

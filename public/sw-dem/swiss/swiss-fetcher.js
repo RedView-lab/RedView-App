@@ -16,7 +16,7 @@
 // anciens que l'ordonnanceur IGN, avec notre propre SWISS_PRUNED_SENTINEL.
 // ---------------------------------------------------------------------------
 
-// ─── Concurrency limiter ────────────────────────────────────────────────────
+// ─── Limiteur de concurrence ────────────────────────────────────────────────
 let _swissActive = 0;
 const _swissQueue = [];
 let _swissPrunedTotal = 0;
@@ -102,8 +102,8 @@ async function swissRangeFetch(url, offset, length) {
   return null;
 }
 
-// ─── STAC cell-resolution cache ─────────────────────────────────────────────
-// Map key: `${Ekm}/${Nkm}` → { url } | { _null, ts, ttl }
+// ─── Cache de résolution des cellules STAC ──────────────────────────────────
+// Clé : `${Ekm}/${Nkm}` → { url } | { _null, ts, ttl }
 const _stacCellCache = new Map();
 const _stacCellInflight = new Map();
 
@@ -178,7 +178,7 @@ async function _resolveSwissCellsViaStac(EkmMin, EkmMax, NkmMin, NkmMax) {
         priority: 'high',
       });
       if (!res.ok) {
-        // 4xx → permanent (treat as "ok, zero features"). 5xx → transient.
+        // 4xx → définitif (traité comme « ok, zéro objet »). 5xx → transitoire.
         if (res.status >= 400 && res.status < 500) {
           console.warn(`[swiss][stac] HTTP ${res.status} ${pageUrl} (permanent)`);
           return { _permanent: true, value: { features: [] } };
@@ -189,7 +189,7 @@ async function _resolveSwissCellsViaStac(EkmMin, EkmMax, NkmMin, NkmMax) {
       return { _permanent: true, value: await res.json() };
     } catch (e) {
       console.warn(`[swiss][stac] fetch error ${pageUrl}:`, e?.message || e);
-      return null; // transient (timeout, network)
+      return null; // transitoire (délai dépassé, réseau)
     }
   });
 
@@ -309,7 +309,7 @@ async function getCOGUrlForCell(Ekm, Nkm) {
     return windowOk ? null : SWISS_STAC_TRANSIENT;
   };
 
-  // Per-cell inflight (legacy path).
+  // Requête en vol par cellule (chemin hérité).
   if (_stacCellInflight.has(key)) return _stacCellInflight.get(key);
 
   // Requête en cours par fenêtre : une autre cellule du même bloc a déjà lancé
@@ -341,8 +341,8 @@ async function getCOGUrlForCell(Ekm, Nkm) {
   return promise;
 }
 
-// ─── COG header cache ───────────────────────────────────────────────────────
-// Map key: url → cog descriptor | { _null, ts, ttl }
+// ─── Cache des en-têtes COG ─────────────────────────────────────────────────
+// Clé : url → descripteur COG | { _null, ts, ttl }
 const _cogHeaderCache = new Map();
 const _cogHeaderInflight = new Map();
 
@@ -391,7 +391,7 @@ async function openSwissCOG(url) {
             priority: 'high',
           });
           if (!res.ok && res.status !== 206) {
-            // 4xx → permanent (file deleted / wrong URL)
+            // 4xx → définitif (fichier supprimé / mauvaise URL)
             if (res.status >= 400 && res.status < 500) {
               console.warn(`[swiss][header] HTTP ${res.status} ${url} (permanent)`);
               return { _permanent: true, value: null };
@@ -441,7 +441,7 @@ async function openSwissCOG(url) {
           break;
         }
       }
-      // Transient (timeout / 5xx) — retry
+      // Transitoire (délai dépassé / 5xx) — nouvel essai
       networkAttempt++;
       if (networkAttempt < SWISS_COG_HEADER_RETRIES) {
         await new Promise((r) => setTimeout(r, 250 + Math.random() * 500));
@@ -470,8 +470,8 @@ async function openSwissCOG(url) {
   return promise;
 }
 
-// ─── Internal-tile cache ────────────────────────────────────────────────────
-// Map key: `${url}#${tileIndex}` → Float32Array | null marker
+// ─── Cache des tuiles internes ──────────────────────────────────────────────
+// Clé : `${url}#${tileIndex}` → Float32Array | marqueur null
 const _tileCache = new Map();
 const _tileInflight = new Map();
 
@@ -536,7 +536,7 @@ function getCOGInternalTileCached(cog, levelIdx, tileIndex) {
 // compressée à part) et mise en cache sous sa propre clé, pour que
 // getCOGInternalTile() et l'échantillonneur synchrone la retrouvent ensuite.
 const SWISS_RANGE_MERGE_GAP = 16 * 1024;      // fusionne les tuiles distantes de ≤ 16 Ko dans le fichier
-const SWISS_RANGE_MAX_SPAN = 6 * 1024 * 1024; // cap a single coalesced fetch at 6 MB
+const SWISS_RANGE_MAX_SPAN = 6 * 1024 * 1024; // plafonne une requête regroupée à 6 Mo
 
 async function prefetchCOGTilesCoalesced(cog, levelIdx, tileIndices) {
   const level = cog.levels[levelIdx];
@@ -563,7 +563,7 @@ async function prefetchCOGTilesCoalesced(cog, levelIdx, tileIndices) {
 
   need.sort((a, b) => a.offset - b.offset);
 
-  // Build contiguous runs (merge tiles whose gap ≤ MERGE_GAP, span ≤ MAX_SPAN).
+  // Construit des plages contiguës (fusionne les tuiles dont l'écart ≤ MERGE_GAP, étendue ≤ MAX_SPAN).
   const runs = [];
   let cur = null;
   for (const t of need) {

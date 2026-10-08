@@ -401,21 +401,21 @@ export function attachDemSource(ctx: Ctx): void {
     let activeTerrainSource: string | null = null;
     try {
       hasAwsSource = !!map.getSource(awsFallbackDEMSource.id);
-    } catch { /* best-effort */ }
+    } catch { /* au mieux */ }
     try {
       activeTerrainSource = map.getTerrain()?.source ?? null;
-    } catch { /* best-effort */ }
+    } catch { /* au mieux */ }
 
     if (!hasAwsSource && activeTerrainSource !== awsFallbackDEMSource.id) return;
 
     if (activeTerrainSource === awsFallbackDEMSource.id) {
       try {
         terrainRef.current?.destroy();
-      } catch { /* best-effort */ }
+      } catch { /* au mieux */ }
       terrainRef.current = null;
       try {
         map.setTerrain(null);
-      } catch { /* best-effort */ }
+      } catch { /* au mieux */ }
     }
 
     try {
@@ -459,7 +459,7 @@ export function attachDemSource(ctx: Ctx): void {
       // rapide. TerrainManager.init() émet setTerrain, que Mapbox traite comme un
       // remplacement à chaud — aucune image plate entre les deux.
       let activeTerrainSource: string | null = null;
-      try { activeTerrainSource = map.getTerrain()?.source ?? null; } catch { /* best-effort */ }
+      try { activeTerrainSource = map.getTerrain()?.source ?? null; } catch { /* au mieux */ }
       const alreadyBound = activeTerrainSource === awsFastDEMSource.id;
       if (alreadyBound && terrainRef.current) {
         terrainRef.current.init();
@@ -495,7 +495,7 @@ export function attachDemSource(ctx: Ctx): void {
       return;
     }
 
-    // 'hd' mode:
+    // mode 'hd' :
     const profile = fns.getActiveDemProfile();
     const tiles = buildDemTilesTemplate(st.demCacheBust, profile);
     let unifiedSource = map.getSource(unifiedDEMSource.id) as {

@@ -343,7 +343,7 @@ export function attachListeners(ctx: Ctx): void {
           x,
           y,
         });
-      } catch { /* best-effort */ }
+      } catch { /* au mieux */ }
       scheduleDerivedCachesReload(300);
     }
   };
@@ -370,7 +370,7 @@ export function attachListeners(ctx: Ctx): void {
         center: { lng: center.lng, lat: center.lat },
         z: map.getZoom(),
       });
-    } catch { /* best-effort */ }
+    } catch { /* au mieux */ }
   };
 
   fns.ensureTrackingListeners = () => {
@@ -441,7 +441,7 @@ export function attachListeners(ctx: Ctx): void {
             type: 'SET_PAIR_ORTHO_WITH_DEM',
             enabled,
           });
-        } catch { /* best-effort */ }
+        } catch { /* au mieux */ }
       };
       map.on('styledata', syncOrthoPairing);
       syncOrthoPairing(); // déclenché une fois tout de suite au cas où la source serait déjà montée
@@ -453,7 +453,7 @@ export function attachListeners(ctx: Ctx): void {
             type: 'SET_PAIR_ORTHO_WITH_DEM',
             enabled: false,
           });
-        } catch { /* best-effort */ }
+        } catch { /* au mieux */ }
       };
     }
     st.trackingListenersBound = true;

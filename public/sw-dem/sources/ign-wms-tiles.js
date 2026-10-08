@@ -178,7 +178,7 @@ async function getMnsWmsTile(mercZ, mercX, mercY, purpose = null, mapTile = null
     const cached2 = getCachedMnsWms(key);
     if (cached2.hit) return cached2.data;
 
-    // 1. Primary: True LiDAR HD MNS WMS (~0.40m surface model)
+    // 1. Principal : le vrai WMS MNS LiDAR HD (modèle de surface à ~0,40 m)
     const { controller, cleanup, init } = ignFetchInit({ purpose, mapTile });
     try {
       let data = null;

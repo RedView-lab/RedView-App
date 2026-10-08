@@ -61,7 +61,7 @@ importScripts(
 // d'un worker (p. ex. quand le SW renvoie une voisine évincée du LRU côté SW mais
 // encore en cours ici). Petit budget — les workers ont moins de mémoire que le SW.
 const WORKER_DEM_LRU_MAX = 128;
-const _workerDemLru = new Map(); // key "z/x/y" → Float32Array
+const _workerDemLru = new Map(); // clé "z/x/y" → Float32Array
 
 function workerDemGet(key) {
   if (!_workerDemLru.has(key)) return null;
@@ -209,8 +209,8 @@ self.onmessage = async (event) => {
           const r = srcPixels[idx];
           const g = srcPixels[idx + 1];
           const b = srcPixels[idx + 2];
-          // Terrarium: H = R*256 + G + B/256 - 32768
-          // Terrain-RGB: val = (H + 10000) * 10 = (R*256 + G + B*0.00390625 - 22768) * 10
+          // Terrarium : H = R*256 + G + B/256 - 32768
+          // Terrain-RGB : val = (H + 10000) * 10 = (R*256 + G + B*0.00390625 - 22768) * 10
           const raw = (r * 256 + g + b * 0.00390625 - 22768) * 10;
           const val = raw > 0 ? (raw > 16777215 ? 16777215 : (raw + 0.5) | 0) : 0;
           outRgba[idx]     = (val >> 16) & 0xff;

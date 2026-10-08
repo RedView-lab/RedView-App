@@ -65,7 +65,7 @@ const _ZRLE_LEN_BASE = [3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31,
 const _ZRLE_LEN_EXTRA = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2,
   3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0];
 const _ZRLE_CL_ORDER = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
-// Match length (3…258) → length code index (0…28, i.e. symbols 257…285).
+// Longueur de correspondance (3…258) → indice du code de longueur (0…28, soit les symboles 257…285).
 const _ZRLE_LEN_CODE = (() => {
   const t = new Uint8Array(259);
   for (let c = 0; c < 29; c++) {
@@ -161,7 +161,7 @@ function zlibDeflateRle(data) {
   const n = data.length;
   let out = new Uint8Array(Math.max(1024, (n >> 1) + 1024));
   let pos = 2;
-  out[0] = 0x78; // deflate, 32 K window
+  out[0] = 0x78; // deflate, fenêtre de 32 K
   out[1] = 0x01; // FLEVEL 0 (le plus rapide), FCHECK tel que 0x7801 % 31 === 0
   let bitBuf = 0;
   let bitCnt = 0;
@@ -175,11 +175,11 @@ function zlibDeflateRle(data) {
     }
   };
 
-  const symbols = new Uint16Array(_ZRLE_BLOCK_SYMBOLS); // < 256 literal, else 256 + match length
+  const symbols = new Uint16Array(_ZRLE_BLOCK_SYMBOLS); // < 256 littéral, sinon 256 + longueur de correspondance
   const litFreq = new Uint32Array(286);
   const distFreq = new Uint32Array(30);
   const clFreq = new Uint32Array(19);
-  const clOps = new Uint16Array(286 + 30); // code-length symbol | extra value << 5
+  const clOps = new Uint16Array(286 + 30); // symbole de longueur de code | valeur supplémentaire << 5
   let i = 0;
   do {
     litFreq.fill(0);
@@ -255,7 +255,7 @@ function zlibDeflateRle(data) {
     }
 
     put(final ? 1 : 0, 1);
-    put(2, 2); // dynamic Huffman
+    put(2, 2); // Huffman dynamique
     put(nLit - 257, 5);
     put(nDist - 1, 5);
     put(nCl - 4, 4);
@@ -307,7 +307,7 @@ async function buildRawPng(width, height, rgba) {
   for (let y = 0; y < height; y++) {
     const off = y * rowBytes;
     const srcOff = y * rowLen;
-    raw[off] = 0; // filter: None
+    raw[off] = 0; // filtre : None
     raw.set(rgba.subarray(srcOff, srcOff + rowLen), off + 1);
   }
   return buildPngFromScanlines(width, height, raw);
@@ -327,15 +327,15 @@ async function buildPngFromScanlines(width, height, raw, colorType = 6) {
 
 // PNG autour d'un flux zlib déjà compressé des lignes.
 function buildPngFromZlib(width, height, compData, colorType) {
-  // PNG signature
+  // Signature PNG
   const sig = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
 
-  // IHDR: width, height, bit-depth 8, color-type 6 (RGBA)
+  // IHDR : largeur, hauteur, profondeur 8 bits, type de couleur 6 (RGBA)
   const ihdrData = new Uint8Array(13);
   const ihdrView = new DataView(ihdrData.buffer);
   ihdrView.setUint32(0, width);
   ihdrView.setUint32(4, height);
-  ihdrData[8] = 8;  // bit depth
+  ihdrData[8] = 8;  // profondeur de bits
   ihdrData[9] = colorType;
   ihdrData[10] = 0; // compression
   ihdrData[11] = 0; // filter
@@ -404,7 +404,7 @@ async function buildGrayPng(width, height, gray) {
     const off = y * rowBytes;
     const row = y * width;
     const up = row - width;
-    raw[off] = 4; // filter type: Paeth
+    raw[off] = 4; // type de filtre : Paeth
     for (let x = 0; x < width; x++) {
       const a = x > 0 ? gray[row + x - 1] : 0;
       const b = y > 0 ? gray[up + x] : 0;
@@ -441,7 +441,7 @@ async function buildRawPngSlope(width, height, rgba) {
   for (let y = 0; y < height; y++) {
     const off = y * rowBytes;
     const srcRow = y * width * 4;
-    raw[off] = 1; // filter type: Sub
+    raw[off] = 1; // type de filtre : Sub
     // Premier pixel de la ligne : pas de voisin de gauche → stocké tel quel.
     raw[off + 1] = rgba[srcRow];
     raw[off + 2] = rgba[srcRow + 1];
@@ -465,7 +465,7 @@ async function buildRawPngSlope(width, height, rgba) {
   const ihdrView = new DataView(ihdrData.buffer);
   ihdrView.setUint32(0, width);
   ihdrView.setUint32(4, height);
-  ihdrData[8] = 8;  // bit depth
+  ihdrData[8] = 8;  // profondeur de bits
   ihdrData[9] = 6;  // type de couleur : RGBA (comme buildRawPng, pour que le décodage Mapbox
                     // suive le même chemin ; seul le filtre interne au PNG diffère).
   ihdrData[10] = 0;
@@ -484,7 +484,7 @@ async function buildRawPngSlope(width, height, rgba) {
   return new Blob([png], { type: 'image/png' });
 }
 
-// ── Encode elevations → Terrain-RGB PNG ───────────────────────────────
+// ── Encodage des altitudes → PNG Terrain-RGB ─────────────────────────
 
 // Tuile DEM plate précalculée au niveau de la mer (tous les pixels à altitude=0).
 // Générée une seule fois à la demande — renvoyée pour toute requête DEM en échec,
@@ -497,7 +497,7 @@ function getFlatDemTile() {
   if (!_flatDemTilePromise) {
     _flatDemTilePromise = (async () => {
       const size = DEM_TILE_SIZE;
-      const elevations = new Float32Array(size * size); // All zeros = sea level
+      const elevations = new Float32Array(size * size); // Tout à zéro = niveau de la mer
       const blob = await encodeTerrainRGBPng(elevations);
       if (typeof swLog !== 'undefined' && swLog.isDebug()) {
         swLog.debug('build', `Flat DEM tile generated: ${blob.size} bytes (${size}x${size})`);
@@ -539,7 +539,7 @@ async function encodeTerrainRGBPng(elevations) {
 
   for (let y = 0; y < size; y++) {
     const rowOffset = y * rowBytes;
-    raw[rowOffset] = 2; // filter: Up
+    raw[rowOffset] = 2; // filtre : Up
     let o = rowOffset + 1;
     let p = 0;
     const rowStart = y * size;
@@ -655,7 +655,7 @@ async function decodeTerrainRGBBlobUncached(blob) {
     ctx.drawImage(img, 0, 0);
     imageData = ctx.getImageData(0, 0, width, height);
   } finally {
-    img.close(); // Release GPU texture memory immediately
+    img.close(); // Libère tout de suite la mémoire de texture GPU
   }
   const pixels = imageData.data;
   const len = width * height;
@@ -664,13 +664,13 @@ async function decodeTerrainRGBBlobUncached(blob) {
 
   for (let i = 0; i < len; i++) {
     const val = u32[i];
-    // In little-endian: val = (A << 24) | (B << 16) | (G << 8) | R
-    // Terrain-RGB formula: -10000 + ((R << 16) | (G << 8) | B) * 0.1
+    // En petit-boutiste : val = (A << 24) | (B << 16) | (G << 8) | R
+    // Formule Terrain-RGB : -10000 + ((R << 16) | (G << 8) | B) * 0.1
     const rgb = ((val & 0xff) << 16) | (val & 0x0000ff00) | ((val >> 16) & 0xff);
     elevations[i] = -10000 + rgb * 0.1;
   }
 
-  // ── DEBUG: log decode diagnostics ──
+  // ── DEBUG : journalise les diagnostics de décodage ──
   if (DEBUG) {
     let minE = Infinity, maxE = -Infinity, sumE = 0;
     for (let i = 0; i < elevations.length; i++) {
@@ -700,7 +700,7 @@ function overzoomDemElevations(parentElevations, parentZ, parentX, parentY, targ
   if (!parentElevations) return null;
   const size = DEM_TILE_SIZE; // 256
   const dz = targetZ - parentZ;
-  const nChildren = 1 << dz; // e.g. dz=2 → 4 sub-tiles per axis
+  const nChildren = 1 << dz; // p. ex. dz=2 → 4 sous-tuiles par axe
 
   // Quel enfant dans la grille du parent
   const childX = targetX - (parentX << dz);
@@ -719,7 +719,7 @@ function overzoomDemElevations(parentElevations, parentZ, parentX, parentY, targ
   const srcX0 = childX * srcSize;
   const srcY0 = childY * srcSize;
 
-  // Helper: clamp-sample parent elevations
+  // Aide : échantillonnage borné des altitudes du parent
   const pSample = (px, py) => {
     const cx = Math.max(0, Math.min(px, size - 1));
     const cy = Math.max(0, Math.min(py, size - 1));

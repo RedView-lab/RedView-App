@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Slope Tile Processing — Tile Builders (zone HD tiles, ancestor upsamples)
+// Tuiles de pente — constructeurs (tuiles HD de zone, suréchantillonnage des ancêtres)
 // ---------------------------------------------------------------------------
 
 const zoneStateMap = new Map();

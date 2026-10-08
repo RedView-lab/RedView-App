@@ -12,7 +12,7 @@ export function loadViewport(): MapViewport | null {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const vp: MapViewport = JSON.parse(raw);
-    // Basic validation
+    // Validation de base
     if (
       typeof vp.center?.[0] === 'number' &&
       typeof vp.center?.[1] === 'number' &&
@@ -29,5 +29,5 @@ export function loadViewport(): MapViewport | null {
 export function saveViewport(vp: MapViewport): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(vp));
-  } catch { /* quota exceeded, non-critical */ }
+  } catch { /* quota dépassé, sans gravité */ }
 }

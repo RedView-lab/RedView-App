@@ -37,7 +37,7 @@ interface EnvironmentLighting {
   directional: {
     color: string;
     intensity: number;
-    /** [azimuth°, polar°] — polar 0 = zenith, 90 = horizon. */
+    /** [azimut°, polaire°] — polaire 0 = zénith, 90 = horizon. */
     direction: [number, number];
   };
   fog: FogSpecification;

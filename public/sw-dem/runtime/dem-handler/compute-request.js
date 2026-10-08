@@ -58,7 +58,7 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile, options 
     negCache.match(cacheKey),
   ]);
 
-  // 1. Positive cache
+  // 1. Cache positif
   if (cached) {
     const ttlMs = parseInt(cached.headers.get('x-cache-ttl-ms') || '0', 10);
     if (!ttlMs) {
@@ -77,7 +77,7 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile, options 
     if (!fresh) await cache.delete(cacheKey);
   }
 
-  // 2. Negative cache (TTL-bounded)
+  // 2. Cache négatif (borné par TTL)
   if (negCached) {
     const age = parseInt(negCached.headers.get('x-cached-at') || '0', 10);
     const ttl = parseInt(negCached.headers.get('x-neg-ttl') || String(NEGATIVE_TTL_PIPELINE), 10);
@@ -92,7 +92,7 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile, options 
     if (!live) negCache.delete(cacheKey);
   }
 
-  // 2b. Fast 30m mode: directly serve AWS Terrarium (global 30m, zero country-specific oversampling)
+  // 2b. Mode 30 m rapide : sert directement AWS Terrarium (30 m mondial, aucun suréchantillonnage par pays)
   if (demProfile === 'fast-30m') {
     try {
       const pngBlob = await fetchAWSTerrainTile(z, x, y);
@@ -192,7 +192,7 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile, options 
     // deux pourraient tourner.
     const tilePredominantlyFrench = franceClass === 'inside' || tileCenterInFrancePoly;
 
-    // ── Stricter "tile actually overlaps France polygon" test.
+    // ── Test plus strict « la tuile recouvre vraiment le polygone France ».
     let tileTrulyTouchesFrance = tileIsInFrance;
     if (tileIsInFrance && franceClass === 'border' && inSwitzerland) {
       const cLng = (tileBounds.west + tileBounds.east) / 2;
@@ -380,7 +380,7 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile, options 
                   }
                 }
               }
-            } catch { /* best-effort */ }
+            } catch { /* au mieux */ }
             spainBorderFillPromise = null;
           }
           if (ignResult.blob) {
@@ -440,7 +440,7 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile, options 
         } else if (sp?.source === 'spain-unavailable') {
           spainTransientFailure = true;
         }
-      } catch { /* best-effort */ }
+      } catch { /* au mieux */ }
       spainBorderFillPromise = null;
     }
 
@@ -462,7 +462,7 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile, options 
       }
     }
 
-    // 3b. WMTS terrain fallback.
+    // 3b. Repli sur le terrain WMTS.
     if (!pngBlob && tileTrulyTouchesFrance && useFranceHighres && !ignHadSomeData) {
       const highresResult = await buildIGNFallbackTile(z, x, y);
       if (highresResult) {
@@ -541,7 +541,7 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile, options 
       if (pngBlob) demSource = 'aws-terrarium';
     }
 
-    // 5. Single-step parent overzoom (outside-LiDAR & low-zoom path).
+    // 5. Surzoom d'un seul niveau du parent (hors LiDAR et bas zoom).
     if (!pngBlob && allowGlobalFallbackTile) {
       const fb = await tryParentOverzoom(cache, z, x, y, _depth, demProfile);
       if (fb) {
@@ -550,7 +550,7 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile, options 
       }
     }
 
-    // 5b. Emergency degraded-parent — last resort.
+    // 5b. Parent dégradé d'urgence — dernier recours.
     if (!pngBlob && lidarRegionEngaged && z >= MAPBOX_DEM_MAXZOOM) {
       try {
         const emergency = await fetchAWSTerrainTile(z, x, y);

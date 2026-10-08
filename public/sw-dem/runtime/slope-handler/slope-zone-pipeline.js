@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Slope Tile Processing — Zone Multi-Fetch Pipeline & Viewport Prewarm
+// Tuiles de pente — pipeline multi-requêtes de zone et préchauffage de la vue
 // ---------------------------------------------------------------------------
 
 let activeZonePipeline = null;
@@ -157,7 +157,7 @@ async function startZoneSlopeMultiFetch(tiles, profile, zoneHash) {
     if (currentPipeline.cancelled) return;
     try {
       await buildAndCacheHdSlopeTile(t.z, t.x, t.y, 1, demProfile, zone, { silent: true });
-    } catch { /* best-effort */ }
+    } catch { /* au mieux */ }
     hdDone++;
     if (!currentPipeline.cancelled) {
       broadcastZoneProgress(zone, 'hd', hdDone, total);
@@ -202,7 +202,7 @@ function prewarmSlopeTiles(tiles, profile, zoneHash) {
       if (!t || !Number.isFinite(t.z) || !Number.isFinite(t.x) || !Number.isFinite(t.y)) continue;
       try {
         await handleSlopeRequest(t.z, t.x, t.y, '', demProfile, '');
-      } catch { /* best-effort */ }
+      } catch { /* au mieux */ }
     }
   });
   Promise.all(workers).catch(() => {});

@@ -246,7 +246,7 @@ export function useMap(
         let hasContent = false;
         try {
           hasContent = styleHasUsableContent(map.getStyle());
-        } catch { /* getStyle threw */ }
+        } catch { /* getStyle a levé une exception */ }
         if (hasContent) return;
         console.warn(
           `[map3d] style not parsed after ${STUCK_SHELL_WATCHDOG_MS} ms of visible time — retrying setStyle`,

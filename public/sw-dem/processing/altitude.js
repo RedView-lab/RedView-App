@@ -120,7 +120,7 @@ async function encodeAltitudePng(elevations, zoneMask) {
     : buildRawPng(size, size, rgba);
 }
 
-// ── Full pipeline — DEM blob → altitude overlay PNG ────────────────────────
+// ── Pipeline complet — blob DEM → PNG de surcouche d'altitude ──────────────
 async function buildAltitudeTile(demBlob, z, x, y, shouldCancel, zoneRing) {
   const t0 = performance.now();
   const elevations = await decodeAltitudeDemBlob(demBlob, z, x, y);

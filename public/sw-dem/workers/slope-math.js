@@ -34,7 +34,7 @@
 // ---------------------------------------------------------------------------
 
 const SLOPE_EARTH_CIRCUMFERENCE_M = 40075016.686;
-// encoded = sqrt(atan(g) / (π/2)) · 255 = sqrt(deg / 90) · 255
+// encodé = sqrt(atan(g) / (π/2)) · 255 = sqrt(deg / 90) · 255
 const SLOPE_ENC_K = 255 / Math.sqrt(Math.PI / 2);
 
 // Cellules de DEM empruntées à chaque voisine : Horn en a besoin d'1, le
@@ -74,7 +74,7 @@ function buildPaddedElevationsFromArrays(ownElev, neighbourElevations) {
     pad.set(ownElev.subarray(r * S, (r + 1) * S), (r + B) * P + B);
   }
 
-  // North strip: tile rows −1 … −B.
+  // Bande nord : lignes de tuile −1 … −B.
   for (let k = 1; k <= B; k++) {
     const dst = (B - k) * P + B;
     if (nN) {
@@ -96,7 +96,7 @@ function buildPaddedElevationsFromArrays(ownElev, neighbourElevations) {
       }
     }
   }
-  // West / east strips.
+  // Bandes ouest / est.
   for (let r = 0; r < S; r++) {
     const row = (r + B) * P;
     const src = r * S;
@@ -111,7 +111,7 @@ function buildPaddedElevationsFromArrays(ownElev, neighbourElevations) {
         : ownElev[src + S - 1] + (k + 1) * (ownElev[src + S - 1] - ownElev[src + S - 2]);
     }
   }
-  // Corner blocks.
+  // Blocs de coin.
   const fillCorner = (r0, r1, c0, c1) => {
     for (let r = r0; r < r1; r++) {
       const re = r < B ? B : B + S - 1;
@@ -308,7 +308,7 @@ function rasterizeRingMask(ring, z, x, y, size) {
   const n = ring.length;
   if (!n || n < 3) return null;
 
-  // 2× supersampled coverage buffer.
+  // Tampon de couverture suréchantillonné 2×.
   const ss = 2;
   const sw = size * ss;
   const worldTiles = 1 << z;
@@ -320,11 +320,11 @@ function rasterizeRingMask(ring, z, x, y, size) {
     const lng = ring[i][0];
     const lat = ring[i][1];
 
-    // X in Web Mercator tile pixel space
+    // X dans l'espace pixel de la tuile Web Mercator
     const tileFracX = ((lng + 180) / 360) * worldTiles - x;
     px[i] = tileFracX * sw;
 
-    // Y in Web Mercator tile pixel space
+    // Y dans l'espace pixel de la tuile Web Mercator
     const latRad = (lat * Math.PI) / 180;
     const sinLat = Math.sin(latRad);
     const clampedSin = Math.max(-0.999999, Math.min(0.999999, sinLat));
@@ -360,7 +360,7 @@ function rasterizeRingMask(ring, z, x, y, size) {
     }
   }
 
-  // 2×2 average downsample → feathered alpha.
+  // Sous-échantillonnage par moyenne 2×2 → alpha adouci.
   const out = new Uint8Array(size * size);
   for (let r = 0; r < size; r++) {
     const sRow = r * ss * sw;

@@ -28,7 +28,7 @@ let activeIGNSlopeVisible = 0;
 // à celle de slope-visible. Slope-visible garde le LIFO et un sous-plafond
 // dynamique ; un chargement de pente isolé (aucun fond de carte en file) a tout
 // le budget, donc les mesures dédiées à la pente à 1 m ne changent pas.
-const ignForegroundQueue = [];   // basemap (purpose === null/undefined)
+const ignForegroundQueue = [];   // fond de carte (purpose === null/undefined)
 const ignSlopeVisibleQueue = []; // PURPOSE_SLOPE_VISIBLE
 const ignBackgroundQueue = [];   // PURPOSE_SLOPE_WARM
 let ignPrunedTotal = 0; // Compteur cumulé, pour le diagnostic
@@ -247,7 +247,7 @@ function scheduleIGN(fn, purpose, coords, mapTile = null, options = {}) {
       lat = c.lat;
       hasCoords = true;
     } else if (coords && Number.isFinite(coords.lng) && Number.isFinite(coords.lat)) {
-      // Direct lng/lat (Mercator-tile WMS requests) — centre-first ordering.
+      // lng/lat directs (requêtes WMS par tuile Mercator) — ordre depuis le centre.
       lng = coords.lng;
       lat = coords.lat;
       hasCoords = true;
@@ -284,7 +284,7 @@ function scheduleIGN(fn, purpose, coords, mapTile = null, options = {}) {
 
 function drainIGN() {
   while (activeIGN < IGN_CONCURRENCY && totalIGNQueueLength() > 0) {
-    // LIFO: pop newest item — prioritise current-viewport tiles over stale ones
+    // LIFO : prend l'élément le plus récent — priorité aux tuiles de la vue courante sur les anciennes
     const next = popNextIGNEntry();
     if (!next?.entry) break;
     const { entry, background } = next;

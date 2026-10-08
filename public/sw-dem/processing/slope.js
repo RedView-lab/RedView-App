@@ -96,7 +96,7 @@ async function buildSlopeTile(demBlob, neighbourBlobs, z, x, y, resFactor, demPr
     const [nx, ny] = coords[dir];
     try {
       neighbourElevations[dir] = await decodeSlopeDemBlob(blob, z, nx, ny, demProfile);
-    } catch { /* treated as missing */ }
+    } catch { /* traité comme manquant */ }
   }));
   return buildSlopePngFromElevations(ownElev, neighbourElevations, z, x, y, {
     resFactor,

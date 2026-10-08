@@ -39,7 +39,7 @@ const DEM_HOT_CACHE = new Map();
 function demHotGet(keyStr) {
   const entry = DEM_HOT_CACHE.get(keyStr);
   if (!entry) return null;
-  // Refresh LRU position
+  // Rafraîchit la position LRU
   DEM_HOT_CACHE.delete(keyStr);
   DEM_HOT_CACHE.set(keyStr, entry);
   return entry;

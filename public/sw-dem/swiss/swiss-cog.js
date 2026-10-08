@@ -21,7 +21,7 @@
 // pipeline suisse.
 // ---------------------------------------------------------------------------
 
-// ─── TIFF tag IDs we care about ─────────────────────────────────────────────
+// ─── Identifiants des balises TIFF qui nous intéressent ─────────────────────
 const T_ImageWidth         = 256;
 const T_ImageLength        = 257;
 const T_BitsPerSample      = 258;
@@ -36,7 +36,7 @@ const T_ModelPixelScaleTag = 33550;
 const T_ModelTiepointTag   = 33922;
 const T_GDAL_NODATA        = 42113;
 
-// TIFF field type sizes
+// Tailles des types de champ TIFF
 const TIFF_TYPE_SIZE = {
   1: 1,  // BYTE
   2: 1,  // ASCII
@@ -58,7 +58,7 @@ const TIFF_TYPE_SIZE = {
 // utilisent Compression=8, la forme enveloppée zlib ; DecompressionStream gère
 // nativement 'deflate' (zlib) et 'deflate-raw'. On essaie d'abord zlib.
 async function inflateDeflate(buffer) {
-  // buffer: Uint8Array
+  // buffer : Uint8Array
   const tryDecompress = async (format) => {
     const stream = new Blob([buffer]).stream().pipeThrough(new DecompressionStream(format));
     const out = await new Response(stream).arrayBuffer();
@@ -174,7 +174,7 @@ function decodeTIFFLZW(input) {
       }
       writeEntry(code);
     } else {
-      // Bad code — corrupt stream. Bail.
+      // Code invalide — flux corrompu. On abandonne.
       break;
     }
 
@@ -450,7 +450,7 @@ function pickSwissCOGLevel(cog, mppOut) {
   return best;
 }
 
-// ─── Internal-tile fetch + decode ───────────────────────────────────────────
+// ─── Récupération + décodage des tuiles internes ────────────────────────────
 
 // Décode en Float32Array une plage d'octets de tuile interne déjà récupérée.
 // Séparé de fetchAndDecodeTile() pour que l'ordonnanceur de plages regroupées

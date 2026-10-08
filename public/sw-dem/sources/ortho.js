@@ -47,7 +47,7 @@ async function ensureFrancePoly() {
 }
 
 // ---------------------------------------------------------------------------
-// Point-in-polygon (ray-casting)
+// Point dans un polygone (lancer de rayon)
 // ---------------------------------------------------------------------------
 
 function pointInRing(lng, lat, ring) {
@@ -81,7 +81,7 @@ function pointInFrance(lng, lat) {
 }
 
 // ---------------------------------------------------------------------------
-// Tile classification (inside / border / outside France polygon)
+// Classement des tuiles (dans / en bordure / hors du polygone France)
 // ---------------------------------------------------------------------------
 
 function classifyOrthoTile(z, x, y) {
@@ -339,7 +339,7 @@ async function maskOrthoTile(imgBlob, z, tileX, tileY) {
 }
 
 // ---------------------------------------------------------------------------
-// Ortho tile URL builder & helpers
+// Construction des URL de tuiles ortho et aides
 // ---------------------------------------------------------------------------
 
 function buildOrthoTileURL(z, x, y) {
@@ -566,7 +566,7 @@ async function tryParentOrthoOverzoom(cache, z, x, y) {
         img.close();
       }
     } catch {
-      // Try next parent level
+      // Essaie le niveau parent suivant
     }
   }
   return null;

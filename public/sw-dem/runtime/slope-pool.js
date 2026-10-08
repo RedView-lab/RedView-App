@@ -41,12 +41,12 @@
 // État interne du pool. Vit au niveau du module pour que le SW réutilise un seul
 // pool pour toutes les requêtes de pente / d'altitude.
 let _slopeWorkers = null;            // Worker[]
-let _slopeWorkerReady = null;        // boolean[] — worker accepted at least one job
-let _slopeWorkerMonotonic = 0;       // round-robin counter
+let _slopeWorkerReady = null;        // boolean[] — le worker a accepté au moins une tâche
+let _slopeWorkerMonotonic = 0;       // compteur à tour de rôle
 let _slopePoolDisabled = false;      // passe à true après une défaillance structurelle
 // id → { resolve, reject, kind, workerIdx } — `kind` permet de n'annuler qu'un seul overlay.
 const _slopeJobCallbacks = new Map();
-const _workerActiveJobs = new Map(); // workerIdx → active count
+const _workerActiveJobs = new Map(); // indice du worker → nombre de tâches actives
 let _slopeJobMonotonic = 0;
 
 // ── Porte de concurrence du travail préalable ─────────────────────────
@@ -163,7 +163,7 @@ function ensureSlopePool() {
     const w = spawnSlopeWorker();
     if (!w) {
       _slopePoolDisabled = true;
-      // Tear down any partially-spawned workers.
+      // Démonte les workers lancés à moitié.
       for (const partial of workers) {
         try { partial.terminate(); } catch { /* ignore */ }
       }
@@ -225,7 +225,7 @@ function cancelPoolJobsByKind(kind) {
       const c = _workerActiveJobs.get(cb.workerIdx) || 0;
       _workerActiveJobs.set(cb.workerIdx, Math.max(0, c - 1));
     }
-    cb.resolve(null); // null == "cancelled" — caller treats as transparent
+    cb.resolve(null); // null == « annulé » — l'appelant le traite comme transparent
     n++;
   }
   return n;

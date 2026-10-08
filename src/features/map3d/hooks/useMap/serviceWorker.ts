@@ -29,7 +29,7 @@ function markReloadedForCurrentEpoch(): void {
   try {
     window.sessionStorage.setItem(MAP_CACHE_AUTO_RELOAD_SESSION_KEY, MAP_CACHE_EPOCH);
   } catch {
-    /* ignore storage failures */
+    /* échecs de stockage ignorés */
   }
 }
 

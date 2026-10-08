@@ -228,7 +228,7 @@ self.addEventListener('message', (e) => {
       if (typeof startZoneSlopeMultiFetch === 'function') {
         startZoneSlopeMultiFetch(tiles, profile, zone);
       }
-    } catch { /* best-effort */ }
+    } catch { /* au mieux */ }
     return;
   }
   if (e.data?.type === 'PURGE_SLOPE_CACHE') {
@@ -354,7 +354,7 @@ self.addEventListener('message', (e) => {
           })
           .map((req) => cache.delete(req)));
       })),
-    ]).catch(() => { /* best-effort */ });
+    ]).catch(() => { /* au mieux */ });
     return;
   }
   // ── Préchauffage des pentes entre profils / sur la vue (multicœur 2026-06-20) ──
@@ -374,7 +374,7 @@ self.addEventListener('message', (e) => {
     if (tiles.length === 0) return;
     try {
       if (typeof prewarmSlopeTiles === 'function') prewarmSlopeTiles(tiles, profile, zone);
-    } catch { /* best-effort */ }
+    } catch { /* au mieux */ }
     return;
   }
   // ── Zone d'analyse (overlays de terrain limités à une zone) ─────────

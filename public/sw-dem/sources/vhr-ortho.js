@@ -59,11 +59,11 @@ const VHR_HOT_CACHE_MAX = 160;
 const VHR_NODATA_MIN = 250;
 const VHR_FRINGE_MIN = 200;
 const VHR_FRINGE_PASSES = 2;
-// CacheStorage bound: ~40 KB per retina JPEG tile → ~200 MB at most.
+// Borne du CacheStorage : ~40 Ko par tuile JPEG retina → ~200 Mo au plus.
 const VHR_DISK_MAX_ENTRIES = 5000;
 const VHR_DISK_TRIM_EVERY = 250;
 
-// ── Small helpers ───────────────────────────────────────────────────────
+// ── Petites aides ───────────────────────────────────────────────────────
 
 function vhrMercatorBBox(z, x, y) {
   const world = 2 * Math.PI * 6378137;
@@ -211,7 +211,7 @@ async function fetchVhrImage(url) {
 
 // ── Masques de couverture (une grille alpha de 64 px par couche et par tuile z14) ──
 
-// key → { alpha: Uint8Array | null } (null alpha = no coverage at all)
+// clé → { alpha: Uint8Array | null } (alpha null = aucune couverture)
 const vhrMaskMemory = new Map();
 const vhrMaskInflight = new Map();
 
@@ -284,7 +284,7 @@ async function getVhrMask(layer, mx, my) {
 function classifyVhrCoverage(alpha, z, x, y) {
   if (!alpha) return 'none';
   const dz = z - VHR_MASK_Z;
-  const span = VHR_MASK_SIZE / (1 << dz); // mask pixels per tile side
+  const span = VHR_MASK_SIZE / (1 << dz); // pixels de masque par côté de tuile
   const ox = (x - ((x >> dz) << dz)) * span;
   const oy = (y - ((y >> dz) << dz)) * span;
   const x0 = Math.floor(ox);
@@ -322,7 +322,7 @@ async function planVhrTile(z, x, y) {
   return plan;
 }
 
-// ── Tile assembly ────────────────────────────────────────────────────────
+// ── Assemblage des tuiles ────────────────────────────────────────────────
 
 async function buildVhrTile(z, x, y, px) {
   const plan = await planVhrTile(z, x, y);
@@ -362,7 +362,7 @@ async function buildVhrTile(z, x, y, px) {
   return { blob: await out.convertToBlob({ type: 'image/png' }), type: 'image/png' };
 }
 
-// ── Request handler ─────────────────────────────────────────────────────
+// ── Gestionnaire de requêtes ────────────────────────────────────────────
 
 const vhrInflight = new Map();
 const VHR_HOT_CACHE = new Map();

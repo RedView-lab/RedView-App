@@ -157,7 +157,7 @@ async function compositeIGNMapbox(ignElevations, coverage, z, x, y, opts = {}) {
     return encodeTerrainRGBPng(ignElevations);
   }
 
-  // --- Original partial-coverage path (distance transform + IDW blend) ---
+  // --- Chemin d'origine en couverture partielle (transformée de distance + mélange IDW) ---
   let mbElevations = opts.prefilledMbElev;
   if (!mbElevations) {
     const mapboxBlob = await fetchMapboxTile(z, x, y);
@@ -191,7 +191,7 @@ async function compositeIGNMapbox(ignElevations, coverage, z, x, y, opts = {}) {
     return c * c * (3 - 2 * c);
   }
 
-  // Resample Mapbox elevations helper
+  // Aide de rééchantillonnage des altitudes Mapbox
   const mbSize = Math.round(Math.sqrt(mbElevations.length));
   const scale = mbSize / DEM_TILE_SIZE;
 
@@ -202,7 +202,7 @@ async function compositeIGNMapbox(ignElevations, coverage, z, x, y, opts = {}) {
     return mbElevations[my * mbSize + mx];
   }
 
-  // --- Distance transform (Chamfer 2-pass) ---
+  // --- Transformée de distance (chanfrein, 2 passes) ---
   const distToBorder = new Float32Array(totalPixels);
   const INF = DEM_TILE_SIZE * 2;
   distToBorder.fill(INF);
@@ -223,7 +223,7 @@ async function compositeIGNMapbox(ignElevations, coverage, z, x, y, opts = {}) {
     }
   }
 
-  // Forward pass
+  // Passe avant
   for (let py = 0; py < DEM_TILE_SIZE; py++) {
     for (let px = 0; px < DEM_TILE_SIZE; px++) {
       const idx = py * DEM_TILE_SIZE + px;
@@ -234,7 +234,7 @@ async function compositeIGNMapbox(ignElevations, coverage, z, x, y, opts = {}) {
     }
   }
 
-  // Backward pass
+  // Passe arrière
   for (let py = DEM_TILE_SIZE - 1; py >= 0; py--) {
     for (let px = DEM_TILE_SIZE - 1; px >= 0; px--) {
       const idx = py * DEM_TILE_SIZE + px;
@@ -245,7 +245,7 @@ async function compositeIGNMapbox(ignElevations, coverage, z, x, y, opts = {}) {
     }
   }
 
-  // --- Collect per-pixel border offset samples (IGN − Mapbox) ---
+  // --- Collecte des écarts de bordure par pixel (IGN − Mapbox) ---
   const borderSamples = [];
   for (let py = 0; py < DEM_TILE_SIZE; py++) {
     for (let px = 0; px < DEM_TILE_SIZE; px++) {
@@ -262,7 +262,7 @@ async function compositeIGNMapbox(ignElevations, coverage, z, x, y, opts = {}) {
     }
   }
 
-  // Compute median offset as fallback
+  // Écart médian, en repli
   let medianOffset = 0;
   if (borderSamples.length > 0) {
     const sorted = borderSamples.map(s => s.offset).sort((a, b) => a - b);
@@ -277,7 +277,7 @@ async function compositeIGNMapbox(ignElevations, coverage, z, x, y, opts = {}) {
     samplesForIDW = samplesForIDW.filter((_, i) => i % step === 0);
   }
 
-  // Inverse-distance-weighted offset evaluator
+  // Évaluateur d'écart pondéré par l'inverse de la distance
   function rawIdwOffset(px, py) {
     if (samplesForIDW.length === 0) return medianOffset;
     if (samplesForIDW.length < 4) return medianOffset;

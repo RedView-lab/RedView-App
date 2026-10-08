@@ -33,8 +33,8 @@ function detectGpuProfile(): GpuProfile {
     gl.getExtension('WEBGL_lose_context')?.loseContext();
     const r = renderer.toLowerCase();
 
-    // Detect integrated GPUs (AMD Radeon Graphics / 680M / 780M / 880M, Intel Iris / UHD / Arc iGPU,
-    // Apple Silicon: "ANGLE Metal Renderer: Apple M..." in Chromium, masked "Apple GPU" in Safari), mobile GPUs
+    // Détecte les GPU intégrés (AMD Radeon Graphics / 680M / 780M / 880M, Intel Iris / UHD / Arc iGPU,
+    // Apple Silicon : « ANGLE Metal Renderer: Apple M... » dans Chromium, « Apple GPU » masqué dans Safari), les GPU mobiles
     const isAmdOrIntel = /radeon|amd|intel/.test(r);
     const isAppleGpu = /apple m|apple gpu/.test(r);
     const isDedicated = /geforce|rtx|gtx|quadro|titan|radeon rx (?:[56789]\d00|vega (?:56|64))/.test(r);

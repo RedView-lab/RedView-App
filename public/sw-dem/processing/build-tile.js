@@ -7,12 +7,12 @@
 // Fonctions d'appui : build-tile-support.js. Repli HIGHRES à 5 m :
 // build-fallback-tile.js. Terrain RGE ALTI (WMS) : build-terrain-tile.js.
 
-// tile (see scheduleIGN in sources/ign-scheduler.js, isMapDemTileWanted in sources/ign-cancel.js).
+// tuile (voir scheduleIGN dans sources/ign-scheduler.js, isMapDemTileWanted dans sources/ign-cancel.js).
 async function buildIGNTile(mercZ, mercX, mercY, tileClass, tilePurpose = null, mapTile = null) {
   const t0 = performance.now();
   const isBorder = tileClass === 'border';
 
-  // ── High-Performance WMS LiDAR HD Path (1 single HTTP request per Mercator tile) ──
+  // ── Chemin WMS LiDAR HD haute performance (une seule requête HTTP par tuile Mercator) ──
   if (typeof getMnsWmsTile === 'function') {
     const rawElevations = await fetchIgnRasterThroughCancels(
       () => getMnsWmsTile(mercZ, mercX, mercY, tilePurpose, mapTile),
@@ -82,9 +82,9 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass, tilePurpose = null, 
               }
             }
           }
-        } catch { /* best-effort */ }
+        } catch { /* au mieux */ }
 
-        // Adaptive border dilation
+        // Dilatation adaptative des bordures
         const coverageRatio = coveredCount / totalPixels;
         const dilationPasses = coverageRatio > 0.9 ? 2 : 4;
         for (let pass = 0; pass < dilationPasses; pass++) {
@@ -220,7 +220,7 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass, tilePurpose = null, 
     for (let i = 0; i < subTileOrder.length; i++) {
       const { row, col, gridIdx } = subTileOrder[i];
       fetchCount++;
-      subTileGrid[gridIdx] = undefined; // placeholder — "pending"
+      subTileGrid[gridIdx] = undefined; // substitut — « en attente »
       fetches.push(
         getIGNTileWithFallback(demZ, col, row, deadlineAt, tilePurpose).then((result) => {
           subTileGrid[gridIdx] = result || null;
@@ -238,7 +238,7 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass, tilePurpose = null, 
     if (fetchCount === 0) resolveAll();
   });
 
-  // Macrotask deadline fallback
+  // Repli sur une échéance en macrotâche
   await Promise.race([
     allSettled,
     new Promise((resolve) => setTimeout(resolve, softDeadlineMs)),
@@ -259,7 +259,7 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass, tilePurpose = null, 
     );
   }
 
-  // Log IGN sub-tile fetch results
+  // Journalise les résultats de récupération des sous-tuiles IGN
   let ignOk = 0, ignFallback = 0, ignMissing = 0, ignMissing404 = 0;
   for (let i = 0; i < totalSubTiles; i++) {
     const result = subTileGrid[i];
@@ -424,7 +424,7 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass, tilePurpose = null, 
           }
         }
       }
-    } catch { /* best-effort */ }
+    } catch { /* au mieux */ }
   }
 
   // --- Dilatation adaptative des pixels de bord (8-connexité) avec tampons ping-pong recyclés ---
@@ -442,12 +442,12 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass, tilePurpose = null, 
         const idx = row + px;
         if (coverage[idx]) continue;
         let sum = 0, count = 0;
-        // Cardinal neighbors (4-connected)
+        // Voisins cardinaux (4-connexité)
         if (py > 0 && coverage[idx - DEM_TILE_SIZE]) { sum += elevations[idx - DEM_TILE_SIZE]; count++; }
         if (py < DEM_TILE_SIZE - 1 && coverage[idx + DEM_TILE_SIZE]) { sum += elevations[idx + DEM_TILE_SIZE]; count++; }
         if (px > 0 && coverage[idx - 1]) { sum += elevations[idx - 1]; count++; }
         if (px < DEM_TILE_SIZE - 1 && coverage[idx + 1]) { sum += elevations[idx + 1]; count++; }
-        // Diagonal neighbors (8-connected)
+        // Voisins diagonaux (8-connexité)
         if (py > 0 && px > 0 && coverage[idx - DEM_TILE_SIZE - 1]) { sum += elevations[idx - DEM_TILE_SIZE - 1]; count++; }
         if (py > 0 && px < DEM_TILE_SIZE - 1 && coverage[idx - DEM_TILE_SIZE + 1]) { sum += elevations[idx - DEM_TILE_SIZE + 1]; count++; }
         if (py < DEM_TILE_SIZE - 1 && px > 0 && coverage[idx + DEM_TILE_SIZE - 1]) { sum += elevations[idx + DEM_TILE_SIZE - 1]; count++; }

@@ -14,7 +14,7 @@ import type { BasemapPalette } from './types';
  *   claire que le rendu voulu à l'écran.
  */
 
-/** "Papier topo": warm paper, crisp hierarchy, Swiss-style relief. */
+/** « Papier topo » : papier chaud, hiérarchie nette, relief à la suisse. */
 export const TOPO_LIGHT_PALETTE: BasemapPalette = {
   tone: 'light',
   name: 'RedView Topo Clair',

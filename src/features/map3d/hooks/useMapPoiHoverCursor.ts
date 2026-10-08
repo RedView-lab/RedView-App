@@ -230,7 +230,7 @@ export function useMapPoiHoverCursor(map: MapboxMap | null): void {
             if (canvas.style.cursor === 'pointer') canvas.style.cursor = '';
           }
         } catch {
-          // Query rendered features may throw during rapid style switches
+          // queryRenderedFeatures peut lever une exception pendant des changements de style rapides
         }
       });
     };

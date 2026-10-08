@@ -135,7 +135,7 @@ export function installViewportPrefetch(
       try {
         promises.push(fetch(urls[i], init).catch(() => undefined));
       } catch {
-        /* fetch unavailable */
+        /* fetch indisponible */
       }
     }
     void Promise.allSettled(promises);
@@ -435,7 +435,7 @@ export function installViewportPrefetch(
     const sw = typeof navigator !== 'undefined' ? navigator.serviceWorker : null;
     if (sw && sw.controller) {
       try { sw.controller.postMessage({ type: 'CANCEL_STALE_DEM' }); }
-      catch { /* SW gone away */ }
+      catch { /* SW disparu */ }
     }
   };
   map.on('movestart', cancelOnUserGesture);

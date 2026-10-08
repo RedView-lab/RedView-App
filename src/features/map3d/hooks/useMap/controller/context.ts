@@ -62,7 +62,7 @@ type ReportStatusFn = (
   detail?: string,
 ) => void;
 
-/** Mutable runtime state shared across all controller modules. */
+/** État d'exécution mutable partagé par tous les modules du contrôleur. */
 export interface ControllerState {
   demCacheBust: number;
   demTrackingEnabled: boolean;
@@ -94,7 +94,7 @@ export interface ControllerState {
   reloadInProgress: boolean;
   reloadStyleEscalations: number;
 
-  // anti-flat reinforcements
+  // renforts anti-carte plate
   heartbeatTimer: VisibleTimer | null;
   heartbeatFailures: number;
   setTilesVerifyTimer: VisibleTimer | null;
@@ -125,7 +125,7 @@ export interface ControllerFns {
   dropTrackedTile: (tileKey: string) => void;
   pruneStalePendingTiles: () => boolean;
 
-  // status / progress
+  // état / progression
   reportStatus: ReportStatusFn;
   finishDemActivity: (detail?: string) => void;
   publishDemProgress: (detail?: string) => void;
@@ -134,7 +134,7 @@ export interface ControllerFns {
   applyPendingDemPassiveRefresh: () => boolean;
   clearDemTracking: () => void;
 
-  // dem / terrain
+  // DEM / terrain
   applyManagedTerrain: () => boolean;
   applyUnifiedTerrain: () => boolean;
   refreshDemSource: (options?: { forceRebuild?: boolean }) => boolean;
@@ -155,11 +155,11 @@ export interface ControllerFns {
   reloadMapElevation: () => void;
   reloadMapElevationForProfile: () => void;
 
-  // ign overlay
+  // surcouche IGN
   addIgnOrthoOverlay: () => void;
   addVhrOrthoOverlay: () => void;
 
-  // style bootstrap
+  // amorçage du style
   prepareStyleChange: (detail?: string) => void;
   bootstrapCurrentStyle: () => Promise<boolean>;
 
@@ -168,7 +168,7 @@ export interface ControllerFns {
   removeTrackingListeners: () => void;
   clearStyleBootstrapArtifacts: () => void;
 
-  // heartbeat (anti-flat)
+  // battement de cœur (anti-carte plate)
   startTerrainHeartbeat: () => void;
   stopTerrainHeartbeat: () => void;
 }

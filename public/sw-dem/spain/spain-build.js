@@ -292,7 +292,7 @@ function smoothSpainQuantization(elevations, coverage, width, height) {
       if (vne < mn) mn = vne; if (vne > mx) mx = vne;
       if (vsw < mn) mn = vsw; if (vsw > mx) mx = vsw;
       if (vse < mn) mn = vse; if (vse > mx) mx = vse;
-      if (mx - mn > SPAIN_SMOOTH_VARIANCE_M) continue; // edge / cliff — preserve
+      if (mx - mn > SPAIN_SMOOTH_VARIANCE_M) continue; // bord / falaise — préservé
       out[idx] = (vnw + 2 * vn + vne + 2 * vw + 4 * c + 2 * ve + vsw + 2 * vs + vse) / 16;
     }
   }

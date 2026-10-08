@@ -25,7 +25,7 @@ const swissAreaNegCache = new Map();
 const SWISS_AREA_NEG_TTL = 30 * 60_000; // 30 min
 
 function swissAreaNegKey(z, x, y) {
-  return `${z}/${x >> 1}/${y >> 1}`; // group 2×2 sibling tiles
+  return `${z}/${x >> 1}/${y >> 1}`; // regroupe les tuiles sœurs 2×2
 }
 function swissAreaNegGet(z, x, y) {
   const e = swissAreaNegCache.get(swissAreaNegKey(z, x, y));
@@ -158,13 +158,13 @@ async function buildSwissTile(mercZ, mercX, mercY) {
   const mppTarget = Math.max(0.5, mppOut * 0.6);
   // pickSwissCOGLevel est défini dans swiss-cog.js ; toutes les cellules
   // partagent la même structure de pyramide (les COG swisstopo sont uniformes).
-  const pickedLevels = new Map(); // cellKey → level descriptor
+  const pickedLevels = new Map(); // clé de cellule → descripteur de niveau
   for (const c of usableCells) {
     const lvlIdx = pickSwissCOGLevel(c.cog, mppTarget);
     pickedLevels.set(`${c.Ekm}/${c.Nkm}`, { idx: lvlIdx, level: c.cog.levels[lvlIdx] });
   }
 
-  // Step 2 — resample
+  // Étape 2 — rééchantillonnage
   const totalPixels = DEM_TILE_SIZE * DEM_TILE_SIZE;
   const elevations = new Float32Array(totalPixels);
   const coverage = new Uint8Array(totalPixels);
@@ -320,7 +320,7 @@ async function buildSwissTile(mercZ, mercX, mercY) {
     // 0 pixel couvert peut aussi être le symptôme de fetchs de plages expirés
     // (aucune tuile interne décodée → sampleSwissCOG renvoie NaN). On
     // n'empoisonne pas pour de bon un bloc 2×2 pour un hoquet passager d'AWS.
-    const rangeLikelyTransient = prefetchCount > 0; // we tried but got nothing
+    const rangeLikelyTransient = prefetchCount > 0; // essayé, mais rien obtenu
     if (!stacHadTransientFailure && !rangeLikelyTransient) {
       swissAreaNegSet(mercZ, mercX, mercY);
     }
@@ -335,7 +335,7 @@ async function buildSwissTile(mercZ, mercX, mercY) {
     };
   }
 
-  // Despike LiDAR hot pixels (vegetation tops, scanner artefacts)
+  // Supprime les pixels chauds du LiDAR (cimes de végétation, artefacts du scanner)
   despikeElevations(elevations, coverage, DEM_TILE_SIZE);
 
   if (typeof swLog !== 'undefined' && swLog.isDebug()) {

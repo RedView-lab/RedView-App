@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Coordinate conversions & France bounds check
+// Conversions de coordonnées et test d'appartenance à la France
 // ---------------------------------------------------------------------------
 
 function mercatorTileBounds(z, x, y) {

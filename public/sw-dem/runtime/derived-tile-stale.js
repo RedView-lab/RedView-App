@@ -35,8 +35,8 @@ function derivedDemWaitKey(demProfile, z, x, y) {
 // `messageType` est le type de postMessage que la page écoute
 // (SLOPE_TILES_STALE, ALTITUDE_TILES_STALE).
 function createDerivedTileStaleTracker(messageType) {
-  const retries = new Map(); // tile key → reloads already asked
-  const demWaiters = new Map(); // DEM wait key → Set<tile key>
+  const retries = new Map(); // clé de tuile → rechargements déjà demandés
+  const demWaiters = new Map(); // clé d'attente DEM → Set<clé de tuile>
   let timer = null;
   let firstAt = 0;
   let count = 0;

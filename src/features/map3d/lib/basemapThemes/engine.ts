@@ -95,7 +95,7 @@ function buildRoadOverrides(p: BasemapPalette): LayerOverrides {
     const isTunnel = s === 'tunnel';
     const minorFill = isTunnel ? r.tunnelFill : color(r.minor);
 
-    // Casings. Tunnels share one dashed, lighter casing.
+    // Bordures. Les tunnels partagent une même bordure tiretée, plus claire.
     out[`${s}-motorway-trunk-case`] = line(isTunnel ? r.tunnelCase : r.motorwayCase);
     out[`${s}-major-link-case`] = line(isTunnel ? r.tunnelCase : r.motorwayCase);
     out[`${s}-primary-case`] = line(isTunnel ? r.tunnelCase : r.primaryCase);

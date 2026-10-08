@@ -51,7 +51,7 @@ export function setupMapSubscriptions({
   }
 
   if (getActiveDem3dQuality() === 'fast-30m') {
-    try { lifecycle.setDem3dQuality('fast-30m'); } catch { /* best-effort */ }
+    try { lifecycle.setDem3dQuality('fast-30m'); } catch { /* au mieux */ }
   }
   const unsubscribeDem3dQuality = subscribeDem3dQuality((q) => {
     try { lifecycle.setDem3dQuality(q); } catch (err) {
@@ -77,7 +77,7 @@ export function setupMapSubscriptions({
     try {
       lifecycle.reloadMapElevationForProfile();
     } catch {
-      /* best-effort */
+      /* au mieux */
     }
   }
 

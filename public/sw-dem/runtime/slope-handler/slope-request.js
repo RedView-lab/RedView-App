@@ -51,7 +51,7 @@ async function handleSlopeRequest(z, x, y, resParam, demProfile = 'default', zon
   const cacheKeyUrl = `/slope-tiles/${z}/${x}/${y}${params.size ? `?${params.toString()}` : ''}`;
   const hotKey = `${sourceDem ? `${sourceDem}:` : ''}${demProfile}:${cacheKeyUrl}`;
 
-  // ── Hot tier (SLOPE_HOT_CACHE) ──────────────────────────────────────
+  // ── Niveau chaud (SLOPE_HOT_CACHE) ──────────────────────────────────
   const hot = (typeof slopeHotGet === 'function') ? slopeHotGet(hotKey) : null;
   if (hot) {
     return slopeHotResponse(hot);
@@ -68,7 +68,7 @@ async function handleSlopeRequest(z, x, y, resParam, demProfile = 'default', zon
     return cached;
   }
 
-  // ── Analysis-zone early rejection ───────────────────────────────────
+  // ── Rejet anticipé hors zone d'analyse ──────────────────────────────
   const { entry: zoneEntry, ring: zoneRing } = resolveAnalysisZoneForTile(zoneHash);
   if (zoneHash) {
     if (!zoneEntry || !tileIntersectsAnalysisZone(zoneEntry, z, x, y)) {
@@ -76,7 +76,7 @@ async function handleSlopeRequest(z, x, y, resParam, demProfile = 'default', zon
     }
   }
 
-  // ── In-flight coalescing ────────────────────────────────────────────
+  // ── Regroupement des requêtes en vol ────────────────────────────────
   const inflightKey = `${sourceDem ? `${sourceDem}:` : ''}${demProfile}:${z}/${x}/${y}?${resFactor}${zoneHash ? `&z=${zoneHash}` : ''}`;
   const existing = SLOPE_INFLIGHT.get(inflightKey);
   if (existing) {

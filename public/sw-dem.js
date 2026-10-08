@@ -124,7 +124,7 @@ const swModuleEpoch = new URL(self.location.href).searchParams.get('rv-map-cache
 const withEpoch = (path) => `${path}?rv-map-cache-epoch=${encodeURIComponent(swModuleEpoch)}`;
 
 importScripts(
-  // ── Pipeline primitives (config + math + low-level fetchers) ──────────
+  // ── Primitives du pipeline (config + maths + récupérateurs bas niveau) ──
   withEpoch('/sw-dem/core/logger.js'),
   withEpoch('/sw-dem/core/config.js'),
   withEpoch('/sw-dem/core/geo.js'),
@@ -155,11 +155,11 @@ importScripts(
   withEpoch('/sw-dem/swiss/swiss-cog.js'),
   withEpoch('/sw-dem/swiss/swiss-fetcher.js'),
   withEpoch('/sw-dem/swiss/swiss-build.js'),
-  // Norway — national DTM via Kartverket / Geonorge WCS (UTM 32/33/35)
+  // Norvège — MNT national via le WCS Kartverket / Geonorge (UTM 32/33/35)
   withEpoch('/sw-dem/norway/norway-config.js'),
   withEpoch('/sw-dem/norway/norway-coords.js'),
   withEpoch('/sw-dem/norway/norway-build.js'),
-  // Spain — national MDT 5 m via IGN / IDEE WCS
+  // Espagne — MDT national 5 m via le WCS IGN / IDEE
   withEpoch('/sw-dem/spain/spain-config.js'),
   withEpoch('/sw-dem/spain/spain-coords.js'),
   withEpoch('/sw-dem/spain/spain-build.js'),

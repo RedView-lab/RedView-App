@@ -94,7 +94,7 @@ async function handleAltitudeRequest(z, x, y, zoneHash = '', demProfile = 'defau
     return cached;
   }
 
-  // ── Analysis-zone early rejection ────────────────────────────────────
+  // ── Rejet anticipé hors zone d'analyse ───────────────────────────────
   const { entry: zoneEntry, ring: zoneRing } = resolveAnalysisZoneForTile(zoneHash);
   if (zoneHash) {
     if (!zoneEntry || !tileIntersectsAnalysisZone(zoneEntry, z, x, y)) {
@@ -136,7 +136,7 @@ async function handleAltitudeRequest(z, x, y, zoneHash = '', demProfile = 'defau
       if (!zoneRing) {
         altitudeBlob = demBlob;
       } else {
-        // ── Zone-masked build path: worker pool first, in-process fallback ──
+        // ── Construction masquée par zone : pool de workers d'abord, repli dans le processus ──
         let usedPool = false;
         if (typeof computeAltitudeViaPool === 'function') {
           try {

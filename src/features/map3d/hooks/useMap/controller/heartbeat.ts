@@ -54,12 +54,12 @@ export function attachHeartbeat(ctx: Ctx): void {
             st.heartbeatFailures = 0;
             return;
           }
-        } catch { /* terrain query failed */ }
-        // Silent detach — re-bind.
+        } catch { /* requête de terrain échouée */ }
+        // Détachement silencieux — on rattache.
         try {
           fns.applyFastDemTerrain();
           st.heartbeatFailures = 0;
-        } catch { /* best-effort */ }
+        } catch { /* au mieux */ }
         return;
       }
       // Autorise l'autoréparation avant même le premier signal « prêt » si le
@@ -82,13 +82,13 @@ export function attachHeartbeat(ctx: Ctx): void {
             st.heartbeatFailures = 0;
             return;
           }
-        } catch { /* terrain query failed */ }
-        // AWS source exists but terrain isn't bound — try re-attaching
+        } catch { /* requête de terrain échouée */ }
+        // La source AWS existe mais le terrain n'y est pas lié — on tente de le rattacher
         try {
           map.setTerrain({ source: awsFallbackDEMSource.id, exaggeration: 1.5 });
           st.heartbeatFailures = 0;
           return;
-        } catch { /* fallback re-attach failed */ }
+        } catch { /* rattachement de repli échoué */ }
       }
 
       let isSourceBusy = false;

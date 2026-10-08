@@ -60,7 +60,7 @@ export function installDemWantedTilesSync(map: MapboxMap): () => void {
     lastPostAt = Date.now();
     try {
       controller.postMessage({ type: 'DEM_WANTED_TILES', keys, sentAt: lastPostAt });
-    } catch { /* SW gone away */ }
+    } catch { /* SW disparu */ }
   };
 
   const schedule = (delayMs: number): void => {

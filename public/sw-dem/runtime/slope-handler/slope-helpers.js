@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Slope Tile Processing — Shared Helpers
+// Tuiles de pente — aides partagées
 // ---------------------------------------------------------------------------
 
 const DEBUG_SLOPE = false;
@@ -57,7 +57,7 @@ async function invalidateParentDownsampledSlopeTiles(z, x, y, zoneHash) {
       }
     }
     await Promise.all(toDelete);
-  } catch { /* best-effort */ }
+  } catch { /* au mieux */ }
 }
 
 // ── Tuiles de pente périmées → rechargement de la source côté page ────
@@ -130,7 +130,7 @@ async function buildSlopeBlobFromDem(demBlob, z, x, y, demCache, resFactor, demP
   };
 }
 
-// ── HD coverage & DEM source classes ──────────────────────────────────
+// ── Couverture HD et classes de source DEM ────────────────────────────
 
 /**
  * Vrai quand un DEM national haute résolution (IGN France, outre-mer compris,

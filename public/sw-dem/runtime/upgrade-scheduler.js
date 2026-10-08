@@ -71,7 +71,7 @@ function notifyDemTileCacheUpdated(z, x, y, source, profile) {
       }));
     })
     .catch(() => {
-      /* best-effort notification */
+      /* notification au mieux */
     });
 }
 

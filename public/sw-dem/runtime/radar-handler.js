@@ -10,12 +10,12 @@
  * Correspondance monotone, de la bruine légère (0,1 mm/h) aux cœurs d'orages violents (> 20 mm/h).
  */
 function rainviewerRgbToMm(r, g, b) {
-  // 1. Warm core: Yellow -> Orange -> Red -> Dark Red (Convective / Heavy / Storm)
+  // 1. Cœur chaud : jaune -> orange -> rouge -> rouge sombre (convectif / fort / orage)
   if (r >= 200 && b < 40) {
     // g va de ~238 (jaune ~6 mm/h) à ~27 (rouge sombre ~23 mm/h)
     return 5.0 + ((255 - g) / 255.0) * 20.0;
   }
-  // 2. Magenta / Purple / Extreme Hail (> 25 mm/h)
+  // 2. Magenta / violet / grêle extrême (> 25 mm/h)
   if (r >= 180 && b >= 150 && g < 100) {
     return 25.0 + (r / 255.0) * 15.0;
   }

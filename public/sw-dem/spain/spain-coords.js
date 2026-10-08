@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Spain — bbox classification + WGS84 -> projected native DEM coverage space
+// Espagne — classement de l'emprise + WGS84 -> espace projeté de couverture du DEM natif
 // ---------------------------------------------------------------------------
 
 function tileOverlapsSpain(z, x, y) {

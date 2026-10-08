@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Service Worker DEM — Centralised Structured Logger
+// Service Worker DEM — journal structuré centralisé
 // ---------------------------------------------------------------------------
 
 const SW_LOG_LEVELS = Object.freeze({
@@ -12,7 +12,7 @@ const SW_LOG_LEVELS = Object.freeze({
 
 const SW_BADGE_COLORS = Object.freeze({
   build: '#2563eb',     // Blue
-  'build-hr': '#3b82f6',// Lighter blue
+  'build-hr': '#3b82f6',// Bleu plus clair
   dispatch: '#64748b',  // Slate
   swiss: '#dc2626',     // Red
   spain: '#ea580c',     // Orange

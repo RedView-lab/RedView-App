@@ -122,7 +122,7 @@ async function buildIGNFallbackTile(mercZ, mercX, mercY) {
 
   const source = 'ign-highres';
 
-  // Full coverage fast path
+  // Chemin rapide en couverture complète
   if (coveredCount === totalPixels) {
     const dt = (performance.now() - t0).toFixed(1);
     if (typeof swLog !== 'undefined' && swLog.isDebug()) {
@@ -160,7 +160,7 @@ async function buildIGNFallbackTile(mercZ, mercX, mercY) {
           }
         }
       }
-    } catch { /* best-effort */ }
+    } catch { /* au mieux */ }
   }
 
   // Dilatation avec des tampons ping-pong recyclés

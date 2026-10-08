@@ -136,7 +136,7 @@ async function getExistingTerrainDemResponse(z, x, y, demProfile, demCache, sour
   return null;
 }
 
-// ── Neighbour DEMs (Horn + interpolation border) ──────────────────────
+// ── DEM voisins (Horn + bordure d'interpolation) ──────────────────────
 
 const SLOPE_NEIGHBOUR_DIRECTIONS = [
   ['north', 0, -1],

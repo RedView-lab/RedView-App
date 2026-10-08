@@ -37,7 +37,7 @@ export function isPointPanelOpen(target?: EventTarget | null): boolean {
     }
   }
 
-  // 2. Draft POI card
+  // 2. Carte de POI en brouillon
   const draftCard = document.querySelector('.rv-poi-draft-card, [data-rv-poi-draft-card]');
   if (draftCard instanceof HTMLElement && draftCard.offsetParent !== null) {
     return true;

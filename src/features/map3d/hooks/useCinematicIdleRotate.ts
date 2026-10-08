@@ -113,7 +113,7 @@ export function useCinematicIdleRotate(
     // Arme le minuteur d'inactivité initial
     resetIdleTimer();
 
-    // User activity event listeners (window / document)
+    // Écouteurs d'activité de l'utilisateur (window / document)
     const windowEvents = [
       'mousemove',
       'mousedown',
@@ -149,7 +149,7 @@ export function useCinematicIdleRotate(
       }
     });
 
-    // Mapbox map interaction events
+    // Événements d'interaction de la carte Mapbox
     const mapEvents = [
       'movestart',
       'zoomstart',

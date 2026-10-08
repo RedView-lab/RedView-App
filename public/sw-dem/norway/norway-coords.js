@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Norway — bbox classification + WGS84 -> EUREF89 / UTM projection helpers
+// Norvège — classement de l'emprise + aides de projection WGS84 -> EUREF89 / UTM
 // ---------------------------------------------------------------------------
 
 function tileOverlapsNorway(z, x, y) {

@@ -43,10 +43,10 @@ const SWISS_LV95_BOUNDS = {
   Nmax: 1_296_000,
 };
 
-// Native source resolution
-const SWISS_NATIVE_GSD = 0.5;       // metres per pixel
-const SWISS_KM_TILE_PX = 2000;      // 1 km / 0.5 m = 2000 pixels
-const SWISS_KM_TILE_M = 1000;       // 1 km tile size in metres
+// Résolution native de la source
+const SWISS_NATIVE_GSD = 0.5;       // mètres par pixel
+const SWISS_KM_TILE_PX = 2000;      // 1 km / 0,5 m = 2000 pixels
+const SWISS_KM_TILE_M = 1000;       // taille d'une tuile de 1 km, en mètres
 
 // Seuil de zoom Mercator.
 //
@@ -78,7 +78,7 @@ function shouldUseSwiss(mercZ, lat) {
 const SWISS_STAC_FETCH_TIMEOUT_MS = 15_000;
 const SWISS_COG_HEADER_TIMEOUT_MS = 12_000;
 const SWISS_COG_RANGE_TIMEOUT_MS  = 20_000;
-const SWISS_COG_RANGE_RETRIES     = 2;   // total attempts incl. first try
+const SWISS_COG_RANGE_RETRIES     = 2;   // nombre total d'essais, premier compris
 const SWISS_COG_HEADER_RETRIES    = 3;   // les en-têtes sont minuscules → nouvelle tentative peu coûteuse
 
 // TTL du cache négatif (ms) — les échecs STAC sont en général définitifs (tuile
@@ -94,7 +94,7 @@ const SWISS_NULL_TTL_TRANSIENT = 5_000;    // 5 s
 // tuile interne décodée peut faire 256×256 Float32 = 256 Ko, mais on les garde
 // parce que les tuiles Mercator voisines rééchantillonnent les mêmes tuiles internes.
 const SWISS_HEADER_CACHE_MAX = 512;   // ≈2 MB
-const SWISS_TILE_CACHE_MAX = 256;     // ≈64 MB upper bound
+const SWISS_TILE_CACHE_MAX = 256;     // borne supérieure ≈ 64 Mo
 const SWISS_STAC_CELL_CACHE_MAX = 16384; // Résolutions d'items STAC par cellule kilométrique LV95 (une fenêtre de 14×14 en écrit ~196 d'un coup)
 
 // Limiteur de concurrence des COG — sémaphore distinct de celui de l'IGN, pour

@@ -98,7 +98,7 @@ async function fetchAWSTerrainTile(z, x, y) {
       } catch { /* on poursuit dans le processus courant */ }
     }
 
-    // ── In-Process Fallback ────────────────────────────────────────────────
+    // ── Repli dans le processus ──────────────────────────────────────────
     const blob = new Blob([arrayBuffer], { type: 'image/png' });
     const img = await createImageBitmap(blob, {
       colorSpaceConversion: 'none',
