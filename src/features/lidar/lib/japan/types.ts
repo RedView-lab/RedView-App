@@ -2,7 +2,7 @@ export type JapanZoneNumber =
   | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10
   | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19;
 
-/** 1km x 1km tile in Japan Plane Rectangular CS (JGD2011 Zone 1..19) */
+/** Tuile de 1 km x 1 km dans le système plan rectangulaire japonais (JGD2011, zones 1..19) */
 export interface JapanTileCoord {
   eastKm: number;
   northKm: number;

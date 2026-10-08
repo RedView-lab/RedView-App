@@ -64,9 +64,9 @@ export interface LodNode {
 export interface LodTileHeader {
   pointCount: number;
   nodeCount: number;
-  /** Absolute CRS bounds. */
+  /** Emprise CRS absolue. */
   bounds: PointCloudBounds;
-  /** Absolute km-aligned origin (see PointCloudOrigin). */
+  /** Origine absolue alignée sur le km (voir PointCloudOrigin). */
   origin: PointCloudOrigin;
   /** Cube de l'octree relatif à `origin` : coin minimal et longueur d'arête. */
   cubeMinX: number;
@@ -82,7 +82,7 @@ export interface LodTileHeader {
 export interface LodTileInput {
   /** XYZ relatifs à `origin`. */
   positions: Float32Array;
-  /** RGB per point. */
+  /** RVB par point. */
   colors: Uint8Array;
   classifications: Uint8Array;
   intensities?: Uint16Array;
@@ -388,7 +388,7 @@ export function buildLodTile(input: LodTileInput): LodTile {
 interface CellSums {
   /** Clés de cellule : x | y << 7 | z << 14 dans la grille du nœud. */
   keys: Uint32Array;
-  /** Per cell: r, g, b, intensity, point count. */
+  /** Par cellule : r, g, b, intensité, nombre de points. */
   sums: Uint32Array;
   size: number;
 }

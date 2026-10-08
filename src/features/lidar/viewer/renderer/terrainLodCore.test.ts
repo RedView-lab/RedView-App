@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { mat4MultiplyInto } from './math';
 import { TERRAIN_VERTEX_FLOATS, TerrainLodSelector, type TerrainMeshData } from './terrainLodCore';
 
-/** Two 256 m tiles side by side (1 m grid, gentle relief), merged as the viewer does. */
+/** Deux tuiles de 256 m côte à côte (grille de 1 m, relief doux), fusionnées comme le fait le viewer. */
 function twoTiles(): TerrainMeshData {
   const n = 257;
   const vertices = new Float32Array(2 * n * n * TERRAIN_VERTEX_FLOATS);
@@ -24,7 +24,7 @@ function twoTiles(): TerrainMeshData {
   return { vertices, colors: new Uint8Array(2 * n * n * 4), parts };
 }
 
-/** View-projection looking down at the scene from `height` metres. */
+/** View-projection regardant la scène vers le bas depuis `height` mètres. */
 function viewProjFrom(height: number): Float32Array {
   const view = new Float32Array([1, 0, 0, 0, 0, 0, -1, 0, 0, 1, 0, 0, 0, 0, -height, 1]);
   const f = 1 / Math.tan(Math.PI / 8);
@@ -41,7 +41,7 @@ describe('TerrainLodSelector', () => {
     const selector = new TerrainLodSelector(twoTiles());
     expect(selector.chunks).toHaveLength(8);
     const linked = selector.chunks.filter((chunk) => chunk.neighbours.some((n, side) => n >= 0 && selector.chunks[n]!.baseVertex >= 257 * 257 !== chunk.baseVertex >= 257 * 257 && side >= 0));
-    // The two chunk columns facing each other across the tile seam.
+    // Les deux colonnes de chunks qui se font face de part et d'autre de la jonction des tuiles.
     expect(linked.length).toBe(4);
   });
 
@@ -63,7 +63,7 @@ describe('TerrainLodSelector', () => {
       for (const n of selector.chunks[i]!.neighbours) {
         if (n >= 0) expect(Math.abs(selector.levels[i]! - selector.levels[n]!)).toBeLessThanOrEqual(1);
       }
-      // A coarse chunk is pushed behind the true surface by its error.
+      // Un chunk grossier est repoussé derrière la vraie surface de son erreur.
       expect(selector.pushBack[i]! > 0).toBe(selector.levels[i]! > 0);
     }
   });

@@ -59,7 +59,7 @@ const LOOK_MAX_PITCH = 85 * DEG;
 const LOOK_MIN_FOV_X = 3 * DEG;
 const LOOK_MAX_FOV_X = 120 * DEG;
 
-/** Zoom per wheel pixel (log scale): ≈ ×1.1 per 100 px notch. */
+/** Zoom par pixel de molette (échelle logarithmique) : ≈ ×1,1 par cran de 100 px. */
 const WHEEL_ZOOM_PER_PX = 0.001;
 /** Pixels d'un pas `DOM_DELTA_LINE` : Firefox exprime la molette en lignes (3 par cran). */
 const WHEEL_LINE_PX = 40;
@@ -165,7 +165,7 @@ export class CameraController {
     };
   }
 
-  /** Current look-around pose (meaningful in `look` mode). */
+  /** Pose courante du tour d'horizon (significative en mode `look`). */
   getLookPose(): LookPose {
     return { ...this.look };
   }
@@ -221,7 +221,7 @@ export class CameraController {
     this.notifyChange();
   }
 
-  // ── Look-around ─────────────────────────────────────────────────────────────
+  // ── Tour d'horizon ──────────────────────────────────────────────────────────
 
   /**
    * Fait voler l'œil vers `eye` (repère de rendu) et passe en mode regard
@@ -291,7 +291,7 @@ export class CameraController {
     Object.assign(this.goal, this.getPose());
   }
 
-  // ── Frame update ────────────────────────────────────────────────────────────
+  // ── Mise à jour de l'image ──────────────────────────────────────────────────
 
   /**
    * Amène en douceur la pose courante vers la pose visée ; à appeler une fois
@@ -441,7 +441,7 @@ export class CameraController {
     return this._eye;
   }
 
-  /** Unit view direction. */
+  /** Direction de vue unitaire. */
   getForward(): [number, number, number] {
     if (this.mode === 'look') return forwardOf(this.look.yaw, this.look.pitch);
     const eye = this.getEye();

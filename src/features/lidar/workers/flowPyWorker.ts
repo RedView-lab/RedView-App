@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 
-// One worker of the avalanche Flow-Py pool (viewer/tools/terrain/avalanche/
-// flowPyPool.ts): runs the blocks of release cells it is handed.
+// Un worker du pool Flow-Py des avalanches (viewer/tools/terrain/avalanche/
+// flowPyPool.ts) : exécute les blocs de cellules de départ qu'on lui confie.
 
 import {
   createFlowPyWorkerHandler,

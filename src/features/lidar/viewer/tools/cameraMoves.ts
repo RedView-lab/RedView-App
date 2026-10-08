@@ -4,7 +4,7 @@ import type { ScenePick } from './types';
 
 /** Base de la pente visée par « Face à la pente » : le versant, pas une marche dedans (m). */
 const FACE_SLOPE_BASELINE_M = 20;
-/** Below this slope "Face à la pente" looks straight down. */
+/** Sous cette pente, « Face à la pente » regarde droit vers le bas. */
 const FACE_SLOPE_MIN_DEG = 3;
 
 /** Tourne l'orbite autour du point choisi, en gardant une distance raisonnable. */

@@ -3,7 +3,7 @@ import { decodeCopcChunks, getLazPerf, type CopcChunk, type CopcDecodeHeader, ty
 import { decodeCopcChunksWithRedviewLaz, initRedviewLaz } from '../lib/laz/redviewLaz';
 import { splitChunkBatches } from './copcDecodeBatches';
 
-// The app's tsconfig has no Node types: node:fs through process.getBuiltinModule (Node ≥ 22.3).
+// Le tsconfig de l'app n'a pas les types Node : node:fs via process.getBuiltinModule (Node ≥ 22.3).
 const { readFileSync } = (globalThis as unknown as {
   process: { getBuiltinModule(id: 'node:fs'): { readFileSync(path: URL): Uint8Array } };
 }).process.getBuiltinModule('node:fs');
@@ -25,7 +25,7 @@ describe('splitChunkBatches', () => {
   });
 });
 
-/** Concatenation of decoded batches, as the page assembles the workers' parts. */
+/** Concaténation des lots décodés, comme la page assemble les parties des workers. */
 function concat(parts: DecodedCopcChunks[]): DecodedCopcChunks {
   const count = parts.reduce((sum, part) => sum + part.count, 0);
   const out: DecodedCopcChunks = {
@@ -54,7 +54,7 @@ function concat(parts: DecodedCopcChunks[]): DecodedCopcChunks {
 }
 
 describe('batched COPC decode', () => {
-  /** Two real nodes of IGN LiDAR HD tile LHD_FXX_0965_6500 (see lib/laz/redviewLaz.test.ts). */
+  /** Deux vrais nœuds de la tuile IGN LiDAR HD LHD_FXX_0965_6500 (voir lib/laz/redviewLaz.test.ts). */
   let chunks: CopcChunk[] = [];
   const header: CopcDecodeHeader = { pointDataRecordFormat: 6, pointDataRecordLength: 30, scale: [0.01, 0.01, 0.01], offset: [0, 0, 0] };
   const origin = { x: 965000, y: 6499000, z: 0 };

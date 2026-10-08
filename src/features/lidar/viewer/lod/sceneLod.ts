@@ -297,7 +297,7 @@ export class SceneLod {
     const tile = this.tiles[tileIndex]!;
     const header = tile.header;
     const cube = lodNodeCube(header, entry);
-    // Absolute cube corner → render frame (float64 subtraction, exact enough).
+    // Coin absolu du cube → repère de rendu (soustraction float64, assez exacte).
     const minX = header.origin.x + cube.minX - center.x;
     const minY = header.origin.z + cube.minZ - center.z;
     const maxZ = -(header.origin.y + cube.minY - center.y);
@@ -661,7 +661,7 @@ export class SceneLod {
     }
     const s = node.size / 65535;
     const margin = CONTENT_MARGIN_CELLS * node.cell;
-    // Quantized CRS axes (east, north, up) → render frame (east, up, −north).
+    // Axes CRS quantifiés (est, nord, haut) → repère de rendu (est, haut, −nord).
     const box: Box = {
       minX: node.originX + minQx * s - margin,
       maxX: node.originX + maxQx * s + margin,

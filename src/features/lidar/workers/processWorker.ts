@@ -15,9 +15,9 @@ export type WorkerRequest =
       wasmModule?: WebAssembly.Module;
       redviewLazModule?: WebAssembly.Module | null;
     }
-  /** Start ortho downloads early (from header bounds) while points decode elsewhere. */
+  /** Lancer tôt les téléchargements ortho (depuis l'emprise de l'en-tête) pendant que les points se décodent ailleurs. */
   | { type: 'prefetch'; bounds: PointCloudBounds; crs: DetectedCrs }
-  /** Colorize already-decoded points (parallel COPC decode path). */
+  /** Coloriser des points déjà décodés (chemin du décodage COPC parallèle). */
   | {
       type: 'colorize';
       positions: Float32Array;
@@ -50,7 +50,7 @@ workerScope.onmessage = async (e: MessageEvent<WorkerRequest>) => {
     try {
       prefetchOrthoTiles(request.bounds, request.crs);
     } catch {
-      // Prefetch is best-effort; colorize fetches whatever is missing.
+      // Le préchargement est au mieux ; colorize télécharge ce qui manque.
     }
     return;
   }
@@ -77,7 +77,7 @@ workerScope.onmessage = async (e: MessageEvent<WorkerRequest>) => {
           crs: request.crs,
         };
 
-    // Files with their own RGB (PDRF 7/8) skip the orthophoto pass.
+    // Les fichiers avec leur propre RVB (PDRF 7/8) sautent la passe orthophoto.
     if (!pointCloud.embeddedRgb) {
       await colorizePointCloud(pointCloud, (phase, pct) => {
         const msg: WorkerResponse = { type: 'progress', phase: 'colorizing', message: phase, percent: pct };

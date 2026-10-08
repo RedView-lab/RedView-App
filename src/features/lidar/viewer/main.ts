@@ -88,7 +88,7 @@ syncRootAppScale();
 initAnalytics({ surface: 'viewer', release: APP_BUILD_ID });
 trackScreen('viewer');
 
-// --- DOM refs ---
+// --- Références DOM ---
 /** Remplacé par le canvas du renderer une fois créé (un moteur de repli reçoit un élément neuf, voir claimViewerCanvas). */
 let canvas = document.getElementById('canvas') as HTMLCanvasElement;
 const overlay = document.getElementById('overlay')!;
@@ -123,13 +123,13 @@ function resizeCanvas() {
 
 /** Images rendues après l'arrêt de la caméra pour que le LOD atteigne sa qualité au repos. */
 const MAX_SETTLE_FRAMES = 240;
-/** Stats line refresh period (ms). */
+/** Période de rafraîchissement de la ligne de statistiques (ms). */
 const STATS_INTERVAL_MS = 250;
 /** Les images gardent la qualité « caméra en mouvement » aussi longtemps après le dernier changement de caméra (ms). */
 const MOTION_HOLD_MS = 150;
 const EDL_DEFAULT_PERCENT = 50;
 
-/** EDL neighbour radius: 1.4 CSS px (Potree default), in canvas pixels. */
+/** Rayon de voisinage de l'EDL : 1,4 px CSS (défaut de Potree), en pixels du canvas. */
 function edlRadiusPx(): number {
   return 1.4 * (canvas.width / Math.max(1, window.innerWidth));
 }

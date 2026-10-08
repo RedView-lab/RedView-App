@@ -70,7 +70,7 @@ export interface ViewerToolsOptions {
   getDrawnNodes: () => readonly SceneNode[];
   /** Le filtre de points affiche cette classe ASPRS. */
   isClassVisible: (classification: number) => boolean;
-  /** Current point diameter, m. */
+  /** Diamètre actuel des points, m. */
   getPointSize: () => number;
   routeController: ViewerRouteController;
   setAnalysisMesh: (mesh: OverlayMeshData | null) => void;
@@ -191,7 +191,7 @@ export class ViewerToolsController {
     return readSceneCanopy(this.field, this.pointPicker, cellM);
   }
 
-  // ── Comments (lidar/viewer/comments) ──────────────────────────────────────
+  // ── Commentaires (lidar/viewer/comments) ──────────────────────────────────
 
   /** Point du repère de rendu d'une position WGS84 (altitude du MNT quand `altitudeM` est null) ; null hors de la scène. */
   localFromLonLat(lon: number, lat: number, altitudeM: number | null): Vec3 | null {
@@ -268,7 +268,7 @@ export class ViewerToolsController {
     this.opts.setAnalysisMesh(null);
   }
 
-  // ── React callbacks ────────────────────────────────────────────────────────
+  // ── Rappels React ──────────────────────────────────────────────────────────
 
   private readonly uiActions: ToolsUiActions = {
     onMenuAction: (action) => this.runMenuAction(action),
@@ -547,7 +547,7 @@ export class ViewerToolsController {
 
   // ── Camera ─────────────────────────────────────────────────────────────────
 
-  // ── First-person view ──────────────────────────────────────────────────────
+  // ── Vue à la première personne ─────────────────────────────────────────────
 
   /** Se place au point, l'œil à 1,7 m au-dessus du sol, et regarde autour à 360°. */
   private enterLookAround(pick: ScenePick): void {

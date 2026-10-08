@@ -36,15 +36,15 @@ export interface TerrainPart {
 }
 
 export interface TerrainMeshData {
-  /** x, y, z, nx, ny, nz per vertex (render frame). */
+  /** x, y, z, nx, ny, nz par sommet (repère de rendu). */
   vertices: Float32Array;
-  /** RGBA8 per vertex. */
+  /** RGBA8 par sommet. */
   colors: Uint8Array;
   parts: TerrainPart[];
 }
 
 const CHUNK_QUADS = 128;
-/** Strides 1, 2, 4 … 32 grid steps. */
+/** Pas de 1, 2, 4 … 32 pas de grille. */
 const LEVELS = 6;
 /**
  * Plus grande erreur de hauteur d'un niveau plus grossier, projetée (px de

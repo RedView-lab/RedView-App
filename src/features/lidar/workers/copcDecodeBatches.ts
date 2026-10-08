@@ -1,13 +1,13 @@
 /**
- * Points per decode batch: a batch is posted to the page as soon as it is
- * decoded, so this bounds what a decode worker holds at once (its WASM memory
- * never shrinks) — 1 M points ≈ 15 MB of decoded arrays.
+ * Points par lot de décodage : un lot est envoyé à la page dès qu'il est
+ * décodé, ce qui borne ce qu'un worker de décodage garde à la fois (sa mémoire
+ * WASM ne rétrécit jamais) — 1 M points ≈ 15 Mo de tableaux décodés.
  */
 const COPC_DECODE_BATCH_POINTS = 1_000_000;
 
 /**
- * Splits chunks, in order, into runs of whole chunks of at most
- * `maxPoints` points (a chunk bigger than that is a batch on its own).
+ * Découpe les chunks, dans l'ordre, en séries de chunks entiers d'au plus
+ * `maxPoints` points (un chunk plus gros forme un lot à lui seul).
  */
 export function splitChunkBatches<T extends { pointCount: number }>(
   chunks: readonly T[],

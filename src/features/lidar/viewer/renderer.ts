@@ -143,7 +143,7 @@ export class WebGpuLidarRenderer implements LidarRenderer {
   private canvasHeight = 1;
   /** Diamètre des points en mètres, identique pour tous (projeté, borné en pixels). */
   pointSize = 0.3;
-  /** Point diameter in device pixels; 0 = adaptive (world size, clamped in pixels). */
+  /** Diamètre des points en pixels physiques ; 0 = adaptatif (taille monde, bornée en pixels). */
   fixedPointPixels = 0;
   /** Plus grand diamètre de point projeté (px de l'écran) ; abaissé pour la vue à hauteur d'œil. */
   private maxPointPixels = POINT_MAX_PX;
@@ -219,7 +219,7 @@ export class WebGpuLidarRenderer implements LidarRenderer {
       NODE_POOL_CAPACITY,
     );
 
-    // Photo mode frozen (photoMode/featureFlag.ts): nothing created.
+    // Mode photo gelé (photoMode/featureFlag.ts) : rien n'est créé.
     if (PHOTO_MODE_ENABLED) {
       this.photoRenderer = new PhotoRenderer({
         device: this.device,
@@ -501,7 +501,7 @@ export class WebGpuLidarRenderer implements LidarRenderer {
       : null;
   }
 
-  /** Tiles' DTM grids (merged vertex buffers), see `TerrainLod`. */
+  /** Grilles MNT des tuiles (vertex buffers fusionnés), voir `TerrainLod`. */
   setTerrainMesh(mesh: TerrainMeshData): void {
     this.terrain?.destroy();
     this.terrain = new TerrainLod(this.device, mesh, this.pipelines.terrainLodBindGroupLayout);

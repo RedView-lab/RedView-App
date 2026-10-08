@@ -57,7 +57,7 @@ export interface BudgetSample {
   intervalMs: number;
   /** Intervalle d'image visé (ms), multiple de la période de rafraîchissement (voir FrameClock). */
   targetIntervalMs: number;
-  /** Display refresh period (ms). */
+  /** Période de rafraîchissement de l'écran (ms). */
   refreshMs: number;
   /** Caméra immobile : l'image peut faire croître le budget, jamais le faire baisser (sauf image pathologique). */
   rest?: boolean;
@@ -190,7 +190,7 @@ export class AdaptivePointBudget {
   private framesSinceChange = 0;
   private starvedFrames = 0;
   private lastRest = false;
-  /** User density slider (0.01–1). */
+  /** Curseur de densité de l'utilisateur (0,01–1). */
   userScale = 1;
 
   constructor(profile: PlatformProfile, options: { preciseGpu: boolean }) {
@@ -213,7 +213,7 @@ export class AdaptivePointBudget {
     };
   }
 
-  /** Feeds one rendered frame. */
+  /** Fournit une image rendue. */
   sample(sample: BudgetSample): void {
     const rest = sample.rest === true;
     if (rest !== this.lastRest) {

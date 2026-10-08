@@ -1,11 +1,12 @@
 /// <reference lib="webworker" />
 
-// Avalanche terrain exposure of a point (release areas, Flow-Py runout, ATES
-// class) off the main thread. The wind shelter index, a costly terrain term,
-// is kept between requests on the same ground model; the Flow-Py runs, the
-// bulk of the work (tens of millions of cells on a large face), are spread
-// over a pool of nested workers (flowPyPool.ts) — the same result as one
-// thread, in a fraction of the time.
+// Exposition d'un point au terrain avalancheux (zones de départ, écoulement
+// Flow-Py, classe ATES) hors du thread principal. L'indice d'abri au vent, un
+// terme de terrain coûteux, est gardé entre les requêtes sur le même modèle de
+// sol ; les passes Flow-Py, l'essentiel du travail (des dizaines de millions de
+// cellules sur un grand versant), sont réparties sur un pool de workers
+// imbriqués (flowPyPool.ts) — le même résultat qu'un seul thread, en une
+// fraction du temps.
 
 import {
   computeAvalancheTerrain,
@@ -18,12 +19,12 @@ import { WindShelterField } from '../viewer/tools/terrain/avalanche/releaseArea'
 
 const workerScope = self as unknown as DedicatedWorkerGlobalScope;
 
-/** Flow-Py workers at most (the avalanche worker itself mostly waits). */
+/** Nombre maximal de workers Flow-Py (le worker avalanche lui-même attend surtout). */
 const MAX_FLOW_WORKERS = 8;
 
 export interface AvalancheWorkerRequest {
   id: number;
-  /** Identifies the ground model (wind shelter cache). */
+  /** Identifie le modèle de sol (cache de l'abri au vent). */
   gridKey: string;
   input: AvalancheTerrainInput;
 }
@@ -35,7 +36,7 @@ export type AvalancheWorkerResponse =
 let wind: { key: string; field: WindShelterField } | null = null;
 let pool: Worker[] | null = null;
 
-/** The Flow-Py pool, created on first use; empty where nested workers are unavailable. */
+/** Le pool Flow-Py, créé au premier usage ; vide là où les workers imbriqués sont indisponibles. */
 function flowPool(): Worker[] {
   if (pool) return pool;
   const size = Math.min(MAX_FLOW_WORKERS, (navigator.hardwareConcurrency || 2) - 1);
@@ -58,7 +59,7 @@ function dropPool(): void {
   pool = [];
 }
 
-// Requests run one after the other: the pool serves one Flow-Py job at a time.
+// Les requêtes passent l'une après l'autre : le pool sert une tâche Flow-Py à la fois.
 let queue: Promise<void> = Promise.resolve();
 
 workerScope.onmessage = (e: MessageEvent<AvalancheWorkerRequest>) => {
@@ -75,7 +76,7 @@ async function handle({ id, gridKey, input }: AvalancheWorkerRequest): Promise<v
         result = await computeAvalancheTerrainWith(input, wind.field, (grid, terrain, target, run) =>
           runFlowPyInPool(ports, grid, terrain, target, run));
       } catch (error) {
-        // A pool that broke (worker crash, out of memory) is not reused.
+        // Un pool cassé (plantage de worker, mémoire insuffisante) n'est pas réutilisé.
         console.warn('[LiDAR tools] Flow-Py pool failed, single thread:', error);
         dropPool();
         result = computeAvalancheTerrain(input, wind.field);

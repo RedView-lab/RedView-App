@@ -1,14 +1,15 @@
 /// <reference lib="webworker" />
 
-// Decodes a contiguous group of COPC chunks. Several of these run in parallel
-// (see `decodeCopcInParallel` in viewer/runtime.ts). The group is decoded in
-// batches of whole chunks, each posted as soon as it is ready: the page copies
-// it into place in the tile's arrays and drops it, so a tile never holds its
-// points twice (the parts and the assembled arrays) and a worker's WASM memory
-// — which never shrinks — stays bounded by one batch instead of its whole group.
-// Points come out in chunk order, exactly as a single decode of the group. The
-// RedView LAZ decoder (lib/laz/) is used when its module is given, laz-perf
-// otherwise or once it fails: same output.
+// Décode un groupe contigu de chunks COPC. Plusieurs tournent en parallèle
+// (voir `decodeCopcInParallel` dans viewer/runtime.ts). Le groupe est décodé
+// par lots de chunks entiers, chacun envoyé dès qu'il est prêt : la page le
+// copie à sa place dans les tableaux de la tuile et le libère, de sorte qu'une
+// tuile ne garde jamais ses points en double (les parties et les tableaux
+// assemblés) et que la mémoire WASM d'un worker — qui ne rétrécit jamais —
+// reste bornée par un lot au lieu de tout son groupe. Les points sortent dans
+// l'ordre des chunks, exactement comme un décodage unique du groupe. Le
+// décodeur LAZ de RedView (lib/laz/) est utilisé quand son module est fourni,
+// laz-perf sinon ou dès qu'il échoue : même sortie.
 
 import { decodeCopcChunksWithRedviewLaz, initRedviewLaz } from '../lib/laz/redviewLaz';
 import { decodeCopcChunks, getLazPerf, type CopcChunk, type CopcDecodeHeader, type DecodedCopcChunks } from '../lib/lazParser';
@@ -20,21 +21,21 @@ const workerScope = self as unknown as DedicatedWorkerGlobalScope;
 export type CopcDecodeRequest = {
   type: 'decode';
   header: CopcDecodeHeader;
-  /** Shared by every decode worker of a tile so their parts can be concatenated. */
+  /** Partagé par chaque worker de décodage d'une tuile pour que leurs parties puissent être concaténées. */
   origin: PointCloudOrigin;
-  /** Compressed chunk bytes, concatenated in chunk order. */
+  /** Octets des chunks compressés, concaténés dans l'ordre des chunks. */
   bytes: ArrayBuffer;
   pointCounts: number[];
   byteLengths: number[];
   wasmModule?: WebAssembly.Module;
-  /** RedView LAZ decoder, compiled on the main thread (lib/laz/redviewLazModule.ts). */
+  /** Décodeur LAZ de RedView, compilé sur le thread principal (lib/laz/redviewLazModule.ts). */
   redviewLazModule?: WebAssembly.Module | null;
 };
 
 export type CopcDecodeResponse =
   | { type: 'progress'; done: number; total: number }
   | {
-      /** The next points of the group, in order (batches arrive in sequence). */
+      /** Les points suivants du groupe, dans l'ordre (les lots arrivent en séquence). */
       type: 'part';
       positions: Float32Array;
       classifications: Uint8Array;
