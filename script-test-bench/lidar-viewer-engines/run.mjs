@@ -22,9 +22,9 @@
  * automatique d'un navigateur est déjà WebGL 2, le cas « webgl » forcé
  * referait le même chemin : il est sauté (≈ 165 s de SwiftShader en CI).
  *
- * `--browsers webkit` (Safari's engine, `npx playwright install webkit`):
- * no WebGPU, so WebGL 2; on Windows its OPFS writes leave empty files, the
- * tile then goes to CacheStorage like the app's saveTile does.
+ * `--browsers webkit` (le moteur de Safari, `npx playwright install webkit`) :
+ * pas de WebGPU, donc WebGL 2 ; sous Windows ses écritures OPFS laissent des
+ * fichiers vides, la tuile passe alors par CacheStorage comme le fait saveTile dans l'app.
  *
  * Usage (après `npm run build:vite`) :
  *   node script-test-bench/lidar-viewer-engines/run.mjs

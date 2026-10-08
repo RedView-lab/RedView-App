@@ -384,7 +384,7 @@ async function interactions(session, screen) {
       // Colonnes ajoutées (grille) : chaque ligne couvre toute la largeur du
       // tableau, d'un même fond, cases à cocher et actions comprises. Les
       // colonnes sont retirées ensuite (retour à la liste compacte).
-      // One click per render: a toggle starts from the columns last rendered.
+      // Un clic par rendu : une bascule part des colonnes du dernier rendu.
       const toggleColumns = async () => {
         let toggled = 0;
         for (const label of ['Altitude', 'Temp(é|e)rature']) {

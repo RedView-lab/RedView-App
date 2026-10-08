@@ -140,7 +140,7 @@ async function main() {
     console.log(`   ${ANSI.gray}Résolu   :${ANSI.reset} ${resolved}\n`);
   }
 
-  // 3. Trigger verification on Resend
+  // 3. Déclencher la vérification chez Resend
   console.log(`${ANSI.gray}[3/4] Déclenchement de la vérification côté Resend...${ANSI.reset}`);
   try {
     const verifyRes = await fetch(`https://api.resend.com/domains/${domainInfo.id}/verify`, {

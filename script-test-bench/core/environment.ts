@@ -34,7 +34,7 @@ function run(command: string, args: string[]): string | null {
 /** Au mieux selon l'OS ; `unknown` quand la machine n'a pas de batterie ou que la sonde échoue. */
 export function detectPowerSource(): PowerSource {
   if (process.platform === 'win32') {
-    // Win32_Battery.BatteryStatus: 1 = discharging, 2 = on AC; nothing on a desktop.
+    // Win32_Battery.BatteryStatus : 1 = sur batterie, 2 = sur secteur ; rien sur un fixe.
     const status = run('powershell', ['-NoProfile', '-NonInteractive', '-Command', '(Get-CimInstance Win32_Battery).BatteryStatus']);
     if (status === '1') return 'battery';
     if (status && /^\d+$/.test(status)) return 'ac';

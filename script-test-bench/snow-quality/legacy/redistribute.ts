@@ -2,7 +2,7 @@
 // gardée seulement comme « avant » du banc de qualité neige. Non utilisée par l'application.
 
 // ============================================================================
-// Snow redistribution — TypeScript port of RedView v0.1
+// Redistribution de la neige — portage TypeScript de RedView v0.1
 // ----------------------------------------------------------------------------
 // Source : crates/redview-scene/src/terrain/processing/snow/{mod, terrain_analysis,
 //          flow, corrections, outliers, phases, postprocess, sampling}.rs

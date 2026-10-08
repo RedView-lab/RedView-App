@@ -77,7 +77,7 @@ export function skill(model: Float32Array, ref: Float32Array, z: Float32Array, w
     vm += (model[i] - mm) ** 2;
     vr += (ref[i] - mr) ** 2;
   }
-  // Kappa on snow / no snow.
+  // Kappa sur neige / pas de neige.
   let a = 0, b = 0, c = 0, d = 0;
   for (let i = 0; i < n; i++) {
     const ms = model[i] > 5, rs = ref[i] > 5;
