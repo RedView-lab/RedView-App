@@ -3,14 +3,13 @@ import { translateAppText } from '@/shared/i18n/config';
 import { loadTerrainData, readTileHead, saveTerrainData, type TerrainCache } from '../../lib/storage';
 import { openLodTile, type OpenedLodTile } from '../../lib/lodCache';
 import { generateHeightmap } from '../heightmap';
+import { loadTileFromOPFS, type ViewerStatusReporter } from '../runtime';
 import {
   buildLodTileInWorker,
   getDefaultDecodeWorkerCount,
-  loadTileFromOPFS,
   processPointCloudInWorker,
   upgradeLodTileInWorker,
-  type ViewerStatusReporter,
-} from '../runtime';
+} from './pointCloudWorkers';
 import {
   buildTileFileCandidates,
   createSceneProgressReporter,

@@ -65,14 +65,8 @@ import { setUpPhotoMode } from './session/photoModeSetup';
 import { createViewerKeyDownHandler } from './session/viewerShortcuts';
 import { ViewerSnowController, type SnowSceneContext } from './session/viewerSnowController';
 import type { PhotoModeController } from './photoMode/photoModeController';
-import {
-  explainWorkerError,
-  launchWebGLFallback,
-  loadTileFromOPFS,
-  noEngineHint,
-  setViewerStatus,
-  showFatalError,
-} from './runtime';
+import { launchWebGLFallback, loadTileFromOPFS, setViewerStatus } from './runtime';
+import { explainWorkerError, noEngineHint, showFatalError } from './loading/fatalError';
 
 // --- i18n ---
 // No React here: the viewer's DOM (static HTML + imperative panels) is
