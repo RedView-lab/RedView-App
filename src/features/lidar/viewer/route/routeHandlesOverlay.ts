@@ -224,7 +224,7 @@ export class RouteHandlesOverlay {
       this.ctx.restore();
     }
 
-    // 3) Render Ghost Insert Handle on hovered segment (simple, clean white dot)
+    // 3) Dessiner la poignée fantôme d'insertion sur le segment survolé (point blanc simple et net)
     if (this.ghostHandle && !this.draggingHandle && this.ghostHandle.screenPoint.inFront) {
       const { screenX, screenY } = this.ghostHandle.screenPoint;
       const ghostRadius = 5.0;

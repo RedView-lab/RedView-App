@@ -262,7 +262,7 @@ function edlRadiusPx(): number {
       heightGrid: terrainMesh.heightGrid,
       gridWidth: terrainMesh.gridWidth,
       gridHeight: terrainMesh.gridHeight,
-      // Grid centred on cz (heightmapWorker / mergeHeightGrid).
+      // Grille centrée sur cz (heightmapWorker / mergeHeightGrid).
       heightGridOffsetZ: 0,
     };
 
