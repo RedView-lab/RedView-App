@@ -48,6 +48,7 @@
     "bench:routing:sweep": "tsx script-test-bench/routing-quality/sweep.ts",
     "bench:routing:compare": "tsx script-test-bench/routing-quality/compare.ts",
     "bench:routing:report": "tsx script-test-bench/routing-quality/report-html.ts",
+    "bench:routing-load": "tsx script-test-bench/routing-load/run.ts",
     "bench:fit": "tsx script-test-bench/suites/fit-predictor.ts",
     "bench:pace": "tsx script-test-bench/pace-accuracy/run.ts",
     "bench:pace:prep": "tsx script-test-bench/pace-accuracy/prep.ts",

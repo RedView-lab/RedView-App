@@ -5,6 +5,7 @@ import {
   buildAnchoredVia,
   buildIslandRepairCandidates,
   concatBrouterRoutes,
+  isBrouterBusyError,
   isBrouterIslandError,
   isBrouterRateLimitError,
   needsLongDistanceAnchors,
@@ -75,13 +76,14 @@ function routeCost(route: BrouterRoute): number {
 }
 
 /**
- * Échec qu'une autre méthode de recherche peut surmonter (délai dépassé,
- * watchdog, serveur saturé) — par opposition à l'annulation, au quota et aux
- * points eux-mêmes (hors carte, zone interdite, îlot, aucun chemin permis par
- * le profil), qu'aucune recherche ne changera.
+ * Échec qu'une autre méthode de recherche peut surmonter (délai de calcul
+ * dépassé, watchdog) — par opposition à l'annulation, au quota, à la file du
+ * proxy saturée (plusieurs requêtes de plus dans la même file n'y changeraient
+ * rien, sinon en pire) et aux points eux-mêmes (hors carte, zone interdite,
+ * îlot, aucun chemin permis par le profil), qu'aucune recherche ne changera.
  */
 function canEscalate(error: unknown, signal: AbortSignal): boolean {
-  if (signal.aborted || isBrouterRateLimitError(error) || isRouteSeamError(error)) return false;
+  if (signal.aborted || isBrouterRateLimitError(error) || isBrouterBusyError(error) || isRouteSeamError(error)) return false;
   const message = error instanceof Error ? error.message : String(error);
   return !/not mapped|restricted area|island detected|no track found/i.test(message);
 }

@@ -1,4 +1,5 @@
 import {
+  brouterProxyAppliesBudget,
   fetchBrouterRoute,
   isBrouterQueueBusy,
   requestBeelineKm,
@@ -21,6 +22,15 @@ function customProfileTimeoutMs(beelineKm: number): number {
   const extra = Math.max(0, beelineKm - 150) * 40;
   return Math.round(Math.min(CUSTOM_PROFILE_TIMEOUT_MAX_MS, CUSTOM_PROFILE_TIMEOUT_MS + extra));
 }
+
+/**
+ * Proxy qui applique `budgetMs` : il répond 504 au bout du délai de CALCUL,
+ * compté après l'attente dans sa file. Le minuteur du client n'est plus
+ * qu'un filet (file pleine, réseau) : sous charge, une attente dans la file
+ * ne fait plus abandonner une recherche pour en lancer deux ou trois autres
+ * (tracé grossier, ancres) derrière elle dans la même file.
+ */
+const QUEUE_ALLOWANCE_MS = 45_000;
 
 /** Recherche restée sans réponse dans le délai accordé. */
 class BrouterSearchTimeoutError extends Error {
@@ -103,6 +113,8 @@ function fetchWithHedge(
       fetchBrouterRoute({
         ...request,
         searchWeight: HEDGE_SEARCH_WEIGHT,
+        // Jamais en file : sans place libre, le proxy le refuse aussitôt (la fine continue).
+        hedge: true,
         signal: hedgeCtrl.signal,
         onResponseHeaders: onComputed,
       }).then((route) => finish(() => resolve(route)), onError);
@@ -124,12 +136,15 @@ export async function fetchCustomProfileRoute(
   reqBase.signal?.addEventListener('abort', onUserAbort, { once: true });
   const beelineKm = requestBeelineKm([reqBase.start, ...(reqBase.via ?? []), reqBase.end]);
   const timeoutMs = customProfileTimeoutMs(beelineKm);
-  const timer = setTimeout(() => searchCtrl.abort(new BrouterSearchTimeoutError(timeoutMs)), timeoutMs);
+  // Proxy qui compte le délai sur le calcul seul (`budgetMs`) : minuteur local en filet.
+  const budget = brouterProxyAppliesBudget();
+  const localTimeoutMs = budget ? timeoutMs + QUEUE_ALLOWANCE_MS : timeoutMs;
+  const timer = setTimeout(() => searchCtrl.abort(new BrouterSearchTimeoutError(localTimeoutMs)), localTimeoutMs);
 
   try {
     // Le délai borne le calcul, pas le téléchargement de la réponse.
     return await fetchWithHedge(
-      { ...reqBase, profile },
+      { ...reqBase, profile, ...(budget ? { budgetMs: timeoutMs } : {}) },
       beelineKm,
       searchCtrl.signal,
       () => clearTimeout(timer),

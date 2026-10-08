@@ -68,8 +68,16 @@ describe('createRequestLogger', () => {
       const pathname = new URL(req.url ?? '/', 'http://localhost').pathname;
       (req as http.IncomingMessage & { redviewRoute?: string }).redviewRoute = normalizeRoutePath(
         pathname,
-        pathname === '/api/poi' ? 'poi' : null,
+        pathname === '/api/poi' ? 'poi' : pathname === '/api/brouter' ? 'brouter' : null,
       );
+      if (pathname === '/api/brouter') {
+        // Mesures du proxy BRouter (api/brouter.ts), dont une valeur inattendue à ignorer.
+        res.setHeader('X-Upstream-Wait-Ms', '120');
+        res.setHeader('X-Upstream-Compute-Ms', '845');
+        res.setHeader('X-Search-Km', '73');
+        res.setHeader('X-Brouter-Timeout', 'compute');
+        res.setHeader('X-Route-Cache', 'lonlats=6.1,45.2');
+      }
       res.statusCode = pathname === '/boom' ? 500 : 200;
       res.end('ok');
     });
@@ -101,6 +109,16 @@ describe('createRequestLogger', () => {
     for (const secret of ['s3cr3t', 'userId', 'a_session', 'Bearer', 'cookie', 'authorization']) {
       expect(serialized).not.toContain(secret);
     }
+  });
+
+  it('copies the BRouter proxy measures (queue wait, compute, distance, timeout) — numbers and known words only', async () => {
+    const { lines, base } = await startServer();
+    await fetch(`${base}/api/brouter`);
+    await fetch(`${base}/api/poi`);
+    await expect.poll(() => lines.length).toBe(2);
+    expect(lines[0]).toMatchObject({ route: '/api/brouter/*', upstream: { waitMs: 120, computeMs: 845, km: 73, timeout: 'compute' } });
+    expect(lines[0]!.upstream).not.toHaveProperty('cache');
+    expect(lines[1]).not.toHaveProperty('upstream');
   });
 
   it('generates a request id when none is sent', async () => {

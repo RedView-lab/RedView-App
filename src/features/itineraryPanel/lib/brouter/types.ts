@@ -63,6 +63,17 @@ export interface BrouterRequest {
   /** Poids imposé de l'heuristique (tracé grossier) au lieu du poids selon la distance. */
   searchWeight?: number;
   /**
+   * Délai de calcul voulu (ms), appliqué par le proxy APRÈS l'attente dans sa
+   * file (`budgetMs`) : au-delà, 504 + `X-Brouter-Timeout: compute`. Ignoré
+   * par un ancien proxy.
+   */
+  budgetMs?: number;
+  /**
+   * Recherche de secours (customProfileFetch.ts) : le proxy ne la met jamais
+   * en file (503 immédiat sans place libre), et elle n'est pas réessayée.
+   */
+  hedge?: boolean;
+  /**
    * Appelé dès réception des en-têtes : BRouter ne répond qu'une fois le tracé
    * calculé, le reste n'est que du téléchargement.
    */

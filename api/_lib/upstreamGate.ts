@@ -36,6 +36,8 @@ export interface UpstreamGate {
    * (la place n'est jamais prise), ou `UpstreamBusyError`.
    */
   acquire(signal?: AbortSignal): Promise<UpstreamSlot>;
+  /** Une place libre tout de suite (personne en file), sinon null — jamais d'attente. */
+  tryAcquire(): UpstreamSlot | null;
   readonly active: number;
   readonly queued: number;
 }
@@ -79,6 +81,11 @@ export function createUpstreamGate({
     },
     get queued() {
       return queue.length;
+    },
+    tryAcquire() {
+      if (active >= slots || queue.length > 0) return null;
+      active += 1;
+      return slotFor(now());
     },
     acquire(signal) {
       const enqueuedAt = now();

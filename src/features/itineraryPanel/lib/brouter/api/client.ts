@@ -47,6 +47,38 @@ export function isBrouterRateLimitError(error: unknown): error is BrouterRateLim
 }
 
 /**
+ * File du proxy saturée (503 après les nouveaux essais) : BRouter est plein.
+ * Jamais une raison d'escalader (tracé grossier, ancres) : ce serait
+ * plusieurs requêtes de plus dans la même file.
+ */
+export class BrouterBusyError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'BrouterBusyError';
+  }
+}
+
+export function isBrouterBusyError(error: unknown): error is BrouterBusyError {
+  return error instanceof BrouterBusyError;
+}
+
+/**
+ * Le proxy applique `budgetMs` (en-tête `X-Brouter-Budget`, posé sur toutes
+ * ses réponses) : le délai d'une recherche peut alors porter sur le calcul
+ * seul, l'attente dans sa file n'y compte plus. Un ancien proxy ne le pose
+ * pas : le délai reste compté depuis l'envoi.
+ */
+let proxyAppliesBudget = false;
+
+function noteProxyCapabilities(res: Response): void {
+  if (res.headers.get('x-brouter-budget') === '1') proxyAppliesBudget = true;
+}
+
+export function brouterProxyAppliesBudget(): boolean {
+  return proxyAppliesBudget;
+}
+
+/**
  * File du proxy pleine (HTTP 503 + Retry-After, api/_lib/upstreamGate.ts) :
  * la même requête est rejouée après le délai conseillé, au plus deux fois —
  * jamais un doublage ni un repli sur d'autres recherches, qui ajouteraient de
@@ -110,7 +142,9 @@ export async function fetchBrouterRoute(
       headers: { Accept: 'application/json,application/geo+json,text/plain' },
     });
     noteUpstreamQueue(res);
-    if (res.status === 503 && busyRetries < BUSY_RETRY_LIMIT) {
+    noteProxyCapabilities(res);
+    // Un secours sans place libre ne se réessaie pas : la recherche fine continue.
+    if (res.status === 503 && !req.hedge && busyRetries < BUSY_RETRY_LIMIT) {
       // Pas encore calculé : les délais de l'appelant (secours, recherche) continuent de courir.
       await res.body?.cancel().catch(() => undefined);
       busyRetries += 1;
@@ -118,7 +152,8 @@ export async function fetchBrouterRoute(
       await delay(busyRetryDelayMs(res), req.signal);
       continue;
     }
-    req.onResponseHeaders?.();
+    // Une file pleine (503) n'a rien calculé : les délais de l'appelant continuent de courir.
+    if (res.status !== 503) req.onResponseHeaders?.();
 
     if (!res.ok) {
       const text = await res.text().catch(() => '');
@@ -130,6 +165,7 @@ export async function fetchBrouterRoute(
       if (res.status === 429) {
         throw new BrouterRateLimitError(message, parseRetryAfterS(res.headers.get('retry-after')));
       }
+      if (res.status === 503) throw new BrouterBusyError(message);
       lastError = new Error(message);
       if (isWatchdogMessage(lastError.message) && attempt < WATCHDOG_RETRY_DELAYS_MS.length) {
         await delay(WATCHDOG_RETRY_DELAYS_MS[attempt]!, req.signal);
@@ -206,6 +242,7 @@ export async function uploadCustomProfile(
   });
   let res = await send();
   noteUpstreamQueue(res);
+  noteProxyCapabilities(res);
   for (let busyRetries = 0; res.status === 503 && busyRetries < BUSY_RETRY_LIMIT; busyRetries += 1) {
     await res.body?.cancel().catch(() => undefined);
     await delay(busyRetryDelayMs(res), signal);
@@ -218,6 +255,7 @@ export async function uploadCustomProfile(
     if (res.status === 429) {
       throw new BrouterRateLimitError(message, parseRetryAfterS(res.headers.get('retry-after')));
     }
+    if (res.status === 503) throw new BrouterBusyError(message);
     throw new Error(message);
   }
   let parsed: { profileid?: string; error?: string };

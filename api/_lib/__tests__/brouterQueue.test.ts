@@ -220,6 +220,68 @@ describe('api/brouter — file d’attente vers BRouter', () => {
     expect(brouter.fetchMock).toHaveBeenCalledTimes(4);
   });
 
+  it('budgetMs : délai de calcul compté après la file ; à l’échéance, 504 « compute » et place rendue', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    try {
+      const busy = Array.from({ length: 4 }, (_, index) => call(handler, route(index)));
+      const budgeted = call(handler, { ...route(5), budgetMs: '3000' });
+      await vi.advanceTimersByTimeAsync(5_000);
+      // 5 s dans la file : son délai de calcul n'a pas commencé.
+      expect(budgeted.body).toBeUndefined();
+      brouter.inFlight[0]!.finish();
+      await vi.advanceTimersByTimeAsync(2_900);
+      expect(budgeted.body).toBeUndefined();
+      expect(brouter.inFlight.some((entry) => entry.url.includes('6.5%2C45.1'))).toBe(true);
+      const after = call(handler, route(6));
+      await vi.advanceTimersByTimeAsync(200);
+      await budgeted.done;
+      expect(budgeted.status).toBe(504);
+      expect(budgeted.headers['x-brouter-timeout']).toBe('compute');
+      // Requête interrompue, place rendue : la suivante part.
+      expect(brouter.inFlight.some((entry) => entry.url.includes('6.5%2C45.1'))).toBe(false);
+      expect(brouter.inFlight.some((entry) => entry.url.includes('6.6%2C45.1'))).toBe(true);
+      for (const entry of [...brouter.inFlight]) entry.finish();
+      await Promise.all([...busy, after].map((captured) => captured.done));
+      expect(after.status).toBe(200);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('client parti pendant le calcul : requête interrompue, place rendue (BRouter tue le calcul abandonné au suivant)', async () => {
+    const running = Array.from({ length: 3 }, (_, index) => call(handler, route(index)));
+    const abandoned = call(handler, route(7));
+    const waiting = call(handler, route(8));
+    await flush();
+    abandoned.close();
+    await abandoned.done;
+    await flush();
+    expect(brouter.inFlight.some((entry) => entry.url.includes('6.7%2C45.1'))).toBe(false);
+    expect(brouter.inFlight.some((entry) => entry.url.includes('6.8%2C45.1'))).toBe(true);
+    for (const entry of [...brouter.inFlight]) entry.finish();
+    await Promise.all([...running, waiting].map((captured) => captured.done));
+  });
+
+  it('secours (hedge=1) : une place libre ou un refus immédiat, jamais la file', async () => {
+    const busy = Array.from({ length: 4 }, (_, index) => call(handler, route(index)));
+    const refused = call(handler, { ...route(5), hedge: '1' });
+    await refused.done;
+    expect(refused.status).toBe(503);
+    expect(refused.headers['retry-after']).toBeUndefined();
+    brouter.inFlight[0]!.finish();
+    await busy[0]!.done;
+    const accepted = call(handler, { ...route(6), hedge: '1' });
+    await flush();
+    expect(brouter.inFlight.some((entry) => entry.url.includes('6.6%2C45.1'))).toBe(true);
+    // Paramètres du proxy, jamais transmis à BRouter.
+    expect(brouter.fetchMock.mock.calls.some(([url]) => /hedge|budgetMs/.test(String(url)))).toBe(false);
+    expect(brouter.fetchMock.mock.calls.some(([url]) => String(url).includes('6.5%2C45.1'))).toBe(false);
+    for (const entry of [...brouter.inFlight]) entry.finish();
+    await Promise.all([...busy, accepted].map((captured) => captured.done));
+    expect(accepted.status).toBe(200);
+    expect(accepted.headers['x-brouter-budget']).toBe('1');
+  });
+
   it('une réponse du cache ne passe pas par la file', async () => {
     const first = call(handler, route(1));
     await flush();

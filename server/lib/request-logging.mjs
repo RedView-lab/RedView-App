@@ -52,6 +52,42 @@ function routeOf(req) {
   return req.redviewRoute ?? '/:unrouted';
 }
 
+/**
+ * Mesures que le proxy BRouter pose en en-têtes de réponse (api/brouter.ts),
+ * recopiées dans la ligne de la requête : attente dans la file, temps de
+ * calcul, distance d'effort, cache, délai dépassé. Seulement ces en-têtes,
+ * seulement des nombres ou des mots connus.
+ */
+const UPSTREAM_NUMBER_HEADERS = [
+  ['x-upstream-wait-ms', 'waitMs'],
+  ['x-upstream-compute-ms', 'computeMs'],
+  ['x-search-km', 'km'],
+];
+const UPSTREAM_WORD_HEADERS = [
+  ['x-route-cache', 'cache', /^HIT$/],
+  ['x-brouter-timeout', 'timeout', /^(compute|total)$/],
+];
+
+function upstreamOf(res) {
+  if (typeof res.getHeader !== 'function') return undefined;
+  const upstream = {};
+  for (const [header, key] of UPSTREAM_NUMBER_HEADERS) {
+    const raw = res.getHeader(header);
+    const value = Number(raw);
+    if (raw !== undefined && Number.isFinite(value)) upstream[key] = value;
+  }
+  for (const [header, key, pattern] of UPSTREAM_WORD_HEADERS) {
+    const value = res.getHeader(header);
+    if (typeof value === 'string' && pattern.test(value)) upstream[key] = value;
+  }
+  return Object.keys(upstream).length > 0 ? upstream : undefined;
+}
+
+function withUpstream(object, res) {
+  const upstream = upstreamOf(res);
+  return upstream ? { ...object, upstream } : object;
+}
+
 function logLevelFor(req, res, error) {
   const route = routeOf(req);
   if (error || res.statusCode >= 500) return 'error';
@@ -98,14 +134,14 @@ export function createRequestLogger({ level = process.env.LOG_LEVEL || 'info', d
       res: (res) => ({ statusCode: res.statusCode }),
       err: pino.stdSerializers.err,
     },
-    customSuccessObject: (req, _res, value) => ({ ...value, route: routeOf(req) }),
+    customSuccessObject: (req, res, value) => withUpstream({ ...value, route: routeOf(req) }, res),
     customErrorObject: (req, res, error, value) => {
       // Un 5xx sans exception : pino-http fabrique une erreur dont la pile ne
       // montre que ses propres internes. Les vraies erreurs sont journalisées
       // (et envoyées à GlitchTip) par le serveur, avec leur pile.
       const synthetic = !res.err && error?.message === `failed with status code ${res.statusCode}`;
       const { err, ...rest } = value;
-      return synthetic ? { ...rest, route: routeOf(req) } : { ...rest, err, route: routeOf(req) };
+      return withUpstream(synthetic ? { ...rest, route: routeOf(req) } : { ...rest, err, route: routeOf(req) }, res);
     },
     customSuccessMessage: () => 'request completed',
     customErrorMessage: () => 'request failed',

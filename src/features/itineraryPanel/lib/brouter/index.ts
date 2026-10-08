@@ -14,6 +14,8 @@ export {
   
   formatBrouterErrorMessage,
   
+  brouterProxyAppliesBudget,
+  isBrouterBusyError,
   isBrouterQueueBusy,
   isBrouterRateLimitError,
 } from './api';

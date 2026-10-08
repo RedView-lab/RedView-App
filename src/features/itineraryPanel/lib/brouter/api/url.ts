@@ -51,6 +51,9 @@ export function buildBrouterUrl(req: BrouterRequest): string {
     observedCostScale(req.profile) ?? req.searchCostScale,
     req.searchWeight,
   )));
+  // Pour le proxy seulement (jamais transmis à BRouter, hors de sa clé de cache).
+  if (req.budgetMs != null && Number.isFinite(req.budgetMs)) params.set('budgetMs', String(Math.round(req.budgetMs)));
+  if (req.hedge) params.set('hedge', '1');
 
   return `${BROUTER_PROXY_URL}?${params.toString()}`;
 }

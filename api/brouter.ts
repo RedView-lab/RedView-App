@@ -31,7 +31,7 @@ import crypto from 'node:crypto';
 import { promisify } from 'node:util';
 import zlib from 'node:zlib';
 import { createByteLru } from '../server/lib/byte-lru.mjs';
-import { resolvePass1Coefficient } from './_lib/brouter-search.js';
+import { effectiveSearchKm, resolvePass1Coefficient } from './_lib/brouter-search.js';
 import type { ApiRequest, ApiResponse } from './_lib/types.js';
 import { createUpstreamGate, UpstreamBusyError, type UpstreamSlot } from './_lib/upstreamGate.js';
 
@@ -59,6 +59,8 @@ const BEELINE_OVERRIDE = 'profile:add_beeline';
 const ROUTE_TIMEOUT_MS = 55_000;
 /** Temps de calcul laissé au minimum à une requête sortie tard de la file. */
 const ROUTE_MIN_COMPUTE_MS = 20_000;
+/** Plus petit budget de calcul (`budgetMs`) accepté d'un client. */
+const MIN_BUDGET_MS = 2_000;
 const UPLOAD_TIMEOUT_MS = 15_000;
 
 /**
@@ -130,6 +132,9 @@ export default async function handler(
     return res.status(204).end();
   }
 
+  // Ce proxy applique `budgetMs` (délai de calcul compté après la file) : le client
+  // qui le lit mesure son délai d'escalade sur le calcul seul (customProfileFetch.ts).
+  res.setHeader('X-Brouter-Budget', '1');
   const upstream = (process.env.BROUTER_UPSTREAM ?? '').trim() || 'http://localhost:17777';
   const base = upstream.replace(/\/+$/, '').replace(/\/brouter$/, '');
 
@@ -259,11 +264,19 @@ async function handleRouteQuery(
   }
 
   const url = `${base}/brouter?${params.toString()}`;
+  const hedge = queryValue(req.query.hedge) === '1';
+  const budgetMs = parseBudgetMs(queryValue(req.query.budgetMs));
+  const effortKm = effectiveSearchKm(params.get('lonlats') ?? '');
+  res.setHeader('X-Search-Km', String(Math.round(effortKm)));
 
+  // Client parti (nouvelle édition côté app, onglet fermé) : une requête encore
+  // dans la file n'y part jamais, une requête partie est interrompue et sa place
+  // rendue. BRouter ne voit pas qu'elle est abandonnée et continue de calculer,
+  // mais la requête suivante le lui fait tuer (au-delà de ses fils, il tue son
+  // calcul le plus ancien) : garder la place jusqu'à sa réponse coûtait plus
+  // cher — tous les calculs abandonnés menés à terme, les vivants en file
+  // derrière eux (bench:routing-load du 08/10 : CPU +26 %, geste p50 ×2).
   const controller = new AbortController();
-  // Client parti (nouvelle édition côté app, onglet fermé) : on libère BRouter
-  // au lieu de laisser tourner un calcul de jusqu'à 55 s pour personne — et
-  // une requête encore dans la file n'y part jamais.
   let clientGone = false;
   const onClientClose = () => {
     if (res.writableFinished) return;
@@ -273,71 +286,135 @@ async function handleRouteQuery(
   res.once('close', onClientClose);
 
   const startedAt = Date.now();
-  let upstreamRes!: Response;
-  let body!: string;
+  let result!: UpstreamResult;
   for (let attempt = 0; ; attempt += 1) {
-    const slot = await acquireBrouterSlot(res, controller.signal, () => clientGone);
+    const slot = hedge
+      ? takeFreeBrouterSlot(res)
+      : await acquireBrouterSlot(res, controller.signal, () => clientGone);
     if (!slot) {
       res.off('close', onClientClose);
       return;
     }
-    const computeBudgetMs = Math.max(ROUTE_MIN_COMPUTE_MS, ROUTE_TIMEOUT_MS - (Date.now() - startedAt));
-    const timer = setTimeout(() => controller.abort(), computeBudgetMs);
+    // Échéance : le budget de calcul du client (compté d'ici, après la file), et
+    // toujours sous le délai du proxy (nginx coupe à 60 s).
+    const totalBudgetMs = Math.max(ROUTE_MIN_COMPUTE_MS, ROUTE_TIMEOUT_MS - (Date.now() - startedAt));
+    const deadlineMs = Math.min(totalBudgetMs, budgetMs ?? Number.POSITIVE_INFINITY);
+    let expired = false;
+    const timer = setTimeout(() => {
+      expired = true;
+      controller.abort();
+    }, deadlineMs);
     try {
-      upstreamRes = await fetch(url, {
-        method: 'GET',
-        signal: controller.signal,
-        headers: { Accept: 'application/json,application/geo+json,text/plain' },
-      });
-      body = await upstreamRes.text();
-    } catch (err) {
+      result = await callBrouter(url, controller.signal);
+    } finally {
       clearTimeout(timer);
       slot.release();
-      res.off('close', onClientClose);
-      if (clientGone) return;
-      const isAbort = (err as { name?: string } | undefined)?.name === 'AbortError';
-      if (!isAbort) console.error('[brouter] upstream unreachable:', err);
-      return res.status(isAbort ? 504 : 502).json({
-        error: isAbort
-          ? `BRouter upstream timeout after ${computeBudgetMs}ms`
-          : 'BRouter upstream unreachable',
-      });
     }
-    clearTimeout(timer);
-    slot.release();
+    if (clientGone) {
+      res.off('close', onClientClose);
+      return;
+    }
+    if (expired) {
+      res.off('close', onClientClose);
+      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('X-Brouter-Timeout', deadlineMs < totalBudgetMs ? 'compute' : 'total');
+      return res.status(504).json({ error: `BRouter upstream timeout after ${deadlineMs}ms` });
+    }
     // Un profil accepté plus tôt dont BRouter n'a plus le fichier : renvoyé
     // une fois, puis la même requête rejouée.
-    if (attempt > 0 || clientGone || !(await restoreMissingProfile(base, params.get('profile'), body))) break;
+    if (result.kind !== 'ok' || attempt > 0 || !(await restoreMissingProfile(base, params.get('profile'), result.body))) break;
   }
   res.off('close', onClientClose);
+  if (result.kind !== 'ok') {
+    console.error('[brouter] upstream unreachable:', result.error);
+    return res.status(502).json({ error: 'BRouter upstream unreachable' });
+  }
+  res.setHeader('X-Upstream-Compute-Ms', String(result.computeMs));
 
-  const contentType =
-    upstreamRes.headers.get('content-type') ?? 'application/json';
+  const { contentType, body } = result;
 
   // BRouter renvoie du texte brut « error: ... » avec un HTTP 200 sur les
   // échecs de routage. On les remonte en 422 pour que le client puisse réagir.
-  const looksLikeError =
-    !contentType.includes('json') ||
-    body.trimStart().toLowerCase().startsWith('error');
-
-  res.setHeader('Content-Type', contentType);
-  res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=300');
-  if (looksLikeError) {
+  if (isBrouterError(contentType, body)) {
     // Remonte aussi le texte d'erreur amont dans un en-tête dédié, au cas où le
     // corps serait consommé / filtré sur le chemin du retour vers le
     // navigateur (certains CDN retirent les corps 422 en texte brut). Tronqué
     // pour garder des en-têtes petits.
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=300');
     res.setHeader('x-brouter-upstream-error', sanitizeHeaderValue(body));
     return res.status(422).send(body);
   }
 
+  res.setHeader('Content-Type', contentType);
+  res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=300');
   let brotli: Buffer | null = null;
-  if (upstreamRes.status === 200) {
+  if (result.status === 200) {
     brotli = await compressRoute(Buffer.from(body, 'utf8'));
-    ROUTE_CACHE.set(cacheKey, { brotli, contentType, status: upstreamRes.status });
+    ROUTE_CACHE.set(cacheKey, { brotli, contentType, status: result.status });
   }
-  return sendRouteBody(req, res, upstreamRes.status, body, brotli);
+  return sendRouteBody(req, res, result.status, body, brotli);
 }
+
+type UpstreamResult =
+  | { kind: 'ok'; status: number; contentType: string; body: string; computeMs: number }
+  | { kind: 'unreachable'; error: unknown };
+
+/** Premier paramètre de requête d'un nom (chaîne), ou null. */
+function queryValue(value: string | string[] | undefined): string | null {
+  const first = Array.isArray(value) ? value[0] : value;
+  return typeof first === 'string' ? first : null;
+}
+
+/** `budgetMs` du client : entier, borné à [MIN_BUDGET_MS, ROUTE_TIMEOUT_MS] ; null s'il manque ou ne se lit pas. */
+function parseBudgetMs(value: string | null): number | null {
+  if (value == null || !/^\d{1,6}$/.test(value)) return null;
+  return Math.min(ROUTE_TIMEOUT_MS, Math.max(MIN_BUDGET_MS, Number(value)));
+}
+
+/**
+ * Requête de secours (`hedge=1`, customProfileFetch.ts) : une place libre
+ * tout de suite, sinon 503 immédiat — un secours en file attendrait derrière
+ * les autres et ne ferait qu'ajouter un calcul à un BRouter déjà plein.
+ */
+function takeFreeBrouterSlot(res: ApiResponse): UpstreamSlot | null {
+  const slot = brouterGate.tryAcquire();
+  if (slot) {
+    res.setHeader('X-Upstream-Wait-Ms', '0');
+    return slot;
+  }
+  res.setHeader('Cache-Control', 'no-store');
+  res.status(503).json({ error: 'BRouter busy, no slot for a backup search' });
+  return null;
+}
+
+/** Appel à BRouter ; l'annulation (client parti, échéance) lève une AbortError. */
+async function callBrouter(url: string, signal: AbortSignal): Promise<UpstreamResult> {
+  const dispatchedAt = Date.now();
+  try {
+    const upstreamRes = await fetch(url, {
+      method: 'GET',
+      signal,
+      headers: { Accept: 'application/json,application/geo+json,text/plain' },
+    });
+    const body = await upstreamRes.text();
+    return {
+      kind: 'ok',
+      status: upstreamRes.status,
+      contentType: upstreamRes.headers.get('content-type') ?? 'application/json',
+      body,
+      computeMs: Date.now() - dispatchedAt,
+    };
+  } catch (error) {
+    return { kind: 'unreachable', error };
+  }
+}
+
+/** Texte d'erreur de BRouter (« error: … », HTTP 200 ou non) plutôt qu'un tracé. */
+function isBrouterError(contentType: string, body: string): boolean {
+  return !contentType.includes('json') || body.trimStart().toLowerCase().startsWith('error');
+}
+
 
 /* ------------------------------------------------------------------ */
 /* POST → /brouter/profile (envoi d'un BRF personnalisé)               */
