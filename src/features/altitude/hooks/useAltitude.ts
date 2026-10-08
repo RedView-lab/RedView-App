@@ -27,7 +27,7 @@ function postToServiceWorker(message: Record<string, unknown>): void {
   try {
     navigator.serviceWorker?.controller?.postMessage(message);
   } catch {
-    /* service worker may not control this page yet */
+    /* le Service Worker ne contrôle peut-être pas encore cette page */
   }
 }
 
@@ -44,7 +44,7 @@ function removeAltitudeLayer(map: MapboxMap): void {
     if (map.getLayer(ALTITUDE_LAYER_ID)) map.removeLayer(ALTITUDE_LAYER_ID);
     if (map.getSource(ALTITUDE_SOURCE_ID)) map.removeSource(ALTITUDE_SOURCE_ID);
   } catch {
-    /* style may be transitioning or map already destroyed */
+    /* le style est peut-être en transition, ou la carte déjà détruite */
   }
 }
 
@@ -54,14 +54,15 @@ function setAltitudeVisibility(map: MapboxMap, visible: boolean): void {
       map.setLayoutProperty(ALTITUDE_LAYER_ID, 'visibility', visible ? 'visible' : 'none');
     }
   } catch {
-    /* style may be transitioning */
+    /* le style est peut-être en transition */
   }
 }
 
 /**
- * Idempotent: makes the altitude source + layer exist for `sourceKey` and be
- * visible. Swaps the source when the key changed (3D quality / DEM profile /
- * zone). Returns false when the style is not ready yet — caller retries.
+ * Idempotent : fait exister la source + la couche d'altitude pour `sourceKey`
+ * et les rend visibles. Remplace la source quand la clé a changé (qualité 3D /
+ * profil DEM / zone). Renvoie false quand le style n'est pas encore prêt —
+ * l'appelant réessaie.
  */
 function ensureAltitudeLayer(
   map: MapboxMap,
@@ -97,12 +98,12 @@ function ensureAltitudeLayer(
 }
 
 /**
- * Altitude (hypsometric tint) overlay.
+ * Surcouche d'altitude (teinte hypsométrique).
  *
- * The overlay never downloads elevation itself: its tiles are the DEM tiles
- * the 3D terrain already decoded (`AltitudeDemSource`), coloured on the GPU
- * (`raster-color`). Disabling only hides the layer — a re-enable repaints
- * from the tiles still held by the source.
+ * La surcouche ne télécharge jamais l'altitude elle-même : ses tuiles sont les
+ * tuiles DEM que le terrain 3D a déjà décodées (`AltitudeDemSource`), colorées
+ * sur le GPU (`raster-color`). La désactivation masque seulement la couche —
+ * une réactivation repeint depuis les tuiles que la source garde encore.
  */
 export function useAltitude(
   map: MapboxMap | null,
@@ -119,9 +120,10 @@ export function useAltitude(
   const sourceKey = buildAltitudeSourceKey(sourceOptions);
   const usesServiceWorker = altitudeUsesServiceWorker(sourceOptions);
 
-  // Latest paint/source props, read when (re)building the layer so the mount
-  // effect doesn't re-run on every slider tick.
-  // Layout effect: synced before any passive effect below reads them.
+  // Dernières propriétés de peinture / de source, lues quand on (re)construit
+  // la couche, pour que l'effet de montage ne se relance pas à chaque cran de
+  // curseur. Effet de layout : synchronisé avant que les effets passifs
+  // ci-dessous les lisent.
   const propsRef = useRef<AltitudeLayerProps>({ opacity, colorMode, categories, hiddenIds, sourceOptions });
   const enabledRef = useRef(enabled);
   useLayoutEffect(() => {
@@ -130,7 +132,7 @@ export function useAltitude(
   });
   const mountedKeyRef = useRef<string | null>(null);
 
-  // ── Mount / swap / visibility / style reload ─────────────────────────
+  // ── Montage / remplacement / visibilité / rechargement du style ───────
   useEffect(() => {
     if (!map || !isMapLoaded) return;
     if (!enabled) {
@@ -147,13 +149,15 @@ export function useAltitude(
         map.triggerRepaint();
         return;
       }
-      // Style not ready: one-shot retry on the next style event — never a
-      // persistent `sourcedata` listener (fires per tile during loads).
+      // Style pas prêt : un seul nouvel essai au prochain événement de style —
+      // jamais un écouteur `sourcedata` permanent (il se déclenche à chaque
+      // tuile pendant les chargements).
       map.once('styledata', attempt);
     };
 
-    // A basemap switch wipes every custom layer; re-add once the new style
-    // has settled (next tick, so base layers land first and slot order holds).
+    // Un changement de fond de carte efface toutes les couches personnalisées ;
+    // on les réajoute une fois le nouveau style posé (tick suivant, pour que
+    // les couches de base arrivent d'abord et que l'ordre des slots tienne).
     const onStyleLoad = () => {
       mountedKeyRef.current = null;
       if (deferTimer) clearTimeout(deferTimer);
@@ -170,8 +174,8 @@ export function useAltitude(
     };
   }, [map, isMapLoaded, enabled, sourceKey]);
 
-  // ── Service-Worker pressure (zone-masked path only) ───────────────────
-  // The shared-DEM source reads the terrain's tiles and never asks the SW.
+  // ── Pression sur le Service Worker (chemin masqué par zone seulement) ──
+  // La source à DEM partagé lit les tuiles du terrain et ne sollicite jamais le SW.
   useEffect(() => {
     if (!map || !isMapLoaded || !enabled || !usesServiceWorker) return;
     postToServiceWorker({ type: 'ALTITUDE_ACTIVE_STATE', active: true });
@@ -189,7 +193,7 @@ export function useAltitude(
         map.setPaintProperty(ALTITUDE_LAYER_ID, 'raster-opacity', opacity);
       }
     } catch {
-      /* style may be transitioning */
+      /* le style est peut-être en transition */
     }
   }, [map, isMapLoaded, opacity]);
 
@@ -201,7 +205,7 @@ export function useAltitude(
         map.setPaintProperty(ALTITUDE_LAYER_ID, 'raster-color', expr as unknown as string);
       }
     } catch {
-      /* style may be transitioning */
+      /* le style est peut-être en transition */
     }
   }, [map, isMapLoaded, colorMode, categories, hiddenIds]);
 

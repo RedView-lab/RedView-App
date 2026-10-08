@@ -1,24 +1,24 @@
-// ── Slope category definition ─────────────────────────────────────────
+// ── Définition d'une catégorie de pente ───────────────────────────────
 
 export interface SlopeCategory {
   id: string;
   label: string;
-  /** Minimum slope angle in degrees (inclusive) */
+  /** Angle de pente minimal en degrés (inclus) */
   minDeg: number;
-  /** Maximum slope angle in degrees (exclusive, Infinity for last) */
+  /** Angle de pente maximal en degrés (exclu, Infinity pour la dernière) */
   maxDeg: number;
-  /** Display color (hex) */
+  /** Couleur d'affichage (hexadécimale) */
   color: string;
-  /** Pre-formatted range label as it should appear in the UI legend
-   *  (e.g. "0 - 7%", "7% - 12%", "<24%"). Matches Figma node 1749:57744. */
+  /** Libellé de plage préformaté tel qu'il doit apparaître dans la légende
+   *  (p. ex. "0 - 7%", "7% - 12%", "<24%"). Correspond au nœud Figma 1749:57744. */
   displayRange: string;
 }
 
-// ── Colorization mode ─────────────────────────────────────────────────
+// ── Mode de coloration ────────────────────────────────────────────────
 
 export type SlopeColorMode = 'gradient' | 'step';
 
-// ── Persisted user state ──────────────────────────────────────────────
+// ── État utilisateur persisté ─────────────────────────────────────────
 
 export type SlopeDemProfile = 'default' | 'terrain';
 
@@ -26,6 +26,6 @@ export interface SlopeState {
   enabled: boolean;
   opacity: number;
   colorMode: SlopeColorMode;
-  /** @deprecated Resolution is now dynamically inherited from the active 3D map */
+  /** @deprecated La résolution est désormais héritée dynamiquement de la carte 3D active */
   resolution?: string;
 }

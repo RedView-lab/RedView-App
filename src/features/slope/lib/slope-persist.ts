@@ -37,17 +37,17 @@ export function saveSlopeState(state: SlopeState): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch {
-    // Quota exceeded — silently ignore
+    // Quota dépassé — ignoré sans bruit
   }
 }
 
-// ── Custom breakpoints persistence ────────────────────────────────────
+// ── Persistance des seuils personnalisés ──────────────────────────────
 
 export interface PersistedBreakpoints {
-  /** Number of bands (e.g. 10) */
+  /** Nombre de bandes (p. ex. 10) */
   bandCount: number;
-  /** Internal breakpoints between bands (length = bandCount - 1).
-   *  Key is the band count so each count has its own breakpoints. */
+  /** Seuils internes entre les bandes (longueur = bandCount - 1).
+   *  La clé est le nombre de bandes, pour que chaque nombre ait ses propres seuils. */
   byCount: Record<number, number[]>;
 }
 
@@ -74,6 +74,6 @@ export function saveBreakpoints(data: PersistedBreakpoints): void {
   try {
     localStorage.setItem(BREAKPOINTS_KEY, JSON.stringify(data));
   } catch {
-    // Quota exceeded — silently ignore
+    // Quota dépassé — ignoré sans bruit
   }
 }

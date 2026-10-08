@@ -18,41 +18,44 @@ export const ALTITUDE_SOURCE_ID = 'altitude-tiles';
 export const ALTITUDE_LAYER_ID = 'altitude-overlay';
 
 /**
- * Zone-masked tiles are built by the Service Worker (per-pixel polygon mask)
- * from the DEM it caches: hypsometric bands gain nothing from z15-z17 there
- * and Mapbox overzooms past `maxzoom`.
+ * Les tuiles masquées par zone sont construites par le Service Worker (masque
+ * de polygone par pixel) à partir du DEM qu'il met en cache : les bandes
+ * hypsométriques n'y gagnent rien de z15 à z17, et Mapbox surzoome au-delà de
+ * `maxzoom`.
  */
 const ALTITUDE_ZONE_MAXZOOM = 14;
 
 /**
- * The overlay uses exactly the tiles of the 3D terrain's DEM pyramid
- * (z = floor(zoom − 1)): every tile is a DEM tile the terrain already loaded.
+ * La surcouche utilise exactement les tuiles de la pyramide DEM du terrain 3D
+ * (z = floor(zoom − 1)) : chaque tuile est une tuile DEM que le terrain a déjà
+ * chargée.
  */
 const ALTITUDE_TILE_SIZE = TERRAIN_ALIGNED_RASTER_TILE_SIZE;
 
-// raster-color-mix works on 0..1 normalised channels (×255 folded in), with
-// Mapbox's own RGB scaling compensated (see rasterColorMix.ts: without it,
-// everything below ~29 m / ~96 m decoded under 0 and showed as sea level).
-// Every altitude tile is Mapbox Terrain-RGB: -10000 + (R·65536 + G·256 + B) · 0.1
-// (the shared-DEM source re-encodes Terrarium tiles).
+// raster-color-mix travaille sur des canaux normalisés 0..1 (×255 intégré), la
+// mise à l'échelle RGB propre à Mapbox étant compensée (voir rasterColorMix.ts :
+// sans cela, tout ce qui est sous ~29 m / ~96 m se décodait sous 0 et
+// s'affichait comme niveau de la mer). Chaque tuile d'altitude est du
+// Terrain-RGB de Mapbox : -10000 + (R·65536 + G·256 + B) · 0.1 (la source à
+// DEM partagé réencode les tuiles Terrarium).
 const MAPBOX_RGB_DECODE_MIX = mapboxRasterColorMix([1671168, 6528, 25.5, -10000]);
 const ALTITUDE_DECODE_RANGE: [number, number] = [MIN_ALTITUDE_M, MAX_ALTITUDE_M];
 
-/** Zone restriction for the altitude overlay (analysis-zone polygon). */
+/** Restriction de zone de la surcouche d'altitude (polygone de la zone d'analyse). */
 export interface AltitudeZoneOptions {
-  /** Stable hash of the polygon ring — becomes the `?zone=` cache key. */
+  /** Empreinte stable de l'anneau du polygone — devient la clé de cache `?zone=`. */
   hash: string;
-  /** [west, south, east, north] — Mapbox raster-source `bounds`. */
+  /** [ouest, sud, est, nord] — `bounds` de la source raster Mapbox. */
   bounds: [number, number, number, number];
-  /** Flat [lng, lat, ...] ring coordinates for masking. */
+  /** Coordonnées de l'anneau à plat [lng, lat, ...] pour le masquage. */
   ring?: number[];
 }
 
 export interface AltitudeTileSourceOptions {
   zone?: AltitudeZoneOptions | null;
-  /** Active 3D terrain quality — the overlay reads the SAME DEM as the terrain. */
+  /** Qualité active du terrain 3D — la surcouche lit le MÊME DEM que le terrain. */
   quality?: Dem3dQuality;
-  /** Active HD DEM profile (surface 0.40 m vs bare-earth 1 m). */
+  /** Profil DEM HD actif (surface 0,40 m ou sol nu 1 m). */
   profile?: DemTileProfile;
 }
 
@@ -70,12 +73,12 @@ function resolveAltitudeSource(options: AltitudeTileSourceOptions | undefined): 
   };
 }
 
-/** True when tiles go through the Service Worker (zone-masked path). */
+/** Vrai quand les tuiles passent par le Service Worker (chemin masqué par zone). */
 export function altitudeUsesServiceWorker(options: AltitudeTileSourceOptions | undefined): boolean {
   return Boolean(resolveAltitudeSource(options).zone);
 }
 
-/** Changes whenever the source must be swapped (remove + re-add). */
+/** Change chaque fois que la source doit être remplacée (retrait + réajout). */
 export function buildAltitudeSourceKey(options: AltitudeTileSourceOptions | undefined): string {
   const { quality, profile, zone } = resolveAltitudeSource(options);
   return zone ? `zone:${zone.hash}:${profile}` : `dem:${quality}:${profile}`;
@@ -90,12 +93,13 @@ function swAltitudeTileUrl(profile: DemTileProfile, zone: AltitudeZoneOptions | 
 }
 
 /**
- * - No zone (the common case): `AltitudeDemSource`, which reads the DEM tiles
- *   the 3D terrain already decoded (fast-30m AWS Terrarium or HD SW DEM) —
- *   no second download, colours land in the same frame as the relief. The
- *   tile URLs are only its fallback when the terrain does not hold a tile.
- * - Zone: `/altitude-tiles?zone=<hash>`, masked by the SW; `bounds` stops
- *   Mapbox requesting tiles outside the polygon bbox.
+ * - Sans zone (cas courant) : `AltitudeDemSource`, qui lit les tuiles DEM que le
+ *   terrain 3D a déjà décodées (AWS Terrarium fast-30m ou DEM HD du SW) — pas de
+ *   second téléchargement, les couleurs arrivent dans la même image que le
+ *   relief. Les URL de tuiles ne servent que de repli quand le terrain n'a pas
+ *   une tuile.
+ * - Avec zone : `/altitude-tiles?zone=<hash>`, masquées par le SW ; `bounds`
+ *   empêche Mapbox de demander des tuiles hors de l'emprise du polygone.
  */
 export function buildAltitudeSource(options?: AltitudeTileSourceOptions) {
   const { quality, profile, zone } = resolveAltitudeSource(options);
@@ -140,7 +144,7 @@ export function buildAltitudeLayer(
       'raster-color-mix': MAPBOX_RGB_DECODE_MIX,
       'raster-color-range': ALTITUDE_DECODE_RANGE,
       'raster-color': buildAltitudeColorExpression(categories, colorMode, hiddenIds),
-      // Legend colours must stay exact under dusk/night scene lighting.
+      // Les couleurs de la légende doivent rester exactes sous l'éclairage de crépuscule / nuit.
       'raster-emissive-strength': 1,
     },
   };

@@ -52,7 +52,7 @@ export function removeSlopeLayer(map: MapboxMap): void {
     if (map.getLayer(SLOPE_LAYER_ID)) map.removeLayer(SLOPE_LAYER_ID);
     if (map.getSource(SLOPE_SOURCE_ID)) map.removeSource(SLOPE_SOURCE_ID);
   } catch {
-    /* style may be transitioning */
+    /* le style est peut-être en transition */
   }
 }
 
@@ -66,16 +66,17 @@ export function setSlopeVisibility(map: MapboxMap, visible: boolean): void {
       );
     }
   } catch {
-    /* layer may not exist yet */
+    /* la couche n'existe peut-être pas encore */
   }
 }
 
-// ── Slope active-state notification (2026-06-20 multicore pass) ───────
-// Tells the SW whether slope is on/off so it can grow/shrink the in-memory
-// DEM hot tier. The slope pipeline reads ~5× more DEM tiles than the
-// basemap (own + 4 cardinal neighbours per slope tile), so when slope is
-// active the DEM LRU needs extra headroom to avoid evicting basemap DEM
-// tiles the user will re-ask for next frame. Idempotent + best-effort.
+// ── Notification de l'état actif de la pente (passe multicœur du 2026-06-20) ──
+// Indique au SW si la pente est activée ou non pour qu'il agrandisse ou
+// réduise le niveau chaud en mémoire du DEM. Le pipeline de pente lit ~5× plus
+// de tuiles DEM que le fond de carte (la sienne + 4 voisines cardinales par
+// tuile de pente) : quand la pente est active, la LRU du DEM a besoin de marge
+// pour ne pas évincer les tuiles DEM du fond que l'utilisateur redemandera à
+// l'image suivante. Idempotent et au mieux.
 export function notifySlopeActiveState(active: boolean): void {
   try {
     navigator.serviceWorker?.controller?.postMessage({
@@ -83,13 +84,14 @@ export function notifySlopeActiveState(active: boolean): void {
       active,
     });
   } catch {
-    /* service worker may not control this page yet */
+    /* le Service Worker ne contrôle peut-être pas encore cette page */
   }
 }
 
-// Cheap guard — called from high-frequency map events, so it must NOT use
-// map.getStyle() (serialises the whole style on every call). getTerrain /
-// getSource throw while no style is attached, which the catch maps to false.
+// Garde peu coûteuse — appelée depuis des événements de carte à haute
+// fréquence, elle ne doit donc PAS utiliser map.getStyle() (qui sérialise tout
+// le style à chaque appel). getTerrain / getSource lèvent une exception tant
+// qu'aucun style n'est attaché, ce que le catch traduit en false.
 export function canStartSlopeWork(map: MapboxMap): boolean {
   try {
     return Boolean(map.getTerrain()?.source || map.getSource(SLOPE_SOURCE_ID));

@@ -20,13 +20,15 @@ function tileKeyOf(event: MapSourceDataEvent): string | null {
 }
 
 /**
- * "Altitude X/Y" pill for the overlay status bar. Mirrors the slope reporter:
- * counts tiles of the altitude source only, publishes at most every 120 ms,
- * and a stagnation watchdog force-completes after 8 s so a straggler tile
- * never strands the pill on "loading".
+ * Pastille « Altitude X/Y » de la barre d'état des surcouches. Calquée sur
+ * celle de la pente : ne compte que les tuiles de la source d'altitude, publie
+ * au plus toutes les 120 ms, et un garde-fou de stagnation force la fin après
+ * 8 s pour qu'une tuile retardataire ne bloque jamais la pastille sur
+ * « chargement ».
  *
- * `resetKey` restarts the tally when the raster source is swapped (3D
- * quality / DEM profile / zone change) so stale tile keys never count.
+ * `resetKey` remet le décompte à zéro quand la source raster est remplacée
+ * (qualité 3D / profil DEM / changement de zone), pour que des clés de tuiles
+ * périmées ne comptent jamais.
  */
 export function useAltitudeLoadStatus(
   map: MapboxMap | null,
@@ -80,8 +82,8 @@ export function useAltitudeLoadStatus(
       const total = requested.size;
       const done = loaded.size;
       if (total === 0) {
-        // Every visible tile came from cache (no sourcedataloading event):
-        // nothing is in flight, so the overlay is ready.
+        // Chaque tuile visible venait du cache (pas d'événement
+        // sourcedataloading) : rien n'est en vol, la surcouche est prête.
         if (isSourceLoaded()) {
           emit('ready', 100, 'Altitude prête');
           return;
@@ -102,8 +104,8 @@ export function useAltitudeLoadStatus(
       watchdog = setTimeout(() => {
         watchdog = null;
         if (requested.size === 0) {
-          // Nothing in flight (or every tile errored) for a full stagnation
-          // window: the overlay is as loaded as it will get.
+          // Rien en vol (ou toutes les tuiles en erreur) pendant toute une
+          // fenêtre de stagnation : la surcouche est aussi chargée qu'elle le sera.
           if (Date.now() - lastProgressMs >= STAGNATION_MS) {
             emit('ready', 100, 'Altitude prête');
             return;
@@ -170,8 +172,8 @@ export function useAltitudeLoadStatus(
       scheduleSettle();
     };
 
-    // Failed tiles (404 / network) emit `error`, not `sourcedata`: without
-    // this they stayed "requested" and pinned the pill below 100 %.
+    // Les tuiles en échec (404 / réseau) émettent `error`, pas `sourcedata` :
+    // sans cela, elles restaient « demandées » et bloquaient la pastille sous 100 %.
     const onTileError = (event: MapboxErrorEvent) => {
       onAbort(event as unknown as MapSourceDataEvent);
     };

@@ -54,7 +54,7 @@ export function saveAltitudeState(state: AltitudeState): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch {
-    // Quota exceeded — silently ignore.
+    // Quota dépassé — ignoré sans bruit.
   }
 }
 
@@ -87,6 +87,6 @@ export function saveAltitudeBreakpoints(data: PersistedAltitudeBreakpoints): voi
   try {
     localStorage.setItem(BREAKPOINTS_KEY, JSON.stringify(data));
   } catch {
-    // Quota exceeded — silently ignore.
+    // Quota dépassé — ignoré sans bruit.
   }
 }

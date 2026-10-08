@@ -3,18 +3,18 @@ import { mapboxRasterColorMix } from '@/features/map3d/lib/rasterColorMix';
 import type { SlopeColorMode, SlopeCategory, SlopeDemProfile } from '../types';
 import { buildSlopeColorExpression, MAX_SLOPE_DEG } from './slope-config';
 
-// ── Source & Layer IDs ────────────────────────────────────────────────
+// ── Identifiants de source et de couche ───────────────────────────────
 
 export const SLOPE_SOURCE_ID = 'slope-tiles';
 export const SLOPE_LAYER_ID = 'slope-overlay';
 
-/** Zone restriction for the slope overlay (analysis-zone polygon). */
+/** Restriction de zone de la surcouche de pente (polygone de la zone d'analyse). */
 export interface SlopeZoneOptions {
-  /** Stable hash of the polygon ring — becomes the `?zone=` cache key. */
+  /** Empreinte stable de l'anneau du polygone — devient la clé de cache `?zone=`. */
   hash: string;
-  /** [west, south, east, north] — Mapbox raster-source `bounds`. */
+  /** [ouest, sud, est, nord] — `bounds` de la source raster Mapbox. */
   bounds: [number, number, number, number];
-  /** Flat [lng, lat, ...] ring coordinates for masking. */
+  /** Coordonnées de l'anneau à plat [lng, lat, ...] pour le masquage. */
   ring?: number[];
 }
 
@@ -38,7 +38,7 @@ export function buildSlopeSourceKey(options: SlopeTileSourceOptions | undefined)
 }
 
 function resolveSlopeMaxZoom(options: SlopeTileSourceOptions): number {
-  // 30m resolution (fast-30m / 30m): capped at z13 (~13.5m/px at lat 45°) to prevent stair-step oversampling
+  // Résolution 30 m (fast-30m / 30m) : plafonnée à z13 (~13,5 m/px à 45° de latitude) pour éviter un suréchantillonnage en escalier
   if (options.sourceDem === 'fast-30m' || options.sourceDem === '30m') {
     return 13;
   }
@@ -46,36 +46,38 @@ function resolveSlopeMaxZoom(options: SlopeTileSourceOptions): number {
   if (options.zone) {
     return 14;
   }
-  // 1m LiDAR Terrain:
+  // Terrain LiDAR 1 m :
   if (options.demProfile === 'terrain') {
     return 16;
   }
-  // 0.40m LiDAR Surface: capped at z16 (~1.69m/px at 45° lat) to prevent WMS oversampling artifacts
+  // Surface LiDAR 0,40 m : plafonnée à z16 (~1,69 m/px à 45° de latitude) pour éviter les artefacts de suréchantillonnage du WMS
   return 16;
 }
 
-// ── Raster source definition ──────────────────────────────────────────
+// ── Définition de la source raster ────────────────────────────────────
 //
-// Tile URL only varies on DEM profile + `resFactor` + the analysis-zone hash
-// (the parameters that actually change the slope pixels). Color mode,
-// category breakpoints and band-visibility are applied GPU-side via
-// raster-color paint properties, so changing them never invalidates the SW
-// tile cache and never refetches any tile — `setPaintProperty` is instant
-// and synchronous on the GPU.
+// L'URL de tuile ne varie qu'avec le profil DEM + `resFactor` + l'empreinte de
+// la zone d'analyse (les paramètres qui changent vraiment les pixels de
+// pente). Le mode de couleur, les seuils de catégorie et la visibilité des
+// bandes sont appliqués côté GPU via les propriétés de peinture raster-color :
+// les changer n'invalide jamais le cache de tuiles du SW et ne redemande
+// jamais de tuile — `setPaintProperty` est instantané et synchrone sur le GPU.
 //
-// Tile pyramid: the overlay requests exactly the tiles of the 3D terrain's
-// DEM pyramid (TERRAIN_ALIGNED_RASTER_TILE_SIZE, z = floor(zoom − 1)), so the
-// Service Worker computes slope tile z/x/y from the DEM tile z/x/y the terrain
-// mesh already loaded — no DEM of its own to build. With 256 px tiles it
-// asked round(zoom + 1): 16–64× more DEM tiles than the relief on screen,
-// each one an IGN build. The SW returns 512 px tiles (2× Catmull-Rom of the
-// DEM-resolution slope) that Mapbox draws over 1024–2048 px.
+// Pyramide de tuiles : la surcouche demande exactement les tuiles de la
+// pyramide DEM du terrain 3D (TERRAIN_ALIGNED_RASTER_TILE_SIZE,
+// z = floor(zoom − 1)), donc le Service Worker calcule la tuile de pente z/x/y
+// à partir de la tuile DEM z/x/y que le maillage du terrain a déjà chargée —
+// aucun DEM propre à construire. Avec des tuiles de 256 px, elle demandait
+// round(zoom + 1) : 16 à 64× plus de tuiles DEM que le relief à l'écran,
+// chacune une construction IGN. Le SW renvoie des tuiles de 512 px (Catmull-Rom
+// 2× de la pente à la résolution du DEM) que Mapbox dessine sur 1024–2048 px.
 //
-// Zone mode: `bounds` stops Mapbox from requesting ANY tile outside the
-// polygon bbox, and `?zone=<hash>` makes the Service Worker (a) reject
-// non-intersecting tiles before any DEM fetch and (b) alpha-mask partially
-// covered tiles to the exact polygon. The hash in the URL also isolates
-// zone-masked tiles from unmasked ones in every cache tier.
+// Mode zone : `bounds` empêche Mapbox de demander la MOINDRE tuile hors de
+// l'emprise du polygone, et `?zone=<hash>` fait que le Service Worker (a)
+// refuse les tuiles qui ne le coupent pas avant toute requête DEM et (b)
+// masque en alpha les tuiles partiellement couvertes au polygone exact.
+// L'empreinte dans l'URL isole aussi les tuiles masquées des tuiles non
+// masquées dans chaque niveau de cache.
 
 export function buildSlopeTileSource(options: SlopeTileSourceOptions = DEFAULT_SOURCE_OPTIONS) {
   const params = new URLSearchParams();
@@ -103,7 +105,7 @@ export function buildSlopeTileSource(options: SlopeTileSourceOptions = DEFAULT_S
   } = {
     type: 'raster',
     tiles: [`/slope-tiles/{z}/{x}/{y}${query ? `?${query}` : ''}`],
-    // Zone tiles keep the z14 pipeline's 256 px grid.
+    // Les tuiles de zone gardent la grille de 256 px du pipeline z14.
     tileSize: options.zone ? 256 : TERRAIN_ALIGNED_RASTER_TILE_SIZE,
     minzoom: 4,
     maxzoom,
@@ -114,32 +116,35 @@ export function buildSlopeTileSource(options: SlopeTileSourceOptions = DEFAULT_S
   return source;
 }
 
-// ── Build layer definition ────────────────────────────────────────────
+// ── Construction de la définition de couche ───────────────────────────
 //
-// SW PNG encoding (sqrt-gamma, single channel — gray + alpha PNG, decoded
-// to R = G = B):
+// Encodage PNG du SW (gamma racine, un seul canal — PNG gris + alpha, décodé
+// en R = G = B) :
 //   R = round(sqrt(deg / 90) * 255)
-//   A = 0 on NoData, 255 otherwise
+//   A = 0 sur NoData, 255 sinon
 //
-// raster-color-mix [90, 0, 0, 0] decodes R→[0,90] perceptual units.
-// The actual degree value is recovered in `buildSlopeColorExpression`,
-// which transforms each stop position via `degToEncoded(deg) = sqrt(deg/90) * 90`
-// so that the gradient breakpoints fall at the correct raster-value.
+// raster-color-mix [90, 0, 0, 0] décode R → [0, 90] en unités perceptives.
+// La valeur réelle en degrés est retrouvée dans `buildSlopeColorExpression`,
+// qui transforme chaque position de palier via
+// `degToEncoded(deg) = sqrt(deg/90) * 90` pour que les seuils du dégradé
+// tombent sur la bonne raster-value.
 //
-// Why single-channel: bilinear `raster-resampling: 'linear'` filters each
-// PNG channel independently. The previous 16-bit RG packing produced a
-// regular dot/grid moiré wherever R changed between adjacent pixels (every
-// ~0.35°): the bilinear (R, G) midpoint decodes to a wildly wrong value at
-// the byte boundary. With a single channel + sqrt gamma the bilinear sample
-// is always a smooth interpolation of the perceptual ramp, so the overlay
-// shows the raw 1 m DEM signal as a clean continuous gradient.
+// Pourquoi un seul canal : le rééchantillonnage bilinéaire
+// `raster-resampling: 'linear'` filtre chaque canal PNG indépendamment.
+// L'ancien empaquetage RG sur 16 bits produisait un moiré régulier en points /
+// grille partout où R changeait entre pixels voisins (tous les ~0,35°) : le
+// point milieu bilinéaire (R, G) se décode en une valeur très fausse à la
+// frontière d'octet. Avec un seul canal + gamma racine, l'échantillon
+// bilinéaire est toujours une interpolation douce de la rampe perceptive : la
+// surcouche montre le signal brut du DEM à 1 m comme un dégradé continu et net.
 //
-// slot: 'top' — must match the IGN ortho layer's slot so the overlay paints
-// ABOVE the orthophoto. With slot: 'middle' the ortho tiles fully occlude
-// the slope raster inside France and the user sees nothing.
+// slot : 'top' — doit être le slot de la couche ortho IGN pour que la
+// surcouche peigne AU-DESSUS de l'orthophoto. Avec slot : 'middle', les tuiles
+// ortho masquent entièrement le raster de pente en France et l'utilisateur ne
+// voit rien.
 
-// Mapbox's −0.29 % RGB scaling compensated (rasterColorMix.ts) so band
-// breakpoints fall on the exact degree.
+// La mise à l'échelle RGB de −0,29 % de Mapbox est compensée (rasterColorMix.ts)
+// pour que les seuils des bandes tombent sur le degré exact.
 const SLOPE_DECODE_MIX = mapboxRasterColorMix([MAX_SLOPE_DEG, 0, 0, 0]);
 const SLOPE_DECODE_RANGE: [number, number] = [0, MAX_SLOPE_DEG];
 
@@ -156,19 +161,21 @@ export function buildSlopeLayer(
     slot: 'top',
     paint: {
       'raster-opacity': opacity,
-      // Linear resampling smooths band transitions on pitched views.
-      // Nearest produced blocky pixel staircases that read as data errors.
+      // Le rééchantillonnage linéaire adoucit les transitions entre bandes en
+      // vue inclinée. Le plus proche voisin produisait des escaliers de pixels
+      // qu'on prenait pour des erreurs de données.
       'raster-resampling': 'linear' as const,
       'raster-fade-duration': 0,
       'raster-color-mix': SLOPE_DECODE_MIX,
       'raster-color-range': SLOPE_DECODE_RANGE,
       'raster-color': buildSlopeColorExpression(categories, colorMode, hiddenIds),
-      // Legend colours must stay exact under dusk/night scene lighting.
+      // Les couleurs de la légende doivent rester exactes sous l'éclairage de crépuscule / nuit.
       'raster-emissive-strength': 1,
     },
   };
 }
 
-// Re-exported so callers (the hook) can rebuild just the color expression
-// when category/mode/hidden state changes without touching the source.
+// Réexporté pour que les appelants (le hook) puissent reconstruire seulement
+// l'expression de couleur quand la catégorie / le mode / l'état masqué change,
+// sans toucher à la source.
 export { buildSlopeColorExpression };

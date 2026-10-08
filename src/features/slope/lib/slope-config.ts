@@ -1,6 +1,6 @@
 import type { SlopeCategory, SlopeColorMode, SlopeState } from '../types';
 
-// ── Default state ─────────────────────────────────────────────────────
+// ── État par défaut ───────────────────────────────────────────────────
 
 export const DEFAULT_SLOPE_STATE: SlopeState = {
   enabled: false,
@@ -9,32 +9,33 @@ export const DEFAULT_SLOPE_STATE: SlopeState = {
   resolution: 'auto',
 };
 
-// ── Build raster-color expression ─────────────────────────────────────
-// Produces an interpolate or step expression mapping slope degrees → RGBA.
-// The input is the decoded raster value via `raster-color-mix`.
+// ── Construction de l'expression raster-color ─────────────────────────
+// Produit une expression interpolate ou step qui associe les degrés de pente
+// à du RGBA. L'entrée est la valeur raster décodée via `raster-color-mix`.
 
-// `["raster-value"]` returns the value decoded by raster-color-mix and
-// clamped to raster-color-range, **in the same units as the range**
-// (NOT normalised to [0, 1]). With the sqrt-gamma encoding (see
-// slope-source.ts), the SW writes R = round(sqrt(deg/90) * 255) and the
-// raster-color-mix decodes that to V = sqrt(deg/90) * 90 ∈ [0, 90]. So the
-// stop positions in the interpolate/step expression must be expressed in
-// the same V-space, not raw degrees: a category breakpoint at deg_k must
-// be placed at V_k = sqrt(deg_k/90) * 90 = sqrt(deg_k * 90).
+// `["raster-value"]` renvoie la valeur décodée par raster-color-mix et bornée à
+// raster-color-range, **dans les mêmes unités que la plage** (PAS normalisée à
+// [0, 1]). Avec l'encodage en gamma racine (voir slope-source.ts), le SW écrit
+// R = round(sqrt(deg/90) * 255) et raster-color-mix le décode en
+// V = sqrt(deg/90) * 90 ∈ [0, 90]. Les positions des paliers de l'expression
+// interpolate / step doivent donc s'exprimer dans ce même espace V, pas en
+// degrés bruts : un seuil de catégorie à deg_k doit être placé à
+// V_k = sqrt(deg_k/90) * 90 = sqrt(deg_k * 90).
 //
-// The sqrt gamma concentrates the encoding precision in the low-slope range
-// (the part the user actually scrutinises). Mapbox, however, lerps colours
-// linearly in raster-value space, i.e. along sqrt(deg): at 2.5° between stops
-// at 0° and 5° it would already be 71 % of the way. The gradient therefore
-// gets GRADIENT_SUBSTEPS degree-spaced sub-stops per band, so the colour is
-// linear in degrees (as in the legend and the LiDAR viewer's ramp) to within
-// a few percent of a band, while the encoding keeps its precision.
+// Le gamma racine concentre la précision de l'encodage sur les faibles pentes
+// (la partie que l'utilisateur scrute vraiment). Mapbox interpole cependant les
+// couleurs linéairement dans l'espace raster-value, c'est-à-dire selon
+// sqrt(deg) : à 2,5° entre des paliers à 0° et 5°, il serait déjà à 71 % du
+// chemin. Le dégradé reçoit donc GRADIENT_SUBSTEPS sous-paliers espacés en
+// degrés par bande, pour que la couleur soit linéaire en degrés (comme dans la
+// légende et la rampe du visualiseur LiDAR) à quelques pour cent de bande près,
+// tandis que l'encodage garde sa précision.
 export const MAX_SLOPE_DEG = 90;
 const GRADIENT_SUBSTEPS = 6;
 
 function degStop(deg: number): number {
-  // Map a degree breakpoint to the raster-value (sqrt-gamma) space.
-  // Identity at 0° and at 90° (the two anchors), monotonic in between.
+  // Ramène un seuil en degrés dans l'espace raster-value (gamma racine).
+  // Identité à 0° et à 90° (les deux ancrages), monotone entre les deux.
   if (deg <= 0) return 0;
   if (deg >= MAX_SLOPE_DEG) return MAX_SLOPE_DEG;
   return Math.sqrt(deg * MAX_SLOPE_DEG);
@@ -42,7 +43,7 @@ function degStop(deg: number): number {
 
 type Rgba = [number, number, number, number];
 
-/** '#RRGGBB' → straight RGBA (alpha 0..1); null for anything else. */
+/** '#RRGGBB' → RGBA non prémultiplié (alpha 0..1) ; null pour tout le reste. */
 function parseHexRgba(hex: string, alpha: number): Rgba | null {
   const match = /^#([0-9a-f]{6})$/iu.exec(hex.trim());
   if (!match) return null;
@@ -55,16 +56,18 @@ function rgbaString([r, g, b, a]: Rgba): string {
 }
 
 /**
- * Build a Mapbox raster-color expression from a list of categories.
+ * Construit une expression raster-color Mapbox à partir d'une liste de
+ * catégories.
  *
- * @param categories  Sorted slope bands (ascending minDeg).
- * @param mode        'gradient' = smooth lerp between band colors;
- *                    'step'     = flat color per band.
- * @param hiddenIds   Optional category ids whose pixels must render fully
- *                    transparent (band-visibility toggles in the panel).
- *                    Hidden bands are emitted as `'transparent'` stops, so
- *                    visibility changes never invalidate any tile — they
- *                    swap the paint expression in-place.
+ * @param categories  Bandes de pente triées (minDeg croissant).
+ * @param mode        'gradient' = interpolation douce entre les couleurs des bandes ;
+ *                    'step'     = couleur unie par bande.
+ * @param hiddenIds   Identifiants optionnels des catégories dont les pixels
+ *                    doivent être entièrement transparents (bascules de
+ *                    visibilité des bandes dans le panneau). Les bandes
+ *                    masquées sont émises en paliers `'transparent'`, donc un
+ *                    changement de visibilité n'invalide jamais de tuile — il
+ *                    remplace l'expression de peinture sur place.
  */
 export function buildSlopeColorExpression(
   categories: SlopeCategory[],
@@ -78,8 +81,8 @@ export function buildSlopeColorExpression(
     hidden.has(cat.id) ? 'transparent' : cat.color;
 
   if (mode === 'step') {
-    // Step: hard-edged bands. First band starts at 0°, each stop fixes the
-    // color from there until the next breakpoint.
+    // Paliers : bandes à bords nets. La première bande commence à 0°, chaque
+    // palier fixe la couleur de là jusqu'au seuil suivant.
     const expr: unknown[] = ['step', ['raster-value'], 'transparent'];
     for (const cat of categories) {
       expr.push(degStop(cat.minDeg), colorOf(cat));
@@ -87,9 +90,10 @@ export function buildSlopeColorExpression(
     return expr;
   }
 
-  // Gradient: linear interpolation (in degrees) across band-start colors.
-  // Hidden bands keep their colour at alpha 0 — the fade in/out at the
-  // boundary is the LiDAR viewer's, visually nicer than a hard cut.
+  // Dégradé : interpolation linéaire (en degrés) entre les couleurs de début
+  // des bandes. Les bandes masquées gardent leur couleur avec alpha 0 — le
+  // fondu à la limite est celui du visualiseur LiDAR, visuellement plus joli
+  // qu'une coupure nette.
   const expr: unknown[] = ['interpolate', ['linear'], ['raster-value']];
   categories.forEach((cat, index) => {
     expr.push(degStop(cat.minDeg), colorOf(cat));
@@ -105,7 +109,7 @@ export function buildSlopeColorExpression(
       expr.push(degStop(deg), rgbaString(rgba));
     }
   });
-  // Extend the last color out to 90° so we never get a black/transparent tail
+  // Prolonge la dernière couleur jusqu'à 90° pour ne jamais avoir de queue noire / transparente
   const last = categories[categories.length - 1];
   if (last.maxDeg < MAX_SLOPE_DEG) {
     expr.push(degStop(MAX_SLOPE_DEG), colorOf(last));
@@ -116,7 +120,7 @@ export function buildSlopeColorExpression(
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
-/** Convert degrees to approximate percentage (tan). Caps at 90° → ∞ */
+/** Convertit des degrés en pourcentage approximatif (tan). Plafonné à 90° → ∞ */
 function degToPercent(deg: number): string {
   if (deg >= 90) return '∞';
   return String(Math.round(Math.tan((deg * Math.PI) / 180) * 100));
@@ -132,7 +136,7 @@ export function formatSlopeDegreeLabel(deg: number): string {
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
 }
 
-// ── Color ramp for dynamic bands ──────────────────────────────────────
+// ── Rampe de couleurs des bandes dynamiques ───────────────────────────
 
 /**
  * Palettes dédiées par nombre de bandes : un échantillonnage uniforme d'une
@@ -165,7 +169,7 @@ const SLOPE_PALETTES_BY_COUNT: Record<number, string[]> = {
 /** Rampe continue de secours pour les nombres de bandes sans palette dédiée. */
 const COLOR_RAMP = SLOPE_PALETTES_BY_COUNT[10];
 
-/** Interpolate a hex color between two hex colors. t ∈ [0, 1]. */
+/** Interpole une couleur hexadécimale entre deux couleurs hexadécimales. t ∈ [0, 1]. */
 function lerpColor(a: string, b: string, t: number): string {
   const pa = [parseInt(a.slice(1, 3), 16), parseInt(a.slice(3, 5), 16), parseInt(a.slice(5, 7), 16)];
   const pb = [parseInt(b.slice(1, 3), 16), parseInt(b.slice(3, 5), 16), parseInt(b.slice(5, 7), 16)];
@@ -175,7 +179,7 @@ function lerpColor(a: string, b: string, t: number): string {
   return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${bl.toString(16).padStart(2, '0')}`.toUpperCase();
 }
 
-/** Pick a color from the ramp for position t ∈ [0, 1]. */
+/** Choisit une couleur de la rampe pour la position t ∈ [0, 1]. */
 function rampColor(t: number): string {
   const n = COLOR_RAMP.length - 1;
   const i = Math.min(Math.floor(t * n), n - 1);
@@ -183,7 +187,7 @@ function rampColor(t: number): string {
   return lerpColor(COLOR_RAMP[i], COLOR_RAMP[i + 1], frac);
 }
 
-/** Category labels assigned by slope severity. */
+/** Libellés de catégorie attribués selon la sévérité de la pente. */
 const SEVERITY_LABELS = [
   'Quasi plat', 'Roulant', 'Soutenu', 'Raide', 'Mur', 'Extrême',
 ];
@@ -217,12 +221,12 @@ function roundBreakpointDeg(value: number): number {
   return Math.round(value / BREAKPOINT_STEP_DEG) * BREAKPOINT_STEP_DEG;
 }
 
-// ── Breakpoint validation ─────────────────────────────────────────────
+// ── Validation des seuils ─────────────────────────────────────────────
 
 /**
- * Given `count` bands, produce clean, intuitive degree breakpoints.
- * Returns an array of length `count - 1` (the boundaries between bands).
- * The implicit boundaries are 0° on the left and 90° on the right.
+ * Pour `count` bandes, produit des seuils en degrés propres et intuitifs.
+ * Renvoie un tableau de longueur `count - 1` (les limites entre les bandes).
+ * Les limites implicites sont 0° à gauche et 90° à droite.
  */
 function generateBreakpointsForCount(count: number): number[] {
   const preset = DEFAULT_DEGREE_BREAKPOINTS_BY_COUNT[count];
@@ -237,42 +241,42 @@ function generateBreakpointsForCount(count: number): number[] {
 }
 
 /**
- * Validate and clamp an array of internal breakpoints.
+ * Valide et borne un tableau de seuils internes.
  *
- * @param breakpoints  Raw user-edited breakpoints (length = bandCount - 1).
- *                     Implicit: band[0] starts at 0°, band[last] ends at 90°.
- * @param bandCount    Total number of bands.
- * @returns            Sanitised breakpoints, guaranteed strictly ascending in (0, 90).
+ * @param breakpoints  Seuils bruts modifiés par l'utilisateur (longueur = bandCount - 1).
+ *                     Implicite : band[0] commence à 0°, band[last] finit à 90°.
+ * @param bandCount    Nombre total de bandes.
+ * @returns            Seuils assainis, garantis strictement croissants dans (0, 90).
  */
 export function clampBreakpoints(breakpoints: number[], bandCount: number): number[] {
-  const n = bandCount - 1; // number of internal breakpoints
+  const n = bandCount - 1; // nombre de seuils internes
 
-  // Degenerate: single band → no internal breakpoints
+  // Cas dégénéré : une seule bande → aucun seuil interne
   if (n <= 0) return [];
 
-  // Too many bands to fit with ≥0.1° gaps? Fall back to even spacing.
+  // Trop de bandes pour tenir avec des écarts ≥ 0,1° ? Repli sur un espacement régulier.
   if (n >= 900) return generateBreakpointsForCount(bandCount);
 
-  // 1. Clamp each value individually to [0.1, 89.9]
+  // 1. Borne chaque valeur individuellement à [0.1, 89.9]
   const bp = breakpoints.slice(0, n).map((v) => {
     const rounded = roundBreakpointDeg(v);
     return Math.max(BREAKPOINT_STEP_DEG, Math.min(90 - BREAKPOINT_STEP_DEG, Number.isFinite(rounded) ? rounded : BREAKPOINT_STEP_DEG));
   });
 
-  // Pad with defaults if too few values provided
+  // Complète avec les valeurs par défaut s'il y a trop peu de valeurs
   while (bp.length < n) {
     const defaults = generateBreakpointsForCount(bandCount);
     bp.push(defaults[bp.length] ?? roundBreakpointDeg((bp[bp.length - 1] ?? 0) + BREAKPOINT_STEP_DEG));
   }
 
-  // 2. Forward pass: ensure strictly ascending with ≥0.1° gap
+  // 2. Passe avant : garantit un ordre strictement croissant avec un écart ≥ 0,1°
   for (let i = 1; i < n; i++) {
     if (bp[i] <= bp[i - 1]) {
       bp[i] = roundBreakpointDeg(bp[i - 1] + BREAKPOINT_STEP_DEG);
     }
   }
 
-  // 3. If last breakpoint overflows 89.9°, backward pass to compress
+  // 3. Si le dernier seuil dépasse 89,9°, passe arrière pour compresser
   if (bp[n - 1] > 90 - BREAKPOINT_STEP_DEG) {
     bp[n - 1] = 90 - BREAKPOINT_STEP_DEG;
     for (let i = n - 2; i >= 0; i--) {
@@ -282,8 +286,8 @@ export function clampBreakpoints(breakpoints: number[], bandCount: number): numb
     }
   }
 
-  // 4. If first breakpoint underflows 0.1°, it means the space is too cramped.
-  //    Fall back to evenly-spaced.
+  // 4. Si le premier seuil passe sous 0,1°, l'espace est trop étroit.
+  //    Repli sur un espacement régulier.
   if (bp[0] < BREAKPOINT_STEP_DEG) {
     return generateBreakpointsForCount(bandCount);
   }
@@ -292,15 +296,15 @@ export function clampBreakpoints(breakpoints: number[], bandCount: number): numb
 }
 
 /**
- * Generate N slope categories from an array of internal breakpoints.
- * breakpoints.length must equal count - 1.
- * If no breakpoints are provided, evenly-spaced defaults are used.
+ * Génère N catégories de pente à partir d'un tableau de seuils internes.
+ * breakpoints.length doit valoir count - 1.
+ * Sans seuils fournis, des valeurs par défaut régulièrement espacées sont utilisées.
  */
 export function generateDynamicCategories(
   count: number,
   customBreakpoints?: number[],
 ): SlopeCategory[] {
-  // Build the full boundary array: [0, bp1, bp2, ..., 90]
+  // Construit le tableau complet des limites : [0, bp1, bp2, ..., 90]
   const bp = customBreakpoints && customBreakpoints.length === count - 1
     ? clampBreakpoints(customBreakpoints, count)
     : generateBreakpointsForCount(count);

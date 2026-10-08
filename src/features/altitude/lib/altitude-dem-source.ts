@@ -1,35 +1,38 @@
 import type { Map as MapboxMap } from 'mapbox-gl';
 
 /**
- * Altitude overlay tiles read straight from the DEM tiles the 3D terrain has
- * already decoded — no second download, no Service Worker round trip.
+ * Tuiles de la surcouche d'altitude lues directement dans les tuiles DEM que le
+ * terrain 3D a déjà décodées — pas de second téléchargement, pas d'aller-retour
+ * par le Service Worker.
  *
- * The overlay used to be a plain raster source on the terrain's own tile URLs.
- * Same bytes, fetched twice: its requests queued behind the terrain's (and the
- * satellite / VHR tiles) in Mapbox's shared image queue and on the same
- * connections, so after a camera move the colours landed 1–2 s after the
- * relief. A custom source is called directly by the tile pipeline: each tile
- * is the terrain DEM tile of the same z/x/y (TERRAIN_ALIGNED_RASTER_TILE_SIZE
- * makes the two pyramids identical), re-encoded to Terrain-RGB in memory
- * (~1 ms) and coloured on the GPU by the layer's raster-color.
+ * La surcouche était une simple source raster sur les URL de tuiles du terrain.
+ * Mêmes octets, récupérés deux fois : ses requêtes attendaient derrière celles
+ * du terrain (et des tuiles satellite / VHR) dans la file d'images partagée de
+ * Mapbox et sur les mêmes connexions, si bien qu'après un mouvement de caméra
+ * les couleurs arrivaient 1 à 2 s après le relief. Une source personnalisée est
+ * appelée directement par le pipeline de tuiles : chaque tuile est la tuile DEM
+ * du terrain de même z/x/y (TERRAIN_ALIGNED_RASTER_TILE_SIZE rend les deux
+ * pyramides identiques), réencodée en Terrain-RGB en mémoire (~1 ms) et colorée
+ * sur le GPU par le raster-color de la couche.
  *
- * While the terrain still loads a tile, `loadTile` waits for it — Mapbox shows
- * the parent altitude tile meanwhile, exactly like the parent mesh of the
- * relief. A tile the terrain never asks for (different culling at the horizon)
- * is cropped from the closest loaded ancestor DEM, or fetched as a last resort
- * (terrain off, style rebuild). When the terrain replaces a DEM tile (HD
- * upgrade, cache bust), the altitude tile built from the old one is reloaded.
+ * Tant que le terrain charge encore une tuile, `loadTile` l'attend — Mapbox
+ * affiche entre-temps la tuile d'altitude parente, exactement comme le maillage
+ * parent du relief. Une tuile que le terrain ne demande jamais (élimination
+ * différente à l'horizon) est découpée dans le DEM ancêtre chargé le plus
+ * proche, ou récupérée en dernier recours (terrain désactivé, reconstruction du
+ * style). Quand le terrain remplace une tuile DEM (passage en HD, invalidation
+ * du cache), la tuile d'altitude construite sur l'ancienne est rechargée.
  *
- * Reads Mapbox internals (source cache `_tiles`, `tile.dem`), all guarded:
- * anything missing falls back to the network path.
+ * Lit des internes de Mapbox (`_tiles` du cache de source, `tile.dem`), tous
+ * protégés : tout ce qui manque se replie sur le chemin réseau.
  */
 
-/** Mapbox Terrain-RGB: elevation = -10000 + (R·65536 + G·256 + B) · 0.1. */
+/** Terrain-RGB de Mapbox : altitude = -10000 + (R·65536 + G·256 + B) · 0.1. */
 const ALTITUDE_DEM_ENCODING = 'mapbox' as const;
 
-/** How long a tile the terrain is not loading may wait before the fallbacks. */
+/** Durée pendant laquelle une tuile que le terrain ne charge pas peut attendre avant les replis. */
 const UNREQUESTED_TILE_GRACE_MS = 400;
-/** Upper bound on waiting for a terrain tile that is loading. */
+/** Attente maximale d'une tuile de terrain en cours de chargement. */
 const LOADING_TILE_MAX_WAIT_MS = 30_000;
 const REFRESH_DEBOUNCE_MS = 120;
 
@@ -56,7 +59,7 @@ interface StyleLike {
 }
 
 export interface AltitudeFallbackTiles {
-  /** `{z}/{x}/{y}` template answered with a DEM PNG. */
+  /** Gabarit `{z}/{x}/{y}` qui répond par un PNG DEM. */
   url: string;
   encoding: 'mapbox' | 'terrarium';
 }
@@ -70,7 +73,7 @@ function isDemData(value: unknown): value is DemDataLike {
   return Boolean(dem && dem.floatView instanceof Float32Array && dem.dim > 0 && dem.stride >= dem.dim);
 }
 
-/** Terrain-RGB image of `dem`, or of the `(qx, qy)` cell of a `2^dz` split of it. */
+/** Image Terrain-RGB de `dem`, ou de sa cellule `(qx, qy)` dans un découpage en `2^dz`. */
 export function encodeDem(dem: DemDataLike, dz = 0, qx = 0, qy = 0): ImageData {
   const size = dem.dim;
   const image = new ImageData(size, size);
@@ -80,8 +83,9 @@ export function encodeDem(dem: DemDataLike, dz = 0, qx = 0, qy = 0): ImageData {
   const oy = qy * size * scale;
   const { floatView, stride } = dem;
   for (let py = 0; py < size; py += 1) {
-    // Sample positions in the DEM grid (pixel centres); the 1 px border holds
-    // the neighbours, so bilinear reads may step one cell outside.
+    // Positions d'échantillonnage dans la grille DEM (centres des pixels) ; la
+    // bordure de 1 px contient les voisines, donc une lecture bilinéaire peut
+    // déborder d'une cellule.
     const sy = dz === 0 ? py : oy + (py + 0.5) * scale - 0.5;
     const y0 = Math.floor(sy);
     const fy = sy - y0;
@@ -126,7 +130,7 @@ async function fetchFallbackTile(
   if (response.status !== 200) return null;
   const bitmap = await createImageBitmap(await response.blob());
   if (fallback.encoding === ALTITUDE_DEM_ENCODING) return bitmap;
-  // Terrarium → Terrain-RGB, so the layer keeps a single decode expression.
+  // Terrarium → Terrain-RGB, pour que la couche garde une seule expression de décodage.
   const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   if (!ctx) return null;
@@ -162,14 +166,14 @@ export class AltitudeDemSource {
   readonly tileSize: number;
   readonly minzoom: number;
   readonly maxzoom: number;
-  /** Injected by Mapbox on addSource: reloads every tile of the source. */
+  /** Injecté par Mapbox à l'addSource : recharge toutes les tuiles de la source. */
   update?: () => void;
 
   private map: MapboxMap | null = null;
   private readonly fallback: AltitudeFallbackTiles;
-  /** Altitude tile key → DEM data it was built from (null: network fallback). */
+  /** Clé de tuile d'altitude → données DEM dont elle a été construite (null : repli réseau). */
   private readonly served = new Map<string, DemDataLike | null>();
-  /** Terrain tile key → callbacks waiting for it. */
+  /** Clé de tuile du terrain → callbacks qui l'attendent. */
   private readonly waiters = new Map<string, Set<() => void>>();
   private readonly staleKeys = new Set<string>();
   private refreshTimer: ReturnType<typeof setTimeout> | null = null;
@@ -238,8 +242,8 @@ export class AltitudeDemSource {
         await this.waitForTerrainTile(key, signal, terrainLoadingIt ? LOADING_TILE_MAX_WAIT_MS : UNREQUESTED_TILE_GRACE_MS);
         continue;
       }
-      // The terrain does not hold this tile: what it renders there is an
-      // ancestor DEM, so crop the same one.
+      // Le terrain n'a pas cette tuile : ce qu'il y affiche est un DEM ancêtre,
+      // on découpe donc le même.
       const ancestor = terrain ? this.findAncestor(terrain, z, x, y) : null;
       if (ancestor) {
         this.served.set(key, ancestor.dem);
@@ -264,7 +268,7 @@ export class AltitudeDemSource {
     }
   }
 
-  /** The terrain's DEM for z/x/y, or whether it is still loading it. */
+  /** Le DEM du terrain pour z/x/y, ou le fait qu'il est encore en chargement. */
   private lookupTile(
     cache: SourceCacheLike,
     z: number,
@@ -327,8 +331,9 @@ export class AltitudeDemSource {
     const callbacks = this.waiters.get(key);
     if (callbacks) for (const wake of [...callbacks]) wake();
     if (!tile.hasData() || !isDemData(tile.dem)) return;
-    // A DEM tile replaced the one an altitude tile was built from (HD upgrade,
-    // cache bust), or a cropped / fetched stand-in can now be exact.
+    // Une tuile DEM a remplacé celle dont une tuile d'altitude a été construite
+    // (passage en HD, invalidation du cache), ou un substitut découpé / récupéré
+    // peut maintenant être exact.
     if (this.served.has(key) && this.served.get(key) !== tile.dem) this.staleKeys.add(key);
     for (const servedKey of this.staleKeys) {
       if (servedKey !== key && !this.isDescendant(servedKey, z, x, y)) continue;
@@ -357,7 +362,7 @@ export class AltitudeDemSource {
     }, REFRESH_DEBOUNCE_MS);
   }
 
-  /** Rebuilds only the stale tiles (per-tile reload), else the whole source. */
+  /** Reconstruit seulement les tuiles périmées (rechargement par tuile), sinon toute la source. */
   private refreshStaleTiles(): void {
     const map = this.map;
     if (!map || this.staleKeys.size === 0) return;
@@ -375,7 +380,7 @@ export class AltitudeDemSource {
         return;
       }
     } catch {
-      /* fall through to the public reload */
+      /* on passe au rechargement public */
     }
     this.update?.();
   }

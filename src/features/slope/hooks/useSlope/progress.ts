@@ -68,7 +68,7 @@ export function useSlopeProgressReporter({
     };
 
     const publishProgress = () => {
-      // If zone pipeline is driving progress, NEVER let viewport/idle emit ready
+      // Si le pipeline de zone pilote la progression, JAMAIS de « prêt » émis par la vue / l'inactivité
       if (isZonePipelineActive) {
         return;
       }
@@ -116,12 +116,12 @@ export function useSlopeProgressReporter({
             armWatchdog();
             return;
           }
-          // Failsafe: the SW zone pipeline went silent (killed SW, dropped
-          // message…) — stop waiting for its "done" phase.
+          // Sécurité : le pipeline de zone du SW s'est tu (SW tué, message
+          // perdu…) — on cesse d'attendre sa phase « done ».
           isZonePipelineActive = false;
         }
         if (requested.size === 0) {
-          // Nothing in flight for a full stagnation window: done.
+          // Rien en vol pendant toute une fenêtre de stagnation : terminé.
           if (Date.now() - lastProgressMs >= STAGNATION_MS) {
             emit('ready', 100, 'Pentes prêtes');
             return;
@@ -209,7 +209,7 @@ export function useSlopeProgressReporter({
     };
 
     const onViewportChange = () => {
-      // Don't reset if active zone pipeline is running
+      // Pas de remise à zéro si un pipeline de zone actif tourne
       if (isZonePipelineActive) {
         return;
       }
@@ -220,7 +220,7 @@ export function useSlopeProgressReporter({
       armWatchdog();
     };
 
-    // ── SW Zone Progress Listener ──────────────────────────────────────
+    // ── Écouteur de progression de zone du SW ─────────────────────────
     const onSwMessage = (event: MessageEvent) => {
       if (event.data?.type !== 'ZONE_SLOPE_PROGRESS') return;
       const { phase, loaded: count, total: totalCount, percent } = event.data;
@@ -240,7 +240,7 @@ export function useSlopeProgressReporter({
       }
     };
 
-    // Failed tiles emit `error`, not `sourcedata`/`dataabort`.
+    // Les tuiles en échec émettent `error`, pas `sourcedata`/`dataabort`.
     const onTileError = (event: MapboxErrorEvent) => {
       onError(event as unknown as MapSourceDataEvent);
     };

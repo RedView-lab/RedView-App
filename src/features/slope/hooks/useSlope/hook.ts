@@ -71,15 +71,15 @@ function startZonePipeline(
       tiles,
     });
   } catch {
-    /* best-effort */
+    /* au mieux */
   }
 }
 
 /**
- * Idempotent: makes the slope source + layer exist for `sourceKey` and be
- * visible, swapping the source when the key changed (DEM profile /
- * resolution / zone). Returns null when the style is not ready (caller
- * retries), otherwise whether a swap/fresh add happened.
+ * Idempotent : fait exister la source + la couche de pente pour `sourceKey` et
+ * les rend visibles, en remplaçant la source quand la clé a changé (profil DEM
+ * / résolution / zone). Renvoie null quand le style n'est pas prêt (l'appelant
+ * réessaie), sinon si un remplacement / un nouvel ajout a eu lieu.
  */
 function ensureSlopeLayer(
   map: MapboxMap,
@@ -113,8 +113,9 @@ function ensureSlopeLayer(
 }
 
 /**
- * Slope overlay. Disabling only hides the layer (source kept, so the 3D
- * terrain graph stays stable and a re-enable repaints from cache).
+ * Surcouche de pente. La désactivation masque seulement la couche (source
+ * gardée, pour que le graphe du terrain 3D reste stable et qu'une réactivation
+ * repeigne depuis le cache).
  */
 export function useSlope(
   map: MapboxMap | null,
@@ -137,10 +138,11 @@ export function useSlope(
   );
   const hiddenKey = useMemo(() => Array.from(hiddenIds).sort().join(','), [hiddenIds]);
 
-  // Tiles requested before the Service Worker controls the page went to the
-  // server fallback: 30 m slope, or a 204 / 429 that Mapbox marks as errored
-  // and never retries (source.reload() skips errored tiles). A new controller
-  // re-keys the source so every tile is requested again through the SW.
+  // Les tuiles demandées avant que le Service Worker contrôle la page sont
+  // allées au repli serveur : pente 30 m, ou un 204 / 429 que Mapbox marque en
+  // erreur et ne redemande jamais (source.reload() saute les tuiles en erreur).
+  // Un nouveau contrôleur change la clé de la source pour que chaque tuile soit
+  // redemandée via le SW.
   const [swControllerEpoch, setSwControllerEpoch] = useState(0);
   useEffect(() => {
     const sw = typeof navigator !== 'undefined' ? navigator.serviceWorker : undefined;
@@ -155,7 +157,7 @@ export function useSlope(
     [sourceOptions, swControllerEpoch],
   );
 
-  // Layout effect: synced before any passive effect below reads them.
+  // Effet de layout : synchronisé avant que les effets passifs ci-dessous les lisent.
   const propsRef = useRef<SlopeLayerProps>({
     opacity, colorMode, categories: categories ?? [], hiddenIds, sourceOptions,
   });
@@ -169,7 +171,7 @@ export function useSlope(
   const mountedKeyRef = useRef<string | null>(null);
   const lastZonePipelineRef = useRef<ZonePipelineStamp>(null);
 
-  // ── Mount / swap / visibility / style reload ─────────────────────────
+  // ── Montage / remplacement / visibilité / rechargement du style ───────
   useEffect(() => {
     if (!map || !isMapLoaded) return;
     if (!enabled) {
@@ -186,21 +188,22 @@ export function useSlope(
       const result = ensureSlopeLayer(map, sourceKey, mountedKeyRef, propsRef.current);
       if (!result) {
         mountedRef.current = false;
-        // Style not ready: one-shot retry, never a persistent per-tile listener.
+        // Style pas prêt : un seul nouvel essai, jamais un écouteur permanent par tuile.
         map.once('styledata', attempt);
         return;
       }
       mountedRef.current = true;
       if (result.added) {
         map.triggerRepaint();
-        // Resolution / profile switch on a zone → re-run the zone multi-fetch.
+        // Changement de résolution / de profil sur une zone → relance la récupération multiple de la zone.
         const { zone, demProfile } = propsRef.current.sourceOptions;
         if (hadMountedKey && zone?.bounds) startZonePipeline(zone, demProfile, lastZonePipelineRef);
       }
     };
 
-    // A basemap switch wipes custom layers; re-add on the next tick so base
-    // layers land first and slot order holds.
+    // Un changement de fond de carte efface les couches personnalisées ; on les
+    // réajoute au tick suivant pour que les couches de base arrivent d'abord et
+    // que l'ordre des slots tienne.
     const onStyleLoad = () => {
       mountedRef.current = false;
       mountedKeyRef.current = null;
@@ -218,9 +221,10 @@ export function useSlope(
     };
   }, [map, isMapLoaded, enabled, sourceKey]);
 
-  // ── Active-state notification ─────────────────────────────────────
-  // Tells the SW to grow the DEM hot tier when slope is on (it reads ~5×
-  // more DEM tiles than the basemap), and kicks the zone pipeline.
+  // ── Notification de l'état actif ──────────────────────────────────
+  // Demande au SW d'agrandir le niveau chaud du DEM quand la pente est active
+  // (elle lit ~5× plus de tuiles DEM que le fond de carte), et relance le
+  // pipeline de zone.
   useEffect(() => {
     if (!map || !isMapLoaded) return;
     notifySlopeActiveState(enabled);
@@ -237,7 +241,7 @@ export function useSlope(
         map.setPaintProperty(SLOPE_LAYER_ID, 'raster-opacity', opacity);
       }
     } catch {
-      /* style may be transitioning */
+      /* le style est peut-être en transition */
     }
   }, [map, isMapLoaded, opacity]);
 
@@ -251,7 +255,7 @@ export function useSlope(
         map.setPaintProperty(SLOPE_LAYER_ID, 'raster-color', expression as unknown as string);
       }
     } catch {
-      /* style may be transitioning */
+      /* le style est peut-être en transition */
     }
   }, [map, isMapLoaded, colorMode, categoriesKey, hiddenKey]);
 

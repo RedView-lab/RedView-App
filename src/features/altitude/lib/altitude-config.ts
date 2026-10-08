@@ -7,9 +7,9 @@ import type {
 
 export const MAX_ALTITUDE_M = 5000;
 /**
- * Lower bound of the raster-color lookup. Kept slightly below 0 so sea /
- * bathymetry (negative in Terrarium) lands in a transparent bin instead of
- * being clamped onto the first land colour.
+ * Borne inférieure de la table raster-color. Gardée un peu sous 0 pour que la
+ * mer / la bathymétrie (négative dans Terrarium) tombe dans une classe
+ * transparente au lieu d'être ramenée sur la première couleur de terre.
  */
 export const MIN_ALTITUDE_M = -100;
 
