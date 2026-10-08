@@ -1,5 +1,5 @@
-/* Rethink Sans comes from @/shared/styles/typography.css (served by the app,
-   imported first by main.ts): no font @import here. */
+/* Rethink Sans vient de @/shared/styles/typography.css (servi par l'app,
+   importé en premier par main.ts) : pas d'@import de police ici. */
 
 #overlay {
   position: fixed;

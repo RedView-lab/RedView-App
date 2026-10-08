@@ -15,9 +15,9 @@ function getSafeReferrerUrl(): string | null {
 }
 
 /**
- * Reopens the viewer with `targetEngine`. WebGPU and WebGL 2 draw the same
- * viewer; the terrain engine has no point cloud, so it asks first.
- * Returns false when nothing changes (same engine, or switch cancelled).
+ * Rouvre le viewer avec `targetEngine`. WebGPU et WebGL 2 dessinent le même
+ * viewer ; le moteur terrain n'a pas de nuage de points, il demande donc d'abord.
+ * Renvoie false quand rien ne change (même moteur, ou bascule annulée).
  */
 export function switchViewerEngine(targetEngine: ViewerEngineKey, runningEngine: ViewerEngineKey): boolean {
   if (targetEngine === runningEngine) return false;

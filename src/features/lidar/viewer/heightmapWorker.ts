@@ -1,5 +1,5 @@
 // ============================================
-// Heightmap Terrain Generator — Web Worker
+// Génération du terrain heightmap — Web Worker
 // ============================================
 
 interface WorkerInput {
@@ -58,14 +58,14 @@ function generateHeightmap(
   const gridW = Math.max(2, Math.min(maxGrid + 1, Math.ceil(rangeX / res) + 1));
   const gridH = Math.max(2, Math.min(maxGrid + 1, Math.ceil(rangeY / res) + 1));
   const N = gridW * gridH;
-  // Node spacing actually used by the mesh and every heightGrid consumer
-  // (nodes span [min, max] exactly): ≤ res, since the range is rarely a
-  // multiple of res. Splatting with `res` instead shifted the terrain by up
-  // to one cell towards the far edges.
+  // Espacement des nœuds réellement utilisé par le maillage et chaque
+  // consommateur de heightGrid (les nœuds couvrent exactement [min, max]) :
+  // ≤ res, l'étendue étant rarement un multiple de res. Projeter avec `res`
+  // décalait le terrain jusqu'à une cellule vers les bords éloignés.
   const cellX = rangeX > 0 ? rangeX / (gridW - 1) : res;
   const cellY = rangeY > 0 ? rangeY / (gridH - 1) : res;
 
-  // 1) First pass: count ground points to decide fallback
+  // 1) Première passe : compter les points sol pour décider du repli
   let groundCount = 0;
   for (let i = 0; i < count; i++) {
     const cls = classifications[i];
@@ -73,10 +73,10 @@ function generateHeightmap(
   }
   const useStrictGround = groundCount >= Math.min(1000, count * 0.05);
 
-  // 2) Bilinear splatting accumulation grid (completely eliminates flight-line stepping and moiré beating)
-  // Interleaved accumulators [z, w, r, g, b] per cell: one cache line per
-  // splat corner instead of five scattered arrays. `w` keeps float32
-  // accumulation semantics via Math.fround.
+  // 2) Grille d'accumulation par projection bilinéaire (supprime entièrement l'escalier des lignes de vol et le moiré)
+  // Accumulateurs entrelacés [z, w, r, g, b] par cellule : une ligne de cache par
+  // coin projeté au lieu de cinq tableaux dispersés. `w` garde la sémantique
+  // d'accumulation float32 via Math.fround.
   const ACC = 5;
   const acc = new Float64Array(N * ACC);
   const hasPoint = new Uint8Array(N);
@@ -86,7 +86,7 @@ function generateHeightmap(
     if (useStrictGround) {
       if (cls !== 2 && cls !== 9 && cls !== 17) continue;
     } else {
-      if (cls === 7 || cls === 18) continue; // ignore noise
+      if (cls === 7 || cls === 18) continue; // ignorer le bruit
     }
 
     const x = positions[i * 3]!;
@@ -100,7 +100,7 @@ function generateHeightmap(
     const gx = (x - bounds.minX) / cellX;
     const gy = (y - bounds.minY) / cellY;
 
-    // Points on the max edge splat onto the last cell (f = 1).
+    // Les points sur le bord max sont projetés sur la dernière cellule (f = 1).
     const x0 = Math.min(gridW - 2, Math.floor(gx));
     const y0 = Math.min(gridH - 2, Math.floor(gy));
     const fx = gx - x0;
@@ -149,10 +149,10 @@ function generateHeightmap(
     }
   }
 
-  // 3) Initial distance BFS fill for large gaps
+  // 3) Remplissage initial des grands trous par BFS de distance
   fillHoles(heights, colR, colG, colB, gridW, gridH);
 
-  // Global fallback for fully empty tiles
+  // Repli global pour les tuiles entièrement vides
   let globalMinZ = Infinity;
   for (let i = 0; i < N; i++) {
     if (heights[i]! < globalMinZ) globalMinZ = heights[i]!;
@@ -162,10 +162,10 @@ function generateHeightmap(
     if (!isFinite(heights[i]!)) heights[i] = globalMinZ;
   }
 
-  // 4) Harmonic Laplace relaxation on unmeasured cells (smooth C2 boundary blending without altering real points)
+  // 4) Relaxation harmonique de Laplace sur les cellules non mesurées (raccord lisse C2 sans modifier les vrais points)
   relaxHolesLaplacian(heights, hasPoint, gridW, gridH, 20);
 
-  // 5) Build mesh in renderer space
+  // 5) Construire le maillage dans l'espace du renderer
   const cx = (bounds.minX + bounds.maxX) / 2;
   const cy = (bounds.minY + bounds.maxY) / 2;
   const cz = (bounds.minZ + bounds.maxZ) / 2;
@@ -198,7 +198,7 @@ function generateHeightmap(
     }
   }
 
-  // 6) Per-vertex normal from Horn's 8-neighbor weighted slope gradient (GIS industry standard)
+  // 6) Normale par sommet à partir du gradient de pente pondéré sur 8 voisins de Horn (standard SIG)
   for (let gy = 0; gy < gridH; gy++) {
     const y0 = Math.max(0, gy - 1);
     const y1 = gy;
@@ -212,7 +212,7 @@ function generateHeightmap(
       const x1 = gx;
       const x2 = Math.min(gridW - 1, gx + 1);
 
-      // 8 neighboring elevation samples
+      // 8 échantillons d'altitude voisins
       const z00 = heights[y0 * gridW + x0]!;
       const z10 = heights[y0 * gridW + x1]!;
       const z20 = heights[y0 * gridW + x2]!;
@@ -239,7 +239,7 @@ function generateHeightmap(
     }
   }
 
-  // 7) Triangle indices
+  // 7) Indices des triangles
   const quadW = gridW - 1;
   const quadH = gridH - 1;
   const indexCount = quadW * quadH * 6;
@@ -263,7 +263,7 @@ function generateHeightmap(
     }
   }
 
-  // Height grid for GPU Sobel / snow / lighting
+  // Grille de hauteurs pour le Sobel GPU / la neige / l'éclairage
   const heightGrid = new Float32Array(N);
   for (let i = 0; i < N; i++) {
     heightGrid[i] = vertices[i * 6 + 1]!;

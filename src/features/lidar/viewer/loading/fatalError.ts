@@ -19,8 +19,8 @@ export function showFatalError(
 
   // Construit via le DOM (textContent) : les messages peuvent contenir des
   // fragments non maîtrisés (erreurs worker, paramètres d'URL…).
-  // Above #overlay::before like the loader card: that positioned layer's
-  // backdrop blur otherwise covers an unpositioned card (the error was unreadable).
+  // Au-dessus de #overlay::before comme la carte de chargement : sinon le flou
+  // d'arrière-plan de cette couche positionnée couvre une carte non positionnée (l'erreur était illisible).
   const card = createStyledElement('div', `
       position: relative;
       z-index: 1;
@@ -68,9 +68,9 @@ export function showFatalError(
 }
 
 /**
- * What to try when no engine starts. On Linux the usual cause is the
- * browser's GPU acceleration being off or the driver blocklisted: without
- * it there is no WebGL at all (Chrome no longer falls back to SwiftShader).
+ * Que tenter quand aucun moteur ne démarre. Sous Linux, la cause habituelle est
+ * l'accélération GPU du navigateur désactivée ou le pilote en liste noire : sans
+ * elle, pas de WebGL du tout (Chrome ne se rabat plus sur SwiftShader).
  */
 export function noEngineHint(): string {
   const ua = navigator.userAgent;

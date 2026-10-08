@@ -40,9 +40,9 @@ function lerp(a: number, b: number, t: number): number {
 }
 
 /**
- * Builds a 512x1 RGBA Uint8Array representing the 1D altitude LUT ramp.
- * Index 0 maps to 0 metres.
- * Index 511 maps to maxAltitude metres (default 5000m).
+ * Construit un Uint8Array RGBA de 512x1 représentant la rampe de LUT altitude 1D.
+ * L'indice 0 correspond à 0 mètre.
+ * L'indice 511 correspond à maxAltitude mètres (5000 m par défaut).
  */
 export function buildAltitudeRampData(
   bands: AltitudeBand[],
@@ -55,7 +55,7 @@ export function buildAltitudeRampData(
     return data;
   }
 
-  // Sort ascending by minMeters
+  // Tri croissant sur minMeters
   const sortedBands = [...bands].sort((a, b) => a.minMeters - b.minMeters);
 
   if (colorization === 'stepped') {
@@ -89,7 +89,7 @@ export function buildAltitudeRampData(
     return data;
   }
 
-  // Gradient mode: Smooth linear interpolation between altitude stops
+  // Mode dégradé : interpolation linéaire continue entre les paliers d'altitude
   interface Stop {
     altM: number;
     color: RgbaColor;
@@ -130,7 +130,7 @@ export function buildAltitudeRampData(
       continue;
     }
 
-    // Find bounding stops
+    // Trouver les paliers encadrants
     let s0 = stops[0]!;
     let s1 = stops[1]!;
     for (let s = 0; s < stops.length - 1; s++) {

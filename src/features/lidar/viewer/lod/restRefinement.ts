@@ -1,50 +1,50 @@
 // ============================================
-// Still-camera quality: refinement budget + progressive anti-aliasing
+// Qualité caméra fixe : budget de raffinement + anticrénelage progressif
 // ============================================
 //
-// The point budget is sized for moving frames (a vsync each). Once the
-// camera stops, nothing has to be ready within 16 ms any more, so the still
-// image is refined in two steps:
-//  1. refine: the budget grows to what the GPU draws in about
-//     REST_TARGET_MS per frame (measured: the cost of the complete still
-//     selection is read, then the budget is scaled towards the target, at
-//     most MAX_ADJUSTMENTS times; bounded by the platform's rest ceiling).
-//     The deeper nodes stream in and the far field reaches the on-screen
-//     density of the foreground. The learnt budget carries over to the next
-//     still views;
-//  2. accumulate: with the selection complete, REST_SAMPLES frames are
-//     rendered with sub-pixel offsets (Halton 2,3) and averaged in linear
-//     light (renderer `accumulate`): every pixel ends up as the mean of what
-//     it covers, as 16× supersampling would give: no shimmering sub-pixel
-//     points far away, smooth edges, no jagged sprite discs.
-// Then the render loop goes idle. Any camera move drops back to the moving
-// budget at once (its selection is a prefix of the still one, so already
-// resident).
+// Le budget de points est dimensionné pour les images en mouvement (une vsync
+// chacune). Une fois la caméra arrêtée, plus rien ne doit être prêt en 16 ms :
+// l'image fixe est raffinée en deux temps :
+//  1. raffiner : le budget grandit jusqu'à ce que le GPU dessine en environ
+//     REST_TARGET_MS par image (mesuré : le coût de la sélection fixe complète
+//     est lu, puis le budget est mis à l'échelle vers la cible, au plus
+//     MAX_ADJUSTMENTS fois ; borné par le plafond au repos de la plateforme).
+//     Les nœuds plus profonds arrivent en flux et le lointain atteint la densité
+//     à l'écran du premier plan. Le budget appris est repris pour les vues fixes
+//     suivantes ;
+//  2. accumuler : la sélection complète, REST_SAMPLES images sont rendues avec
+//     des décalages sous-pixel (Halton 2,3) et moyennées en lumière linéaire
+//     (`accumulate` du renderer) : chaque pixel finit comme la moyenne de ce
+//     qu'il couvre, comme le donnerait un suréchantillonnage 16× : pas de points
+//     sous-pixel qui scintillent au loin, bords lisses, pas de disques de sprites crénelés.
+// Puis la boucle de rendu se met au repos. Tout mouvement de caméra revient
+// aussitôt au budget en mouvement (sa sélection est un préfixe de la sélection
+// fixe, donc déjà résidente).
 
-/** Frames averaged by the progressive anti-aliasing. */
+/** Images moyennées par l'anticrénelage progressif. */
 export const REST_SAMPLES = 16;
-/** GPU time aimed at for a still frame (a few vsyncs: nothing moves). */
+/** Temps GPU visé pour une image fixe (quelques vsyncs : rien ne bouge). */
 const REST_TARGET_MS = 50;
-/** Photo mode: more frames (soft shadows and clouds converge with them) and a denser still selection. */
+/** Mode photo : plus d'images (les ombres douces et les nuages convergent avec elles) et une sélection fixe plus dense. */
 export const PHOTO_REST_SAMPLES = 32;
 export const PHOTO_REST_TARGET_MS = 110;
-/** The budget grows while a complete still frame costs less than this share of the target… */
+/** Le budget grandit tant qu'une image fixe complète coûte moins que cette part de la cible… */
 const GROW_BELOW = 0.6;
-/** …and shrinks above this one. */
+/** …et diminue au-dessus de celle-ci. */
 const SHRINK_ABOVE = 1.35;
-/** Largest growth of one adjustment. */
+/** Plus forte croissance d'un ajustement. */
 const MAX_GROWTH = 2.5;
-/** Frames of an unchanged, fully loaded selection before its cost is read (the GPU timer is smoothed). */
+/** Images d'une sélection inchangée et entièrement chargée avant de lire son coût (le timer GPU est lissé). */
 const MEASURE_FRAMES = 6;
 const MAX_ADJUSTMENTS = 4;
-/** First still budget, as a multiple of the moving one, before any measurement. */
+/** Premier budget fixe, en multiple du budget en mouvement, avant toute mesure. */
 const INITIAL_FACTOR = 3;
-/** A complete still frame this slow stops the refinement or the accumulation at once (sluggish input otherwise). */
+/** Une image fixe complète aussi lente arrête aussitôt le raffinement ou l'accumulation (sinon entrées poussives). */
 const REST_ABORT_MS = 200;
 
 export type RestPhase = 'moving' | 'refine' | 'accumulate' | 'done';
 
-/** Radical inverse of `index` in `base` (Halton sequence), in [0, 1). */
+/** Inverse radical de `index` en base `base` (suite de Halton), dans [0, 1). */
 function halton(index: number, base: number): number {
   let result = 0;
   let f = 1 / base;
@@ -57,58 +57,58 @@ function halton(index: number, base: number): number {
   return result;
 }
 
-/** Cost of the still frame just rendered. */
+/** Coût de l'image fixe qui vient d'être rendue. */
 export interface RestFrameSample {
-  /** Every node of the selection is drawn (no pending load). */
+  /** Chaque nœud de la sélection est dessiné (aucun chargement en attente). */
   lodIdle: boolean;
-  /** Smoothed GPU cost of the frames (ms); frame interval when the GPU is not timed. */
+  /** Coût GPU lissé des images (ms) ; intervalle entre images quand le GPU n'est pas chronométré. */
   gpuMs: number;
-  /** The budget cut the selection (more points would be drawn with a larger one). */
+  /** Le budget a coupé la sélection (plus de points seraient dessinés avec un budget plus grand). */
   budgetLimited: boolean;
 }
 
 export class RestRefinement {
   phase: RestPhase = 'moving';
-  /** Index of the next accumulated frame (0 = plain frame, replaces the history). */
+  /** Indice de la prochaine image accumulée (0 = image simple, remplace l'historique). */
   sample = 0;
-  /** Frames averaged per still view. */
+  /** Images moyennées par vue fixe. */
   samples = REST_SAMPLES;
-  /** GPU time aimed at for a complete still frame (ms). */
+  /** Temps GPU visé pour une image fixe complète (ms). */
   private targetMs = REST_TARGET_MS;
-  /** Learnt still budget (points, before the density slider); 0 until the first still view. */
+  /** Budget fixe appris (points, avant le curseur de densité) ; 0 jusqu'à la première vue fixe. */
   private restBudget = 0;
   private stableFrames = 0;
   private adjustments = 0;
   private readonly enabled: boolean;
 
-  /** @param enabled false keeps every frame at the moving budget, without accumulation (pinned-budget benches). */
+  /** @param enabled false garde chaque image au budget en mouvement, sans accumulation (benchs à budget figé). */
   constructor(enabled: boolean) {
     this.enabled = enabled;
   }
 
-  /** Still-view quality: frames averaged and GPU time aimed at per frame (photo mode raises both). */
+  /** Qualité de la vue fixe : images moyennées et temps GPU visé par image (le mode photo relève les deux). */
   setQuality(samples: number, targetMs: number): void {
     this.samples = Math.max(1, Math.round(samples));
     this.targetMs = Math.max(10, targetMs);
     this.invalidate();
   }
 
-  /** The camera moves: moving budget, no accumulation. */
+  /** La caméra bouge : budget en mouvement, pas d'accumulation. */
   setMoving(): void {
     this.phase = 'moving';
     this.sample = 0;
   }
 
-  /** Still camera and the moving budget has settled with its selection drawn: start refining. */
+  /** Caméra fixe et budget en mouvement stabilisé avec sa sélection dessinée : commencer le raffinement. */
   startRefine(): void {
     if (this.phase !== 'moving') return;
     this.enterRefine();
   }
 
   /**
-   * Something on screen changed (overlay, colours, density, new node…): the
-   * averaged history is stale. The still selection is checked again (it may
-   * need loads) before a new accumulation starts.
+   * Quelque chose a changé à l'écran (surcouche, couleurs, densité, nouveau
+   * nœud…) : l'historique moyenné est périmé. La sélection fixe est revérifiée
+   * (elle peut demander des chargements) avant une nouvelle accumulation.
    */
   invalidate(): void {
     if (this.phase === 'accumulate' || this.phase === 'done') this.enterRefine();
@@ -122,8 +122,8 @@ export class RestRefinement {
   }
 
   /**
-   * Still-frame budget (points, before the density slider) from the raw
-   * moving one, within [moving budget, rest ceiling].
+   * Budget de l'image fixe (points, avant le curseur de densité) à partir du
+   * budget brut en mouvement, dans [budget en mouvement, plafond au repos].
    */
   budget(movingBudget: number, restCeiling: number): number {
     if (this.phase === 'moving' || !this.enabled) return movingBudget;
@@ -133,9 +133,9 @@ export class RestRefinement {
   }
 
   /**
-   * After a refine frame: once the selection has been complete for a few
-   * frames, its cost scales the budget towards REST_TARGET_MS (more loads
-   * follow), or the accumulation starts.
+   * Après une image de raffinement : une fois la sélection complète depuis
+   * quelques images, son coût met le budget à l'échelle vers REST_TARGET_MS
+   * (d'autres chargements suivent), ou l'accumulation commence.
    */
   onRefineFrame(frame: RestFrameSample, movingBudget: number, restCeiling: number): void {
     if (this.phase !== 'refine') return;
@@ -144,10 +144,10 @@ export class RestRefinement {
       return;
     }
     if (frame.gpuMs > REST_ABORT_MS) {
-      // A complete still frame already this slow (software rasteriser, weak
-      // GPU): refining and averaging would keep the view sluggish for many
-      // seconds. This frame is the final image; the next still views start
-      // from half the budget.
+      // Une image fixe complète déjà aussi lente (rastériseur logiciel, GPU
+      // faible) : raffiner et moyenner garderaient la vue poussive pendant de
+      // nombreuses secondes. Cette image est l'image finale ; les vues fixes
+      // suivantes partent de la moitié du budget.
       this.restBudget = Math.max(movingBudget, this.restBudget * 0.5);
       this.phase = 'done';
       return;
@@ -171,13 +171,13 @@ export class RestRefinement {
     this.sample = 0;
   }
 
-  /** Sub-pixel offset (canvas px, within ±0.5) of the frame about to be accumulated. */
+  /** Décalage sous-pixel (px du canvas, dans ±0,5) de l'image sur le point d'être accumulée. */
   jitter(): [number, number] {
     if (this.phase !== 'accumulate' || this.sample === 0) return [0, 0];
     return [halton(this.sample, 2) - 0.5, halton(this.sample, 3) - 0.5];
   }
 
-  /** After an accumulated frame (`gpuMs` as in RestFrameSample). */
+  /** Après une image accumulée (`gpuMs` comme dans RestFrameSample). */
   onAccumulatedFrame(gpuMs: number, movingBudget: number): void {
     if (this.phase !== 'accumulate') return;
     if (gpuMs > REST_ABORT_MS) {
@@ -189,7 +189,7 @@ export class RestRefinement {
     if (this.sample >= this.samples) this.phase = 'done';
   }
 
-  /** Still frames left to render before the image is final. */
+  /** Images fixes restant à rendre avant que l'image soit finale. */
   get pending(): boolean {
     return this.phase === 'refine' || this.phase === 'accumulate';
   }

@@ -1,10 +1,10 @@
 // ============================================
-// Octree LOD — Frustum Culling & Screen-Space Metrics
+// LOD de l'octree — élagage par frustum et mesures en espace écran
 // ============================================
 
 import type { AABB } from './types';
 
-/** 6 frustum planes: [a,b,c,d] for ax+by+cz+d >= 0 (inside) */
+/** 6 plans du frustum : [a,b,c,d] pour ax+by+cz+d >= 0 (intérieur) */
 export type FrustumPlanes = Float64Array; // 24 floats (6 × 4)
 
 export const OUTSIDE = 0;
@@ -14,49 +14,49 @@ const INSIDE = 2;
 const _planesBuffer = new Float64Array(24);
 
 /**
- * Extract 6 frustum planes from a column-major viewProj matrix.
- * Planes point inward (positive half-space is inside the frustum).
+ * Extrait les 6 plans du frustum d'une matrice viewProj en colonnes.
+ * Les plans pointent vers l'intérieur (le demi-espace positif est dans le frustum).
  */
 export function extractFrustumPlanes(vp: Float32Array): FrustumPlanes {
   const planes = _planesBuffer;
 
-  // Left:   row3 + row0
+  // Gauche : ligne3 + ligne0
   planes[0]  = vp[3]  + vp[0];
   planes[1]  = vp[7]  + vp[4];
   planes[2]  = vp[11] + vp[8];
   planes[3]  = vp[15] + vp[12];
 
-  // Right:  row3 - row0
+  // Droite : ligne3 - ligne0
   planes[4]  = vp[3]  - vp[0];
   planes[5]  = vp[7]  - vp[4];
   planes[6]  = vp[11] - vp[8];
   planes[7]  = vp[15] - vp[12];
 
-  // Bottom: row3 + row1
+  // Bas :    ligne3 + ligne1
   planes[8]  = vp[3]  + vp[1];
   planes[9]  = vp[7]  + vp[5];
   planes[10] = vp[11] + vp[9];
   planes[11] = vp[15] + vp[13];
 
-  // Top:    row3 - row1
+  // Haut :   ligne3 - ligne1
   planes[12] = vp[3]  - vp[1];
   planes[13] = vp[7]  - vp[5];
   planes[14] = vp[11] - vp[9];
   planes[15] = vp[15] - vp[13];
 
-  // Near:   row2 (WebGPU: clip z in [0,1], 0 <= z_clip)
+  // Proche : ligne2 (WebGPU : z clip dans [0,1], 0 <= z_clip)
   planes[16] = vp[2];
   planes[17] = vp[6];
   planes[18] = vp[10];
   planes[19] = vp[14];
 
-  // Far:    row3 - row2 (z_clip <= w_clip)
+  // Loin :   ligne3 - ligne2 (z_clip <= w_clip)
   planes[20] = vp[3]  - vp[2];
   planes[21] = vp[7]  - vp[6];
   planes[22] = vp[11] - vp[10];
   planes[23] = vp[15] - vp[14];
 
-  // Normalize each plane
+  // Normaliser chaque plan
   for (let i = 0; i < 6; i++) {
     const o = i * 4;
     const len = Math.sqrt(planes[o] * planes[o] + planes[o + 1] * planes[o + 1] + planes[o + 2] * planes[o + 2]);
@@ -73,8 +73,8 @@ export function extractFrustumPlanes(vp: Float32Array): FrustumPlanes {
 }
 
 /**
- * Test AABB against frustum planes.
- * Returns OUTSIDE, INTERSECT, or INSIDE.
+ * Teste une AABB contre les plans du frustum.
+ * Renvoie OUTSIDE, INTERSECT ou INSIDE.
  */
 export function frustumTestAABB(planes: FrustumPlanes, aabb: AABB): number {
   let allInside = true;
@@ -99,12 +99,12 @@ export function frustumTestAABB(planes: FrustumPlanes, aabb: AABB): number {
 }
 
 /**
- * Compute screen-space size of an AABB in pixels.
- * Uses bounding sphere projection in clip space: zero GC allocations, ultra-fast scalar math.
+ * Calcule la taille à l'écran d'une AABB en pixels.
+ * Projette la sphère englobante en espace clip : aucune allocation, calcul scalaire très rapide.
  *
- * `projScaleY` is the projection's `proj[1][1]` (1 / tan(fovY / 2)). It must
- * not be read from `viewProj[5]`, which is `proj[1][1] * up.y` and collapses
- * to ~0 when the camera looks straight down.
+ * `projScaleY` est le `proj[1][1]` de la projection (1 / tan(fovY / 2)). Il ne
+ * doit pas être lu dans `viewProj[5]`, qui vaut `proj[1][1] * up.y` et tombe à
+ * ~0 quand la caméra regarde droit vers le bas.
  */
 export function screenSpaceSize(
   aabb: AABB,
@@ -121,11 +121,11 @@ export function screenSpaceSize(
   const cz = aabb.minZ + halfZ;
   const radius = Math.sqrt(halfX * halfX + halfY * halfY + halfZ * halfZ);
 
-  // Transform center into clip space (w is distance along camera forward in view space)
+  // Transformer le centre en espace clip (w est la distance le long de l'axe avant de la caméra en espace vue)
   const w = viewProj[3] * cx + viewProj[7] * cy + viewProj[11] * cz + viewProj[15];
 
   if (w <= radius) {
-    // Camera is inside or very close to bounding volume
+    // La caméra est dans le volume englobant ou très près
     return Math.max(viewportW, viewportH);
   }
 

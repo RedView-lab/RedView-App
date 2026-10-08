@@ -10,11 +10,11 @@ describe('RestRefinement on a slow GPU', () => {
     const rest = new RestRefinement(true);
     rest.startRefine();
     const stillBudget = rest.budget(MOVING, CEILING);
-    // Software rasteriser: a full-resolution still frame takes seconds.
+    // Rastériseur logiciel : une image fixe en pleine résolution prend des secondes.
     rest.onRefineFrame({ lodIdle: true, gpuMs: 3000, budgetLimited: false }, MOVING, CEILING);
     expect(rest.phase).toBe('done');
     expect(rest.pending).toBe(false);
-    // The next still view starts lower.
+    // La vue fixe suivante démarre plus bas.
     rest.setMoving();
     rest.startRefine();
     expect(rest.budget(MOVING, CEILING)).toBeLessThan(stillBudget);
@@ -50,7 +50,7 @@ describe('FrameClock.lastIntervalMs', () => {
     expect(clock.lastIntervalMs).toBe(0);
     expect(clock.frame(1016)).toBe(16);
     expect(clock.lastIntervalMs).toBe(16);
-    // 3 s frame: not a cadence sample, but its real cost.
+    // Image de 3 s : pas un échantillon de cadence, mais son coût réel.
     expect(clock.frame(4016)).toBe(0);
     expect(clock.lastIntervalMs).toBe(3000);
     clock.pause();

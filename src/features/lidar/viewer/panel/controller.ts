@@ -32,7 +32,7 @@ interface ViewerPanelOptions {
   engineOptions?: ViewerEngineOption[];
   onPointSizeChange?: (percent: number) => void;
   onDensityChange?: (percent: number) => void;
-  /** Point size slider switches between metres (adaptive) and fixed pixels. */
+  /** Le curseur de taille des points bascule entre mètres (adaptatif) et pixels fixes. */
   onFixedSizeChange?: (fixed: boolean) => void;
   edlEnabled?: boolean;
   edlStrengthPercent?: number;
@@ -145,7 +145,7 @@ export function createViewerPanel(options: ViewerPanelOptions) {
   let currentEngineMode: ViewerEngineKey = options.engineMode ?? 'webgpu';
   let availableEngineOptions = normalizeEngineOptions(options.engineOptions);
 
-  // --- Left panel resize and collapse state ---
+  // --- Redimensionnement et repli du panneau de gauche ---
   let leftPanelWidth = LEFT_PANEL_WIDTH_DEFAULT;
   try {
     const stored = localStorage.getItem(LEFT_PANEL_STORAGE_WIDTH_KEY);
@@ -205,7 +205,7 @@ export function createViewerPanel(options: ViewerPanelOptions) {
     resizeHandle?.classList.add('is-dragging');
     const startX = event.clientX;
     const startWidth = leftPanelWidth;
-    // The panel is zoomed by --app-scale: screen px -> panel px.
+    // Le panneau est zoomé par --app-scale : px écran -> px du panneau.
     const uiScale = readRootAppScale();
 
     const onMove = (nextEvent: MouseEvent) => {
@@ -273,7 +273,7 @@ export function createViewerPanel(options: ViewerPanelOptions) {
       if (!optionKey) return;
       const config = getEngineOption(optionKey);
       const isSelected = optionKey === currentEngineMode;
-      // An engine the page does not offer is not listed.
+      // Un moteur que la page ne propose pas n'est pas listé.
       option.hidden = !config;
       option.classList.toggle('is-selected', isSelected);
       option.setAttribute('aria-selected', isSelected ? 'true' : 'false');
@@ -282,7 +282,7 @@ export function createViewerPanel(options: ViewerPanelOptions) {
       else option.removeAttribute('title');
     });
 
-    // The terrain engine draws a textured DTM: no point controls, an elevation exaggeration instead.
+    // Le moteur terrain dessine un MNT texturé : pas de réglages des points, une exagération du relief à la place.
     if (currentEngineMode === 'terrain') {
       pointControlsGroup?.setAttribute('hidden', '');
       elevationControlsGroup?.removeAttribute('hidden');

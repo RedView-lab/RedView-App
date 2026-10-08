@@ -1,5 +1,5 @@
 // ============================================
-// LiDAR viewer — comments React layer (bubbles, open thread, new comment)
+// Viewer LiDAR — couche React des commentaires (bulles, fil ouvert, nouveau commentaire)
 // ============================================
 
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
@@ -19,9 +19,9 @@ const no = () => false;
 const now = () => new Date().toISOString();
 
 /**
- * The app's comment components, driven by the viewer controller through a
- * `CommentToolValue` whose writes become bridge actions (read only when the
- * app tab is closed).
+ * Les composants de commentaire de l'app, pilotés par le contrôleur du viewer
+ * via un `CommentToolValue` dont les écritures deviennent des actions du pont
+ * (lecture seule quand l'onglet de l'app est fermé).
  */
 export function ViewerCommentsUi({ controller }: { controller: ViewerComments }) {
   const snapshot = useSyncExternalStore(controller.subscribe, controller.getSnapshot);

@@ -1,5 +1,5 @@
 // ============================================
-// LiDAR viewer — comments React layer mount
+// Viewer LiDAR — montage de la couche React des commentaires
 // ============================================
 
 import { createRoot } from 'react-dom/client';
@@ -9,7 +9,7 @@ import { AppI18nStaticProvider } from '@/shared/i18n/AppI18nProvider';
 import { ViewerCommentsUi } from './ViewerCommentsUi';
 import type { ViewerComments } from './viewerComments';
 
-/** Mounts the comments layer over the scene canvas; returns its unmount. */
+/** Monte la couche des commentaires sur le canvas de la scène ; renvoie son démontage. */
 export function mountViewerCommentsUi(controller: ViewerComments, container: HTMLElement): () => void {
   const host = document.createElement('div');
   host.className = 'rv-lidar-comments-host';

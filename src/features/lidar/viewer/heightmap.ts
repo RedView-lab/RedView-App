@@ -1,5 +1,5 @@
 // ============================================
-// LiDAR HD Viewer — Heightmap Terrain Generator (Worker Wrapper)
+// Viewer LiDAR HD — génération du terrain heightmap (enveloppe du worker)
 // ============================================
 
 import type { PointCloudData } from '../types';
@@ -53,8 +53,8 @@ export function generateHeightmap(pc: PointCloudData, resolution = 1.0): Promise
     };
 
     const { positions, colors, classifications, count } = copyTerrainPoints(pc);
-    // Positions are relative to `pc.origin`: hand the worker bounds in that
-    // frame (only differences matter for the grid and the centred mesh).
+    // Les positions sont relatives à `pc.origin` : donner au worker l'emprise dans
+    // ce repère (seules les différences comptent pour la grille et le maillage centré).
     const { bounds, origin } = pc;
 
     worker.postMessage(
@@ -80,9 +80,9 @@ const isGroundClass = (cls: number) => cls === 2 || cls === 9 || cls === 17;
 const isNoiseClass = (cls: number) => cls === 7 || cls === 18;
 
 /**
- * Copies only the points the worker will splat (same selection rule as
- * `heightmapWorker`): ground classes when there are enough of them, otherwise
- * everything but noise. Avoids a full copy of the cloud for the transfer.
+ * Copie seulement les points que le worker va projeter (même règle de sélection
+ * que `heightmapWorker`) : les classes sol quand il y en a assez, sinon tout
+ * sauf le bruit. Évite une copie complète du nuage pour le transfert.
  */
 function copyTerrainPoints(pc: PointCloudData): {
   positions: Float32Array;

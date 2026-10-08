@@ -1,35 +1,35 @@
 // ============================================
-// LiDAR LOD — Shared types
+// LOD LiDAR — types partagés
 // ============================================
 
 /**
- * Coarse GPU class, from adapter info (see `resolvePlatformInfo`) or the
- * WebGL renderer string (`resolveWebglPlatformInfo`). `software`: CPU
- * rasteriser (llvmpipe, SwiftShader, WARP) — only the WebGL 2 backend runs
- * on one, WebGPU refuses software adapters.
+ * Classe de GPU grossière, d'après les infos de l'adaptateur (voir
+ * `resolvePlatformInfo`) ou la chaîne du renderer WebGL (`resolveWebglPlatformInfo`).
+ * `software` : rastériseur CPU (llvmpipe, SwiftShader, WARP) — seul le backend
+ * WebGL 2 y tourne, WebGPU refuse les adaptateurs logiciels.
  */
 export type GpuTier = 'integrated' | 'discrete' | 'apple' | 'software';
 
-/** Platform-dependent GPU/memory profile */
+/** Profil GPU/mémoire dépendant de la plateforme */
 export interface PlatformProfile {
   tier: GpuTier;
-  /** Floor of the adaptive budget (emergency cuts never go below). */
+  /** Plancher du budget adaptatif (les coupes d'urgence ne descendent jamais en dessous). */
   minBudget: number;
   initialBudget: number;
-  /** Ceiling of the moving-camera budget. */
+  /** Plafond du budget caméra en mouvement. */
   maxBudget: number;
-  /** Ceiling of the still-camera budget (see RestRefinement). */
+  /** Plafond du budget caméra fixe (voir RestRefinement). */
   restMaxBudget: number;
-  /** Points kept resident on the GPU (≥ restMaxBudget; the rest is evicted LRU). */
+  /** Points gardés résidents sur le GPU (≥ restMaxBudget ; le reste est évincé en LRU). */
   poolBudget: number;
   maxCanvasDim: number;
   dprCap: number;
   isApple: boolean;
-  /** Scene resolution while the camera moves, as a share of the canvas (fill-rate saving). */
+  /** Résolution de la scène pendant que la caméra bouge, en part du canvas (économie de fill-rate). */
   motionScale: number;
 }
 
-/** Axis-aligned bounding box */
+/** Boîte englobante alignée sur les axes */
 export interface AABB {
   minX: number; minY: number; minZ: number;
   maxX: number; maxY: number; maxZ: number;

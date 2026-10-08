@@ -12,7 +12,7 @@ describe('wheelDeltaPixels', () => {
   });
 
   it('converts Firefox line deltas to about one Chrome notch', () => {
-    // A mouse notch in Firefox (Linux and Windows): 3 lines.
+    // Un cran de molette dans Firefox (Linux et Windows) : 3 lignes.
     expect(wheelDeltaPixels({ deltaY: 3, deltaMode: LINE }, 900)).toBe(120);
     expect(wheelDeltaPixels({ deltaY: -3, deltaMode: LINE }, 900)).toBe(-120);
   });

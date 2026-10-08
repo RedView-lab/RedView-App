@@ -22,7 +22,7 @@ function mulberry32(seed: number): () => number {
 
 const ORIGIN = { x: 965000, y: 6499000, z: 0 };
 
-/** Writes point `i` at a local position with seeded attributes. */
+/** Écrit le point `i` à une position locale avec des attributs tirés d'une graine. */
 function fillPoint(input: LodTileInput, i: number, x: number, y: number, z: number, rand: () => number): void {
   input.positions[i * 3] = x;
   input.positions[i * 3 + 1] = y;
@@ -31,7 +31,7 @@ function fillPoint(input: LodTileInput, i: number, x: number, y: number, z: numb
   input.colors[i * 3 + 1] = Math.floor(x / 4) & 255;
   input.colors[i * 3 + 2] = Math.floor(y / 4) & 255;
   input.classifications[i] = rand() < 0.3 ? 5 : 2;
-  // Zeros, a 12-bit body and rare saturated outliers: the percentile scale has work to do.
+  // Des zéros, un corps sur 12 bits et de rares valeurs aberrantes saturées : l'échelle par percentile a du travail.
   input.intensities![i] = rand() < 0.05 ? 0 : Math.floor(rand() * 4096) + (rand() < 0.01 ? 60000 : 0);
 }
 
@@ -48,7 +48,7 @@ function emptyInput(count: number): LodTileInput {
   };
 }
 
-/** Terrain-like plain LAS tile: the additive octree is built here (several levels). */
+/** Tuile LAS simple façon terrain : l'octree additif est construit ici (plusieurs niveaux). */
 function additiveInput(count: number, seed: number): LodTileInput {
   const rand = mulberry32(seed);
   const input = emptyInput(count);
@@ -61,8 +61,8 @@ function additiveInput(count: number, seed: number): LodTileInput {
 }
 
 /**
- * COPC-like tile: points grouped per node in hierarchy order, with a node
- * whose parent holds no point (its subtree feeds the root directly).
+ * Tuile façon COPC : points groupés par nœud dans l'ordre de la hiérarchie, avec
+ * un nœud dont le parent ne contient aucun point (son sous-arbre alimente directement la racine).
  */
 function copcInput(seed: number): LodTileInput {
   const rand = mulberry32(seed);
@@ -71,7 +71,7 @@ function copcInput(seed: number): LodTileInput {
     ['0-0-0-0', 6000],
     ['1-0-0-0', 5000], ['1-1-0-0', 5000], ['1-0-1-0', 4000],
     ['2-0-0-0', 3000], ['2-1-0-0', 3000], ['2-2-1-0', 3000], ['2-1-3-0', 2000],
-    // Parent 1-1-1-0 is absent.
+    // Le parent 1-1-1-0 est absent.
     ['2-3-3-0', 2500], ['2-2-2-1', 1500],
     ['3-0-0-0', 2000], ['3-5-2-0', 2000],
   ];
@@ -93,7 +93,7 @@ function copcInput(seed: number): LodTileInput {
   return { ...input, copc };
 }
 
-/** Two FNV-1a 32-bit hashes (different offsets) of the packed bytes, node table and header. */
+/** Deux hachages FNV-1a 32 bits (décalages différents) des octets empaquetés, de la table des nœuds et de l'en-tête. */
 function fingerprint(tile: LodTile): string {
   const bytes = [tile.packed, new TextEncoder().encode(JSON.stringify([tile.nodes, tile.header]))];
   let a = 0x811c9dc5;
@@ -108,9 +108,9 @@ function fingerprint(tile: LodTile): string {
 }
 
 /**
- * Brute force of the attribute filter: for every node with descendants, the
- * mean over all the points of its subtree lying in each cell of its grid,
- * gathered point by point (no level-by-level merge).
+ * Force brute du filtre d'attributs : pour chaque nœud ayant des descendants,
+ * la moyenne sur tous les points de son sous-arbre situés dans chaque cellule
+ * de sa grille, rassemblés point par point (pas de fusion niveau par niveau).
  */
 function referenceFilter(tile: LodTile): Map<number, Uint8Array> {
   const { nodes, packed } = tile;
@@ -207,7 +207,7 @@ describe('buildLodTile', () => {
         for (let axis = 0; axis < 3; axis++) {
           const q = view.getUint16(at + axis * 2, true);
           const min = axis === 0 ? cube.minX : axis === 1 ? cube.minY : cube.minZ;
-          // Inside the cube, and a valid quantization step of it.
+          // Dans le cube, et un pas de quantification valide de celui-ci.
           expect(min + (q / 65535) * cube.size).toBeGreaterThanOrEqual(min - 1e-9);
           expect(q).toBeLessThanOrEqual(65535);
         }
@@ -223,7 +223,7 @@ describe('buildLodTile', () => {
     const low = values[Math.ceil(values.length * 0.01) - 1]!;
     const high = values[Math.ceil(values.length * 0.99) - 1]!;
     const expectedOf = (v: number) => (v <= low ? 0 : v >= high ? 255 : Math.round(((v - low) / Math.max(1, high - low)) * 255));
-    // The additive build reorders points: compare value multisets per class of raw intensity.
+    // La construction additive réordonne les points : comparer les multiensembles de valeurs par classe d'intensité brute.
     const seen = new Map<number, number>();
     for (let i = 0; i < tile.header.pointCount; i++) {
       const value = tile.packed[i * LOD_POINT_STRIDE + LOD_RECORD.intensity]!;
@@ -242,7 +242,7 @@ describe('buildLodTile', () => {
     const expected = referenceFilter(tile);
     expect(expected.size).toBeGreaterThan(0);
     for (const [index, values] of expected) expect(filteredOf(tile, index), `node ${index}`).toEqual(values);
-    // Leaves keep their own values (counted: one `expect` per point cost seconds on the CI runner).
+    // Les feuilles gardent leurs propres valeurs (comptées : un `expect` par point coûtait des secondes sur le runner de CI).
     tile.nodes.forEach((node, index) => {
       if (expected.has(index)) return;
       let differing = 0;

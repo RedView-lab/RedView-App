@@ -1,14 +1,14 @@
 // ============================================
-// LiDAR viewer — comments (the app's info bubbles, on the point cloud)
+// Viewer LiDAR — commentaires (les bulles d'info de l'app, sur le nuage de points)
 // ============================================
 //
-// Same threads as the RedView map (features/comments), received from the app
-// tab through the comments bridge (comments/bridge/lidarCommentChannel.ts):
-// the app stays the only writer (real-time session), the viewer sends it
-// actions. Without an answer from the app the last stored copy is shown read
-// only. Bubbles sit on the scene's ground model (its DTM, the stored altitude
-// only as a fallback), are reprojected on every camera pose (DOM transforms,
-// no React render per frame) and fade behind a ridge.
+// Mêmes fils que sur la carte RedView (features/comments), reçus de l'onglet
+// de l'app par le pont des commentaires (comments/bridge/lidarCommentChannel.ts) :
+// l'app reste le seul rédacteur (session temps réel), le viewer lui envoie des
+// actions. Sans réponse de l'app, la dernière copie stockée est affichée en
+// lecture seule. Les bulles reposent sur le modèle de sol de la scène (son MNT,
+// l'altitude stockée seulement en repli), sont reprojetées à chaque pose de
+// caméra (transformations DOM, pas de rendu React par image) et s'estompent derrière une crête.
 
 import {
   postLidarCommentMessage,
@@ -26,24 +26,24 @@ import type { Vec3 } from '../tools/types';
 import { mountViewerCommentsUi } from './mount';
 
 export interface ViewerCommentsOptions {
-  /** Parent of the scene canvas (bubbles and cards are laid over it). */
+  /** Parent du canvas de la scène (bulles et cartes sont posées dessus). */
   container: HTMLElement;
-  /** Render-frame position of a WGS84 point (ground altitude when `altitudeM` is null); null outside the scene. */
+  /** Position dans le repère de rendu d'un point WGS84 (altitude du sol quand `altitudeM` est null) ; null hors de la scène. */
   toLocal(lon: number, lat: number, altitudeM: number | null): Vec3 | null;
   project(local: Vec3): ProjectedScreenPoint;
-  /** The ground model does not hide this point from the eye. */
+  /** Le modèle de sol ne cache pas ce point à l'œil. */
   isVisible(local: Vec3): boolean;
-  /** Brings the camera over a bubble (previous / next thread). */
+  /** Amène la caméra au-dessus d'une bulle (fil précédent / suivant). */
   centerOn(local: Vec3): void;
-  /** Floating panels over the scene: an open card stays between them. */
+  /** Panneaux flottants sur la scène : une carte ouverte reste entre eux. */
   obstacles?: () => readonly Element[];
-  /** Outline of the hovered / open comment zone on the ground (null: none). */
+  /** Contour au sol de la zone de commentaire survolée / ouverte (null : aucune). */
   showZone?: (ring: ReadonlyArray<[number, number]> | null) => void;
 }
 
 export interface ViewerCommentsSnapshot {
   state: LidarCommentState | null;
-  /** The app answers: writes reach the project. */
+  /** L'app répond : les écritures atteignent le projet. */
   live: boolean;
   openThreadId: string | null;
   hoveredThreadId: string | null;
@@ -51,13 +51,13 @@ export interface ViewerCommentsSnapshot {
   draftFocusRequest: number;
 }
 
-/** Bubble height (CommentPin): a card sits beside it, top aligned. */
+/** Hauteur d'une bulle (CommentPin) : une carte se place à côté, alignée en haut. */
 const PIN_SIZE_PX = 36;
 const CARD_GAP_PX = 8;
 const EDGE_PX = 8;
-/** Bubble hidden behind a ridge: faded, still there. */
+/** Bulle cachée derrière une crête : estompée, toujours là. */
 const OCCLUDED_OPACITY = '0.35';
-/** No answer to HELLO within this delay: read only (app closed). */
+/** Pas de réponse à HELLO dans ce délai : lecture seule (app fermée). */
 const HELLO_TIMEOUT_MS = 1500;
 
 const anchorKey = (anchor: ProjectCommentAnchor) => `${anchor.lng},${anchor.lat},${anchor.elevationM ?? ''}`;
@@ -72,7 +72,7 @@ export class ViewerComments {
   private readonly unsubscribe: () => void;
   private readonly unmount: () => void;
   private helloTimer: number | null = null;
-  /** Text being typed in the new comment (kept when clicking elsewhere). */
+  /** Texte en cours de saisie dans le nouveau commentaire (gardé si on clique ailleurs). */
   readonly draftTextRef = { current: '' };
 
   constructor(opts: ViewerCommentsOptions) {
@@ -105,7 +105,7 @@ export class ViewerComments {
     this.unmount = mountViewerCommentsUi(this, opts.container);
   }
 
-  // ── Store read by the React layer ──────────────────────────────────────────
+  // ── Store lu par la couche React ───────────────────────────────────────────
 
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
@@ -116,7 +116,7 @@ export class ViewerComments {
 
   getSnapshot = (): ViewerCommentsSnapshot => this.snapshot;
 
-  /** Comments can be written from the viewer (the app holds the project open). */
+  /** Les commentaires peuvent être écrits depuis le viewer (l'app tient le projet ouvert). */
   get writable(): boolean {
     return this.snapshot.live && this.snapshot.state !== null;
   }
@@ -129,7 +129,7 @@ export class ViewerComments {
 
   private shownZoneKey = '';
 
-  /** Zone of the hovered thread, else of the open one, else of the new comment (like the map). */
+  /** Zone du fil survolé, sinon de celui ouvert, sinon du nouveau commentaire (comme sur la carte). */
   private syncZone(): void {
     const { state, hoveredThreadId, openThreadId, draft } = this.snapshot;
     const find = (id: string | null) => (id ? state?.threads.find((thread) => thread.id === id)?.zone : undefined);
@@ -144,7 +144,7 @@ export class ViewerComments {
     for (const listener of [...this.listeners]) listener();
   }
 
-  // ── Elements placed on every camera pose ───────────────────────────────────
+  // ── Éléments placés à chaque pose de caméra ────────────────────────────────
 
   registerPin(key: string, element: HTMLElement | null): void {
     if (element) this.pins.set(key, element);
@@ -161,7 +161,7 @@ export class ViewerComments {
     const cacheKey = anchorKey(anchor);
     const cached = this.locals.get(key);
     if (cached?.key === cacheKey) return cached.local;
-    // The scene's DTM first (LiDAR ground), the stored terrain altitude otherwise.
+    // Le MNT de la scène d'abord (sol LiDAR), sinon l'altitude de terrain stockée.
     const local = this.opts.toLocal(anchor.lng, anchor.lat, null) ?? this.opts.toLocal(anchor.lng, anchor.lat, anchor.elevationM);
     this.locals.set(key, { key: cacheKey, local });
     return local;
@@ -172,7 +172,7 @@ export class ViewerComments {
     return this.snapshot.state?.threads.find((thread) => thread.id === key)?.anchor ?? null;
   }
 
-  /** Screen position of a bubble, null when off screen or outside the scene. */
+  /** Position écran d'une bulle, null hors de l'écran ou hors de la scène. */
   private screenOf(key: string): { x: number; y: number; visible: boolean } | null {
     const anchor = this.anchorFor(key);
     const local = anchor ? this.localOf(key, anchor) : null;
@@ -182,7 +182,7 @@ export class ViewerComments {
     return { x: point.screenX, y: point.screenY, visible: this.opts.isVisible(local) };
   }
 
-  /** Reprojects bubbles and the open card; call after a camera move. */
+  /** Reprojette les bulles et la carte ouverte ; à appeler après un mouvement de caméra. */
   updateOverlay(): void {
     const width = this.opts.container.clientWidth;
     const height = this.opts.container.clientHeight;
@@ -219,7 +219,7 @@ export class ViewerComments {
     card.style.visibility = 'visible';
   }
 
-  /** Horizontal span between the floating panels (container px); the whole width if they leave no room. */
+  /** Intervalle horizontal entre les panneaux flottants (px du conteneur) ; toute la largeur s'ils ne laissent pas de place. */
   private freeSpan(width: number): [number, number] {
     const container = this.opts.container.getBoundingClientRect();
     let minX = 0;
@@ -235,7 +235,7 @@ export class ViewerComments {
     return maxX - minX > 360 ? [minX, maxX] : [0, width];
   }
 
-  // ── Threads, new comment ───────────────────────────────────────────────────
+  // ── Fils, nouveau commentaire ──────────────────────────────────────────────
 
   openThread(threadId: string, options?: { center?: boolean }): void {
     const thread = this.snapshot.state?.threads.find((candidate) => candidate.id === threadId);
@@ -257,7 +257,7 @@ export class ViewerComments {
     if (this.snapshot.hoveredThreadId !== threadId) this.update({ hoveredThreadId: threadId });
   }
 
-  /** Next / previous open thread of the scene. */
+  /** Fil ouvert suivant / précédent de la scène. */
   navigate(direction: 1 | -1): void {
     const threads = (this.snapshot.state?.threads ?? []).filter((thread) => thread.resolvedAt === undefined || thread.id === this.snapshot.openThreadId);
     if (threads.length === 0) return;
@@ -296,12 +296,12 @@ export class ViewerComments {
       at: new Date().toISOString(),
     });
     this.draftTextRef.current = '';
-    // The thread opens once the app has published it.
+    // Le fil s'ouvre dès que l'app l'a publié.
     this.update({ draft: null, openThreadId: threadId });
     return true;
   }
 
-  /** Action of the user, applied by the app (same reducer, then the real-time session). */
+  /** Action de l'utilisateur, appliquée par l'app (même reducer, puis la session temps réel). */
   sendAction(action: CommentAction): boolean {
     const state = this.snapshot.state;
     if (!state || !this.writable) return false;
