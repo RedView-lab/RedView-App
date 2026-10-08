@@ -7,7 +7,6 @@ import {
   createProject,
   createProjectFolder,
   deleteProject,
-  deleteProjectFitFiles,
   deleteProjectFolder,
   deleteProjectThumbnail,
   getProject,
@@ -116,9 +115,9 @@ export function useDeleteProject(userId: string | null) {
   return useMutation({
     mutationKey: projectLibraryKeys.mutation('delete-project'),
     mutationFn: async ({ id }: { id: string }) => {
+      // deleteProject efface aussi les fichiers FIT du projet.
       await deleteProject(id);
-      // Stockage nettoyé au mieux, sans bloquer la suppression.
-      void deleteProjectFitFiles(id);
+      // Miniature nettoyée au mieux, sans bloquer la suppression.
       void deleteProjectThumbnail(id);
     },
     onSuccess: (_result, { id }) => cache.update((snapshot) => removeProject(snapshot, id)),

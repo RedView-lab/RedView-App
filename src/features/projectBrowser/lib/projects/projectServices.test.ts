@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('@/shared/services/projects', () => ({
   createProject: vi.fn(),
   deleteProject: vi.fn(),
-  deleteProjectFitFiles: vi.fn(),
+  deleteFitUploads: vi.fn(),
   deleteProjectThumbnail: vi.fn(),
   duplicateProjectItineraryFitFiles: vi.fn(),
   duplicateProjectThumbnail: vi.fn(),
@@ -58,7 +58,7 @@ beforeEach(() => {
   api.saveProject.mockResolvedValue(undefined as never);
   api.duplicateProjectThumbnail.mockResolvedValue(true);
   api.deleteProject.mockResolvedValue(undefined as never);
-  api.deleteProjectFitFiles.mockResolvedValue(undefined as never);
+  api.deleteFitUploads.mockResolvedValue([]);
   api.deleteProjectThumbnail.mockResolvedValue(undefined as never);
 });
 
@@ -73,6 +73,9 @@ describe('duplicateProjectWithAssets', () => {
     expect(name).toBe('GT20 copie 2');
     expect(folderId).toBe('f1');
     expect(data).toMatchObject({ name: 'GT20 copie 2', savedAt: null, sizeBytes: null });
+    // Never created with the source's FIT files: rolling the copy back
+    // (deleteProject erases the files it references) would erase them.
+    expect(data?.itineraries).toEqual([expect.objectContaining({ fitUploads: [] })]);
     expect(api.saveProject).toHaveBeenCalledWith('copy', expect.objectContaining({
       itineraries: [expect.objectContaining({ fitUploads: [{ id: 'fit-new' }] })],
     }));
@@ -92,7 +95,7 @@ describe('duplicateProjectWithAssets', () => {
 
     await expect(duplicateProjectWithAssets('src', () => [])).rejects.toThrow('cloud down');
     expect(api.deleteProject).toHaveBeenCalledWith('copy');
-    expect(api.deleteProjectFitFiles).toHaveBeenCalledWith('copy');
+    expect(api.deleteFitUploads).toHaveBeenCalledWith([{ id: 'fit-new' }]);
     expect(api.deleteProjectThumbnail).toHaveBeenCalledWith('copy');
   });
 
@@ -101,7 +104,7 @@ describe('duplicateProjectWithAssets', () => {
     api.deleteProject.mockRejectedValue(new Error('also down'));
 
     await expect(duplicateProjectWithAssets('src', () => [])).rejects.toThrow('storage down');
-    expect(api.deleteProjectFitFiles).toHaveBeenCalledWith('copy');
+    expect(api.deleteFitUploads).toHaveBeenCalledWith([{ id: 'fit-new' }]);
   });
 
   it('creates nothing when the source project is missing', async () => {

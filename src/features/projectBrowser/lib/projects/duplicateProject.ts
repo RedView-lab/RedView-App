@@ -2,12 +2,13 @@ import { translateAppText } from '@/shared/i18n';
 import {
   createProject,
   deleteProject,
-  deleteProjectFitFiles,
+  deleteFitUploads,
   deleteProjectThumbnail,
   duplicateProjectItineraryFitFiles,
   duplicateProjectThumbnail,
   getProject,
   saveProject,
+  type ItineraryFitUpload,
   type ProjectRow,
 } from '@/shared/services/projects';
 
@@ -30,6 +31,7 @@ export async function duplicateProjectWithAssets(
   siblingNamesOf: (folderId: string | null) => string[],
 ): Promise<DuplicatedProject> {
   let duplicateProjectId: string | null = null;
+  let duplicateFitUploads: Record<string, ItineraryFitUpload[]> = {};
   try {
     const source = await getProject(projectId);
     if (!source) throw new Error(translateAppText('Projet introuvable.'));
@@ -41,10 +43,17 @@ export async function duplicateProjectWithAssets(
     duplicateData.savedAt = null;
     duplicateData.sizeBytes = null;
 
-    const row = await createProject(name, duplicateData, source.folder_id);
+    // Créée sans les fichiers FIT de l'original : la copie reçoit les siens
+    // plus bas. Avec ceux de l'original, un retour arrière (deleteProject de la
+    // copie, qui efface les fichiers référencés) effacerait ceux de l'original.
+    const row = await createProject(
+      name,
+      { ...duplicateData, itineraries: duplicateData.itineraries.map((itinerary) => ({ ...itinerary, fitUploads: [] })) },
+      source.folder_id,
+    );
     duplicateProjectId = row.id;
 
-    const duplicateFitUploads = await duplicateProjectItineraryFitFiles(
+    duplicateFitUploads = await duplicateProjectItineraryFitFiles(
       duplicateData.itineraries.map((itinerary) => ({ id: itinerary.id, fitUploads: itinerary.fitUploads })),
       row.id,
     );
@@ -64,7 +73,11 @@ export async function duplicateProjectWithAssets(
       } catch {
         // Rollback au mieux ; le nettoyage du stockage suit quand même.
       }
-      await Promise.allSettled([deleteProjectFitFiles(duplicateProjectId), deleteProjectThumbnail(duplicateProjectId)]);
+      // Les copies FIT déjà envoyées, même si la copie n'a pas pu les référencer.
+      await Promise.allSettled([
+        deleteFitUploads(Object.values(duplicateFitUploads).flat()),
+        deleteProjectThumbnail(duplicateProjectId),
+      ]);
     }
     throw error;
   }

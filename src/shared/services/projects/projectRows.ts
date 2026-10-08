@@ -52,6 +52,7 @@ import {
   type CloudProjectDoc,
 } from './cloudDocuments';
 import { ProjectCloudError } from './errors';
+import { collectProjectFitUploads, deleteFitUploads } from './fitFiles';
 import { readLocalProjects, removeLocalProjectCacheEntry, writeLocalProjects } from './legacyLocalProjects';
 import { utf8ByteLength } from './limits';
 import { markLocalSynced, writeLocalCopy } from './localCopy';
@@ -714,9 +715,30 @@ export async function moveProjectToFolder(
   void enqueue(localQueues, id, () => idbUpdateProjectMeta(id, { folder_id: folderId })).catch(() => undefined);
 }
 
+/**
+ * Fichiers FIT référencés par le projet, lus avant sa suppression : copie
+ * locale si elle existe, sinon la ligne du cloud. Au mieux : un échec de
+ * lecture ne bloque jamais la suppression (les fichiers restants sont purgés
+ * avec le compte, api/_lib/accountDeletion.ts).
+ */
+async function storedFitUploads(id: string, userId: string) {
+  try {
+    const local = await idbGetProject(id);
+    if (local?.data && isOwnedBy(local, userId)) return collectProjectFitUploads(local.data);
+    return collectProjectFitUploads((await fetchCloudRow(id)).data);
+  } catch (error) {
+    logger.projects.warn('FIT files of deleted project could not be listed', error);
+    return [];
+  }
+}
+
 export async function deleteProject(id: string): Promise<void> {
   const userId = await getCurrentUserId();
   const isDev = isLocalFallbackUser(userId);
+  // Traces GPS et fréquence cardiaque (RGPD) : effacées avec le projet. Avec
+  // les droits de l'utilisateur, seuls ses propres fichiers partent (dans un
+  // projet partagé, ceux des autres éditeurs restent à eux).
+  const fitUploads = isDev || id.startsWith('local-') ? [] : await storedFitUploads(id, userId);
 
   // 1. Suppression cloud d'abord : en cas d'échec la copie locale reste intacte
   //    et l'erreur remonte (pas de faux succès suivi d'une « réapparition »).
@@ -735,6 +757,7 @@ export async function deleteProject(id: string): Promise<void> {
     }
     // Fichiers de charge utile éventuels (gros projets), sans faire échouer la suppression.
     await enqueue(cloudQueues, id, () => pruneProjectPayloadFiles(id, null));
+    await deleteFitUploads(fitUploads);
     filePayloadProjects.delete(id);
     payloadFilesChecked.delete(id);
   }

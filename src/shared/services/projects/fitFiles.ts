@@ -9,7 +9,7 @@ import {
 
 import { getCurrentUserId } from './auth';
 import { isLiveSession, sharedProjectTeamId } from './liveSessions';
-import type { ItineraryFitUpload } from './types';
+import type { ItineraryFitUpload, ItineraryProject } from './types';
 
 export interface FitUploadBatchResult {
   /** Fichiers enregistrés dans le bucket, dans l'ordre d'entrée. */
@@ -86,19 +86,52 @@ export async function deleteFitUploads(
   return failedIds;
 }
 
-// TODO(rgpd) : suppression d'un itinéraire / d'un projet. Ces deux points
-// d'entrée ne reçoivent que des ids, or les fichiers du bucket ne sont pas
-// rattachés au projet (id unique, sans métadonnée) : il faudrait passer les
-// `fitUploads` des itinéraires supprimés (ItineraryPanelContainer, effet sur
-// les ids retirés ; useProjectBrowserProjects.handleDelete / rollback de la
-// duplication, qui devraient charger les données du projet) puis appeler
-// deleteFitUploads. Laissé en l'état pendant la refonte de projectRows.ts.
-export async function deleteProjectItineraryFitFiles(
-  _projectId: string,
-  _itineraryId: string,
-  _knownUserId?: string,
-): Promise<void> {
-  // Voir TODO(rgpd) ci-dessus.
+/**
+ * Fichiers FIT du bucket référencés par un projet (tous ses itinéraires). Les
+ * fichiers ne portent aucune métadonnée de projet : c'est le document qui dit
+ * lesquels lui appartiennent (un fichier n'est jamais partagé entre deux
+ * projets, voir duplicateProjectItineraryFitFiles).
+ */
+export function collectProjectFitUploads(
+  project: Pick<ItineraryProject, 'itineraries'> | null | undefined,
+): ItineraryFitUpload[] {
+  return (project?.itineraries ?? []).flatMap((itinerary) =>
+    (itinerary.fitUploads ?? []).filter((upload) => typeof upload.path === 'string' && upload.path.length > 0),
+  );
+}
+
+/**
+ * Fichiers des itinéraires supprimés, par projet, en attente d'effacement. La
+ * suppression d'un itinéraire s'annule (historique de tracé) : effacer ses
+ * fichiers tout de suite casserait l'annulation. Ils sont effacés à la
+ * fermeture du projet, s'il ne les référence plus (flushPendingFitDeletions).
+ */
+const pendingFitDeletions = new Map<string, Map<string, ItineraryFitUpload>>();
+
+export function scheduleFitUploadsDeletion(projectId: string, uploads: readonly ItineraryFitUpload[]): void {
+  const withPath = uploads.filter((upload) => typeof upload.path === 'string' && upload.path.length > 0);
+  if (withPath.length === 0) return;
+  const pending = pendingFitDeletions.get(projectId) ?? new Map<string, ItineraryFitUpload>();
+  for (const upload of withPath) pending.set(upload.path as string, upload);
+  pendingFitDeletions.set(projectId, pending);
+}
+
+/**
+ * Efface les fichiers en attente du projet que `project` (son état courant) ne
+ * référence plus ; ceux qu'une annulation a rendus au projet sont gardés.
+ * Renvoie le nombre de fichiers effacés.
+ */
+export async function flushPendingFitDeletions(
+  projectId: string,
+  project: Pick<ItineraryProject, 'itineraries'> | null | undefined,
+): Promise<number> {
+  const pending = pendingFitDeletions.get(projectId);
+  pendingFitDeletions.delete(projectId);
+  if (!pending || pending.size === 0) return 0;
+  const referenced = new Set(collectProjectFitUploads(project).map((upload) => upload.path));
+  const orphans = [...pending.values()].filter((upload) => !referenced.has(upload.path));
+  const failed = await deleteFitUploads(orphans);
+  return orphans.length - failed.length;
 }
 
 export interface DownloadedFitFileEntry {
@@ -193,7 +226,3 @@ export async function duplicateProjectItineraryFitFiles(
   return uploadsByItineraryId;
 }
 
-export async function deleteProjectFitFiles(_projectId: string): Promise<void> {
-  // Voir TODO(rgpd) près de deleteProjectItineraryFitFiles : sans les
-  // fitUploads du projet, les fichiers ne peuvent pas être retrouvés.
-}

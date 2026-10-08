@@ -29,7 +29,6 @@ import { DEFAULT_ROUTE_TRACE_WIDTH_PX } from '../../lib/route-layer/constants';
 import type { TimelineFilterState } from '../../sections/timeline/TimelineFilters';
 import type { GpxRoute, PoiFeature } from '@/features/poi/types';
 import { dispatchSelectPoiOnChart } from '@/features/poi/lib/chartPoiSyncBridge';
-import { deleteProjectItineraryFitFiles } from '@/shared/services/projects';
 import type { CollaboratorAction, Itinerary, ItineraryProject, PanelMode, PrioritiesState, RhythmState, ProjectCollaborator, ProjectSessionStatus } from '../../types';
 
 import { useItineraryPoiHandlers } from './useItineraryPoiHandlers';
@@ -37,6 +36,7 @@ import { useItineraryMapActions } from './useItineraryMapActions';
 import { useItineraryTimelineCallbacks } from './useItineraryTimelineCallbacks';
 import { useRecalculateTrace } from './useRecalculateTrace';
 import { useGpxFilePicker } from './useGpxFilePicker';
+import { usePendingFitDeletions } from './usePendingFitDeletions';
 import { useTimelineMapSelection } from './useTimelineMapSelection';
 import { useProjectSave } from './useProjectSave';
 import { useCustomProfiles } from './useCustomProfiles';
@@ -134,13 +134,6 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
   const activeItineraryRef = useRef(active);
   activeItineraryRef.current = active;
   const itineraries = project.itineraries;
-  const itineraryIdsSignature = useMemo(
-    () => itineraries.map((itinerary) => itinerary.id).join('|'),
-    [itineraries],
-  );
-  const previousItineraryIdsRef = useRef<string[]>(
-    itineraries.map((itinerary) => itinerary.id),
-  );
 
   const {
     calculateDisabled,
@@ -216,19 +209,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     onRedo: handleRedo,
   });
 
-  useEffect(() => {
-    const previousIds = previousItineraryIdsRef.current;
-    const currentIds = itineraries.map((itinerary) => itinerary.id);
-    previousItineraryIdsRef.current = currentIds;
-    if (!projectId) return;
-
-    const removedIds = previousIds.filter((id) => !currentIds.includes(id));
-    for (const removedId of removedIds) {
-      void deleteProjectItineraryFitFiles(projectId, removedId).catch((error) => {
-        console.warn('[fit-predictor] failed to delete itinerary FIT files', error);
-      });
-    }
-  }, [itineraries, itineraryIdsSignature, projectId]);
+  usePendingFitDeletions(projectId, itineraries);
 
   const {
     cancelRouteRequest,
