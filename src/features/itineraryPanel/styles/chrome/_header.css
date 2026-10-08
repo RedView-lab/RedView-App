@@ -1,4 +1,6 @@
-/* En-tête du haut : bouton retour, titre, puce de confidentialité, date/taille d'enregistrement, icônes d'action */
+/* En-tête du haut (maquette « HEADER ») : logo rond (retour au gestionnaire),
+   titre, enregistrement (icône + date), puis confidentialité ou pastilles
+   des éditeurs et bouton Partager rond. */
 
 .rvi-header {
   display: flex;
@@ -11,7 +13,7 @@
 .rvi-header__title-group {
   display: flex;
   gap: 8px;
-  align-items: flex-start;
+  align-items: center;
   flex: 1 1 0;
   min-width: 0;
 }
@@ -21,8 +23,9 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 5.5px;
-  border-radius: 77px;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
   background: rgb(var(--rv-ink) / 0.1);
   color: var(--rvi-text);
   cursor: pointer;
@@ -46,14 +49,15 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
 .rvi-header__title {
   display: block;
   width: 100%;
-  font-size: var(--rv-font-size-xl);
-  font-weight: 600;
+  font-size: var(--rv-font-size-2xl);
+  font-weight: 700;
+  line-height: 23px;
   color: var(--rvi-text);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -67,45 +71,56 @@
 
 .rvi-header__meta {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   align-items: center;
   flex-wrap: wrap;
+  min-width: 0;
 }
 
-.rvi-header__badge {
-  background: light-dark(rgb(var(--rv-ink) / 0.06), rgba(0, 0, 0, 0.24));
-  padding: 3px 6px;
-  border-radius: 6px;
-  font-size: var(--rv-font-size-xs);
-  font-weight: 700;
-  color: var(--rvi-text);
-  line-height: 1;
-  height: 18px;
+/* Enregistrer : l'icône de la ligne d'état (Ctrl+S, état en infobulle). */
+.rvi-header__save {
+  all: unset;
+  box-sizing: border-box;
+  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  color: rgb(var(--rv-ink) / 0.64);
+  transition: color 0.15s ease, background 0.15s ease;
+}
+button.rvi-header__save {
+  cursor: pointer;
+}
+button.rvi-header__save:hover {
+  color: var(--rvi-text);
+  background: rgb(var(--rv-ink) / 0.08);
+}
+button.rvi-header__save:focus-visible {
+  box-shadow: 0 0 0 2px rgb(var(--rv-ink) / 0.24);
+}
+.rvi-header__save:disabled {
+  cursor: progress;
+}
+.rvi-header__save.is-pending {
+  color: light-dark(#b54708, #fcd9a0);
+}
+.rvi-header__save.is-error {
+  color: light-dark(#b42318, #ffd3d3);
 }
 
 .rvi-header__saved {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  color: var(--rvi-text);
-  opacity: 0.4;
-  font-size: var(--rv-font-size-xs);
-  font-weight: 500;
-  white-space: nowrap;
-}
-
-.rvi-header__size {
-  font-size: var(--rv-font-size-xs);
-  font-weight: 500;
-  color: var(--rvi-text);
-  opacity: 0.4;
   flex: 1 1 0;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: rgb(var(--rv-ink) / 0.64);
+  font-size: var(--rv-font-size-sm);
+  font-weight: 500;
+  line-height: 16px;
 }
 
 /* État de synchronisation cloud (attente hors-ligne / erreur), sous le titre. */
@@ -128,9 +143,18 @@
 
 .rvi-header__actions {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   align-items: center;
   flex-shrink: 0;
+}
+
+.rvi-header__privacy {
+  color: rgb(var(--rv-ink) / 0.64);
+  font-size: var(--rv-font-size-sm);
+  font-weight: 500;
+  line-height: 16px;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 /* Éditeurs présents (co-édition) : pastilles empilées et découpées, comme
@@ -143,93 +167,37 @@
   display: none;
 }
 
-/* Partager : même gabarit que Enregistrer, en action secondaire (puce). */
+/* Partager : bouton rond, icône seule (libellé en infobulle). */
 .rvi-header__share {
   all: unset;
   box-sizing: border-box;
+  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  height: 28px;
-  padding: 0 10px 0 8px;
-  border-radius: var(--rvi-radius-md);
-  background: var(--rvi-bg-chip);
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgb(var(--rv-ink) / 0.16);
   color: var(--rvi-text);
-  font-size: var(--rv-font-size-md);
-  font-weight: 600;
-  line-height: 1;
-  white-space: nowrap;
   cursor: pointer;
   transition: background 0.15s ease;
 }
 .rvi-header__share:hover {
-  background: var(--rvi-bg-chip-hover);
+  background: rgb(var(--rv-ink) / 0.22);
 }
 .rvi-header__share:focus-visible {
   box-shadow: 0 0 0 2px rgb(var(--rv-ink) / 0.24);
 }
 
-/* Panneau étroit : Partager garde son icône seule (libellé en infobulle), une
-   seule pastille d'éditeur suivie du nombre des autres. */
+/* Panneau étroit : une seule pastille d'éditeur suivie du nombre des autres. */
 @container rvipanel (max-width: 440px) {
-  .rvi-header__share {
-    padding: 0 7px;
-  }
-  .rvi-header__share > span {
-    display: none;
-  }
   .rvi-header__people .rvi-header__people-full {
     display: none;
   }
   .rvi-header__people .rvi-header__people-compact {
     display: inline-flex;
   }
-}
-
-/* Bouton Enregistrer — même langage que .rvi-redbtn (rouge de la marque, rayon 6, graisse 600). */
-.rvi-header__save {
-  all: unset;
-  box-sizing: border-box;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 28px;
-  padding: 0 10px 0 8px;
-  border-radius: var(--rvi-radius-md);
-  background: var(--rvi-red);
-  color: var(--rv-on-accent);
-  font-size: var(--rv-font-size-md);
-  font-weight: 600;
-  line-height: 1;
-  white-space: nowrap;
-  cursor: pointer;
-  transition: background 0.15s ease, opacity 0.15s ease;
-}
-.rvi-header__save:hover {
-  background: #a00000;
-  color: var(--rv-on-accent);
-}
-.rvi-header__save:focus-visible {
-  box-shadow: 0 0 0 2px rgb(var(--rv-ink) / 0.24);
-}
-.rvi-header__save:disabled {
-  opacity: 0.6;
-  cursor: progress;
-}
-.rvi-header__save.is-saved,
-.rvi-header__save.is-saved:hover {
-  background: var(--rvi-bg-chip);
-  color: var(--rvi-text-dim);
-}
-.rvi-header__save.is-pending,
-.rvi-header__save.is-pending:hover {
-  background: light-dark(rgba(247, 144, 9, 0.14), rgba(146, 64, 14, 0.36));
-  color: light-dark(#b54708, #fcd9a0);
-}
-.rvi-header__save.is-error,
-.rvi-header__save.is-error:hover {
-  background: light-dark(rgba(217, 45, 32, 0.1), rgba(127, 29, 29, 0.32));
-  color: light-dark(#b42318, #ffd3d3);
 }
 
 .rvi-iconbtn {

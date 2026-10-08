@@ -2757,6 +2757,10 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Unsaved"
   },
   {
+    "fr": "À l’instant",
+    "en": "Just now"
+  },
+  {
     "fr": "Enregistrement…",
     "en": "Saving…"
   },

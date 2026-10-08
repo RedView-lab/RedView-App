@@ -118,6 +118,7 @@ export const dashboardTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'Nom du projet', en: 'Project name' },
   { fr: 'Projet non enregistré', en: 'Unsaved project' },
   { fr: 'Non enregistré', en: 'Unsaved' },
+  { fr: 'À l’instant', en: 'Just now' },
   { fr: 'Enregistrement…', en: 'Saving…' },
   { fr: 'Enregistré', en: 'Saved' },
   { fr: 'Échec de l’enregistrement', en: 'Save failed' },

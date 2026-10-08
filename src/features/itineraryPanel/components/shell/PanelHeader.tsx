@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import {
-  IconClose,
+  IconRedViewMark,
   IconSave,
   IconShare,
 } from '../icons';
@@ -33,7 +33,10 @@ interface PanelHeaderProps {
 }
 
 /** Places de la pile d'éditeurs (la dernière devient « +N » au-delà) : panneau large / étroit. */
-const COLLABORATOR_SLOTS = { full: 4, compact: 2 } as const;
+const COLLABORATOR_SLOTS = { full: 3, compact: 2 } as const;
+
+/** « À l'instant » tant que le dernier enregistrement date de moins d'une minute. */
+const JUST_SAVED_MS = 60_000;
 
 /** Signalée seulement si elle dure : une connexion normale (≈ 1 s) ou une reconnexion rapide n'affiche rien. */
 const SESSION_STATUS_DELAY_MS = { connecting: 1200, offline: 2000 } as const;
@@ -48,17 +51,29 @@ function useLastingSessionStatus(status: ProjectSessionStatus | undefined): 'con
   return (status === 'connecting' || status === 'offline') && lasting === status ? status : null;
 }
 
+/** Vrai tant que `savedAt` date de moins de `JUST_SAVED_MS`, puis repasse à faux tout seul. */
+function useJustSaved(savedAt: string | null): boolean {
+  const savedMs = savedAt ? new Date(savedAt).getTime() : Number.NaN;
+  // Horodatage dont la minute est écoulée : un projet rouvert n'affiche jamais « À l'instant ».
+  const [expiredFor, setExpiredFor] = useState<number | null>(() =>
+    Date.now() - savedMs >= JUST_SAVED_MS ? savedMs : null);
+  useEffect(() => {
+    if (Number.isNaN(savedMs)) return undefined;
+    const delay = Math.max(0, savedMs + JUST_SAVED_MS - Date.now());
+    const timer = window.setTimeout(() => setExpiredFor(savedMs), delay);
+    return () => window.clearTimeout(timer);
+  }, [savedMs]);
+  return !Number.isNaN(savedMs) && expiredFor !== savedMs;
+}
+
+/** « 09:33 - 09/04/2026 ». */
 function formatSavedAt(iso: string, locale: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
-  return new Intl.DateTimeFormat(locale === 'fr' ? 'fr-FR' : 'en-US', {
-    day: '2-digit',
-    month: '2-digit',
-    year: locale === 'fr' ? '2-digit' : 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: locale !== 'fr',
-  }).format(d);
+  const tag = locale === 'fr' ? 'fr-FR' : 'en-US';
+  const time = new Intl.DateTimeFormat(tag, { hour: '2-digit', minute: '2-digit', hour12: locale !== 'fr' }).format(d);
+  const date = new Intl.DateTimeFormat(tag, { day: '2-digit', month: '2-digit', year: 'numeric' }).format(d);
+  return `${time} - ${date}`;
 }
 
 function formatSize(bytes: number, locale: string): string {
@@ -122,6 +137,7 @@ export function PanelHeader({
     const people = collaborators.filter((person) => ids.has(person.userId));
     setMenu((current) => (current?.anchor === anchor ? null : { people, anchor }));
   }, [collaborators]);
+  const justSaved = useJustSaved(savedAt);
   const privacyLabel = privacy === 'private' ? t('Privé') : t('Public');
   const saveLabel =
     saveStatus === 'saving'
@@ -134,9 +150,22 @@ export function PanelHeader({
             ? t('Échec de l’enregistrement')
             : t('Enregistrer');
   const saveTitle = saveStatusMessage || t('Enregistrer le projet (Ctrl+S)');
+  const savedText = saveStatus === 'saving'
+    ? t('Enregistrement…')
+    : !savedAt
+      ? t('Non enregistré')
+      : justSaved
+        ? t('À l’instant')
+        : formatSavedAt(savedAt, locale);
+  // La taille du projet n'est plus affichée sous le titre : elle reste dans l'infobulle.
+  const savedTitle = savedAt
+    ? [formatSavedAt(savedAt, locale), sizeBytes !== null ? formatSize(sizeBytes, locale) : null].filter(Boolean).join(' · ')
+    : t('Projet non enregistré');
+  const backLabel = backDisabled ? t('Retour au gestionnaire en cours') : t('Retour au gestionnaire de projet');
   return (
     <header className="rvi-header" data-rv-collab-status={sessionStatus}>
       <div className="rvi-header__title-group">
+        {/* Logo RedView : ramène au gestionnaire de projets. */}
         <button
           type="button"
           className="rvi-header__back"
@@ -145,10 +174,10 @@ export function PanelHeader({
             onBack?.();
           }}
           disabled={!onBack || backDisabled}
-          aria-label={backDisabled ? t('Retour au gestionnaire en cours') : t('Retour au gestionnaire de projet')}
-          title={backDisabled ? t('Retour au gestionnaire en cours') : t('Retour au gestionnaire de projet')}
+          aria-label={backLabel}
+          title={backLabel}
         >
-          <IconClose size={18} />
+          <IconRedViewMark size={20} />
         </button>
         <div className="rvi-header__info">
           <input
@@ -159,21 +188,24 @@ export function PanelHeader({
             aria-label={t('Nom du projet')}
           />
           <div className="rvi-header__meta">
-            <span className="rvi-header__badge">{privacyLabel}</span>
-            {savedAt ? (
-              <span className="rvi-header__saved">
-                <IconSave size={14} />
-                <span>{formatSavedAt(savedAt, locale)}</span>
-              </span>
+            {onSave ? (
+              <button
+                type="button"
+                className={`rvi-header__save is-${saveStatus}`}
+                onClick={onSave}
+                disabled={saveStatus === 'saving'}
+                // Icône seule : le nom accessible dit l'état (« Enregistrer », « Enregistré »…).
+                aria-label={saveLabel}
+                title={saveTitle}
+              >
+                <IconSave size={20} />
+              </button>
             ) : (
-              <span className="rvi-header__saved" title={t('Projet non enregistré')}>
-                <IconSave size={14} />
-                <span>{t('Non enregistré')}</span>
+              <span className="rvi-header__save" aria-hidden>
+                <IconSave size={20} />
               </span>
             )}
-            {sizeBytes !== null ? (
-              <span className="rvi-header__size">{formatSize(sizeBytes, locale)}</span>
-            ) : null}
+            <span className="rvi-header__saved" title={savedTitle}>{savedText}</span>
             {lastingSessionStatus ? (
               <span
                 className="rvi-header__sync-message is-pending"
@@ -196,63 +228,49 @@ export function PanelHeader({
           </div>
         </div>
       </div>
-      {onSave || onShare ? (
-        <div className="rvi-header__actions">
-          {collaborators.length > 1 ? (
-            <div
-              className="rvi-header__people"
-              role="group"
-              aria-label={t('{{count}} éditeurs sur le projet', { count: collaborators.length })}
-              title={collaborators.map((collaborator) => collaborator.name).join(', ')}
-            >
-              {/* Panneau large : 4 places ; étroit : 2. */}
-              <UserAvatarStack
-                people={stackPeople}
-                max={COLLABORATOR_SLOTS.full}
-                className="rvi-header__people-full"
-                onPersonClick={onCollaboratorAction ? handlePersonClick : undefined}
-                onMoreClick={onCollaboratorAction ? handleMoreClick : undefined}
-              />
-              <UserAvatarStack
-                people={stackPeople}
-                max={COLLABORATOR_SLOTS.compact}
-                className="rvi-header__people-compact"
-                onPersonClick={onCollaboratorAction ? handlePersonClick : undefined}
-                onMoreClick={onCollaboratorAction ? handleMoreClick : undefined}
-              />
-            </div>
-          ) : null}
-          {menu && onCollaboratorAction ? (
-            <CollaboratorMenu people={menu.people} anchorEl={menu.anchor} onAction={onCollaboratorAction} onClose={closeMenu} />
-          ) : null}
-          {onShare ? (
-            <button
-              type="button"
-              className="rvi-header__share"
-              onClick={(event) => onShare(event.currentTarget)}
-              aria-label={t('Partager le projet')}
-              title={t('Partager le projet')}
-            >
-              <IconShare size={14} />
-              <span>{t('Partager')}</span>
-            </button>
-          ) : null}
-          {onSave ? (
-            <button
-              type="button"
-              className={`rvi-header__save is-${saveStatus}`}
-              onClick={onSave}
-              disabled={saveStatus === 'saving'}
-              // Nom accessible = texte visible (« Enregistrer », « Enregistré »…) :
-              // un aria-label fixe le cachait (WCAG 2.5.3) ; le détail reste en infobulle.
-              title={saveTitle}
-            >
-              <IconSave size={14} />
-              <span>{saveLabel}</span>
-            </button>
-          ) : null}
-        </div>
-      ) : null}
+      <div className="rvi-header__actions">
+        {/* Projet partagé avec d'autres éditeurs présents : leurs pastilles ; sinon la confidentialité. */}
+        {collaborators.length > 1 ? (
+          <div
+            className="rvi-header__people"
+            role="group"
+            aria-label={t('{{count}} éditeurs sur le projet', { count: collaborators.length })}
+            title={collaborators.map((collaborator) => collaborator.name).join(', ')}
+          >
+            {/* Panneau large : 3 places ; étroit : 2. */}
+            <UserAvatarStack
+              people={stackPeople}
+              max={COLLABORATOR_SLOTS.full}
+              className="rvi-header__people-full"
+              onPersonClick={onCollaboratorAction ? handlePersonClick : undefined}
+              onMoreClick={onCollaboratorAction ? handleMoreClick : undefined}
+            />
+            <UserAvatarStack
+              people={stackPeople}
+              max={COLLABORATOR_SLOTS.compact}
+              className="rvi-header__people-compact"
+              onPersonClick={onCollaboratorAction ? handlePersonClick : undefined}
+              onMoreClick={onCollaboratorAction ? handleMoreClick : undefined}
+            />
+          </div>
+        ) : (
+          <span className="rvi-header__privacy">{privacyLabel}</span>
+        )}
+        {menu && onCollaboratorAction ? (
+          <CollaboratorMenu people={menu.people} anchorEl={menu.anchor} onAction={onCollaboratorAction} onClose={closeMenu} />
+        ) : null}
+        {onShare ? (
+          <button
+            type="button"
+            className="rvi-header__share"
+            onClick={(event) => onShare(event.currentTarget)}
+            aria-label={t('Partager le projet')}
+            title={t('Partager le projet')}
+          >
+            <IconShare size={20} />
+          </button>
+        ) : null}
+      </div>
     </header>
   );
 }
