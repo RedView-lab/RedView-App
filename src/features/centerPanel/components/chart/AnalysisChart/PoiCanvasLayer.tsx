@@ -115,7 +115,7 @@ export const PoiCanvasLayer = memo(function PoiCanvasLayer({
         continue;
       }
 
-      // Expanded cluster: non-favorites first (below), favorites last (on top).
+      // Amas déplié : les non-favoris d'abord (dessous), les favoris en dernier (au-dessus).
       const sortedMembers = [...group.members].sort((a, b) => {
         if (Boolean(a.favorite) === Boolean(b.favorite)) return 0;
         return a.favorite ? 1 : -1;

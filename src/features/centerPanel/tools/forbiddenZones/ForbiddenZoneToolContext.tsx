@@ -263,7 +263,7 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
     };
   }, [appendDraftPoint, armed, canEdit, deactivate, map, toggle, undoDraft]);
 
-  // Replay draft overlay on style reload
+  // Rejouer la surcouche du brouillon au rechargement du style
   useEffect(() => {
     if (!map) return;
     const handleStyleReload = () => {
