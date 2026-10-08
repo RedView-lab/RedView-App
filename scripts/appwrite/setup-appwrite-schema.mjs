@@ -389,5 +389,7 @@ async function main() {
 
 main().catch((error) => {
   console.error(error);
-  process.exitCode = 1;
+  // --check : 2 = prod injoignable (réseau, délai), distinct d'un écart (1) —
+  // le déploiement réessaie au lieu d'annoncer un schéma différent.
+  process.exitCode = CHECK ? 2 : 1;
 });

@@ -67,9 +67,27 @@ function runProdSchemaCheck() {
     error(`No .env at ${ENV_FILE}: the schema check needs APPWRITE_API_KEY.`);
     return false;
   }
-  const result = spawnSync(process.execPath, [`--env-file=${ENV_FILE}`, SCHEMA_SCRIPT, '--check'], { stdio: 'inherit' });
-  return result.status === 0;
+  const check = () => spawnSync(process.execPath, [`--env-file=${ENV_FILE}`, SCHEMA_SCRIPT, '--check'], { stdio: 'inherit' }).status;
+  let status = check();
+  if (status === SCHEMA_UNREACHABLE) {
+    // Un délai de connexion passager (2026-10-08) ne doit pas passer pour un écart de schéma.
+    warn('Production Appwrite unreachable during the schema check: retrying once in 15 s...');
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 15_000);
+    status = check();
+  }
+  if (status === SCHEMA_UNREACHABLE) {
+    error('Production Appwrite unreachable (schema not checked): nothing was committed or pushed. Check https://appwrite.redview.tech, then deploy again.');
+    return false;
+  }
+  if (status !== 0) {
+    error('Production schema differs from scripts/appwrite/setup-appwrite-schema.mjs: nothing was committed or pushed. Apply it (node --env-file=.env scripts/appwrite/setup-appwrite-schema.mjs --only=<ids>), then deploy again.');
+    return false;
+  }
+  return true;
 }
+
+/** Code de sortie de setup-appwrite-schema.mjs --check quand la prod ne répond pas. */
+const SCHEMA_UNREACHABLE = 2;
 
 async function main() {
   const args = process.argv.slice(2);
@@ -105,10 +123,7 @@ async function main() {
     success('Quality gate passed.');
   }
   if (!skipChecks) {
-    if (!runProdSchemaCheck()) {
-      error('Production schema differs from scripts/appwrite/setup-appwrite-schema.mjs: nothing was committed or pushed. Apply it (node --env-file=.env scripts/appwrite/setup-appwrite-schema.mjs --only=<ids>), then deploy again.');
-      process.exit(1);
-    }
+    if (!runProdSchemaCheck()) process.exit(1);
     success('Production schema matches.');
   }
 
