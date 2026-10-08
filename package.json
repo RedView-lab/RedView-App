@@ -30,6 +30,7 @@
     "server:check": "node scripts/quality/check-server-bundle.mjs",
     "i18n:audit": "node scripts/quality/i18n-audit.mjs",
     "i18n:check": "node scripts/quality/i18n-audit.mjs --strict",
+    "sbom": "node scripts/quality/sbom.mjs",
     "e2e:journey": "tsx script-test-bench/user-journey/run.ts",
     "bench": "tsx --expose-gc script-test-bench/run-all-benchmarks.ts",
     "bench:quick": "tsx --expose-gc script-test-bench/run-all-benchmarks.ts --quick",

@@ -32,6 +32,7 @@ documents ci-dessous approfondissent un sujet.
 | Document | Contenu |
 |---|---|
 | [security-runbook.md](operations/security-runbook.md) | Ordre de mise en place du durcissement de sécurité d'octobre 2026 |
+| [licences.md](operations/licences.md) + [sbom/](operations/sbom) | Licences des dépendances livrées (serveur, navigateur) et SBOM CycloneDX 1.5, produits par `npm run sbom` après un build |
 | [server-perf/](operations/server-perf) | Instantanés de performance de référence du VPS, pris avant et après chaque réglage (`bash scripts/vps/perf-snapshot.sh <libellé>`) |
 | [Configuration de l'hôte du VPS](../server/vps/README.md) | Où va chaque fichier de l'hôte, comment appliquer et revenir en arrière, le plancher mémoire Always Free |
 | [Sauvegardes](../server/vps/backup/README.md) | Sauvegardes chiffrées nocturnes (restic), exercice de restauration hebdomadaire, reprise après sinistre |
