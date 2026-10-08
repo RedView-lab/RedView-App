@@ -1,10 +1,11 @@
 // ============================================================================
-// Snow engine v2 — work grid and scene geometry
+// Moteur neige v2 — grille de travail et géométrie de la scène
 // ----------------------------------------------------------------------------
-// The work grid is a node grid over the scene bounds (row 0 = south, x east,
-// y grid north). Geographic positions come from the four corner nodes: over a
-// few kilometres the bilinear blend of their WGS84 coordinates is exact to
-// well under a metre, so the worker never needs a projection library.
+// La grille de travail est une grille de nœuds sur l'emprise de la scène (ligne
+// 0 = sud, x vers l'est, y vers le nord de la grille). Les positions
+// géographiques viennent des quatre nœuds de coin : sur quelques kilomètres, le
+// mélange bilinéaire de leurs coordonnées WGS84 est exact à bien moins d'un
+// mètre, donc le worker n'a jamais besoin de bibliothèque de projection.
 // ============================================================================
 
 import type { EngineDem, LonLat, SceneGeo } from './types';
@@ -16,18 +17,18 @@ const M_PER_DEG_LON_EQ = 111_320;
 export interface WorkGrid {
   width: number;
   height: number;
-  /** Node spacing, m. */
+  /** Pas entre nœuds, m. */
   dx: number;
   dy: number;
-  /** Mean node spacing, m (finite differences, distances in pixels). */
+  /** Pas moyen entre nœuds, m (différences finies, distances en pixels). */
   ps: number;
   sizeX: number;
   sizeY: number;
-  /** Absolute altitude, m. */
+  /** Altitude absolue, m. */
   z: Float32Array;
 }
 
-/** Summed-area table of a grid (f64), with an extra zero row/column. */
+/** Table de sommes cumulées d'une grille (f64), avec une ligne / colonne de zéros en plus. */
 function summedArea(src: Float32Array, w: number, h: number): Float64Array {
   const sat = new Float64Array((w + 1) * (h + 1));
   for (let y = 0; y < h; y++) {
@@ -40,7 +41,7 @@ function summedArea(src: Float32Array, w: number, h: number): Float64Array {
   return sat;
 }
 
-/** Box mean of radius r (pixels) around every node, edges clamped. */
+/** Moyenne par blocs de rayon r (pixels) autour de chaque nœud, bords bornés. */
 export function boxMean(src: Float32Array, w: number, h: number, r: number): Float32Array {
   if (r < 1) return new Float32Array(src);
   const sat = summedArea(src, w, h);
@@ -59,7 +60,7 @@ export function boxMean(src: Float32Array, w: number, h: number, r: number): Flo
   return out;
 }
 
-/** Bilinear sample of a node grid at fractional node coordinates (clamped). */
+/** Échantillon bilinéaire d'une grille de nœuds à des coordonnées de nœud fractionnaires (bornées). */
 export function sampleBilinear(src: Float32Array, w: number, h: number, fx: number, fy: number): number {
   const x = Math.min(w - 1, Math.max(0, fx));
   const y = Math.min(h - 1, Math.max(0, fy));
@@ -74,8 +75,9 @@ export function sampleBilinear(src: Float32Array, w: number, h: number, fx: numb
 }
 
 /**
- * Resample a node grid (same extent) to `w × h` nodes: box prefilter at the
- * decimation ratio, then bilinear. Non-finite source values are filled first.
+ * Rééchantillonne une grille de nœuds (même emprise) en `w × h` nœuds : préfiltre
+ * par blocs au rapport de décimation, puis bilinéaire. Les valeurs source non
+ * finies sont d'abord remplies.
  */
 export function resampleNodeGrid(src: Float32Array, sw: number, sh: number, w: number, h: number): Float32Array {
   if (sw === w && sh === h) return new Float32Array(src);
@@ -92,7 +94,7 @@ export function resampleNodeGrid(src: Float32Array, sw: number, sh: number, w: n
   return out;
 }
 
-/** Replace non-finite cells by the mean of the finite ones (a DTM hole must not poison the filters). */
+/** Remplace les cellules non finies par la moyenne des cellules finies (un trou du MNT ne doit pas empoisonner les filtres). */
 function fillNonFinite(src: Float32Array): Float32Array {
   let sum = 0;
   let n = 0;
@@ -118,7 +120,7 @@ export function buildWorkGrid(dem: EngineDem, maxResolution: number): WorkGrid {
   return { width, height, dx, dy, ps: (dx + dy) / 2, sizeX: dem.sizeX, sizeY: dem.sizeY, z };
 }
 
-/** Geographic helper for the scene: node ↔ WGS84 and a local metric frame. */
+/** Aide géographique pour la scène : nœud ↔ WGS84 et un repère métrique local. */
 export class SceneFrame {
   readonly center: LonLat;
   readonly gridNorthBearingDeg: number;
@@ -136,7 +138,7 @@ export class SceneFrame {
     this.mPerDegLon = M_PER_DEG_LON_EQ * Math.cos(this.center.lat * DEG);
   }
 
-  /** WGS84 of the point at normalised scene coordinates (u east, v north, 0–1). */
+  /** WGS84 du point aux coordonnées normalisées de la scène (u vers l'est, v vers le nord, 0–1). */
   lonLatAt(u: number, v: number): LonLat {
     const [sw, se, ne, nw] = this.corners;
     const lonS = sw.lon + (se.lon - sw.lon) * u;
@@ -146,7 +148,7 @@ export class SceneFrame {
     return { lon: lonS + (lonN - lonS) * v, lat: latS + (latN - latS) * v };
   }
 
-  /** Local metric frame (east, north), m, around the scene centre (equirectangular). */
+  /** Repère métrique local (est, nord), m, autour du centre de la scène (équirectangulaire). */
   toLocal(lon: number, lat: number): { e: number; n: number } {
     return { e: (lon - this.center.lon) * this.mPerDegLon, n: (lat - this.center.lat) * M_PER_DEG_LAT };
   }
@@ -156,14 +158,15 @@ export class SceneFrame {
     return Math.hypot(p.e, p.n) / 1000;
   }
 
-  /** Grid azimuth (deg, from grid north) of a true azimuth. */
+  /** Azimut de grille (degrés, depuis le nord de la grille) d'un azimut vrai. */
   toGridAzimuth(trueDeg: number): number {
     return (((trueDeg - this.gridNorthBearingDeg) % 360) + 360) % 360;
   }
 
   /**
-   * Normalised scene coordinates (u, v) of a WGS84 point, by inverting the
-   * bilinear corner blend (Newton, converges in 2–3 steps on a near-affine map).
+   * Coordonnées normalisées de la scène (u, v) d'un point WGS84, en inversant le
+   * mélange bilinéaire des coins (Newton, converge en 2 ou 3 pas sur une
+   * application quasi affine).
    */
   sceneUvOf(lon: number, lat: number): { u: number; v: number } {
     let u = 0.5;
@@ -187,7 +190,7 @@ export class SceneFrame {
   }
 }
 
-/** Per-node WGS84 coordinates of the work grid (row-major). */
+/** Coordonnées WGS84 par nœud de la grille de travail (ligne par ligne). */
 export function nodeLonLat(frame: SceneFrame, w: number, h: number): { lon: Float64Array; lat: Float64Array } {
   const lon = new Float64Array(w * h);
   const lat = new Float64Array(w * h);

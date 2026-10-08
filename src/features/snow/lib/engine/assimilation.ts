@@ -1,24 +1,25 @@
 // ============================================================================
-// Snow engine v2 — assimilation of measured snow depths
+// Moteur neige v2 — assimilation des hauteurs de neige mesurées
 // ----------------------------------------------------------------------------
-// Large scale (flat-field stations, avalanche bulletin levels): the downscaled
-// coarse field is the background. AROME carries no snow analysis, so its
-// errors are systematic, and of two kinds: the amount of precipitation and the
-// rain/snow limit (temperature). They are corrected together as
-//     HS(z) = k · background(z + Δz)
-// (k a precipitation factor, Δz an altitude shift of the whole profile),
-// fitted robustly (bisquare) on the measurements with priors k ~ 1 ± 30 %,
-// Δz ~ 0 ± 250 m. Then
-//   - a first-guess check on what the correction leaves (ECMWF:
-//     |d| > 4·√(σb² + σo²) rejected),
-//   - an optimal interpolation of the remaining innovations with the ECMWF
-//     structure functions: horizontal (1 + r/L)·e^(−r/L), vertical
-//     exp(−(Δz/h)²), background error proportional to depth.
-// Every station is also predicted from all the others (leave-one-out), the
-// honest measure of what the measurements bring.
-// Fine scale (`point` measurements inside the scene): simple kriging of the
-// final-field residuals with a short exponential covariance, after a shrunk
-// global ratio when there are several of them.
+// Grande échelle (stations de terrain plat, niveaux du bulletin d'avalanche) :
+// le champ grossier descendu en échelle sert d'ébauche. AROME n'a pas d'analyse
+// de la neige : ses erreurs sont systématiques et de deux natures — la quantité
+// de précipitations et la limite pluie / neige (température). Elles sont
+// corrigées ensemble sous la forme
+//     HS(z) = k · ébauche(z + Δz)
+// (k un facteur de précipitation, Δz un décalage en altitude de tout le
+// profil), ajustés de façon robuste (bicarré) sur les mesures avec les a priori
+// k ~ 1 ± 30 %, Δz ~ 0 ± 250 m. Ensuite
+//   - un contrôle de première estimation sur ce que laisse la correction
+//     (ECMWF : |d| > 4·√(σb² + σo²) rejeté),
+//   - une interpolation optimale des innovations restantes avec les fonctions
+//     de structure de l'ECMWF : horizontale (1 + r/L)·e^(−r/L), verticale
+//     exp(−(Δz/h)²), erreur d'ébauche proportionnelle à la hauteur.
+// Chaque station est aussi prédite à partir de toutes les autres (validation
+// croisée en en retirant une), la mesure honnête de ce qu'apportent les mesures.
+// Petite échelle (mesures `point` dans la scène) : krigeage simple des résidus
+// du champ final avec une covariance exponentielle courte, après un rapport
+// global rétréci quand il y en a plusieurs.
 // ============================================================================
 
 import type { SnowEngineConfig } from './config';
@@ -26,7 +27,7 @@ import type { BraSnowProfile, SnowObservation, StationDiagnostic } from './types
 
 export interface StationSample {
   obs: SnowObservation;
-  /** Local metric position (east, north), m, and altitude, m. */
+  /** Position métrique locale (est, nord), m, et altitude, m. */
   e: number;
   n: number;
   z: number;
@@ -34,9 +35,9 @@ export interface StationSample {
 }
 
 interface ProfileCorrection {
-  /** Precipitation factor. */
+  /** Facteur de précipitation. */
   ratio: number;
-  /** Altitude shift of the background profile, m (read the background at z + shiftM). */
+  /** Décalage en altitude du profil d'ébauche, m (lire l'ébauche à z + shiftM). */
   shiftM: number;
 }
 
@@ -44,10 +45,10 @@ const NO_CORRECTION: ProfileCorrection = { ratio: 1, shiftM: 0 };
 
 export interface LargeScaleAnalysis {
   correction: ProfileCorrection;
-  /** Accepted stations with their OI weights. */
+  /** Stations acceptées avec leurs poids d'interpolation optimale. */
   used: StationSample[];
   alpha: Float64Array;
-  /** Background error σb at the used stations, cm. */
+  /** Erreur d'ébauche σb aux stations utilisées, cm. */
   sigmaB: Float64Array;
   diagnostics: StationDiagnostic[];
   braUsed: boolean;
@@ -71,7 +72,7 @@ function verticalCorrelation(dz: number, hM: number): number {
   return Math.exp(-((dz / hM) ** 2));
 }
 
-/** Solve a small SPD system (Cholesky); returns null when singular. */
+/** Résout un petit système SDP (Cholesky) ; renvoie null s'il est singulier. */
 function solveSpd(a: Float64Array, n: number, rhs: Float64Array): Float64Array | null {
   const l = new Float64Array(n * n);
   for (let i = 0; i < n; i++) {
@@ -106,7 +107,7 @@ function covariance(a: StationSample, b: StationSample, sa: number, sb: number, 
   return sa * sb * horizontalCorrelation(r, config.oiHorizontalKm) * verticalCorrelation(a.z - b.z, config.oiVerticalM);
 }
 
-/** OI weights α = (B + R)⁻¹·d for a set of stations. */
+/** Poids d'interpolation optimale α = (B + R)⁻¹·d pour un ensemble de stations. */
 function oiWeights(stations: StationSample[], innov: Float64Array, sigmaB: Float64Array, config: SnowEngineConfig): Float64Array | null {
   const n = stations.length;
   const m = new Float64Array(n * n);
@@ -121,14 +122,14 @@ function oiWeights(stations: StationSample[], innov: Float64Array, sigmaB: Float
   return solveSpd(m, n, innov);
 }
 
-/** A measurement the profile correction is fitted on. */
+/** Une mesure sur laquelle la correction de profil est ajustée. */
 interface CorrectionDatum {
   observed: number;
-  /** Background at the datum's altitude shifted by `shiftM`. */
+  /** Ébauche à l'altitude de la donnée décalée de `shiftM`. */
   background: (shiftM: number) => number;
-  /** Error variance (measurement + background), cm². */
+  /** Variance d'erreur (mesure + ébauche), cm². */
   variance: number;
-  /** Horizontal relevance (1 at the scene, decreasing with distance). */
+  /** Pertinence horizontale (1 sur la scène, décroissante avec la distance). */
   relevance: number;
 }
 
@@ -136,12 +137,12 @@ const SHIFT_PRIOR_M = 250;
 const RATIO_PRIOR = 0.3;
 
 /**
- * Robust weighted fit of k and Δz. For each Δz of a 20 m grid the factor k
- * has a closed form (weighted least squares with its prior); the Δz with the
- * lowest penalised cost wins. Two bisquare reweightings tame outliers. Δz is
- * only fitted when the measurements span 250 m of altitude or more, or when
- * some of them are below the background's snow line (no snow measured where
- * snow is modelled, or the reverse).
+ * Ajustement pondéré robuste de k et Δz. Pour chaque Δz d'une grille de 20 m, le
+ * facteur k a une forme explicite (moindres carrés pondérés avec son a priori) ;
+ * le Δz de plus faible coût pénalisé l'emporte. Deux repondérations bicarrées
+ * domptent les valeurs aberrantes. Δz n'est ajusté que si les mesures couvrent
+ * 250 m d'altitude ou plus, ou si certaines sont sous la limite de la neige de
+ * l'ébauche (pas de neige mesurée là où le modèle en met, ou l'inverse).
  */
 function fitCorrection(data: CorrectionDatum[], altitudes: number[]): ProfileCorrection {
   if (data.length === 0) return NO_CORRECTION;
@@ -152,7 +153,7 @@ function fitCorrection(data: CorrectionDatum[], altitudes: number[]): ProfileCor
   else shifts.push(0);
   const robust = data.map(() => 1);
   let best: ProfileCorrection = NO_CORRECTION;
-  // Negative log-posterior: Σ w·(o − k·b)² + ((k − 1)/σk)² + (Δz/σz)², w = 1/variance.
+  // Log-postérieure négative : Σ w·(o − k·b)² + ((k − 1)/σk)² + (Δz/σz)², w = 1/variance.
   const tau = 1 / (RATIO_PRIOR * RATIO_PRIOR);
   for (let pass = 0; pass < 3; pass++) {
     let bestCost = Infinity;
@@ -182,9 +183,9 @@ function fitCorrection(data: CorrectionDatum[], altitudes: number[]): ProfileCor
 export interface LargeScaleInput {
   stations: StationSample[];
   bra: BraSnowProfile | null;
-  /** Uncorrected background at a station, read at its altitude + shift. */
+  /** Ébauche non corrigée à une station, lue à son altitude + décalage. */
   stationBackground: (s: StationSample, shiftM: number) => number;
-  /** Uncorrected background at the scene centre for an altitude (BRA levels). */
+  /** Ébauche non corrigée au centre de la scène pour une altitude (niveaux du BRA). */
   centerBackground: (z: number) => number;
   config: SnowEngineConfig;
 }
@@ -223,7 +224,7 @@ export function analyseLargeScale(input: LargeScaleInput): LargeScaleAnalysis {
   }
   const allStationData = stations.map(stationDatum);
 
-  // 1. Correction on everything, 2. first-guess check of what it leaves.
+  // 1. Correction sur tout, 2. contrôle de première estimation de ce qu'elle laisse.
   const correction = fitCorrection([...allStationData, ...braData], [...stations.map((s) => s.z), ...braAltitudes]);
   const diagnostics: StationDiagnostic[] = [];
   const accepted: StationSample[] = [];
@@ -243,7 +244,7 @@ export function analyseLargeScale(input: LargeScaleInput): LargeScaleAnalysis {
     diagnostics.push(diag);
   }
 
-  // 3. OI of the innovations left after the correction.
+  // 3. Interpolation optimale des innovations restantes après la correction.
   const oiOf = (set: StationSample[], corr: ProfileCorrection) => {
     const innov = new Float64Array(set.length);
     const sigmaB = new Float64Array(set.length);
@@ -257,8 +258,8 @@ export function analyseLargeScale(input: LargeScaleInput): LargeScaleAnalysis {
   };
   const { alpha, sigmaB } = oiOf(accepted, correction);
 
-  // Leave-one-out: each used station predicted by the others alone
-  // (correction refitted without it, then OI of the others).
+  // Validation croisée : chaque station utilisée est prédite par les autres seules
+  // (correction réajustée sans elle, puis interpolation optimale des autres).
   for (let k = 0; k < accepted.length; k++) {
     const sk = accepted[k];
     const others = accepted.filter((_, i) => i !== k);
@@ -277,7 +278,7 @@ export function analyseLargeScale(input: LargeScaleInput): LargeScaleAnalysis {
   return { correction, used: accepted, alpha, sigmaB, diagnostics, braUsed: braData.length > 0 };
 }
 
-/** OI increment at a point (local metres, altitude) whose corrected background is `b`. */
+/** Incrément d'interpolation optimale en un point (mètres locaux, altitude) dont l'ébauche corrigée vaut `b`. */
 export function oiIncrementAt(a: LargeScaleAnalysis, e: number, n: number, z: number, b: number, config: SnowEngineConfig): number {
   if (a.used.length === 0) return 0;
   const sx = sigmaBackground(b, config);
@@ -291,20 +292,20 @@ export function oiIncrementAt(a: LargeScaleAnalysis, e: number, n: number, z: nu
 }
 
 // ---------------------------------------------------------------------------
-//  Fine scale: point measurements inside the scene
+//  Petite échelle : mesures ponctuelles dans la scène
 // ---------------------------------------------------------------------------
 
 export interface PointSample {
   obs: SnowObservation;
-  /** Fractional work-grid node coordinates. */
+  /** Coordonnées de nœud fractionnaires dans la grille de travail. */
   fx: number;
   fy: number;
 }
 
 /**
- * Corrects the final field with in-scene point measurements: a global ratio
- * (shrunk towards 1 by n/(n + 3)) when there are at least 3, then simple
- * kriging of the residuals (exponential covariance, range `pointRangeM`).
+ * Corrige le champ final avec les mesures ponctuelles de la scène : un rapport
+ * global (rétréci vers 1 par n/(n + 3)) quand il y en a au moins 3, puis un
+ * krigeage simple des résidus (covariance exponentielle, portée `pointRangeM`).
  */
 export function assimilatePoints(
   hs: Float32Array, w: number, h: number, ps: number, points: PointSample[], config: SnowEngineConfig,
@@ -324,7 +325,7 @@ export function assimilatePoints(
   const n = points.length;
   const resid = new Float64Array(n);
   for (let i = 0; i < n; i++) resid[i] = points[i].obs.hsCm - sample(points[i]);
-  // Residual variance: the model's own spread at that scale, floor 10 cm.
+  // Variance des résidus : la dispersion propre du modèle à cette échelle, plancher 10 cm.
   let mean = 0;
   for (let i = 0; i < hs.length; i++) mean += hs[i];
   mean /= hs.length;

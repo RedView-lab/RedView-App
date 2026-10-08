@@ -1,5 +1,5 @@
 // ============================================================================
-// Snow engine v2 — input / output types (pure data, worker- and Node-safe)
+// Moteur neige v2 — types d'entrée / de sortie (données pures, sûres pour un worker et pour Node)
 // ============================================================================
 
 import type { SnowEngineConfig } from './config';
@@ -10,15 +10,15 @@ export interface LonLat {
 }
 
 /**
- * Scene DTM: a node grid spanning the scene bounds edge to edge
- * (x_i = minX + i·sizeX/(width − 1)); row 0 is the southern edge.
+ * MNT de la scène : une grille de nœuds qui couvre l'emprise de la scène d'un bord
+ * à l'autre (x_i = minX + i·sizeX/(width − 1)) ; la ligne 0 est le bord sud.
  */
 export interface EngineDem {
-  /** Absolute altitude, m. */
+  /** Altitude absolue, m. */
   data: Float32Array;
   width: number;
   height: number;
-  /** Extent of the node grid, m (minX → maxX, minY → maxY). */
+  /** Étendue de la grille de nœuds, m (minX → maxX, minY → maxY). */
   sizeX: number;
   sizeY: number;
 }
@@ -26,49 +26,51 @@ export interface EngineDem {
 export interface SceneGeo {
   /** WGS84 of the four corner nodes: SW, SE, NE, NW. */
   corners: [LonLat, LonLat, LonLat, LonLat];
-  /** True bearing (deg, clockwise from true north) of the grid +Y axis (meridian convergence). */
+  /** Gisement vrai (degrés, sens horaire depuis le nord vrai) de l'axe +Y de la grille (convergence des méridiens). */
   gridNorthBearingDeg: number;
 }
 
-/** Coarse snow-depth field (AROME 0.01°, or a coarser global model as fallback). */
+/** Champ grossier de hauteur de neige (AROME 0,01°, ou un modèle mondial plus grossier en repli). */
 export interface CoarseSnowGrid {
   source: 'arome' | 'open-meteo';
   width: number;
   height: number;
-  /** Cell centres: lon = lonMin + i·dLon, lat = latMin + j·dLat (row 0 = south). */
+  /** Centres des cellules : lon = lonMin + i·dLon, lat = latMin + j·dLat (ligne 0 = sud). */
   lonMin: number;
   latMin: number;
   dLon: number;
   dLat: number;
   hsCm: Float32Array;
   /**
-   * Model terrain height of each cell, m. AROME's snow is the snow of a flat
-   * cell at that height: the elevation downscaling compares every pixel with
-   * it. `null` when unknown (the scene DTM then stands in for the cells it covers).
+   * Hauteur du terrain du modèle pour chaque cellule, m. La neige d'AROME est
+   * celle d'une cellule plate à cette hauteur : la descente en échelle selon
+   * l'altitude compare chaque pixel à elle. `null` quand elle est inconnue (le MNT
+   * de la scène remplace alors les cellules qu'il couvre).
    */
   orographyM: Float32Array | null;
-  /** Nominal cell size, m. */
+  /** Taille nominale d'une cellule, m. */
   resolutionM: number;
 }
 
-/** Coarse DEM around the scene (far field: horizons, outlying shelter, drift inflow). */
+/** DEM grossier autour de la scène (lointain : horizons, abri éloigné, apport de neige soufflée). */
 export interface FarDem {
   data: Float32Array;
   width: number;
   height: number;
-  /** Position of node (0, 0) relative to the scene SW node, m (scene grid axes). */
+  /** Position du nœud (0, 0) par rapport au nœud SO de la scène, m (axes de la grille de la scène). */
   originX: number;
   originY: number;
-  /** Node spacing, m. */
+  /** Pas entre nœuds, m. */
   cell: number;
 }
 
 /**
- * A measured snow depth.
- *  - `flat`: a flat-field station (Nivose, IMIS, climatological): representative
- *    of open flat terrain around it, assimilated into the large-scale field.
- *  - `point`: a measurement at that exact spot of the scene (probe, pit, survey):
- *    corrects the fine field around it.
+ * Une hauteur de neige mesurée.
+ *  - `flat` : une station de terrain plat (Nivose, IMIS, climatologique) :
+ *    représentative du terrain plat dégagé alentour, assimilée dans le champ
+ *    grande échelle.
+ *  - `point` : une mesure à cet endroit précis de la scène (sondage, profil,
+ *    relevé) : corrige le champ fin alentour.
  */
 export interface SnowObservation {
   id: string;
@@ -78,10 +80,10 @@ export interface SnowObservation {
   lat: number;
   elevationM: number | null;
   hsCm: number;
-  /** ISO time of the measurement. */
+  /** Heure ISO de la mesure. */
   time?: string;
   kind: 'flat' | 'point';
-  /** Measurement error, cm (defaults from the config). */
+  /** Erreur de mesure, cm (valeurs par défaut de la config). */
   errorCm?: number;
 }
 
@@ -89,24 +91,24 @@ export interface SnowObservation {
 export interface BraSnowProfile {
   massif: string;
   date: string;
-  /** Off-piste snow depth at a few altitudes, on north and south slopes. */
+  /** Hauteur de neige hors piste à quelques altitudes, sur les versants nord et sud. */
   levels: Array<{ altitudeM: number; northCm: number; southCm: number }>;
-  /** Altitude of the continuous snow cover, north / south slopes, m. */
+  /** Altitude de l'enneigement continu, versants nord / sud, m. */
   limitNorthM: number | null;
   limitSouthM: number | null;
 }
 
-/** Hourly weather of the past weeks at the scene (model analyses/forecasts). */
+/** Météo horaire des dernières semaines sur la scène (analyses / prévisions de modèle). */
 export interface WeatherHistory {
-  /** Unix ms of the first hour. */
+  /** ms Unix de la première heure. */
   startMs: number;
-  /** Altitude the temperature refers to, m. */
+  /** Altitude à laquelle se rapporte la température, m. */
   elevationM: number;
   temperatureC: Float32Array;
   precipitationMm: Float32Array;
   snowfallCm: Float32Array;
   windSpeedMs: Float32Array;
-  /** Direction the wind blows from, deg true. */
+  /** Direction d'où souffle le vent, degrés vrais. */
   windDirDeg: Float32Array;
 }
 
@@ -121,12 +123,12 @@ export interface SnowEngineInput {
   geo: SceneGeo;
   coarse: CoarseSnowGrid;
   farDem: FarDem | null;
-  /** Canopy cover 0–1 on a node grid over the scene bounds, `null` when the forest is unknown. */
+  /** Couvert de la canopée 0–1 sur une grille de nœuds couvrant l'emprise de la scène, `null` quand la forêt est inconnue. */
   canopy: CanopyGrid | null;
   observations: SnowObservation[];
   bra: BraSnowProfile | null;
   weather: WeatherHistory | null;
-  /** Validity time of the coarse field, Unix ms. */
+  /** Heure de validité du champ grossier, ms Unix. */
   analysisTimeMs: number;
   config: SnowEngineConfig;
 }
@@ -138,9 +140,9 @@ export interface StationDiagnostic {
   elevationM: number;
   distanceKm: number;
   observedCm: number;
-  /** Large-scale field before assimilation at the station. */
+  /** Champ grande échelle avant assimilation à la station. */
   backgroundCm: number;
-  /** Leave-one-out analysis at the station (what the other stations predict). */
+  /** Analyse par validation croisée à la station (ce que prédisent les autres stations). */
   looAnalysisCm: number;
   used: boolean;
   rejectedReason?: string;
@@ -153,42 +155,42 @@ export interface SnowDiagnostics {
     altitudesM: number[];
     hsCm: number[];
     cellsUsed: number;
-    /** Gradient around the scene altitude, cm per 100 m. */
+    /** Gradient autour de l'altitude de la scène, cm par 100 m. */
     gradientCmPer100m: number;
-    /** Lowest altitude with snow on the profile, m. */
+    /** Altitude la plus basse enneigée sur le profil, m. */
     snowlineM: number | null;
     orography: 'model' | 'scene-dtm';
   };
   assimilation: {
     stations: StationDiagnostic[];
-    /** Correction of the large-scale field at the scene altitude, cm (stations + BRA). */
+    /** Correction du champ grande échelle à l'altitude de la scène, cm (stations + BRA). */
     profileCorrectionCm: number;
-    /** Fitted precipitation factor k (HS = k·background(z + Δz)). */
+    /** Facteur de précipitation ajusté k (HS = k·ébauche(z + Δz)). */
     precipitationFactor: number;
-    /** Fitted shift of the rain/snow limit, m (positive: the real snow line is higher than modelled). */
+    /** Décalage ajusté de la limite pluie / neige, m (positif : la vraie limite de la neige est plus haute que modélisée). */
     snowlineShiftM: number;
     braUsed: boolean;
     pointsUsed: number;
   };
   wind: {
     source: 'history' | 'default';
-    /** Transport-weighted rose, 16 sectors of 22.5° (direction the wind blows from, N first). */
+    /** Rose pondérée par le transport, 16 secteurs de 22,5° (direction d'où souffle le vent, N d'abord). */
     rose: number[];
-    /** Transport amplitude actually applied, cm·m of flux on flat terrain. */
+    /** Amplitude de transport réellement appliquée, cm·m de flux en terrain plat. */
     fluxCmM: number;
     redistributedPct: number;
   };
   gravity: { movedPct: number };
   melt: {
     source: 'history' | 'season';
-    /** Cumulative melt on flat terrain at the scene altitude, cm of snow. */
+    /** Fonte cumulée en terrain plat à l'altitude de la scène, cm de neige. */
     flatMeltCm: number;
     radiationScale: number;
     braCalibrated: boolean;
   };
   forest: { meanCanopyPct: number | null };
   variability: {
-    /** Helbig et al. (2015) σ(HS) of the scene, cm. */
+    /** σ(HS) de la scène selon Helbig et al. (2015), cm. */
     targetSigmaCm: number;
     modelSigmaCm: number;
   };
@@ -196,7 +198,7 @@ export interface SnowDiagnostics {
 }
 
 export interface SnowEngineResult {
-  /** Snow depth (vertical), cm, on the work grid (node grid over the scene bounds, row 0 = south). */
+  /** Hauteur de neige (verticale), cm, sur la grille de travail (grille de nœuds couvrant l'emprise de la scène, ligne 0 = sud). */
   hsCm: Float32Array;
   width: number;
   height: number;

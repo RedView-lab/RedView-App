@@ -1,5 +1,5 @@
 // ============================================================================
-// Snow engine v2 — Web Worker
+// Moteur neige v2 — Web Worker
 // ============================================================================
 
 import { computeSnowDistribution } from './engine/pipeline';

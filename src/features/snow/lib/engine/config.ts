@@ -1,100 +1,100 @@
 // ============================================================================
-// Snow engine v2 — parameters
+// Moteur neige v2 — paramètres
 // ----------------------------------------------------------------------------
-// Every default comes from a published value; the reference sits next to it.
+// Chaque valeur par défaut vient d'une valeur publiée ; la référence est à côté.
 //
-//   Gruber (2007) WRR 43 W06412 — mass-conserving transport and deposition
-//   Bernhardt & Schulz (2010) GRL 37 L11502 — SnowSlide; holding depth as
-//     parameterised in CHM (3178.4·S^−1.998, Marsh et al. 2020) and evaluated
-//     against ALS snow depth by Quéno et al. (2024)
-//   Quéno et al. (2024) TC 18, 3533 — FSM2trans: SnowSlide + SnowTran-3D vs ALS
-//   Grünewald et al. (2013) HESS 17, 3005 — snow depth vs terrain (ALS, 7 sites)
-//   Grünewald, Bühler & Lehning (2014) TC 8, 2381 — elevation dependency
-//   Helbig et al. (2015) HESS 19, 1339 — σ(HS) and fSCA over complex terrain
-//   Winstral, Elder & Davis (2002) J. Hydrometeor. 3, 524 — Sx shelter index
-//   Liston & Elder (2006) J. Hydrometeor. 7, 217 — MicroMet wind weighting
-//   Li & Pomeroy (1997) J. Appl. Meteor. 36, 205 — threshold wind for transport
-//   Varhola et al. (2010) J. Hydrol. 392, 219 — forest cover vs accumulation/ablation
-//   Hock (1999) J. Glaciol. 45, 101 — temperature index + potential direct radiation
-//   de Rosnay et al. (2014), ECMWF — snow depth optimal interpolation
+//   Gruber (2007) WRR 43 W06412 — transport et dépôt conservant la masse
+//   Bernhardt & Schulz (2010) GRL 37 L11502 — SnowSlide ; hauteur de maintien
+//     paramétrée comme dans CHM (3178,4·S^−1,998, Marsh et al. 2020) et évaluée
+//     contre la hauteur de neige ALS par Quéno et al. (2024)
+//   Quéno et al. (2024) TC 18, 3533 — FSM2trans : SnowSlide + SnowTran-3D contre ALS
+//   Grünewald et al. (2013) HESS 17, 3005 — hauteur de neige et terrain (ALS, 7 sites)
+//   Grünewald, Bühler & Lehning (2014) TC 8, 2381 — dépendance à l'altitude
+//   Helbig et al. (2015) HESS 19, 1339 — σ(HS) et fSCA en terrain complexe
+//   Winstral, Elder & Davis (2002) J. Hydrometeor. 3, 524 — indice d'abri Sx
+//   Liston & Elder (2006) J. Hydrometeor. 7, 217 — pondération du vent de MicroMet
+//   Li & Pomeroy (1997) J. Appl. Meteor. 36, 205 — vent seuil du transport
+//   Varhola et al. (2010) J. Hydrol. 392, 219 — couvert forestier, accumulation et ablation
+//   Hock (1999) J. Glaciol. 45, 101 — indice de température + rayonnement direct potentiel
+//   de Rosnay et al. (2014), ECMWF — interpolation optimale de la hauteur de neige
 // ============================================================================
 
 export interface SnowEngineConfig {
-  /** Work grid cap per axis (the DTM is box-averaged down to it). */
+  /** Plafond de la grille de travail par axe (le MNT y est ramené par moyenne par blocs). */
   maxResolution: number;
 
-  // ---- Large-scale field: elevation profile learnt from the coarse cells ----
-  /** Horizontal weighting radius of the coarse cells (Gaussian e-fold), km. */
+  // ---- Champ grande échelle : profil d'altitude appris sur les cellules grossières ----
+  /** Rayon de pondération horizontale des cellules grossières (e-fold gaussien), km. */
   profileRadiusKm: number;
-  /** Minimum half-width of the local regression in altitude, m. */
+  /** Demi-largeur minimale de la régression locale en altitude, m. */
   profileBandwidthM: number;
-  /** Cap on the extrapolated gradient above/below the cells, cm per 100 m (Grünewald 2013: 6–25 at peak of winter). */
+  /** Plafond du gradient extrapolé au-dessus / en dessous des cellules, cm par 100 m (Grünewald 2013 : 6 à 25 au cœur de l'hiver). */
   maxGradientCmPer100m: number;
-  /** Clamp of the cell-to-profile ratio carried by the residual field. */
+  /** Bornage du rapport cellule / profil porté par le champ résiduel. */
   residualRatioClamp: number;
-  /** Depth offset of the ratio residual (keeps it stable near the snow line), cm. */
+  /** Décalage de hauteur du résidu en rapport (le garde stable près de la limite de la neige), cm. */
   residualEpsilonCm: number;
-  /** Coarse values above this are perennial firn, not seasonal snow (fit only), cm. */
+  /** Au-delà, les valeurs grossières sont du névé pérenne, pas de la neige saisonnière (ajustement seulement), cm. */
   profileFitCapCm: number;
 
-  // ---- Assimilation of measurements ----
-  /** Search radius for flat-field stations, km. */
+  // ---- Assimilation des mesures ----
+  /** Rayon de recherche des stations de terrain plat, km. */
   stationRadiusKm: number;
-  /** OI horizontal correlation length, km (ECMWF: 55; shorter for a 1.3 km background in the Alps). */
+  /** Longueur de corrélation horizontale de l'interpolation optimale, km (ECMWF : 55 ; plus court pour une ébauche à 1,3 km dans les Alpes). */
   oiHorizontalKm: number;
-  /** OI vertical correlation length, m (ECMWF: 800). */
+  /** Longueur de corrélation verticale de l'interpolation optimale, m (ECMWF : 800). */
   oiVerticalM: number;
-  /** Station measurement error, cm (ECMWF: 4). */
+  /** Erreur de mesure d'une station, cm (ECMWF : 4). */
   obsErrorCm: number;
-  /** Representativeness error of a flat-field station, fraction of its depth. */
+  /** Erreur de représentativité d'une station de terrain plat, fraction de sa hauteur. */
   obsRepresentativenessRel: number;
-  /** Background (downscaled coarse field) error, fraction of its depth. */
+  /** Erreur de l'ébauche (champ grossier descendu en échelle), fraction de sa hauteur. */
   backgroundErrorRel: number;
-  /** Background error floor, cm. */
+  /** Plancher de l'erreur d'ébauche, cm. */
   backgroundErrorMinCm: number;
-  /** Innovation rejected beyond this many σ (ECMWF first-guess check). */
+  /** Innovation rejetée au-delà de ce nombre de σ (contrôle de première estimation de l'ECMWF). */
   qcSigma: number;
-  /** BRA pseudo-observation error: floor (cm) and fraction of depth. */
+  /** Erreur des pseudo-observations du BRA : plancher (cm) et fraction de la hauteur. */
   braErrorCm: number;
   braErrorRel: number;
-  /** Correlation range of in-scene point measurements, m. */
+  /** Portée de corrélation des mesures ponctuelles dans la scène, m. */
   pointRangeM: number;
   pointErrorCm: number;
 
-  // ---- Wind transport ----
-  /** MicroMet slope and curvature weights γs, γc (Liston & Elder 2006: 0.5, 0.5). */
+  // ---- Transport par le vent ----
+  /** Poids de pente et de courbure de MicroMet γs, γc (Liston & Elder 2006 : 0,5, 0,5). */
   windSlopeWeight: number;
   windCurvatureWeight: number;
-  /** Smoothing of the DTM seen by the wind (buried roughness, smooth flow), m. */
+  /** Lissage du MNT vu par le vent (rugosité enfouie, écoulement lisse), m. */
   windSmoothM: number;
-  /** Weight of the upwind shelter (Winstral Sx) on the local wind speed. */
+  /** Poids de l'abri amont (Sx de Winstral) sur la vitesse locale du vent. */
   windShelterWeight: number;
-  /** Sx search distance, local / outlying (Winstral 2002: 100 m / 1000 m). */
+  /** Distance de recherche du Sx, locale / éloignée (Winstral 2002 : 100 m / 1000 m). */
   shelterLocalM: number;
   shelterOutlyingM: number;
-  /** Curvature length scales (drift features / ridge-valley half-wavelength), m. */
+  /** Échelles de longueur de la courbure (formes de congères / demi-longueur d'onde crête-vallée), m. */
   curvatureSmallM: number;
   curvatureLargeM: number;
-  /** Relaxation length of the drift flux towards the local transport capacity, m. */
+  /** Longueur de relaxation du flux de transport vers la capacité locale de transport, m. */
   saturationLengthM: number;
-  /** Share of the local snow the wind can strip from a cell. */
+  /** Part de la neige locale que le vent peut arracher à une cellule. */
   erosionMaxFraction: number;
   /**
-   * Drift flux on open flat terrain per unit of transport potential
-   * Σ(U − Ut)·U² over the history, cm·m per (m/s)³·h. ≈ 4000 cm·m for a windy
-   * week, the order of Pomeroy & Gray's saltation + suspension fluxes.
+   * Flux de transport sur terrain plat dégagé par unité de potentiel de
+   * transport Σ(U − Ut)·U² sur l'historique, cm·m par (m/s)³·h. ≈ 4000 cm·m pour
+   * une semaine venteuse, l'ordre des flux de saltation + suspension de Pomeroy & Gray.
    */
   windFluxPerTransport: number;
-  /** Upper bound of the mean share of the snow the wind moves (Quéno 2024: −50 % on windward ridges, +25 % in shelter). */
+  /** Borne supérieure de la part moyenne de la neige que le vent déplace (Quéno 2024 : −50 % sur les crêtes au vent, +25 % à l'abri). */
   maxWindRedistribution: number;
-  /** Share moved when the weather history is unknown. */
+  /** Part déplacée quand l'historique météo est inconnu. */
   defaultWindRedistribution: number;
-  /** Weight of the empirical exposure relation against the physical drift flux (0–1). */
+  /** Poids de la relation empirique d'exposition face au flux de transport physique (0–1). */
   windStatisticalWeight: number;
-  /** Default direction the snow-bearing wind blows from, deg true (NW: Alps, Pyrenees). */
+  /** Direction par défaut d'où souffle le vent porteur de neige, degrés vrais (NO : Alpes, Pyrénées). */
   defaultWindFromDeg: number;
 
-  // ---- Gravitational transport (SnowSlide) ----
+  // ---- Transport gravitaire (SnowSlide) ----
   /**
    * Vertical holding depth h = mult·S^pow, m, S in degrees: CHM's curve, the
    * one evaluated against ALS snow-depth maps (Quéno et al. 2024; the original
@@ -103,39 +103,40 @@ export interface SnowEngineConfig {
    */
   holdingMult: number;
   holdingPow: number;
-  /** Slopes below this never shed snow (Bernhardt & Schulz: 25°). */
+  /** Sous cette pente, la neige ne glisse jamais (Bernhardt & Schulz : 25°). */
   triggerSlopeDeg: number;
   /**
-   * Scale of the slope the holding depth is read at, m. The curves were
-   * calibrated on 25–30 m grids; read at the LiDAR pixel, rock steps and
-   * boulders (buried by the snow) would shed most of the pack.
+   * Échelle de la pente à laquelle la hauteur de maintien est lue, m. Les courbes
+   * ont été calibrées sur des grilles de 25 à 30 m ; lues au pixel LiDAR, les
+   * ressauts rocheux et les blocs (enfouis sous la neige) feraient glisser
+   * l'essentiel du manteau.
    */
   gravitySlopeScaleM: number;
-  /** Holding depth factor of a cell hit by as much sliding snow as it holds (Quéno 2024: −30 %). */
+  /** Facteur de hauteur de maintien d'une cellule frappée par autant de neige glissante qu'elle en retient (Quéno 2024 : −30 %). */
   holdingReceiveFactor: number;
-  /** Runout angle α of the energy line, degrees (AutoATES/Flow-Py: 30° for frequent avalanches). */
+  /** Angle d'arrêt α de la ligne d'énergie, degrés (AutoATES / Flow-Py : 30° pour les avalanches fréquentes). */
   runoutAlphaDeg: number;
-  /** Runout deposition per cell and pass: Dmax·(1 − S/Slim) (Gruber 2007 form), cm and degrees. */
+  /** Dépôt d'arrêt par cellule et par passe : Dmax·(1 − S/Slim) (forme de Gruber 2007), cm et degrés. */
   depositMaxCm: number;
   depositLimitDeg: number;
-  /** Angle of repose of avalanche debris, degrees (deposit cones slump to it; below the trigger slope so a cone does not release again). */
+  /** Angle de repos des débris d'avalanche, degrés (les cônes de dépôt s'y affaissent ; sous la pente de déclenchement, pour qu'un cône ne reparte pas). */
   debrisReposeDeg: number;
   gravityPasses: number;
 
-  // ---- Forest (Varhola 2010: ΔAcc = −0.396·FC, ΔAbl = −0.536·FC) ----
+  // ---- Forêt (Varhola 2010 : ΔAcc = −0,396·FC, ΔAbl = −0,536·FC) ----
   forestAccumulationSlope: number;
   forestAblationSlope: number;
 
-  // ---- Melt (Hock 1999 temperature index with potential direct radiation) ----
+  // ---- Fonte (indice de température de Hock 1999 avec rayonnement direct potentiel) ----
   /** Melt factor, mm w.e. d⁻¹ °C⁻¹. */
   meltFactor: number;
-  /** Radiation factor for snow, mm w.e. m² W⁻¹ d⁻¹ °C⁻¹ (0.5·10⁻³ per hour). */
+  /** Facteur de rayonnement de la neige, mm é.e. m² W⁻¹ j⁻¹ °C⁻¹ (0,5·10⁻³ par heure). */
   radiationFactor: number;
-  /** Air temperature lapse rate, °C m⁻¹. */
+  /** Gradient vertical de température de l'air, °C m⁻¹. */
   lapseRate: number;
-  /** Clear-sky atmospheric transmissivity. */
+  /** Transmissivité atmosphérique par ciel clair. */
   transmissivity: number;
-  /** Precipitation is all snow below / all rain above, °C. */
+  /** Les précipitations sont entièrement de la neige en dessous / entièrement de la pluie au-dessus, °C. */
   snowTempC: number;
   rainTempC: number;
 
@@ -143,14 +144,14 @@ export interface SnowEngineConfig {
   helbigA: number;
   helbigB: number;
   /**
-   * Helbig's σ is a ceiling: when the scene comes out more variable, the wind
-   * amplitude is lowered, down to this share of its physical estimate.
+   * Le σ de Helbig est un plafond : quand la scène sort plus variable, l'amplitude
+   * du vent est abaissée, jusqu'à cette part de son estimation physique.
    */
   windAmplitudeMin: number;
 
-  /** Final Gaussian smoothing, work pixels (0 = off). */
+  /** Lissage gaussien final, pixels de travail (0 = désactivé). */
   finalSmoothSigmaPx: number;
-  /** Output cap, cm. */
+  /** Plafond de la sortie, cm. */
   maxDepthCm: number;
 }
 

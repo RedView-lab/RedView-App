@@ -1,14 +1,15 @@
 // ============================================================================
-// Snow feature — public orchestrator
+// Fonction neige — orchestrateur public
 // ----------------------------------------------------------------------------
-// runSnowPipeline(heightmap):
-//   1. scene geography (corners in WGS84, meridian convergence);
-//   2. in parallel: AROME snow depth (±0.4°), measurements + avalanche bulletin
-//      + weather history (/api/snow-context), far-field DEM (Terrarium);
-//      without AROME (outside its domain, Météo-France down) there is no
-//      snow field: the self-hosted weather models carry no snow depth;
-//   3. model orography of the coarse cells (Terrarium);
-//   4. snow engine v2 in a worker (lib/engine/pipeline.ts).
+// runSnowPipeline(heightmap) :
+//   1. géographie de la scène (coins en WGS84, convergence des méridiens) ;
+//   2. en parallèle : hauteur de neige AROME (±0,4°), mesures + bulletin
+//      d'avalanche + historique météo (/api/snow-context), DEM lointain
+//      (Terrarium) ; sans AROME (hors de son domaine, Météo-France indisponible),
+//      pas de champ de neige : les modèles météo auto-hébergés ne portent pas de
+//      hauteur de neige ;
+//   3. orographie du modèle pour les cellules grossières (Terrarium) ;
+//   4. moteur neige v2 dans un worker (lib/engine/pipeline.ts).
 // ============================================================================
 
 import { toWgs84, trueNorthGridBearingDeg } from '../lidar/lib/coordConvert';
@@ -25,7 +26,7 @@ export type { CanopyGrid, SnowField, SnowHeightmap, SnowDisplayMode, SnowProgres
 export type { SnowDiagnostics } from './lib/engine/types';
 export { DEFAULT_SNOW_ENGINE_CONFIG } from './lib/engine/config';
 
-/** Far-field DEM: margin around the scene and spacing, m. */
+/** DEM lointain : marge autour de la scène et pas, m. */
 const FAR_MARGIN_M = 7000;
 const FAR_CELL_M = 50;
 
@@ -39,8 +40,8 @@ function sceneGeo(h: SnowHeightmap): SceneGeo {
   const cy = (minY + maxY) / 2;
   return {
     corners: [ll(minX, minY), ll(maxX, minY), ll(maxX, maxY), ll(minX, maxY)],
-    // trueNorthGridBearingDeg is where true north points on the grid; the
-    // engine wants the true bearing of the grid +Y axis: the opposite.
+    // trueNorthGridBearingDeg indique où pointe le nord vrai sur la grille ; le
+    // moteur attend le gisement vrai de l'axe +Y de la grille : l'opposé.
     gridNorthBearingDeg: -trueNorthGridBearingDeg(cx, cy, h.crs),
   };
 }
@@ -70,7 +71,7 @@ function runWorker(input: SnowEngineInput, progress: SnowProgress, signal?: Abor
 export async function runSnowPipeline(
   heightmap: SnowHeightmap,
   options?: {
-    /** Extra measurements (e.g. probes in the scene: kind 'point'). */
+    /** Mesures supplémentaires (p. ex. sondages dans la scène : kind 'point'). */
     observations?: SnowObservation[];
     config?: Partial<SnowEngineConfig>;
     progress?: SnowProgress;

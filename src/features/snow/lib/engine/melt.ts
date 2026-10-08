@@ -1,15 +1,17 @@
 // ============================================================================
-// Snow engine v2 — differential melt by exposure
+// Moteur neige v2 — fonte différentielle selon l'exposition
 // ----------------------------------------------------------------------------
-// AROME melts the snow of a flat, unshaded cell. On a slope the melt of a day
-// scales with Hock's (1999) melt index MF + r·I, I the potential direct
-// radiation of that slope with its horizons. So each node melts
-//     M(x) = M_flat(z)·(MF + r·Ī_w(x)) / (MF + r·Ī_w,flat(z)),
-// Ī_w the daily radiation weighted by the positive degree-days of the days
-// the snow was melting at that altitude (from the band snowpack). M_flat(z)
-// is the band snowpack's cumulative melt, capped by its cumulative snowfall.
-// When the avalanche bulletin gives north and south depths, the radiation
-// factor is rescaled so the modelled north–south difference matches them.
+// AROME fait fondre la neige d'une cellule plate, sans ombre. Sur une pente, la
+// fonte d'une journée suit l'indice de fonte de Hock (1999) MF + r·I, I étant le
+// rayonnement direct potentiel de cette pente avec ses horizons. Chaque nœud
+// fond donc de
+//     M(x) = M_plat(z)·(MF + r·Ī_w(x)) / (MF + r·Ī_w,plat(z)),
+// Ī_w étant le rayonnement journalier pondéré par les degrés-jours positifs des
+// jours où la neige fondait à cette altitude (d'après le manteau par bande).
+// M_plat(z) est la fonte cumulée du manteau de la bande, plafonnée par ses
+// chutes de neige cumulées. Quand le bulletin d'avalanche donne les hauteurs au
+// nord et au sud, le facteur de rayonnement est recalé pour que la différence
+// nord–sud modélisée corresponde.
 // ============================================================================
 
 import type { SnowEngineConfig } from './config';
@@ -30,11 +32,11 @@ const DAY_MS = 86_400_000;
 
 export interface MeltModel {
   source: 'history' | 'season';
-  /** Melt of a node relative to flat open ground at its altitude (reduced horizon grid). */
+  /** Fonte d'un nœud par rapport au terrain plat dégagé à son altitude (grille d'horizons réduite). */
   ratio: Float32Array;
   ratioWidth: number;
   ratioHeight: number;
-  /** Cumulative flat melt at altitude z, cm of snow. */
+  /** Fonte cumulée en terrain plat à l'altitude z, cm de neige. */
   flatMeltCm: (z: number) => number;
   radiationScale: number;
   braCalibrated: boolean;
@@ -42,7 +44,7 @@ export interface MeltModel {
 
 interface DayWeights {
   sampleDays: number[];
-  /** Per band, weight of each sample day (sums to 1 where the band melted). */
+  /** Par bande, poids de chaque jour échantillonné (somme à 1 là où la bande a fondu). */
   perBand: Float64Array[];
 }
 
@@ -79,7 +81,7 @@ function pickSampleDays(band: BandSnowModel): DayWeights | null {
   return { sampleDays: sampleIdx.map((d) => band.dayStartMs[d]), perBand };
 }
 
-/** Band position of an altitude: lower band index and blend weight. */
+/** Position de bande d'une altitude : indice de la bande inférieure et poids de mélange. */
 function bandPos(band: BandSnowModel, z: number): [number, number] {
   const zs = band.zM;
   const n = zs.length;
@@ -94,7 +96,7 @@ function bandPos(band: BandSnowModel, z: number): [number, number] {
 export interface MeltInput {
   horizons: HorizonField;
   geometry: SurfaceGeometry;
-  /** Altitude of each node of the reduced horizon grid. */
+  /** Altitude de chaque nœud de la grille d'horizons réduite. */
   altitude: Float32Array;
   frame: SceneFrame;
   band: BandSnowModel | null;
@@ -122,7 +124,7 @@ export function buildMeltModel(input: MeltInput): MeltModel {
     const paths = weights.sampleDays.map((d) => daySunPath(d, lat, lon, STEP_MIN));
     const fields = paths.map((p) => dailyRadiationField(horizons, geometry, p, STEP_MIN, tau));
     const nb = band.zM.length;
-    // Flat unshaded radiation per band and sample day, then weighted per band.
+    // Rayonnement en terrain plat sans ombre par bande et par jour échantillonné, puis pondéré par bande.
     const flatW = new Float64Array(nb);
     for (let b = 0; b < nb; b++) {
       for (let s = 0; s < k; s++) flatW[b] += weights.perBand[b][s] * dailyMeanDirect(paths[s], STEP_MIN, band.zM[b], tau, 0, 0);
@@ -143,7 +145,7 @@ export function buildMeltModel(input: MeltInput): MeltModel {
     const meltSwe = (z: number) => Math.min(bandValueAt(band, band.meltSweMm, z), bandValueAt(band, band.snowfallSweMm, z));
     const flatMeltCm = (z: number) => (meltSwe(z) * 100) / rho;
 
-    // Optional calibration of the radiation factor on the BRA north/south depths.
+    // Calibration optionnelle du facteur de rayonnement sur les hauteurs nord / sud du BRA.
     let scale = 1;
     let braCalibrated = false;
     if (input.bra) {
@@ -187,8 +189,9 @@ export function buildMeltModel(input: MeltInput): MeltModel {
     return { source: 'history', ratio, ratioWidth: horizons.width, ratioHeight: horizons.height, flatMeltCm, radiationScale: scale, braCalibrated };
   }
 
-  // No usable history: a seasonal guess. Share of the flat accumulation melted
-  // so far by month (northern hemisphere), radiation of the last 30 days.
+  // Pas d'historique utilisable : une estimation saisonnière. Part de
+  // l'accumulation en terrain plat fondue jusqu'ici selon le mois (hémisphère
+  // nord), rayonnement des 30 derniers jours.
   const date = new Date(input.analysisTimeMs);
   let month = date.getUTCMonth();
   if (lat < 0) month = (month + 6) % 12;

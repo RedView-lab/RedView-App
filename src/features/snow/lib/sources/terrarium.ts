@@ -1,10 +1,11 @@
 // ============================================================================
-// Snow sources — coarse DEM from the AWS Terrarium tiles (browser only)
+// Sources neige — DEM grossier à partir des tuiles AWS Terrarium (navigateur seulement)
 // ----------------------------------------------------------------------------
-// Two uses: the model orography of every AROME cell (mean ground height over
-// the cell, slightly widened like the model's smoothed orography) and the
-// far-field DEM around the LiDAR scene (horizons, outlying wind shelter,
-// drift inflow). Tiles are fetched and decoded by shared/lib/terrarium.ts.
+// Deux usages : l'orographie de modèle de chaque cellule AROME (hauteur
+// moyenne du sol sur la cellule, légèrement élargie comme l'orographie lissée
+// du modèle) et le DEM lointain autour de la scène LiDAR (horizons, abri éloigné
+// du vent, apport de neige soufflée). Les tuiles sont récupérées et décodées par
+// shared/lib/terrarium.ts.
 // ============================================================================
 
 import {
@@ -24,7 +25,7 @@ interface TileMosaic {
   y0: number;
   cols: number;
   rows: number;
-  /** Heights, (rows·256) × (cols·256), NaN where a tile failed. */
+  /** Hauteurs, (lignes·256) × (colonnes·256), NaN là où une tuile a échoué. */
   data: Float32Array;
 }
 
@@ -50,7 +51,7 @@ async function loadMosaic(lonMin: number, latMin: number, lonMax: number, latMax
   return { zoom, x0, y0, cols, rows, data };
 }
 
-/** Bilinear height at a WGS84 point, NaN outside the mosaic or on a missing tile. */
+/** Hauteur bilinéaire en un point WGS84, NaN hors de la mosaïque ou sur une tuile manquante. */
 function heightAt(m: TileMosaic, lon: number, lat: number): number {
   const px = (lonToX(lon, m.zoom) - m.x0) * TILE - 0.5;
   const py = (latToY(lat, m.zoom) - m.y0) * TILE - 0.5;
@@ -67,13 +68,13 @@ function heightAt(m: TileMosaic, lon: number, lat: number): number {
   return a + (b - a) * ty;
 }
 
-/** Mean ground height of every coarse cell (5 × 5 samples over 1.5 cell), NaN where unknown. */
+/** Hauteur moyenne du sol de chaque cellule grossière (5 × 5 échantillons sur 1,5 cellule), NaN si inconnue. */
 export async function coarseOrography(coarse: CoarseSnowGrid, signal?: AbortSignal): Promise<Float32Array> {
   const halfLon = coarse.dLon * 0.75;
   const halfLat = coarse.dLat * 0.75;
   const lonMax = coarse.lonMin + (coarse.width - 1) * coarse.dLon;
   const latMax = coarse.latMin + (coarse.height - 1) * coarse.dLat;
-  // ~200 m pixels for 0.01° cells, coarser for coarser grids.
+  // Pixels d'~200 m pour des cellules de 0,01°, plus grossiers pour des grilles plus grossières.
   const zoom = coarse.dLon >= 0.05 ? 8 : 9;
   const mosaic = await loadMosaic(coarse.lonMin - halfLon, coarse.latMin - halfLat, lonMax + halfLon, latMax + halfLat, zoom, signal);
   const out = new Float32Array(coarse.width * coarse.height);
@@ -95,7 +96,7 @@ export async function coarseOrography(coarse: CoarseSnowGrid, signal?: AbortSign
   return out;
 }
 
-/** Far-field DEM: `marginM` around the scene, `cellM` spacing, scene-local metres. */
+/** DEM lointain : `marginM` autour de la scène, pas `cellM`, mètres locaux de la scène. */
 export async function farFieldDem(frame: SceneFrame, sizeX: number, sizeY: number, marginM: number, cellM: number, signal?: AbortSignal): Promise<FarDem | null> {
   const width = Math.round((sizeX + 2 * marginM) / cellM) + 1;
   const height = Math.round((sizeY + 2 * marginM) / cellM) + 1;

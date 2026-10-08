@@ -1,10 +1,10 @@
 // ============================================================================
-// Snow sources — AROME snow depth (Météo-France WCS via /api/meteofrance)
+// Sources neige — hauteur de neige AROME (WCS Météo-France via /api/meteofrance)
 // ----------------------------------------------------------------------------
-// The analysis time step of the latest AROME 0.01° run, over a window of
-// ±0.4° × ±0.3° around the scene: enough cells (≈ 60 × 60) to learn the local
-// snow–elevation profile and to read the background at the stations.
-// The GRIB2 is decoded server-side (api/meteofrance.ts).
+// Le pas d'analyse du dernier run AROME 0,01°, sur une fenêtre de ±0,4° × ±0,3°
+// autour de la scène : assez de cellules (≈ 60 × 60) pour apprendre le profil
+// local neige–altitude et lire l'ébauche aux stations.
+// Le GRIB2 est décodé côté serveur (api/meteofrance.ts).
 // ============================================================================
 
 import type { CoarseSnowGrid, LonLat } from '../engine/types';

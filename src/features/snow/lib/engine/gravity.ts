@@ -1,23 +1,27 @@
 // ============================================================================
-// Snow engine v2 — gravitational transport (SnowSlide release + MTD runout)
+// Moteur neige v2 — transport gravitaire (déclenchement SnowSlide + arrêt MTD)
 // ----------------------------------------------------------------------------
-// Release, Bernhardt & Schulz (2010) as implemented in CHM and used by Quéno
-// et al. (2024): every cell steeper than 25° (snow surface) keeps at most its
-// holding depth h = mult·S^pow m vertically (see the config: 3.5 m at 30°,
-// 2.0 m at 40°, 1.3 m at 50°); a cell hit by sliding snow holds 30 % less
-// (momentum). Beyond 60° the holding depth tapers to Bernhardt & Schulz's
-// 5 cm SWE floor (~15 cm of snow) at 75°: snow does not stay on rock walls.
+// Déclenchement, d'après Bernhardt & Schulz (2010), tel qu'implémenté dans CHM
+// et utilisé par Quéno et al. (2024) : chaque cellule de plus de 25° (surface de
+// la neige) garde au plus sa hauteur de maintien h = mult·S^pow m verticalement
+// (voir la config : 3,5 m à 30°, 2,0 m à 40°, 1,3 m à 50°) ; une cellule frappée
+// par de la neige glissante en retient 30 % de moins (quantité de mouvement).
+// Au-delà de 60°, la hauteur de maintien décroît jusqu'au plancher de 5 cm d'eau
+// (SWE) de Bernhardt & Schulz (~15 cm de neige) à 75° : la neige ne tient pas
+// sur les parois rocheuses.
 //
-// Runout, after Gruber's (2007) mass-conserving transport and deposition: the
-// moving snow is carried from cell to cell (multiple flow directions, weights
-// ∝ snow-surface drop / distance) and each cell takes at most
-// Dmax·(1 − S/Slim) of it, so deposits build up along the runout instead of
-// piling into one cell. The moving snow stops where its energy line — drawn
-// from the release at the runout angle α, as in Flow-Py (D'Amboise et al.
-// 2022) and AutoATES (α = 30° for frequent avalanches, those that move most of
-// a season's snow) — falls below the snow surface. Cells are processed from
-// the highest snow surface down, so a release runs out in one sweep; slopes
-// and flow directions come from the snow surface at the start of the pass.
+// Arrêt, d'après le transport et le dépôt conservant la masse de Gruber (2007) :
+// la neige en mouvement passe de cellule en cellule (directions d'écoulement
+// multiples, poids ∝ dénivelé de la surface de neige / distance) et chaque
+// cellule en prend au plus Dmax·(1 − S/Slim) : les dépôts s'accumulent le long de
+// la zone d'arrêt au lieu de s'entasser dans une seule cellule. La neige en
+// mouvement s'arrête là où sa ligne d'énergie — tracée depuis le déclenchement
+// à l'angle d'arrêt α, comme dans Flow-Py (D'Amboise et al. 2022) et AutoATES
+// (α = 30° pour les avalanches fréquentes, celles qui déplacent l'essentiel de
+// la neige d'une saison) — passe sous la surface de la neige. Les cellules sont
+// traitées de la surface de neige la plus haute à la plus basse : un
+// déclenchement va jusqu'à son arrêt en un seul balayage ; pentes et directions
+// d'écoulement viennent de la surface de la neige au début de la passe.
 // ============================================================================
 
 import type { SnowEngineConfig } from './config';
@@ -32,7 +36,7 @@ export function holdingDepthCm(slopeDeg: number, config: SnowEngineConfig): numb
   return Math.max(0.05, h60 * Math.exp(-(s - 60) / tau)) * 100;
 }
 
-/** Share of the moving snow a cell of that slope can take, cm (Gruber 2007). */
+/** Part de la neige en mouvement qu'une cellule de cette pente peut prendre, cm (Gruber 2007). */
 function depositCapacityCm(slopeDeg: number, config: SnowEngineConfig): number {
   return slopeDeg >= config.depositLimitDeg ? 0 : config.depositMaxCm * (1 - slopeDeg / config.depositLimitDeg);
 }
@@ -41,11 +45,12 @@ const NX = [1, 1, 0, -1, -1, -1, 0, 1];
 const NY = [0, 1, 1, 1, 0, -1, -1, -1];
 
 /**
- * `order` (cell indices) sorted by decreasing `keys`, ties in increasing
- * index: exactly the permutation of a stable `order.sort((a, b) => keys[b] -
- * keys[a])` on the identity (for doubles, a − b = 0 only when a = b), from a
- * stable LSD radix sort of the IEEE-754 bits — 4-6× faster than the
- * comparator sort, which cost ~85 ms per pass on a 640² grid.
+ * `order` (indices de cellules) trié par `keys` décroissantes, les égalités par
+ * indice croissant : exactement la permutation d'un
+ * `order.sort((a, b) => keys[b] - keys[a])` stable sur l'identité (pour des
+ * doubles, a − b = 0 seulement si a = b), obtenue par un tri par base LSD stable
+ * des bits IEEE-754 — 4 à 6× plus rapide que le tri par comparateur, qui coûtait
+ * ~85 ms par passe sur une grille de 640².
  */
 function sortByDecreasingKey(keys: Float64Array, order: Int32Array, scratch: RadixScratch): void {
   const n = keys.length;
@@ -54,10 +59,10 @@ function sortByDecreasingKey(keys: Float64Array, order: Int32Array, scratch: Rad
   const u32 = new Uint32Array(f64.buffer);
   const hiWord = new Uint8Array(new Uint16Array([1]).buffer)[0] === 1 ? 1 : 0;
   for (let i = 0; i < n; i++) {
-    f64[0] = keys[i] + 0; // −0 → +0: the comparator ties them
+    f64[0] = keys[i] + 0; // −0 → +0 : le comparateur les met à égalité
     let h = u32[hiWord];
     let l = u32[1 - hiWord];
-    // Order-preserving unsigned key, then complemented for a decreasing order.
+    // Clé non signée qui préserve l'ordre, puis complémentée pour un ordre décroissant.
     if (h & 0x80000000) { h = ~h >>> 0; l = ~l >>> 0; } else h = (h | 0x80000000) >>> 0;
     hi[i] = ~h >>> 0;
     lo[i] = ~l >>> 0;
@@ -75,7 +80,7 @@ function sortByDecreasingKey(keys: Float64Array, order: Int32Array, scratch: Rad
     for (let i = 0; i < n; i++) { const j = src[i]; dst[count[(digits[j] >>> shift) & 0xffff]++] = j; }
     const t = src; src = dst; dst = t;
   }
-  // Four passes: the result is back in `order`.
+  // Quatre passes : le résultat est de retour dans `order`.
 }
 
 interface RadixScratch { hi: Uint32Array; lo: Uint32Array; tmp: Int32Array; count: Uint32Array }
@@ -85,14 +90,14 @@ function radixScratch(n: number): RadixScratch {
 }
 
 /**
- * Debris cones: the snow deposited during the pass (`gain`) slumps until no
- * deposit stands steeper than the angle of repose above a neighbour (sandpile
- * relaxation, mass-conserving). Only the fresh deposit moves, never the
- * standing snowpack.
+ * Cônes de débris : la neige déposée pendant la passe (`gain`) s'affaisse
+ * jusqu'à ce qu'aucun dépôt ne soit plus raide que l'angle de repos au-dessus
+ * d'une voisine (relaxation de tas de sable, conservant la masse). Seul le dépôt
+ * frais bouge, jamais le manteau en place.
  */
 function relaxDeposits(hs: Float32Array, gain: Float32Array, z: Float32Array, w: number, h: number, dist: number[], tanRepose: number): void {
   const n = w * h;
-  // LIFO work list: a cell is in it at most once (`queued`), so n slots suffice.
+  // Liste de travail LIFO : une cellule y figure au plus une fois (`queued`), n emplacements suffisent.
   const queue = new Int32Array(n);
   let top = 0;
   const queued = new Uint8Array(n);
@@ -118,7 +123,7 @@ function relaxDeposits(hs: Float32Array, gain: Float32Array, z: Float32Array, w:
       if (e > 0.01) { excess[k] = e; total += e; }
     }
     if (total <= 0) continue;
-    // Move half of the largest excess (cm), at most the fresh deposit.
+    // Déplace la moitié du plus grand excédent (cm), au plus le dépôt frais.
     let maxE = 0;
     for (let k = 0; k < 8; k++) maxE = Math.max(maxE, excess[k]);
     const amount = Math.min(gain[i], 50 * maxE);
@@ -138,9 +143,9 @@ function relaxDeposits(hs: Float32Array, gain: Float32Array, z: Float32Array, w:
 }
 
 /**
- * Runs the gravitational transport in place on `hs` (vertical depth, cm).
- * Returns the share of the snow mass that changed place, and the share that
- * reached the grid edge (given back to the runout zones).
+ * Exécute sur place le transport gravitaire sur `hs` (hauteur verticale, cm).
+ * Renvoie la part de la masse de neige qui a changé de place, et la part qui a
+ * atteint le bord de la grille (rendue aux zones d'arrêt).
  */
 export function snowSlide(hs: Float32Array, grid: WorkGrid, config: SnowEngineConfig, passes = config.gravityPasses): { moved: number; lost: number } {
   const { width: w, height: h, z, dx, dy } = grid;
@@ -153,7 +158,7 @@ export function snowSlide(hs: Float32Array, grid: WorkGrid, config: SnowEngineCo
   const slopeOf = new Float32Array(n);
   const order = new Int32Array(n);
   const flux = new Float32Array(n);
-  /** Mass-weighted energy-line altitude of the snow moving into each cell, m. */
+  /** Altitude de la ligne d'énergie, pondérée par la masse, de la neige qui entre dans chaque cellule, m. */
   const energy = new Float64Array(n);
   const tanAlpha = Math.tan((config.runoutAlphaDeg * Math.PI) / 180);
   const holdTable = new Float32Array(901);
@@ -171,11 +176,12 @@ export function snowSlide(hs: Float32Array, grid: WorkGrid, config: SnowEngineCo
 
   for (let pass = 0; pass < passes; pass++) {
     for (let i = 0; i < n; i++) surf[i] = z[i] + hs[i] / 100;
-    // Slopes and flow directions come from the snow surface at the start of
-    // the pass: read on the fly, the not-yet-processed cells below (loaded with
-    // what they already received) would flatten the slope or even rise above
-    // the cell and stop the release. The holding slope is read at the scale
-    // the curves were calibrated at (`gravitySlopeScaleM`).
+    // Pentes et directions d'écoulement viennent de la surface de la neige au
+    // début de la passe : lues au fil de l'eau, les cellules pas encore traitées
+    // en dessous (chargées de ce qu'elles ont déjà reçu) aplatiraient la pente,
+    // voire passeraient au-dessus de la cellule et arrêteraient le déclenchement.
+    // La pente de maintien est lue à l'échelle où les courbes ont été calibrées
+    // (`gravitySlopeScaleM`).
     const radius = Math.floor(config.gravitySlopeScaleM / (dx + dy));
     const surfSlope = radius >= 1 ? boxMean(new Float32Array(surf), w, h, radius) : surf;
     const step = Math.max(1, radius);
@@ -199,8 +205,8 @@ export function snowSlide(hs: Float32Array, grid: WorkGrid, config: SnowEngineCo
       let moving = flux[i];
       flux[i] = 0;
       let energyAlt = energy[i];
-      // Incoming snow whose energy line has fallen below the surface stops
-      // here (added after the release below: it does not release again).
+      // La neige entrante dont la ligne d'énergie est passée sous la surface
+      // s'arrête ici (ajoutée après le déclenchement ci-dessous : elle ne repart pas).
       let stopped = 0;
       if (moving > 0 && energyAlt <= surf[i]) {
         stopped = moving;
@@ -208,8 +214,9 @@ export function snowSlide(hs: Float32Array, grid: WorkGrid, config: SnowEngineCo
       }
       let hold = holdTable[tableIdx];
       if (Number.isFinite(hold)) {
-        // Hit by sliding snow, a cell holds less (momentum): up to −30 % when
-        // the incoming snow is as deep as what it holds.
+        // Frappée par de la neige glissante, une cellule retient moins (quantité de
+        // mouvement) : jusqu'à −30 % quand la neige entrante est aussi épaisse que
+        // ce qu'elle retient.
         if (moving > 0) hold *= 1 - (1 - config.holdingReceiveFactor) * Math.min(1, moving / hold);
         if (hs[i] > hold) {
           const rel = hs[i] - hold;
@@ -240,7 +247,7 @@ export function snowSlide(hs: Float32Array, grid: WorkGrid, config: SnowEngineCo
         const ny = y + NY[k];
         weights[k] = 0;
         if (nx < 0 || ny < 0 || nx >= w || ny >= h) {
-          // Off the grid: extrapolate the surface from the opposite neighbour.
+          // Hors de la grille : on extrapole la surface depuis la voisine opposée.
           const ox = x - NX[k];
           const oy = y - NY[k];
           if (ox < 0 || oy < 0 || ox >= w || oy >= h) continue;
@@ -252,8 +259,8 @@ export function snowSlide(hs: Float32Array, grid: WorkGrid, config: SnowEngineCo
         if (drop > 0) { weights[k] = drop / dist[k]; wsum += weights[k]; }
       }
       if (wsum + outW <= 0) {
-        // Level ground: spread over the neighbours at the same level; a true
-        // pit keeps it.
+        // Sol à niveau : on répartit sur les voisines au même niveau ; une vraie
+        // cuvette la garde.
         for (let k = 0; k < 8; k++) {
           const nx = x + NX[k];
           const ny = y + NY[k];
@@ -277,14 +284,15 @@ export function snowSlide(hs: Float32Array, grid: WorkGrid, config: SnowEngineCo
       }
       lost += moving * outW * norm;
     }
-    // Snow handed to a cell already processed (same level) settles there.
+    // La neige confiée à une cellule déjà traitée (même niveau) s'y dépose.
     for (let i = 0; i < n; i++) if (flux[i] > 0) { hs[i] += flux[i]; gain[i] += flux[i]; }
     relaxDeposits(hs, gain, z, w, h, dist, tanRepose);
     if (released < 1e-4 * total) break;
   }
-  // What left the tile is matched by what slides in from the slopes above it,
-  // outside the tile: the outflow is given back to the runout zones (cells
-  // that gained snow), so the tile keeps the mass of its coarse cells.
+  // Ce qui a quitté la tuile est compensé par ce qui glisse depuis les pentes
+  // situées au-dessus d'elle, hors de la tuile : le flux sortant est rendu aux
+  // zones d'arrêt (cellules qui ont gagné de la neige), pour que la tuile garde
+  // la masse de ses cellules grossières.
   if (lost > 0) {
     let gained = 0;
     for (let i = 0; i < n; i++) gained += Math.max(0, hs[i] - before[i]);

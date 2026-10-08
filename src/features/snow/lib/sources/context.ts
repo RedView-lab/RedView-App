@@ -1,6 +1,6 @@
 // ============================================================================
-// Snow sources — measurements, avalanche bulletin and weather history
-// (/api/snow-context, see api/snow-context.ts)
+// Sources neige — mesures, bulletin d'avalanche et historique météo
+// (/api/snow-context, voir api/snow-context.ts)
 // ============================================================================
 
 import type { BraSnowProfile, LonLat, SnowObservation, WeatherHistory } from '../engine/types';

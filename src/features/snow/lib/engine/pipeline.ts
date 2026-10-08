@@ -1,19 +1,20 @@
 // ============================================================================
-// Snow engine v2 — orchestration
+// Moteur neige v2 — orchestration
 // ----------------------------------------------------------------------------
-//  A. Terrain analysis of the scene DTM (work grid).
-//  B. Flat open-terrain depth: elevation profile learnt from the coarse cells
-//     against their model orography, read at every pixel's altitude, plus the
-//     smooth residual of the cells.
-//  C. Measurements: elevation-dependent bias + optimal interpolation of the
-//     flat-field stations (and the avalanche bulletin's levels).
-//  D. Accumulation = flat depth + what has melted on the flat so far, reduced
-//     under the canopy, redistributed by the wind (drift flux divergence) and
-//     by gravity (SnowSlide).
-//  E. Melt by exposure (shaded potential radiation × degree-days).
-//  F. The wind amplitude, the least constrained quantity, is set between its
-//     physical estimate ×0.4 and ×2.5 so the scene's σ(HS) matches Helbig et
-//     al. (2015); then light smoothing and in-scene point measurements.
+//  A. Analyse du terrain du MNT de la scène (grille de travail).
+//  B. Hauteur en terrain plat dégagé : profil d'altitude appris sur les cellules
+//     grossières face à leur orographie de modèle, lu à l'altitude de chaque
+//     pixel, plus le résidu lisse des cellules.
+//  C. Mesures : biais dépendant de l'altitude + interpolation optimale des
+//     stations de terrain plat (et des niveaux du bulletin d'avalanche).
+//  D. Accumulation = hauteur en terrain plat + ce qui a fondu sur le plat
+//     jusqu'ici, réduite sous la canopée, redistribuée par le vent (divergence
+//     du flux de transport) et par la gravité (SnowSlide).
+//  E. Fonte selon l'exposition (rayonnement potentiel ombré × degrés-jours).
+//  F. L'amplitude du vent, la grandeur la moins contrainte, est fixée entre ×0,4
+//     et ×2,5 de son estimation physique pour que le σ(HS) de la scène
+//     corresponde à Helbig et al. (2015) ; puis léger lissage et mesures
+//     ponctuelles de la scène.
 // ============================================================================
 
 import { analyseLargeScale, assimilatePoints, oiIncrementAt, type PointSample, type StationSample } from './assimilation';
@@ -41,7 +42,7 @@ function smoothstep(e0: number, e1: number, x: number): number {
   return t * t * (3 - 2 * t);
 }
 
-/** Mean scene altitude of the nodes falling in each coarse cell (NaN where none). */
+/** Altitude moyenne de la scène des nœuds qui tombent dans chaque cellule grossière (NaN s'il n'y en a pas). */
 function orographyFromScene(coarse: CoarseSnowGrid, z: Float32Array, lon: Float64Array, lat: Float64Array): Float32Array {
   const nCells = coarse.width * coarse.height;
   const sum = new Float64Array(nCells);
@@ -111,7 +112,7 @@ export function computeSnowDistribution(input: SnowEngineInput, progress?: Engin
     || (input.bra?.levels.some((l) => l.northCm > 0 || l.southCm > 0) ?? false);
   if (!anySnow) return emptyResult(w, h, grid.ps, coarse, timings);
 
-  // ---- B. Elevation profile and flat field -------------------------------
+  // ---- B. Profil d'altitude et champ en terrain plat -----------------------
   report(8, 'Profil altitudinal');
   let orography = coarse.orographyM;
   let orographySource: 'model' | 'scene-dtm' = 'model';
@@ -133,7 +134,7 @@ export function computeSnowDistribution(input: SnowEngineInput, progress?: Engin
   const eps = config.residualEpsilonCm;
   const flatBackground = (lo: number, la: number, z: number) => flatDepth(profile, z, interp.at(lo, la), eps);
 
-  // Residual of the coarse cells on a lattice of every 8th node, then bilinear.
+  // Résidu des cellules grossières sur un treillis d'un nœud sur 8, puis bilinéaire.
   const step = 8;
   const lw = Math.ceil((w - 1) / step) + 1;
   const lh = Math.ceil((h - 1) / step) + 1;
@@ -195,7 +196,7 @@ export function computeSnowDistribution(input: SnowEngineInput, progress?: Engin
   }
   mark('assimilation');
 
-  // ---- Weather history ----------------------------------------------------
+  // ---- Historique météo ---------------------------------------------------
   report(20, 'Historique météo');
   const rho = bulkDensity(input.analysisTimeMs, frame.center.lat);
   let flatMeanCm = 0;
@@ -216,11 +217,11 @@ export function computeSnowDistribution(input: SnowEngineInput, progress?: Engin
     windSource = 'default';
     rose = defaultWindRose(config.defaultWindFromDeg);
   }
-  // A calm history (no transport hour): only the drifts of earlier storms.
+  // Un historique calme (aucune heure de transport) : seulement les congères des tempêtes précédentes.
   const calmHistory = input.weather != null && windSource === 'default';
   mark('weather');
 
-  // ---- E (prep). Horizons and melt model ---------------------------------
+  // ---- E (préparation). Horizons et modèle de fonte ------------------------
   report(26, 'Horizons et rayonnement');
   const reduce = w > 900 ? 3 : w > 400 ? 2 : 1;
   const azimuths = Array.from({ length: 24 }, (_, k) => k * 15);
@@ -266,7 +267,7 @@ export function computeSnowDistribution(input: SnowEngineInput, progress?: Engin
   const windPattern = computeWindPattern(grid, input.farDem, frame, rose, config);
   mark('wind');
 
-  // ---- Accumulation, melt per node, evaluation -----------------------------
+  // ---- Accumulation, fonte par nœud, évaluation ----------------------------
   const acc0 = new Float32Array(n);
   const meltNode = new Float32Array(n);
   const meltCache = new Map<number, number>();
@@ -313,9 +314,9 @@ export function computeSnowDistribution(input: SnowEngineInput, progress?: Engin
   let accMean = 0;
   for (let i = 0; i < n; i++) accMean += acc0[i];
   accMean /= n;
-  // Physical flat flux: from the transport potential of the history (an
-  // absolute amount: the same storm moves a larger share of a thin pack),
-  // capped by the snow available.
+  // Flux physique en terrain plat : d'après le potentiel de transport de
+  // l'historique (une quantité absolue : la même tempête déplace une plus
+  // grande part d'un manteau mince), plafonné par la neige disponible.
   let q0Phys = 0;
   if (windPattern.meanAbs > 1e-9) {
     const cap = (config.maxWindRedistribution * 2 * accMean) / windPattern.meanAbs;
@@ -323,11 +324,12 @@ export function computeSnowDistribution(input: SnowEngineInput, progress?: Engin
     else q0Phys = (config.defaultWindRedistribution * (calmHistory ? 0.3 : 1) * 2 * accMean) / windPattern.meanAbs;
   }
 
-  // ---- F. Helbig's σ as a ceiling on the wind amplitude ----------------------
-  // The drift pattern is the least certain part of the model: inflating it to
-  // reach a target variance would add misplaced drifts (double penalty), so the
-  // physical amplitude is only lowered, when the scene comes out more variable
-  // than Helbig et al. (2015) allow for its terrain and mean depth.
+  // ---- F. Le σ de Helbig comme plafond de l'amplitude du vent ---------------
+  // Le motif de transport est la partie la moins sûre du modèle : le gonfler
+  // pour atteindre une variance cible ajouterait des congères mal placées
+  // (double peine), donc l'amplitude physique n'est qu'abaissée, quand la scène
+  // sort plus variable que ce qu'Helbig et al. (2015) permettent pour son
+  // terrain et sa hauteur moyenne.
   report(60, 'Calibration de la variabilité');
   const helbig = helbigTerrain(grid, terrain);
   const first = stdOf(evaluate(q0Phys, 2));
@@ -348,7 +350,7 @@ export function computeSnowDistribution(input: SnowEngineInput, progress?: Engin
   const raw = evaluate(q0, config.gravityPasses);
   mark('redistribution');
 
-  // ---- Final smoothing, point measurements, cap ------------------------------
+  // ---- Lissage final, mesures ponctuelles, plafond ---------------------------
   const hs = config.finalSmoothSigmaPx > 0.3 ? gaussianSmooth(raw, w, h, config.finalSmoothSigmaPx) : raw;
   const points: PointSample[] = [];
   for (const o of input.observations) {

@@ -1,10 +1,10 @@
 // ============================================================================
-// Snow engine v2 — potential clear-sky direct radiation (Hock 1999)
+// Moteur neige v2 — rayonnement direct potentiel par ciel clair (Hock 1999)
 // ----------------------------------------------------------------------------
-// I = S0·E0·τ^(m·p/p0)·cos θi, θi the incidence angle on the slope, zero when
-// the sun is under the local horizon. Horizons are traced once per azimuth
-// sector on the scene DTM, then on the far-field DEM (the mountains around a
-// 1 km LiDAR tile shade it far more than its own relief).
+// I = S0·E0·τ^(m·p/p0)·cos θi, θi l'angle d'incidence sur la pente, nul quand le
+// soleil est sous l'horizon local. Les horizons sont tracés une fois par secteur
+// d'azimut sur le MNT de la scène, puis sur le DEM lointain (les montagnes
+// autour d'une tuile LiDAR de 1 km l'ombragent bien plus que son propre relief).
 // ============================================================================
 
 import { sampleBilinear, resampleNodeGrid, type WorkGrid } from './grid';
@@ -14,18 +14,18 @@ const RAD = Math.PI / 180;
 const DEG = 180 / Math.PI;
 const SOLAR_CONSTANT = 1367;
 const EARTH_RADIUS_M = 6_371_000;
-/** Light bends over the horizon: effective Earth curvature reduced by ~13 %. */
+/** La lumière se courbe au-dessus de l'horizon : courbure effective de la Terre réduite d'environ 13 %. */
 const REFRACTION_K = 0.13;
 
 export interface SunPosition {
-  /** Deg true, clockwise from north. */
+  /** Degrés vrais, dans le sens horaire depuis le nord. */
   azimuthDeg: number;
   elevationDeg: number;
-  /** Earth–Sun distance factor (Rm/R)². */
+  /** Facteur de distance Terre–Soleil (Rm/R)². */
   eccentricity: number;
 }
 
-/** NOAA low-precision solar position (error < 0.1° over 1950–2050). */
+/** Position du soleil basse précision de la NOAA (erreur < 0,1° sur 1950–2050). */
 export function sunPosition(timeMs: number, latDeg: number, lonDeg: number): SunPosition {
   const jd = timeMs / 86_400_000 + 2_440_587.5;
   const n = jd - 2_451_545.0;
@@ -46,24 +46,24 @@ export function sunPosition(timeMs: number, latDeg: number, lonDeg: number): Sun
   return { azimuthDeg: ((az * DEG) % 360 + 360) % 360, elevationDeg: el * DEG, eccentricity: 1 / (r * r) };
 }
 
-/** Beam irradiance normal to the rays at altitude z, W m⁻² (0 below the horizon). */
+/** Éclairement du faisceau normal aux rayons à l'altitude z, W m⁻² (0 sous l'horizon). */
 export function beamNormal(sun: SunPosition, altitudeM: number, transmissivity: number): number {
   if (sun.elevationDeg <= 0.5) return 0;
   const sinEl = Math.sin(sun.elevationDeg * RAD);
-  // Kasten–Young air mass, pressure-corrected (Hock 1999: p/p0 = exp(−z/8434.5)).
+  // Masse d'air de Kasten–Young, corrigée de la pression (Hock 1999 : p/p0 = exp(−z/8434,5)).
   const airMass = 1 / (sinEl + 0.50572 * Math.pow(sun.elevationDeg + 6.07995, -1.6364));
   const pressure = Math.exp(-Math.max(0, altitudeM) / 8434.5);
   return SOLAR_CONSTANT * sun.eccentricity * Math.pow(transmissivity, airMass * pressure);
 }
 
-/** cos of the incidence angle on a slope (deg) of a given aspect (deg true). */
+/** cos de l'angle d'incidence sur une pente (degrés) d'une orientation donnée (degrés vrais). */
 function incidenceCos(sun: SunPosition, slopeDeg: number, aspectTrueDeg: number): number {
   const el = sun.elevationDeg * RAD;
   const s = slopeDeg * RAD;
   return Math.max(0, Math.cos(s) * Math.sin(el) + Math.sin(s) * Math.cos(el) * Math.cos((sun.azimuthDeg - aspectTrueDeg) * RAD));
 }
 
-/** Sun positions every `stepMin` minutes of a UTC day (sun above the horizon only). */
+/** Positions du soleil toutes les `stepMin` minutes d'une journée UTC (soleil au-dessus de l'horizon seulement). */
 export function daySunPath(dayStartMs: number, latDeg: number, lonDeg: number, stepMin: number): SunPosition[] {
   const out: SunPosition[] = [];
   for (let m = stepMin / 2; m < 1440; m += stepMin) {
@@ -73,7 +73,7 @@ export function daySunPath(dayStartMs: number, latDeg: number, lonDeg: number, s
   return out;
 }
 
-/** Daily mean direct radiation on an unshaded surface, W m⁻². */
+/** Rayonnement direct moyen journalier sur une surface sans ombre, W m⁻². */
 export function dailyMeanDirect(
   path: SunPosition[], stepMin: number, altitudeM: number, transmissivity: number, slopeDeg: number, aspectTrueDeg: number,
 ): number {
@@ -82,14 +82,14 @@ export function dailyMeanDirect(
   return (sum * stepMin) / 1440;
 }
 
-/** Horizon elevation (tan) per azimuth sector on a (possibly reduced) copy of the work grid. */
+/** Élévation de l'horizon (tan) par secteur d'azimut sur une copie (éventuellement réduite) de la grille de travail. */
 export interface HorizonField {
   width: number;
   height: number;
-  /** Sector centres, deg true. */
+  /** Centres des secteurs, degrés vrais. */
   azimuthsDeg: number[];
   sectorDeg: number;
-  /** One tan(horizon elevation) grid per sector. */
+  /** Une grille de tan(élévation de l'horizon) par secteur. */
   tan: Float32Array[];
 }
 
@@ -116,7 +116,7 @@ export function computeHorizons(
   }
   const curvature = (1 - REFRACTION_K) / (2 * EARTH_RADIUS_M);
   const ray = Float64Array.from(distances);
-  // Earth curvature + refraction drop at each distance.
+  // Abaissement dû à la courbure de la Terre et à la réfraction à chaque distance.
   const drops = Float64Array.from(distances, (dist) => dist * dist * curvature);
   const tan: Float32Array[] = [];
   for (const azTrue of azimuthsDeg) {
@@ -135,17 +135,17 @@ export function computeHorizons(
 }
 
 /**
- * Daily mean clear-sky direct radiation of every node (W m⁻²), on the
- * reduced horizon grid, shaded by the horizons.
+ * Rayonnement direct moyen journalier par ciel clair de chaque nœud (W m⁻²),
+ * sur la grille d'horizons réduite, ombré par les horizons.
  */
-/** Per-node geometry reused by every sun position of every day. */
+/** Géométrie par nœud réutilisée pour chaque position du soleil de chaque jour. */
 export interface SurfaceGeometry {
   n: number;
   cosS: Float32Array;
   sinS: Float32Array;
   cosA: Float32Array;
   sinA: Float32Array;
-  /** Altitude bin (50 m) of the beam look-up table. */
+  /** Classe d'altitude (50 m) de la table de correspondance du faisceau. */
   altBin: Uint16Array;
   altMin: number;
   altBins: number;
@@ -212,7 +212,7 @@ export function dailyRadiationField(
   return out;
 }
 
-/** Upsample a reduced-grid field to the work grid (same extent, node grids). */
+/** Suréchantillonne un champ de la grille réduite vers la grille de travail (même emprise, grilles de nœuds). */
 export function upsampleToWork(field: Float32Array, fw: number, fh: number, w: number, h: number): Float32Array {
   if (fw === w && fh === h) return field;
   const out = new Float32Array(w * h);

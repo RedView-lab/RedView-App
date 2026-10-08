@@ -1,21 +1,23 @@
 // ============================================================================
-// Snow engine v2 — elevation downscaling of the coarse field
+// Moteur neige v2 — descente en échelle du champ grossier selon l'altitude
 // ----------------------------------------------------------------------------
-// AROME gives the snow of a flat 1.3 km cell at the height of its smoothed
-// orography. Inside a LiDAR tile the real ground spans hundreds of metres
-// around that height, and the elevation is the first-order control of snow
-// depth at that scale (Grünewald et al. 2013, 2014: +6 to +25 cm per 100 m).
+// AROME donne la neige d'une cellule plate de 1,3 km à la hauteur de son
+// orographie lissée. Dans une tuile LiDAR, le vrai sol s'étend sur des centaines
+// de mètres autour de cette hauteur, et l'altitude est le facteur de premier
+// ordre de la hauteur de neige à cette échelle (Grünewald et al. 2013, 2014 :
+// +6 à +25 cm par 100 m).
 //
-// 1. The local snow–elevation profile P(z) is learnt from the coarse cells
-//    themselves (robust local linear regression in altitude, cells weighted by
-//    their distance to the scene), made non-decreasing, and extrapolated above
-//    and below the cells with the edge gradient, capped.
-// 2. What a cell holds beyond its profile (precipitation and snow-line
-//    anomalies) is carried by a smooth residual field, as a ratio high on the
-//    profile and as an altitude shift near the snow line, where a ratio would
-//    blow up.
-// 3. The flat-terrain depth of a pixel is the profile read at the pixel's own
-//    altitude, modulated by the residual.
+// 1. Le profil local neige–altitude P(z) est appris sur les cellules grossières
+//    elles-mêmes (régression linéaire locale robuste en altitude, cellules
+//    pondérées par leur distance à la scène), rendu non décroissant, puis
+//    extrapolé au-dessus et en dessous des cellules avec le gradient de bord,
+//    plafonné.
+// 2. Ce qu'une cellule porte au-delà de son profil (anomalies de précipitations
+//    et de limite de la neige) est porté par un champ résiduel lisse, sous forme
+//    de rapport haut sur le profil et de décalage en altitude près de la limite
+//    de la neige, là où un rapport exploserait.
+// 3. La hauteur en terrain plat d'un pixel est le profil lu à l'altitude propre
+//    du pixel, modulé par le résidu.
 // ============================================================================
 
 import type { SnowEngineConfig } from './config';
@@ -28,7 +30,7 @@ const LUT_STEP_M = 10;
 export interface ElevationProfile {
   zMin: number;
   step: number;
-  /** HS (cm) at zMin + k·step. */
+  /** HS (cm) à zMin + k·step. */
   values: Float32Array;
   cellsUsed: number;
   orography: 'model' | 'scene-dtm';
@@ -43,7 +45,7 @@ export function profileAt(p: ElevationProfile, z: number): number {
   return p.values[k] + (p.values[k + 1] - p.values[k]) * (f - k);
 }
 
-/** Lowest altitude where the profile reaches `hs` (cm); the profile is non-decreasing. */
+/** Altitude la plus basse où le profil atteint `hs` (cm) ; le profil est non décroissant. */
 function profileInverse(p: ElevationProfile, hs: number): number {
   const v = p.values;
   if (hs <= v[0]) return p.zMin;
@@ -72,7 +74,7 @@ interface ProfileCell {
   w: number;
 }
 
-/** Pool-adjacent-violators: weighted least-squares non-decreasing fit. */
+/** Pool-adjacent-violators : ajustement non décroissant aux moindres carrés pondérés. */
 function isotonic(values: Float64Array, weights: Float64Array): Float64Array {
   const n = values.length;
   const level = new Float64Array(n);
@@ -109,9 +111,9 @@ function weightedQuantile(cells: ProfileCell[], q: number): number {
   return sorted[sorted.length - 1].z;
 }
 
-/** Local linear fit of HS against altitude around z0 (tricube kernel, robustness weights). */
+/** Ajustement linéaire local de HS selon l'altitude autour de z0 (noyau tricube, poids de robustesse). */
 function localLinear(cells: ProfileCell[], robust: Float64Array, z0: number, minHalfWidth: number, totalW: number): { value: number; mass: number } {
-  // Adaptive half-width: wide enough to hold 30 % of the weight.
+  // Demi-largeur adaptative : assez large pour contenir 30 % du poids.
   const byDist = cells.map((c, i) => ({ d: Math.abs(c.z - z0), w: c.w * robust[i] })).sort((a, b) => a.d - b.d);
   let acc = 0;
   let halfWidth = minHalfWidth;
@@ -135,8 +137,9 @@ function localLinear(cells: ProfileCell[], robust: Float64Array, z0: number, min
 }
 
 /**
- * Fit P(z) over [zLo, zHi] (scene altitudes with margin). Cells need an
- * orography; `fallbackHs` is used when too few cells qualify.
+ * Ajuste P(z) sur [zLo, zHi] (altitudes de la scène avec marge). Les cellules
+ * ont besoin d'une orographie ; `fallbackHs` sert quand trop peu de cellules
+ * conviennent.
  */
 export function fitElevationProfile(
   coarse: CoarseSnowGrid,
@@ -170,8 +173,9 @@ export function fitElevationProfile(
   const values = new Float32Array(nLut);
 
   if (cells.length < 6) {
-    // Too few cells: their weighted mean with a default gradient of 5 % of the
-    // mean depth per 100 m (Grünewald 2013 pooled model: 7.9 cm/100 m at ~1.5 m).
+    // Trop peu de cellules : leur moyenne pondérée avec un gradient par défaut de
+    // 5 % de la hauteur moyenne par 100 m (modèle groupé de Grünewald 2013 :
+    // 7,9 cm/100 m à ~1,5 m).
     const tw = cells.reduce((s, c) => s + c.w, 0);
     const meanHs = tw > 0 ? cells.reduce((s, c) => s + c.w * c.hs, 0) / tw : 0;
     const meanZ = tw > 0 ? cells.reduce((s, c) => s + c.w * c.z, 0) / tw : (zLo + zHi) / 2;
@@ -184,7 +188,7 @@ export function fitElevationProfile(
   const supLo = weightedQuantile(cells, 0.02);
   const supHi = weightedQuantile(cells, 0.98);
 
-  // Support grid every 25 m, robust LOESS (two bisquare reweightings).
+  // Grille d'appui tous les 25 m, LOESS robuste (deux repondérations bicarrées).
   const nodes: number[] = [];
   for (let z = supLo; z <= supHi + 1e-6; z += 25) nodes.push(z);
   if (nodes.length < 2) nodes.push(supLo + 25);
@@ -216,7 +220,7 @@ export function fitElevationProfile(
   }
   fit = isotonic(fit, mass);
 
-  // Edge gradients over the outer 300 m of the support, capped and ≥ 0.
+  // Gradients de bord sur les 300 m extérieurs de l'appui, plafonnés et ≥ 0.
   const capG = config.maxGradientCmPer100m / 100;
   const span = Math.min(300, (supHi - supLo) / 2);
   const gTop = Math.max(0, Math.min(capG, span > 0 ? (evalAt(supHi) - evalAt(supHi - span)) / span : 0));
@@ -233,9 +237,9 @@ export function fitElevationProfile(
 }
 
 /**
- * Residual of every coarse cell against the profile: log-ratio, altitude shift
- * and the blend weight between the two (ratio high on the profile, shift near
- * the snow line).
+ * Résidu de chaque cellule grossière par rapport au profil : log-rapport,
+ * décalage en altitude et poids de mélange entre les deux (rapport haut sur le
+ * profil, décalage près de la limite de la neige).
  */
 export interface ResidualField {
   lnRatio: Float32Array;
@@ -277,7 +281,7 @@ export function computeResiduals(
   return { lnRatio, shiftM, ratioWeight };
 }
 
-/** Gaussian-kernel interpolation of the cell residuals at a WGS84 point. */
+/** Interpolation à noyau gaussien des résidus des cellules en un point WGS84. */
 export class ResidualInterpolator {
   private readonly coarse: CoarseSnowGrid;
   private readonly residuals: ResidualField;
@@ -319,7 +323,7 @@ export class ResidualInterpolator {
   }
 }
 
-/** Flat open-terrain snow depth at altitude z given the local residual. */
+/** Hauteur de neige en terrain plat dégagé à l'altitude z, compte tenu du résidu local. */
 export function flatDepth(profile: ElevationProfile, z: number, r: { lnRatio: number; shiftM: number; ratioWeight: number }, epsCm: number): number {
   const byRatio = (profileAt(profile, z) + epsCm) * Math.exp(r.lnRatio) - epsCm;
   const byShift = profileAt(profile, z + r.shiftM);

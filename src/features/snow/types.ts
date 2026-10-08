@@ -1,5 +1,5 @@
 // ============================================================================
-// Snow feature — public types
+// Fonction neige — types publics
 // ============================================================================
 
 import type { DetectedCrs } from '../lidar/types';
@@ -8,45 +8,45 @@ import type { CanopyGrid, SnowDiagnostics, SnowObservation } from './lib/engine/
 /** Affichage neige dans le viewer. */
 export type SnowDisplayMode = 'off' | 'cover' | 'thickness';
 
-/** Snow depth over a LiDAR scene. */
+/** Hauteur de neige sur une scène LiDAR. */
 export interface SnowField {
-  /** Snow depth (vertical), cm, row-major, row 0 = southern edge (node grid over the bounds). */
+  /** Hauteur de neige (verticale), cm, ligne par ligne, ligne 0 = bord sud (grille de nœuds couvrant l'emprise). */
   data: Float32Array;
   width: number;
   height: number;
-  /** Scene bounds in the LiDAR CRS, [minX, minY, maxX, maxY]. */
+  /** Emprise de la scène dans le CRS du LiDAR, [minX, minY, maxX, maxY]. */
   boundsMeters: [number, number, number, number];
   stats: {
-    /** Mean depth of the snow-covered nodes, cm. */
+    /** Hauteur moyenne des nœuds enneigés, cm. */
     meanCm: number;
     maxCm: number;
     coveragePct: number;
     elapsedMs: number;
   };
-  /** Coarse snow field used (AROME, or a global model outside the AROME domain). */
+  /** Champ de neige grossier utilisé (AROME, ou un modèle mondial hors du domaine AROME). */
   arome: {
     timestamp: string;
     runHour: string;
     source: string;
   };
-  /** What the engine did and with which data (stations, bulletin, wind, melt…). */
+  /** Ce qu'a fait le moteur et avec quelles données (stations, bulletin, vent, fonte…). */
   diagnostics: SnowDiagnostics;
-  /** State of every data source (ok, empty, error, unavailable…). */
+  /** État de chaque source de données (ok, vide, erreur, indisponible…). */
   sources: Record<string, string>;
 }
 
-/** Scene DTM handed to the pipeline (the LiDAR viewer's height grid). */
+/** MNT de la scène confié au pipeline (la grille de hauteurs du visualiseur LiDAR). */
 export interface SnowHeightmap {
-  /** Heights relative to `altitudeOffsetM`, node grid spanning the bounds, row 0 = minY. */
+  /** Hauteurs relatives à `altitudeOffsetM`, grille de nœuds couvrant l'emprise, ligne 0 = minY. */
   data: Float32Array;
   width: number;
   height: number;
-  /** Bounds in the LiDAR CRS, m. */
+  /** Emprise dans le CRS du LiDAR, m. */
   bounds: { minX: number; minY: number; maxX: number; maxY: number };
   crs: DetectedCrs;
-  /** Absolute altitude = data + altitudeOffsetM (the viewer stores heights around the scene centre). */
+  /** Altitude absolue = donnée + altitudeOffsetM (le visualiseur stocke les hauteurs autour du centre de la scène). */
   altitudeOffsetM: number;
-  /** Canopy cover 0–1 on a node grid over the same bounds, when the point cloud tells it. */
+  /** Couvert de la canopée 0–1 sur une grille de nœuds de même emprise, quand le nuage de points le donne. */
   canopy?: CanopyGrid | null;
 }
 

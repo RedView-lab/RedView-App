@@ -1,14 +1,15 @@
 // ============================================================================
-// Snow engine v2 — what the past weeks of weather tell
+// Moteur neige v2 — ce que disent les dernières semaines de météo
 // ----------------------------------------------------------------------------
-// From the hourly weather at the scene (temperature, precipitation, wind):
-//  - a flat snowpack per altitude band (precipitation phase by temperature,
-//    Hock 1999 melt with the clear-sky radiation of the hour): how much has
-//    melted so far at each altitude, and on which days;
-//  - a transport-weighted wind rose: hours with snow on the ground and a wind
-//    above the transport threshold of Li & Pomeroy (1997) (dry snow
-//    9.43 + 0.18·T + 0.0033·T² m/s at 10 m, lower for fresh snow, ~11 m/s for
-//    wet or crusted snow), weighted by (U − Ut)·U² ∝ u*(u*² − u*t²).
+// À partir de la météo horaire sur la scène (température, précipitations, vent) :
+//  - un manteau en terrain plat par bande d'altitude (phase des précipitations
+//    selon la température, fonte de Hock 1999 avec le rayonnement par ciel clair
+//    de l'heure) : combien a fondu jusqu'ici à chaque altitude, et quels jours ;
+//  - une rose des vents pondérée par le transport : heures avec de la neige au
+//    sol et un vent au-dessus du seuil de transport de Li & Pomeroy (1997)
+//    (neige sèche 9,43 + 0,18·T + 0,0033·T² m/s à 10 m, plus bas pour la neige
+//    fraîche, ~11 m/s pour une neige humide ou croûtée), pondérées par
+//    (U − Ut)·U² ∝ u*(u*² − u*t²).
 // ============================================================================
 
 import type { SnowEngineConfig } from './config';
@@ -21,27 +22,27 @@ const SECTORS = 16;
 
 export interface BandSnowModel {
   zM: Float32Array;
-  /** Cumulative melt / snowfall (snow water equivalent), mm, at the analysis time. */
+  /** Fonte / chutes de neige cumulées (équivalent en eau), mm, à l'heure d'analyse. */
   meltSweMm: Float32Array;
   snowfallSweMm: Float32Array;
   sweMm: Float32Array;
-  /** UTC start of every day of the history. */
+  /** Début UTC de chaque jour de l'historique. */
   dayStartMs: number[];
-  /** Positive degree-days on days with snow on the ground, [band·nDays + day], °C·d. */
+  /** Degrés-jours positifs des jours avec de la neige au sol, [bande·nJours + jour], °C·j. */
   meltPdd: Float32Array;
 }
 
 export interface WindRose {
-  /** Transport weight per sector (wind from N, NNE, …), sums to 1 (zeros when no transport). */
+  /** Poids de transport par secteur (vent de N, NNE, …), somme à 1 (des zéros sans transport). */
   weights: Float64Array;
-  /** Transport-weighted wind speed and threshold per sector, m/s. */
+  /** Vitesse du vent et seuil pondérés par le transport, par secteur, m/s. */
   speedMs: Float64Array;
   thresholdMs: Float64Array;
   /** Total transport potential, (m/s)³·h. */
   transport: number;
 }
 
-/** Bulk snow density through the season, kg m⁻³ (settled snow). */
+/** Masse volumique moyenne de la neige au fil de la saison, kg m⁻³ (neige tassée). */
 export function bulkDensity(timeMs: number, latDeg: number): number {
   const d = new Date(timeMs);
   let month = d.getUTCMonth();
@@ -63,7 +64,7 @@ function thresholdWind(tempC: number, fresh: boolean, wet: boolean): number {
   return fresh ? 0.8 * dry : dry;
 }
 
-/** Hours of the history up to the analysis time. */
+/** Heures de l'historique jusqu'à l'heure d'analyse. */
 function usableHours(w: WeatherHistory, analysisTimeMs: number): number {
   const n = Math.min(w.temperatureC.length, w.precipitationMm.length, w.windSpeedMs.length, w.windDirDeg.length);
   return Math.max(0, Math.min(n, Math.floor((analysisTimeMs - w.startMs) / HOUR_MS) + 1));
@@ -113,7 +114,7 @@ export function runBandSnowModel(
   return { zM, meltSweMm: melt, snowfallSweMm: fall, sweMm: swe, dayStartMs, meltPdd };
 }
 
-/** Band values interpolated at an altitude (clamped at the ends). */
+/** Valeurs des bandes interpolées à une altitude (bornées aux extrémités). */
 export function bandValueAt(band: BandSnowModel, values: Float32Array, z: number): number {
   const zs = band.zM;
   const n = zs.length;
@@ -138,7 +139,7 @@ export function computeWindRose(
   const speedSum = new Float64Array(SECTORS);
   const thrSum = new Float64Array(SECTORS);
   let transport = 0;
-  // Snow on the ground at the scene altitude, re-simulated hour by hour.
+  // Neige au sol à l'altitude de la scène, resimulée heure par heure.
   let swe = initialSweMm;
   let lastSnowHour = -1e9;
   let lastWarmHour = -1e9;
@@ -177,7 +178,7 @@ export function computeWindRose(
   return { weights, speedMs, thresholdMs, transport };
 }
 
-/** Default rose when no history: the snow-bearing wind of the region, spread ±45°. */
+/** Rose par défaut sans historique : le vent porteur de neige de la région, étalé sur ±45°. */
 export function defaultWindRose(fromDeg: number): WindRose {
   const weights = new Float64Array(SECTORS);
   let sum = 0;

@@ -1,20 +1,22 @@
 // ============================================================================
-// Snow engine v2 — wind transport (drift flux divergence)
+// Moteur neige v2 — transport par le vent (divergence du flux de transport)
 // ----------------------------------------------------------------------------
-// For each sector of the transport-weighted wind rose:
-//  1. local wind speed factor S = 1 + γs·Ωs + γc·Ωc − γx·Sx (MicroMet slope
-//     and curvature terms, Liston & Elder 2006, plus the upwind shelter of
-//     Winstral et al. 2002 at 100 m and 1000 m);
-//  2. transport capacity C = ((S·U − Ut)⁺ / (U − Ut))³, 1 on open flat
-//     terrain (saltation flux ∝ u*(u*² − u*t²));
-//  3. the drift flux is carried downwind and relaxes towards C over a
-//     saturation length: where C rises (crests, windward convexities) the
-//     wind erodes, where it falls (lee slopes, hollows, behind breaks) it
-//     deposits — the flux divergence, mass-conserving by construction.
-// The flux entering the scene comes from the same computation on the far-field
-// DEM, so a tile sitting in the lee of a big ridge outside it gets loaded.
-// The pattern is linear in the flat-terrain flux Q0; Q0 itself is set later
-// (physical estimate from the wind history, refined against Helbig's σ).
+// Pour chaque secteur de la rose des vents pondérée par le transport :
+//  1. facteur de vitesse locale du vent S = 1 + γs·Ωs + γc·Ωc − γx·Sx (termes de
+//     pente et de courbure de MicroMet, Liston & Elder 2006, plus l'abri amont de
+//     Winstral et al. 2002 à 100 m et 1000 m) ;
+//  2. capacité de transport C = ((S·U − Ut)⁺ / (U − Ut))³, 1 en terrain plat
+//     dégagé (flux de saltation ∝ u*(u*² − u*t²)) ;
+//  3. le flux de transport est porté sous le vent et se relaxe vers C sur une
+//     longueur de saturation : là où C augmente (crêtes, convexités au vent), le
+//     vent érode ; là où il diminue (versants sous le vent, creux, derrière les
+//     ruptures de pente), il dépose — la divergence du flux, conservant la masse
+//     par construction.
+// Le flux qui entre dans la scène vient du même calcul sur le DEM lointain : une
+// tuile située sous le vent d'une grande crête extérieure est bien chargée.
+// Le motif est linéaire en le flux de terrain plat Q0 ; Q0 lui-même est fixé
+// plus tard (estimation physique à partir de l'historique du vent, affinée
+// face au σ de Helbig).
 // ============================================================================
 
 import type { SnowEngineConfig } from './config';
@@ -33,7 +35,7 @@ interface WindSector {
   thresholdMs: number;
 }
 
-/** Sectors carrying at least `minWeight` of the transport, renormalised. */
+/** Secteurs portant au moins `minWeight` du transport, renormalisés. */
 function activeSectors(rose: WindRose, minWeight = 0.04): WindSector[] {
   const out: WindSector[] = [];
   for (let s = 0; s < rose.weights.length; s++) {
@@ -72,9 +74,9 @@ function windCurvatures(grid: WorkGrid, config: SnowEngineConfig): CurvaturePair
 }
 
 /**
- * Transport capacity (1 on open flat terrain) for one sector, and the
- * empirical exposure term of the same sector (Winstral Sx and curvature,
- * + sheltered / − exposed, in [−1, 1]).
+ * Capacité de transport (1 en terrain plat dégagé) pour un secteur, et le terme
+ * empirique d'exposition du même secteur (Sx de Winstral et courbure, + abrité /
+ * − exposé, dans [−1, 1]).
  */
 function sectorFields(
   grid: WorkGrid,
@@ -119,11 +121,12 @@ function sectorFields(
 type Inflow = (x: number, y: number) => number;
 
 /**
- * Carries the drift flux across the grid in the travel direction (grid deg).
- * Semi-Lagrangian upwind sweep along the major axis; the flux of a node is
- * split linearly between the two nodes of the next column it lands between
- * (mass-conserving). Returns the deposition per unit flat flux, and the flux
- * entering every node.
+ * Porte le flux de transport à travers la grille dans la direction du
+ * déplacement (degrés de grille). Balayage amont semi-lagrangien le long de
+ * l'axe principal ; le flux d'un nœud est réparti linéairement entre les deux
+ * nœuds de la colonne suivante entre lesquels il tombe (conservation de la
+ * masse). Renvoie le dépôt par unité de flux en terrain plat, et le flux qui
+ * entre dans chaque nœud.
  */
 function marchFlux(
   w: number, h: number, dx: number, dy: number,
@@ -185,15 +188,15 @@ function marchFlux(
 }
 
 export interface WindPattern {
-  /** Deposition (+) / erosion (−), cm per cm·m of flat flux. */
+  /** Dépôt (+) / érosion (−), cm par cm·m de flux en terrain plat. */
   pattern: Float32Array;
   meanAbs: number;
-  /** Transport-weighted empirical exposure (+ sheltered, − exposed). */
+  /** Exposition empirique pondérée par le transport (+ abrité, − exposé). */
   shelter: Float32Array;
   sectors: WindSector[];
 }
 
-/** Far-field DEM as a work grid (its own terrain analysis, coarse). */
+/** DEM lointain sous forme de grille de travail (sa propre analyse de terrain, grossière). */
 function farAsGrid(far: FarDem): WorkGrid {
   return {
     width: far.width, height: far.height, dx: far.cell, dy: far.cell, ps: far.cell,
@@ -202,8 +205,8 @@ function farAsGrid(far: FarDem): WorkGrid {
 }
 
 /**
- * The wind does not see metre-scale roughness (it is buried, and the flow is
- * smooth at that scale): the terrain terms use the DTM smoothed to
+ * Le vent ne voit pas la rugosité métrique (elle est enfouie, et l'écoulement
+ * est lisse à cette échelle) : les termes de terrain utilisent le MNT lissé à
  * `windSmoothM`.
  */
 function windTerrain(grid: WorkGrid, config: SnowEngineConfig): { grid: WorkGrid; terrain: TerrainFields } {
@@ -265,13 +268,14 @@ export function computeWindPattern(
 }
 
 /**
- * Applies the wind to the accumulation `acc` (cm) in place, for a flat
- * flux Q0 (cm·m). Two structural hypotheses are blended with equal amplitude:
- * the physical drift flux divergence (additive), and the empirical exposure
- * relation (accumulation × (1 + c·exposure), mass-neutral; Winstral et al.
- * 2002, Grünewald et al. 2013). Erosion cannot strip more than a share of the
- * local snow; deposition is reduced by what could not be eroded.
- * Returns the share of the snow that moved.
+ * Applique sur place le vent à l'accumulation `acc` (cm), pour un flux de
+ * terrain plat Q0 (cm·m). Deux hypothèses structurelles sont mélangées à
+ * amplitude égale : la divergence physique du flux de transport (additive) et
+ * la relation empirique d'exposition (accumulation × (1 + c·exposition),
+ * neutre en masse ; Winstral et al. 2002, Grünewald et al. 2013). L'érosion ne
+ * peut pas arracher plus qu'une part de la neige locale ; le dépôt est réduit de
+ * ce qui n'a pas pu être érodé.
+ * Renvoie la part de la neige qui a bougé.
  */
 export function applyWind(acc: Float32Array, wind: WindPattern, q0: number, config: SnowEngineConfig): number {
   const n = acc.length;

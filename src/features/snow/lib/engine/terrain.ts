@@ -1,9 +1,9 @@
 // ============================================================================
-// Snow engine v2 — terrain analysis on the work grid
+// Moteur neige v2 — analyse du terrain sur la grille de travail
 // ----------------------------------------------------------------------------
-// Horn gradients, MicroMet curvature (Liston & Elder 2006), Winstral Sx
-// (Winstral et al. 2002) reaching into the far-field DEM, and the terrain
-// scaling parameters of Helbig et al. (2015).
+// Gradients de Horn, courbure de MicroMet (Liston & Elder 2006), Sx de Winstral
+// (Winstral et al. 2002) étendu au DEM lointain, et paramètres d'échelle du
+// terrain de Helbig et al. (2015).
 // ============================================================================
 
 import { sampleBilinear, type WorkGrid } from './grid';
@@ -13,11 +13,11 @@ const DEG = 180 / Math.PI;
 const RAD = Math.PI / 180;
 
 export interface TerrainFields {
-  /** dz/dx (east) and dz/dy (grid north), m/m. */
+  /** dz/dx (est) et dz/dy (nord de la grille), m/m. */
   gx: Float32Array;
   gy: Float32Array;
   slopeDeg: Float32Array;
-  /** Downslope compass bearing relative to grid north, deg (0 on flats). */
+  /** Gisement de la ligne de plus grande pente par rapport au nord de la grille, degrés (0 sur le plat). */
   aspectGridDeg: Float32Array;
 }
 
@@ -45,7 +45,7 @@ export function terrainGradients(grid: WorkGrid): TerrainFields {
     const g = Math.hypot(gx[i], gy[i]);
     slopeDeg[i] = Math.atan(g) * DEG;
     if (g > 1e-4) {
-      // Downslope vector (−gx, −gy) as a compass bearing.
+      // Vecteur de descente (−gx, −gy) exprimé en gisement.
       let a = Math.atan2(-gx[i], -gy[i]) * DEG;
       if (a < 0) a += 360;
       aspectGridDeg[i] = a;
@@ -55,10 +55,11 @@ export function terrainGradients(grid: WorkGrid): TerrainFields {
 }
 
 /**
- * MicroMet curvature at length scale η (Liston & Elder 2006, Eq. 15): mean of
- * the four directional second differences with neighbours η away, positive on
- * convex terrain (ridges), negative in hollows. The DEM is box-smoothed to the
- * scale first so that a 150 m curvature does not alias 2 m roughness.
+ * Courbure de MicroMet à l'échelle η (Liston & Elder 2006, éq. 15) : moyenne des
+ * quatre différences secondes directionnelles avec les voisins à distance η,
+ * positive en terrain convexe (crêtes), négative dans les creux. Le DEM est
+ * d'abord lissé par blocs à cette échelle, pour qu'une courbure à 150 m ne
+ * replie pas une rugosité de 2 m.
  */
 export function curvatureAtScale(grid: WorkGrid, scaleM: number, smoothed: Float32Array): Float32Array {
   const { width: w, height: h, ps } = grid;
@@ -83,7 +84,7 @@ export function curvatureAtScale(grid: WorkGrid, scaleM: number, smoothed: Float
   return out;
 }
 
-/** Altitude sampler reaching beyond the scene into the far-field DEM. */
+/** Échantillonneur d'altitude qui s'étend au-delà de la scène dans le DEM lointain. */
 export class AltitudeSampler {
   private readonly grid: WorkGrid;
   private readonly far: FarDem | null;
@@ -93,7 +94,7 @@ export class AltitudeSampler {
     this.far = far;
   }
 
-  /** Altitude at scene-local metres (origin = SW node), NaN outside every DEM. */
+  /** Altitude en mètres locaux de la scène (origine = nœud SO), NaN hors de tout DEM. */
   at(xm: number, ym: number): number {
     const g = this.grid;
     const fx = xm / g.dx;
@@ -110,10 +111,11 @@ export class AltitudeSampler {
   }
 
   /**
-   * Largest (zs − zc − drop_k) / d_k (`drops` null: (zs − zc) / d_k) of the
-   * samples zs = at(xm + ux·d_k, ym + uy·d_k), up to the first one outside
-   * every DEM; `best` when none is higher. `at` inlined with the same
-   * arithmetic: horizons and Winstral's Sx sample ~10⁸ points per scene.
+   * Plus grand (zs − zc − drop_k) / d_k (`drops` null : (zs − zc) / d_k) des
+   * échantillons zs = at(xm + ux·d_k, ym + uy·d_k), jusqu'au premier hors de tout
+   * DEM ; `best` quand aucun n'est plus haut. `at` est déroulé avec la même
+   * arithmétique : les horizons et le Sx de Winstral échantillonnent ~10⁸ points
+   * par scène.
    */
   maxRaySlope(
     xm: number, ym: number, ux: number, uy: number,
@@ -149,10 +151,11 @@ export class AltitudeSampler {
 }
 
 /**
- * Winstral Sx: the maximum upwind slope angle (deg) of the terrain between
- * `dMinM` and `dMaxM` up the wind, positive when the node is sheltered,
- * negative when exposed. `windFromGridDeg` is where the wind comes from,
- * relative to grid north. Distances grow geometrically past 16 pixels.
+ * Sx de Winstral : l'angle de pente amont maximal (degrés) du terrain entre
+ * `dMinM` et `dMaxM` en remontant le vent, positif quand le nœud est abrité,
+ * négatif quand il est exposé. `windFromGridDeg` indique d'où vient le vent, par
+ * rapport au nord de la grille. Les distances croissent géométriquement au-delà
+ * de 16 pixels.
  */
 export function shelterIndex(
   grid: WorkGrid,
@@ -183,22 +186,22 @@ export function shelterIndex(
 }
 
 export interface HelbigTerrain {
-  /** Mean squared slope parameter μ (Helbig 2015, Eq. 1). */
+  /** Paramètre de pente quadratique moyenne μ (Helbig 2015, éq. 1). */
   mu: number;
-  /** Correlation length ξ of the detrended DEM, m. */
+  /** Longueur de corrélation ξ du DEM sans tendance, m. */
   xi: number;
   /** Domain size L, m. */
   L: number;
 }
 
-/** μ = √(⟨(∂x z)² + (∂y z)²⟩ / 2), ξ = √2·σz/μ on the linearly detrended DEM. */
+/** μ = √(⟨(∂x z)² + (∂y z)²⟩ / 2), ξ = √2·σz/μ sur le DEM sans tendance linéaire. */
 export function helbigTerrain(grid: WorkGrid, t: TerrainFields): HelbigTerrain {
   const { width: w, height: h, z } = grid;
   const n = w * h;
   let s2 = 0;
   for (let i = 0; i < n; i++) s2 += t.gx[i] * t.gx[i] + t.gy[i] * t.gy[i];
   const mu = Math.sqrt(s2 / n / 2);
-  // Least-squares plane z ≈ a + b·x + c·y (x, y centred node indices).
+  // Plan des moindres carrés z ≈ a + b·x + c·y (x, y indices de nœud centrés).
   let sx = 0, sy = 0, sz = 0;
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { sx += x; sy += y; sz += z[y * w + x]; }
   const mx = sx / n, my = sy / n, mz = sz / n;
@@ -224,13 +227,13 @@ export function helbigTerrain(grid: WorkGrid, t: TerrainFields): HelbigTerrain {
   return { mu, xi, L: Math.sqrt(grid.sizeX * grid.sizeY) };
 }
 
-/** Helbig et al. (2015) Eq. 2: σ(HS) in m from the mean depth (m) and the terrain. */
+/** Helbig et al. (2015), éq. 2 : σ(HS) en m à partir de la hauteur moyenne (m) et du terrain. */
 export function helbigSigmaM(meanHsM: number, terrain: HelbigTerrain, a: number, b: number): number {
   if (meanHsM <= 0 || terrain.mu <= 0) return 0;
   return Math.pow(meanHsM, a) * Math.pow(terrain.mu, b) * Math.exp(-((terrain.xi / terrain.L) ** 2));
 }
 
-/** Separable Gaussian smoothing with renormalised edges. */
+/** Lissage gaussien séparable avec bords renormalisés. */
 export function gaussianSmooth(data: Float32Array, w: number, h: number, sigma: number): Float32Array {
   if (sigma < 0.3) return new Float32Array(data);
   const radius = Math.ceil(sigma * 2.5);
@@ -267,7 +270,7 @@ export function gaussianSmooth(data: Float32Array, w: number, h: number, sigma: 
   return out;
 }
 
-/** Robust scale: the |value| at the given upper quantile (ignores exact zeros). */
+/** Échelle robuste : la |valeur| au quantile supérieur donné (ignore les zéros exacts). */
 export function robustAbsQuantile(data: Float32Array, q: number): number {
   const step = Math.max(1, Math.floor(data.length / 50_000));
   const vals: number[] = [];
