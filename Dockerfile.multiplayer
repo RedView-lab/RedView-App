@@ -14,7 +14,11 @@
 # reconnectent au conteneur suivant et renvoient ce qui n'était pas acquitté.
 # Deux conteneurs en recouvrement ne peuvent pas écrire le même journal
 # (barrière : server/multiplayer/storage.ts).
-FROM node:22-alpine AS builder
+
+# Image de base épinglée par le digest de son index multi-architecture (le VPS
+# est ARM64) : un build rejoue exactement la même image. Dependabot (écosystème
+# docker) propose les nouveaux digests ; les deux Dockerfile gardent le même.
+FROM node:22-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402 AS builder
 
 WORKDIR /app
 
@@ -30,7 +34,7 @@ COPY src ./src
 COPY server ./server
 RUN node scripts/build/build-server.mjs --multiplayer
 
-FROM node:22-alpine
+FROM node:22-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402
 
 WORKDIR /app
 

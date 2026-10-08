@@ -1,4 +1,7 @@
-FROM node:22-alpine AS builder
+# Image de base épinglée par le digest de son index multi-architecture (le VPS
+# est ARM64) : un build rejoue exactement la même image. Dependabot (écosystème
+# docker) propose les nouveaux digests ; les deux Dockerfile gardent le même.
+FROM node:22-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402 AS builder
 
 WORKDIR /app
 
@@ -38,7 +41,7 @@ RUN --mount=type=secret,id=SENTRY_AUTH_TOKEN \
 # compresse rien à l'exécution (ni CPU, ni cache mémoire).
 RUN node scripts/build/precompress-dist.mjs dist
 
-FROM node:22-alpine AS runner
+FROM node:22-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402 AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production

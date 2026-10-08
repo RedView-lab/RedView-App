@@ -33,6 +33,25 @@ updates:
       - dependency-name: stripe
       - dependency-name: "@stripe/*"
 
+  # Image de base node:22-alpine épinglée par digest dans les deux Dockerfile :
+  # une PR par nouveau digest (correctifs d'Alpine et de Node 22). Une montée
+  # de Node (24…) se décide à part.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Paris
+    commit-message:
+      prefix: chore(docker)
+    ignore:
+      - dependency-name: node
+        update-types: ["version-update:semver-major"]
+    groups:
+      image-node:
+        patterns: ["node"]
+
   - package-ecosystem: github-actions
     directory: /
     schedule:
