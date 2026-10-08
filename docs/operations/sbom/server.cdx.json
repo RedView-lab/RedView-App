@@ -780,32 +780,6 @@
     },
     {
       "type": "library",
-      "bom-ref": "pkg:npm/bignumber.js@9.3.1",
-      "name": "bignumber.js",
-      "version": "9.3.1",
-      "purl": "pkg:npm/bignumber.js@9.3.1",
-      "licenses": [
-        {
-          "license": {
-            "id": "MIT"
-          }
-        }
-      ],
-      "hashes": [
-        {
-          "alg": "SHA-512",
-          "content": "2a8d2e5f5e682144bbc09dd16f7d05b3a4a455b2e63c100a7659bbabdf9a93d6db21e15fd0cc2e06c415eb3efe5fbebcfdc1ec7e0f96972b03589726b618ec8d"
-        }
-      ],
-      "externalReferences": [
-        {
-          "type": "distribution",
-          "url": "https://registry.npmjs.org/bignumber.js/-/bignumber.js-9.3.1.tgz"
-        }
-      ]
-    },
-    {
-      "type": "library",
       "bom-ref": "pkg:npm/cjs-module-lexer@2.3.0",
       "name": "cjs-module-lexer",
       "version": "2.3.0",
@@ -962,32 +936,6 @@
     },
     {
       "type": "library",
-      "bom-ref": "pkg:npm/json-bigint@1.0.0",
-      "name": "json-bigint",
-      "version": "1.0.0",
-      "purl": "pkg:npm/json-bigint@1.0.0",
-      "licenses": [
-        {
-          "license": {
-            "id": "MIT"
-          }
-        }
-      ],
-      "hashes": [
-        {
-          "alg": "SHA-512",
-          "content": "4a23efffc56966e59bbcb48cb530d4f2111fad95a0fe61ff9d5fdbe28d0261b4b1bb550840f2ddc0a3822322d05fe5483cee6facb5f78bcaada85ca174f49449"
-        }
-      ],
-      "externalReferences": [
-        {
-          "type": "distribution",
-          "url": "https://registry.npmjs.org/json-bigint/-/json-bigint-1.0.0.tgz"
-        }
-      ]
-    },
-    {
-      "type": "library",
       "bom-ref": "pkg:npm/module-details-from-path@1.0.4",
       "name": "module-details-from-path",
       "version": "1.0.4",
@@ -1040,10 +988,10 @@
     },
     {
       "type": "library",
-      "bom-ref": "pkg:npm/node-appwrite@29.1.0",
+      "bom-ref": "pkg:npm/node-appwrite@16.0.0",
       "name": "node-appwrite",
-      "version": "29.1.0",
-      "purl": "pkg:npm/node-appwrite@29.1.0",
+      "version": "16.0.0",
+      "purl": "pkg:npm/node-appwrite@16.0.0",
       "licenses": [
         {
           "license": {
@@ -1054,13 +1002,39 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "fe945012a4cf168ce0fb644576daaa198e1cbaa064a7c24af0f12ea2e8699bf7fc5093d593902db0cf9b4a813221e98905c22444daf67f075e8aa631b8e914c2"
+          "content": "28b0bc6cdb59f13dacc62b9d60d0b45795307a0c44efe1662e8f7a6b946e4a0451c37078592cecdc9632f961bca7e799263835a3526b41e07b8a451cf2a65cd1"
         }
       ],
       "externalReferences": [
         {
           "type": "distribution",
-          "url": "https://registry.npmjs.org/node-appwrite/-/node-appwrite-29.1.0.tgz"
+          "url": "https://registry.npmjs.org/node-appwrite/-/node-appwrite-16.0.0.tgz"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/node-fetch-native-with-agent@1.7.2",
+      "name": "node-fetch-native-with-agent",
+      "version": "1.7.2",
+      "purl": "pkg:npm/node-fetch-native-with-agent@1.7.2",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "e4c68e382b8912f71c928cfbfed8ddc7533a3aeb0e63a5dce5fe39f486abb864ad5a72b3948d6aa4d81a0309a7e0b98561cb12963fa304c93ce309a64717e4e6"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/node-fetch-native-with-agent/-/node-fetch-native-with-agent-1.7.2.tgz"
         }
       ]
     },
@@ -1425,32 +1399,6 @@
         {
           "type": "distribution",
           "url": "https://registry.npmjs.org/thread-stream/-/thread-stream-4.2.0.tgz"
-        }
-      ]
-    },
-    {
-      "type": "library",
-      "bom-ref": "pkg:npm/undici@6.28.1",
-      "name": "undici",
-      "version": "6.28.1",
-      "purl": "pkg:npm/undici@6.28.1",
-      "licenses": [
-        {
-          "license": {
-            "id": "MIT"
-          }
-        }
-      ],
-      "hashes": [
-        {
-          "alg": "SHA-512",
-          "content": "cd6a5d4d50f9e07e3c088c9b2f4ad6437ba4a5bf5ddb7c0cede1f946d7dd99e3fbd1c587363b5fa3b3f8bd95fee42a0370ee772783eee6e5e9ee535f8dce8344"
-        }
-      ],
-      "externalReferences": [
-        {
-          "type": "distribution",
-          "url": "https://registry.npmjs.org/undici/-/undici-6.28.1.tgz"
         }
       ]
     },

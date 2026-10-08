@@ -32,6 +32,13 @@ updates:
       # tant que le gel n'est pas levé.
       - dependency-name: stripe
       - dependency-name: "@stripe/*"
+      # SDK Appwrite épinglés sur la série du serveur de prod (1.6 : node-appwrite
+      # 16, appwrite 17) ; une montée suit celle du serveur
+      # (docs/operations/appwrite-sdk.md).
+      - dependency-name: node-appwrite
+        update-types: ["version-update:semver-major"]
+      - dependency-name: appwrite
+        update-types: ["version-update:semver-major"]
 
   # Image de base node:22-alpine épinglée par digest dans les deux Dockerfile :
   # une PR par nouveau digest (correctifs d'Alpine et de Node 22). Une montée

@@ -206,9 +206,11 @@ async function leaveSharedProjects(userId: string): Promise<number> {
   const users = getAppwriteUsers();
   const teams = getAppwriteTeams();
   let left = 0;
-  // Chaque page lue est supprimée : on relit toujours la première.
+  // Appwrite 1.6 renvoie toutes les adhésions du compte d'un coup (pas de
+  // pagination sur ce point d'accès) ; la boucle relit tant qu'une réponse
+  // pleine laisse penser qu'il en reste.
   for (let page = 0; page < MAX_PAGES; page += 1) {
-    const { memberships } = await users.listMemberships(userId, [Query.limit(PAGE_SIZE)]);
+    const { memberships } = await users.listMemberships(userId);
     for (const membership of memberships) {
       await ignoreNotFound(() => teams.deleteMembership(membership.teamId, membership.$id));
       // Équipe `p<projectId>` : le serveur temps réel ferme tout de suite la

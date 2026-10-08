@@ -346,10 +346,10 @@
     },
     {
       "type": "library",
-      "bom-ref": "pkg:npm/appwrite@26.2.0",
+      "bom-ref": "pkg:npm/appwrite@17.0.2",
       "name": "appwrite",
-      "version": "26.2.0",
-      "purl": "pkg:npm/appwrite@26.2.0",
+      "version": "17.0.2",
+      "purl": "pkg:npm/appwrite@17.0.2",
       "licenses": [
         {
           "license": {
@@ -360,39 +360,13 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "f1309de2630a861531185f6c8d9e96d95d607ac9e3e37bf5485668780b9eff43b48a4317214f76a7de8f8919f40f89c056f14cffdd9b96e4d36ff3e85c7e669d"
+          "content": "87c7eb2c3458cc50cb4bdc40dacf194a51ffa6b3c5abf99ae78efb7e04071cb704fedf510f13489a9abd02579151bf4e87560988fe3d1c239bc60493196e4040"
         }
       ],
       "externalReferences": [
         {
           "type": "distribution",
-          "url": "https://registry.npmjs.org/appwrite/-/appwrite-26.2.0.tgz"
-        }
-      ]
-    },
-    {
-      "type": "library",
-      "bom-ref": "pkg:npm/bignumber.js@9.3.1",
-      "name": "bignumber.js",
-      "version": "9.3.1",
-      "purl": "pkg:npm/bignumber.js@9.3.1",
-      "licenses": [
-        {
-          "license": {
-            "id": "MIT"
-          }
-        }
-      ],
-      "hashes": [
-        {
-          "alg": "SHA-512",
-          "content": "2a8d2e5f5e682144bbc09dd16f7d05b3a4a455b2e63c100a7659bbabdf9a93d6db21e15fd0cc2e06c415eb3efe5fbebcfdc1ec7e0f96972b03589726b618ec8d"
-        }
-      ],
-      "externalReferences": [
-        {
-          "type": "distribution",
-          "url": "https://registry.npmjs.org/bignumber.js/-/bignumber.js-9.3.1.tgz"
+          "url": "https://registry.npmjs.org/appwrite/-/appwrite-17.0.2.tgz"
         }
       ]
     },
@@ -471,32 +445,6 @@
         {
           "type": "distribution",
           "url": "https://registry.npmjs.org/fractional-indexing/-/fractional-indexing-4.0.0.tgz"
-        }
-      ]
-    },
-    {
-      "type": "library",
-      "bom-ref": "pkg:npm/json-bigint@1.0.0",
-      "name": "json-bigint",
-      "version": "1.0.0",
-      "purl": "pkg:npm/json-bigint@1.0.0",
-      "licenses": [
-        {
-          "license": {
-            "id": "MIT"
-          }
-        }
-      ],
-      "hashes": [
-        {
-          "alg": "SHA-512",
-          "content": "4a23efffc56966e59bbcb48cb530d4f2111fad95a0fe61ff9d5fdbe28d0261b4b1bb550840f2ddc0a3822322d05fe5483cee6facb5f78bcaada85ca174f49449"
-        }
-      ],
-      "externalReferences": [
-        {
-          "type": "distribution",
-          "url": "https://registry.npmjs.org/json-bigint/-/json-bigint-1.0.0.tgz"
         }
       ]
     },

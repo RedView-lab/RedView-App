@@ -5,8 +5,8 @@
 
 Deux ensembles livrés :
 
-- **serveur** : paquets installés dans les images Docker (`npm ci --omit=dev`) — 54 paquets (MIT 41 · Apache-2.0 9 · ISC 2 · BSD-3-Clause 1 · CC0-1.0 1) ;
-- **navigateur** : paquets inclus dans le build Vite — 28 paquets (MIT 20 · CC0-1.0 2 · SEE LICENSE IN LICENSE.txt 2 · Apache-2.0 1 · BSD-3-Clause 1 · ISC 1 · MPL-2.0 1).
+- **serveur** : paquets installés dans les images Docker (`npm ci --omit=dev`) — 52 paquets (MIT 39 · Apache-2.0 9 · ISC 2 · BSD-3-Clause 1 · CC0-1.0 1) ;
+- **navigateur** : paquets inclus dans le build Vite — 26 paquets (MIT 18 · CC0-1.0 2 · SEE LICENSE IN LICENSE.txt 2 · Apache-2.0 1 · BSD-3-Clause 1 · ISC 1 · MPL-2.0 1).
 
 Le script échoue sur une licence copyleft forte (GPL, AGPL, EUPL, SSPL…), absente ou inconnue qui n'a pas été revue. Une exception revue s'ajoute dans `REVIEWED` du script, avec sa raison.
 
@@ -54,17 +54,16 @@ Le script échoue sur une licence copyleft forte (GPL, AGPL, EUPL, SSPL…), abs
 | `@sentry/server-utils` | 10.76.1 | MIT | permissive |
 | `@tybys/wasm-util` | 0.10.4 | MIT | permissive |
 | `atomic-sleep` | 1.0.0 | MIT | permissive |
-| `bignumber.js` | 9.3.1 | MIT | permissive |
 | `cjs-module-lexer` | 2.3.0 | MIT | permissive |
 | `debug` | 4.4.3 | MIT | permissive |
 | `es-module-lexer` | 3.0.3 | MIT | permissive |
 | `fractional-indexing` | 4.0.0 | CC0-1.0 | permissive |
 | `get-caller-file` | 2.0.5 | ISC | permissive |
 | `import-in-the-middle` | 3.5.2 | Apache-2.0 | permissive |
-| `json-bigint` | 1.0.0 | MIT | permissive |
 | `module-details-from-path` | 1.0.4 | MIT | permissive |
 | `ms` | 2.1.3 | MIT | permissive |
-| `node-appwrite` | 29.1.0 | BSD-3-Clause | permissive |
+| `node-appwrite` | 16.0.0 | BSD-3-Clause | permissive |
+| `node-fetch-native-with-agent` | 1.7.2 | MIT | permissive |
 | `on-exit-leak-free` | 2.1.2 | MIT | permissive |
 | `pino` | 10.4.0 | MIT | permissive |
 | `pino-abstract-transport` | 3.0.0 | MIT | permissive |
@@ -79,7 +78,6 @@ Le script échoue sur une licence copyleft forte (GPL, AGPL, EUPL, SSPL…), abs
 | `split2` | 4.2.0 | ISC | permissive |
 | `stripe` | 22.1.0 | MIT | permissive |
 | `thread-stream` | 4.2.0 | MIT | permissive |
-| `undici` | 6.28.1 | MIT | permissive |
 | `ws` | 8.21.0 | MIT | permissive |
 
 ## Navigateur
@@ -98,12 +96,10 @@ Le script échoue sur une licence copyleft forte (GPL, AGPL, EUPL, SSPL…), abs
 | `@stripe/stripe-js` | 5.10.0 | MIT | permissive |
 | `@tanstack/query-core` | 5.104.1 | MIT | permissive |
 | `@tanstack/react-query` | 5.104.1 | MIT | permissive |
-| `appwrite` | 26.2.0 | BSD-3-Clause | permissive |
-| `bignumber.js` | 9.3.1 | MIT | permissive |
+| `appwrite` | 17.0.2 | BSD-3-Clause | permissive |
 | `copc` | 0.0.8 | MIT | permissive |
 | `cross-fetch` | 3.2.0 | MIT | permissive |
 | `fractional-indexing` | 4.0.0 | CC0-1.0 | permissive |
-| `json-bigint` | 1.0.0 | MIT | permissive |
 | `laz-perf` | 0.0.7 | Apache-2.0 | permissive |
 | `mapbox-gl` | 3.21.0 | SEE LICENSE IN LICENSE.txt | revue |
 | `mediabunny` | 1.61.3 | MPL-2.0 | revue |
