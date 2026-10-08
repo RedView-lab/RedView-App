@@ -33,6 +33,7 @@ documents ci-dessous approfondissent un sujet.
 |---|---|
 | [security-runbook.md](operations/security-runbook.md) | Ordre de mise en place du durcissement de sécurité d'octobre 2026 |
 | [appwrite-sdk.md](operations/appwrite-sdk.md) | SDK Appwrite épinglés sur la série du serveur de prod (1.6) : versions, vérifications contre la prod, risques |
+| [memoire-conteneurs.md](operations/memoire-conteneurs.md) | Limites mémoire des conteneurs Coolify (app, temps réel, site vitrine) : relevé du 2026-10-08 et proposition |
 | [licences.md](operations/licences.md) + [sbom/](operations/sbom) | Licences des dépendances livrées (serveur, navigateur) et SBOM CycloneDX 1.5, produits par `npm run sbom` après un build |
 | [server-perf/](operations/server-perf) | Instantanés de performance de référence du VPS, pris avant et après chaque réglage (`bash scripts/vps/perf-snapshot.sh <libellé>`) |
 | [Configuration de l'hôte du VPS](../server/vps/README.md) | Où va chaque fichier de l'hôte, comment appliquer et revenir en arrière, le plancher mémoire Always Free |
