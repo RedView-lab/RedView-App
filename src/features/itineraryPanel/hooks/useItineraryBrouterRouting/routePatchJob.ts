@@ -136,7 +136,7 @@ export function ensureRoutePatchJob(deps: RoutePatchJobDeps, itinerary: Itinerar
     .then(({ route, resolvedWarnings, patch: routedPatch }) => {
       if (ctrl.signal.aborted) return;
       if (isActive()) deps.setRouteWarnings(resolvedWarnings);
-      // Render route immediately with native BRouter elevation data
+      // Afficher le tracé tout de suite avec les altitudes natives de BRouter
       const refinementBase: { current: RouteRefinementBase | null } = { current: null };
       setProject((project) => {
         const next = applyPendingRoutePatch(project, target, route, null, routedPatch);

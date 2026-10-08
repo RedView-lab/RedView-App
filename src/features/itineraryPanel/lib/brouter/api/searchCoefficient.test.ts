@@ -10,7 +10,7 @@ import {
   searchWeightForKm,
 } from './searchCoefficient';
 
-/** Points along a meridian, `segmentsKm` apart (great-circle km on the 6 371 km sphere). */
+/** Points le long d'un méridien, espacés de `segmentsKm` (km de grand cercle sur la sphère de 6 371 km). */
 function meridianRoute(segmentsKm: number[], startLat = 43): BrouterPoint[] {
   const kmPerDegree = (12_742 * Math.PI) / 360;
   const points: BrouterPoint[] = [{ lat: startLat, lon: 6 }];
@@ -71,8 +71,8 @@ describe('resolveSearchCoefficient', () => {
   });
 });
 
-// api/_lib/brouter-search.ts recomputes the coefficient when the client sends
-// none: both sides must keep the same distance steps.
+// api/_lib/brouter-search.ts recalcule le coefficient quand le client n'en envoie
+// pas : les deux côtés doivent garder les mêmes paliers de distance.
 describe('client / BRouter proxy parity', () => {
   const routes: Array<[string, BrouterPoint[]]> = [
     ['5 km', meridianRoute([5])],

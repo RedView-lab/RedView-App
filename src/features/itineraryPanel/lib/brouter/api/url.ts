@@ -1,10 +1,9 @@
 /**
- * URL builders for the BRouter HTTP client.
+ * Constructeurs d'URL du client HTTP BRouter.
  *
- * Every call goes through the same-origin proxy (`api/brouter.ts`): it
- * whitelists the parameters, bounds the A* coefficient and derives the
- * uploaded profile's id from its content. The VPS answers 403 to anything
- * else.
+ * Chaque appel passe par le proxy de même origine (`api/brouter.ts`) : il met
+ * les paramètres en liste blanche, borne le coefficient A* et dérive l'id du
+ * profil envoyé de son contenu. Le VPS répond 403 à tout le reste.
  */
 import {
   DEFAULT_PROFILE,
@@ -22,7 +21,7 @@ function formatLonlats(points: BrouterPoint[]): string {
     .join('|');
 }
 
-/** Build the routing URL — useful for tests/logging. */
+/** Construit l'URL de routage — utile pour les tests/le journal. */
 export function buildBrouterUrl(req: BrouterRequest): string {
   const points: BrouterPoint[] = [req.start, ...(req.via ?? []), req.end];
   const params = new URLSearchParams({
@@ -36,9 +35,9 @@ export function buildBrouterUrl(req: BrouterRequest): string {
   if (req.overrides) {
     const safe = sanitizeOverrides(req.overrides);
     for (const [key, value] of Object.entries(safe)) {
-      // Final guard: every override key must be prefixed with "profile:".
-      // `sanitizeOverrides` already encoded the value and dropped unknown
-      // / empty keys, so we only need the prefix here.
+      // Dernier garde-fou : chaque clé de surcharge doit être préfixée par « profile: ».
+      // `sanitizeOverrides` a déjà encodé la valeur et écarté les clés inconnues /
+      // vides : seul le préfixe reste à poser ici.
       const k = key.startsWith('profile:') ? key : `profile:${key}`;
       params.set(k, value);
     }
@@ -56,7 +55,7 @@ export function buildBrouterUrl(req: BrouterRequest): string {
   return `${BROUTER_PROXY_URL}?${params.toString()}`;
 }
 
-/** Endpoint for the profile-upload POST (the proxy derives the id from the profile). */
+/** Point d'accès du POST d'envoi de profil (le proxy dérive l'id du profil). */
 export function buildProfileUploadUrl(): string {
   return BROUTER_PROXY_URL;
 }

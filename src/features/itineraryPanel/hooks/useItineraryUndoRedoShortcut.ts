@@ -11,9 +11,9 @@ export interface UseItineraryUndoRedoShortcutArgs {
 }
 
 /**
- * Global keyboard accelerator for Undo (Ctrl+Z / Cmd+Z) and Redo (Ctrl+Y / Cmd+Y / Ctrl+Shift+Z / Cmd+Shift+Z).
+ * Raccourci clavier global pour Annuler (Ctrl+Z / Cmd+Z) et Rétablir (Ctrl+Y / Cmd+Y / Ctrl+Maj+Z / Cmd+Maj+Z).
  *
- * Respects text inputs/textareas/contentEditable to avoid hijacking native text editing.
+ * Respecte les champs input/textarea/contentEditable pour ne pas détourner l'édition de texte native.
  */
 export function useItineraryUndoRedoShortcut({
   canUndo,
@@ -26,7 +26,7 @@ export function useItineraryUndoRedoShortcut({
     if (!enabled) return;
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      // Never hijack text typing (search inputs, title edit, notes, etc.)
+      // Ne jamais détourner la saisie de texte (champs de recherche, édition du titre, notes, etc.)
       if (isTypingTarget(event.target)) return;
       // Cmd/Ctrl servent à descendre en FreeCam : Cmd/Ctrl+Z (avancer) ne doit pas annuler.
       if (isFreeCamActive()) return;
@@ -37,7 +37,7 @@ export function useItineraryUndoRedoShortcut({
 
       const key = event.key.toLowerCase();
 
-      // Undo: Ctrl+Z / Cmd+Z (without Shift or Alt)
+      // Annuler : Ctrl+Z / Cmd+Z (sans Maj ni Alt)
       if (key === 'z' && !event.shiftKey && !event.altKey) {
         if (!canUndo) return;
         event.preventDefault();
@@ -46,7 +46,7 @@ export function useItineraryUndoRedoShortcut({
         return;
       }
 
-      // Redo: Ctrl+Y / Cmd+Y OR Ctrl+Shift+Z / Cmd+Shift+Z
+      // Rétablir : Ctrl+Y / Cmd+Y OU Ctrl+Maj+Z / Cmd+Maj+Z
       if (
         ((key === 'y' && !event.shiftKey) || (key === 'z' && event.shiftKey)) &&
         !event.altKey

@@ -10,11 +10,11 @@ import { useItineraryBrouterRouting } from './index';
 import { resolveRouteRequest } from './resolveRouteRequest';
 
 /**
- * Route loading of the routing hook, as the app sees it: the `routeLoading`
- * value of each committed render (panel spinner, overlay status) and the
- * `rv-route-loading` window events (map cursor loader), through every way a
- * routing run starts, ends, is replaced or cancelled. BRouter is simulated by
- * promises the test settles.
+ * Chargement du tracé par le hook de routage, tel que l'app le voit : la valeur
+ * `routeLoading` de chaque rendu validé (indicateur du panneau, état de la
+ * surcouche) et les événements window `rv-route-loading` (chargeur du curseur
+ * de la carte), par chaque façon dont une passe de routage démarre, se termine,
+ * est remplacée ou annulée. BRouter est simulé par des promesses que le test règle.
  */
 
 vi.mock('./resolveRouteRequest', () => ({ resolveRouteRequest: vi.fn() }));
@@ -100,7 +100,7 @@ function itinerary(id: string, overrides: Partial<Itinerary> = {}): Itinerary {
   };
 }
 
-/** Imported GPX: the stored route is authoritative, nothing to route. */
+/** GPX importé : le tracé stocké fait foi, rien à router. */
 function gpxItinerary(id: string, overrides: Partial<Itinerary> = {}): Itinerary {
   return itinerary(id, { gpxRoute: { name: id, source: 'gpx', points: storedPoints() }, ...overrides });
 }
@@ -120,7 +120,7 @@ function renderRouting(initial: Props) {
   const states: boolean[] = [];
   const setProject = vi.fn();
   const rollbackPendingTraceAppend = vi.fn(() => false);
-  // Stable like the app's: a new object per render would re-run the routing effect.
+  // Stable comme dans l'app : un nouvel objet par rendu relancerait l'effet de routage.
   const map = {} as MapboxMap;
   const rendered = renderHook(
     ({ active, itineraries }: Props) => {
@@ -133,7 +133,7 @@ function renderRouting(initial: Props) {
         rollbackPendingTraceAppend,
         setProject,
       });
-      // Committed values only (a render React restarts is not seen).
+      // Valeurs validées seulement (un rendu que React recommence n'est pas vu).
       useEffect(() => {
         states.push(routing.routeLoading);
       }, [routing.routeLoading]);
@@ -151,14 +151,14 @@ function renderRouting(initial: Props) {
   return { ...rendered, unmount, states, setProject };
 }
 
-/** Lets microtasks, promise chains and React updates settle. */
+/** Laisse les microtâches, les chaînes de promesses et les mises à jour React se régler. */
 async function settle() {
   await act(async () => {
     for (let i = 0; i < 10; i += 1) await Promise.resolve();
   });
 }
 
-/** Past the 120 ms debounce of a full recompute. */
+/** Au-delà de l'anti-rebond de 120 ms d'un recalcul complet. */
 async function afterDebounce() {
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 160));
@@ -254,8 +254,8 @@ describe('useItineraryBrouterRouting — route loading', () => {
     const active = gpxItinerary('a', { pendingRoutePatch: patch() });
     const { states, rerender } = renderRouting({ active, itineraries: [active] });
     await settle();
-    // The stored route changed (point count, a dependency of the effect) but
-    // not the patch nor the routing inputs: the running job is kept.
+    // Le tracé stocké a changé (nombre de points, une dépendance de l'effet)
+    // mais ni le patch ni les entrées du routage : la tâche en cours est gardée.
     const points = [...storedPoints(), { lat: C.lat, lon: C.lon, elevationM: null, distanceM: 26_000 }];
     const same = { ...active, gpxRoute: { name: 'a', source: 'gpx' as const, points } };
     rerender({ active: same, itineraries: [same] });

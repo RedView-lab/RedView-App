@@ -29,9 +29,9 @@ function canAccessStyle(map: MapboxMap): boolean {
   }
 }
 
-// Debounce window for coalescing bursts of styledata events. The trace reads
-// its altitude from the terrain on the GPU: streamed DEM tiles never need a
-// replay.
+// Fenêtre d'anti-rebond pour regrouper les rafales d'événements styledata. La
+// trace lit son altitude sur le terrain côté GPU : les tuiles DEM arrivant en
+// flux n'exigent jamais de rejeu.
 const REPLAY_DEBOUNCE_MS = 120;
 const REPLAY_RETRY_MS = 250;
 const REPLAY_MAX_RETRIES = 40;
@@ -44,7 +44,7 @@ interface UseItineraryRouteLayerSyncArgs {
   routeTraceWidthPx?: number;
   /** Finesse des traces dessinées (vue) ; `auto` suit la 2D / 3D et le relief. */
   routeDisplayQuality?: RouteDisplayQuality;
-  /** When false the entire Routes section is off and NO trace renders. */
+  /** À false, toute la section Tracés est coupée et AUCUNE trace n'est rendue. */
   routesEnabled?: boolean;
   /** Filtre « Surface » du panneau d'analyse. */
   surfaceFilter?: RouteSurfaceFilter;
@@ -76,9 +76,10 @@ export function useItineraryRouteLayerSync({
 }: UseItineraryRouteLayerSyncArgs): void {
   const replayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const forceReplayPendingRef = useRef(false);
-  // Signature the last time we actually pushed data to the map. When styledata /
-  // sourcedata fire but this signature is unchanged, the replay is a no-op
-  // (the route geometry / styling has not changed — only terrain did).
+  // Signature de la dernière fois où des données ont vraiment été poussées vers
+  // la carte. Quand styledata / sourcedata se déclenchent sans que cette
+  // signature change, le rejeu ne fait rien (la géométrie / le style du tracé
+  // n'a pas changé — seul le terrain a changé).
   const lastReplayedSignatureRef = useRef<string | null>(null);
 
   const routeSlopeBands = useMemo(
@@ -122,9 +123,9 @@ export function useItineraryRouteLayerSync({
     return `${routesEnabled ? 1 : 0}::active:${active?.id ?? ''}::${itinerarySignature}::bands:${routeSlopeBandSignature}::surface:${surfaceFilter}::quality:${routeDisplayPreset}`;
   }, [active?.id, itineraries, routeDisplayPreset, routeSlopeBandSignature, routeTraceWidthPx, routesEnabled, slopeItineraryId, surfaceFilter]);
 
-  // Ref bag so the stable map listeners always read the latest values without
-  // having to re-subscribe on every project mutation. Synced in a layout
-  // effect, i.e. before any passive effect below reads it.
+  // Sac de refs pour que les écouteurs de carte stables lisent toujours les
+  // dernières valeurs sans se réabonner à chaque modification du projet.
+  // Synchronisé dans un effet de mise en page, donc avant tout effet passif ci-dessous.
   const latestState = {
     active,
     isMapLoaded,
@@ -159,8 +160,8 @@ export function useItineraryRouteLayerSync({
     } = stateRef.current;
     if (!currentMap || !loaded || !canAccessStyle(currentMap)) return false;
 
-    // Elevated (terrain, Mercator) vs draped (globe / no terrain): the line
-    // layers' elevation reference follows it. Streamed DEM tiles never matter.
+    // Élevé (terrain, Mercator) ou drapé (globe / sans terrain) : la référence
+    // d'élévation des couches de ligne le suit. Les tuiles DEM en flux ne comptent jamais.
     const renderSignature = `${signature}::elevation:${getRouteElevationContext(currentMap).signature}`;
     if (!force && lastReplayedSignatureRef.current === renderSignature) return true;
 
@@ -169,9 +170,9 @@ export function useItineraryRouteLayerSync({
       const route = it.gpxRoute;
       if (!route || route.points.length < 2) continue;
       const pts = resolveRouteDisplayPoints(route, displayPreset);
-      // Visible iff the Routes section is active AND the user has not
-      // explicitly hidden this trace. (`analysisVisible` controls the central
-      // chart/profile, not the map line.)
+      // Visible ssi la section Tracés est active ET que l'utilisateur n'a pas
+      // explicitement masqué cette trace. (`analysisVisible` pilote le
+      // graphique/profil central, pas la ligne sur la carte.)
       const routeVisible = areRoutesEnabled && it.visible !== false;
       try {
         const mounted = upsertRouteLayer(currentMap, it.id, pts, {
@@ -219,15 +220,15 @@ export function useItineraryRouteLayerSync({
       clearForbiddenZoneDraft(currentMap);
     }
 
-    // A trace the style could not take yet is retried by the next event /
-    // timer instead of being considered done.
+    // Une trace que le style n'a pas encore pu prendre est retentée au prochain
+    // événement / minuteur au lieu d'être considérée comme faite.
     lastReplayedSignatureRef.current = allMounted ? renderSignature : null;
     return allMounted;
   }, []);
 
   const scheduleReplayRouteState = useCallback((force = false): void => {
     if (force) forceReplayPendingRef.current = true;
-    // Already scheduled — the pending timer will pick up the `force` flag.
+    // Déjà programmé — le minuteur en attente reprendra le drapeau `force`.
     if (replayTimerRef.current) return;
     const run = (attempt: number): void => {
       replayTimerRef.current = setTimeout(() => {
@@ -235,8 +236,8 @@ export function useItineraryRouteLayerSync({
         const pendingForce = forceReplayPendingRef.current;
         forceReplayPendingRef.current = false;
         if (replayRouteState(pendingForce) || attempt >= REPLAY_MAX_RETRIES) return;
-        // The style refused a trace (being replaced): retry on a timer too, a
-        // settled map may not emit another event for a long time.
+        // Le style a refusé une trace (en cours de remplacement) : réessayer aussi
+        // sur minuteur, une carte au repos peut ne plus émettre d'événement avant longtemps.
         if (pendingForce) forceReplayPendingRef.current = true;
         run(attempt + 1);
       }, attempt === 0 ? REPLAY_DEBOUNCE_MS : REPLAY_RETRY_MS);
@@ -244,15 +245,16 @@ export function useItineraryRouteLayerSync({
     run(0);
   }, [replayRouteState]);
 
-  // Replay whenever the actual route state (points / colors / visibility) changes.
+  // Rejouer chaque fois que l'état réel du tracé (points / couleurs / visibilité) change.
   useEffect(() => {
     if (!map || !isMapLoaded) return;
     if (!replayRouteState()) scheduleReplayRouteState();
   }, [isMapLoaded, layerSignature, map, replayRouteState, scheduleReplayRouteState]);
 
-  // Stable map listeners: subscribe once per (map, isMapLoaded). They read the
-  // latest state through refs, so they don't tear down/re-attach on every project
-  // mutation — which previously caused a listener churn storm during GPX import.
+  // Écouteurs de carte stables : abonnement une fois par (map, isMapLoaded). Ils
+  // lisent le dernier état via des refs, ils ne se détachent/réattachent donc pas
+  // à chaque modification du projet — ce qui provoquait une tempête de
+  // réabonnements pendant l'import GPX.
   useEffect(() => {
     if (!map || !isMapLoaded) return;
     const onStyleLoad = () => {
@@ -264,17 +266,17 @@ export function useItineraryRouteLayerSync({
       } catch {
         /* noop */
       }
-      // Layers were wiped — next replay MUST push everything back regardless of
-      // signature, so bust the cache and force.
+      // Les couches ont été effacées — le prochain rejeu DOIT tout repousser quelle
+      // que soit la signature : vider le cache et forcer.
       lastReplayedSignatureRef.current = null;
       scheduleReplayRouteState(true);
     };
     const onStyleData = () => {
       scheduleReplayRouteState(false);
     };
-    // Elevated lines are not drawn on the globe: switch the layers as soon as
-    // the zoom crosses ROUTE_ELEVATED_MIN_ZOOM, not after zoomend + debounce
-    // (a zoom-out used to leave the whole trace invisible until then).
+    // Les lignes élevées ne sont pas dessinées sur le globe : basculer les couches
+    // dès que le zoom franchit ROUTE_ELEVATED_MIN_ZOOM, pas après zoomend + anti-rebond
+    // (un dézoom laissait toute la trace invisible jusque-là).
     let lastElevated = getRouteElevationContext(map).elevated;
     const onZoom = () => {
       const elevated = getRouteElevationContext(map).elevated;

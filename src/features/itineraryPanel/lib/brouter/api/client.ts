@@ -1,10 +1,10 @@
 /**
- * BRouter HTTP client — fetchers.
+ * Client HTTP BRouter — requêtes.
  *
- * Two operations:
- *  - `fetchBrouterRoute(req)` → routes a query, returns parsed metadata.
- *  - `uploadCustomProfile(brf)` → POSTs a full BRF text, returns the
- *    `custom_<id>` handle to use in subsequent routing calls.
+ * Deux opérations :
+ *  - `fetchBrouterRoute(req)` → route une requête, renvoie les métadonnées parsées.
+ *  - `uploadCustomProfile(brf)` → envoie en POST un texte BRF complet, renvoie
+ *    l'identifiant `custom_<id>` à utiliser dans les appels de routage suivants.
  */
 import {
   type BrouterRequest,
@@ -55,9 +55,9 @@ function parseRetryAfterS(value: string | null): number | null {
 }
 
 /**
- * Fetch a route from BRouter. Throws on network/HTTP errors and on
- * BRouter-side errors (which are returned as plain-text responses
- * starting with `"error"` — we detect them via Content-Type).
+ * Demande un tracé à BRouter. Lève une erreur sur les erreurs réseau/HTTP et sur
+ * les erreurs côté BRouter (renvoyées en réponses texte brut commençant par
+ * `"error"` — on les détecte par le Content-Type).
  */
 export async function fetchBrouterRoute(
   req: BrouterRequest,
@@ -145,9 +145,8 @@ export async function fetchBrouterRoute(
 }
 
 /**
- * Upload a custom BRF profile. The server compiles it and returns a
- * `custom_<hash>` id (derived from the profile content) we can pass back
- * as `?profile=...`.
+ * Envoie un profil BRF personnalisé. Le serveur le compile et renvoie un id
+ * `custom_<hash>` (dérivé du contenu du profil) à repasser en `?profile=...`.
  */
 export async function uploadCustomProfile(
   brf: string,

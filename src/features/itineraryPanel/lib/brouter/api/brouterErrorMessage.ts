@@ -65,7 +65,7 @@ export function formatBrouterErrorMessage(error: unknown): string {
     );
   }
 
-  // 1. Zones interdites / Restricted areas
+  // 1. Zones interdites
   if (
     lower.includes('last wpt in restricted area') ||
     lower.includes('to-position in restricted area') ||
@@ -135,7 +135,7 @@ export function formatBrouterErrorMessage(error: unknown): string {
     );
   }
 
-  // 4. Timeout / Watchdog
+  // 4. Délai dépassé / watchdog
   if (
     lower.includes('thread-priority-watchdog') ||
     lower.includes('timeout') ||

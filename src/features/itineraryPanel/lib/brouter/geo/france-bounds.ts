@@ -1,6 +1,6 @@
 /**
- * Boundary check — previously restricted routing strictly to France.
- * Now open to all destinations supported by BRouter across Europe.
+ * Test de frontière — limitait auparavant le routage strictement à la France.
+ * Désormais ouvert à toutes les destinations que BRouter couvre en Europe.
  */
 
 export interface LatLon {
@@ -13,7 +13,7 @@ export interface FranceBoundsCheck {
   reason?: string;
 }
 
-/** Routing boundary check — allows routing across Europe without restrictions. */
+/** Test de frontière du routage — autorise le routage dans toute l'Europe sans restriction. */
 export function checkRouteWithinFrance(_points?: LatLon[]): FranceBoundsCheck {
   return { ok: true };
 }

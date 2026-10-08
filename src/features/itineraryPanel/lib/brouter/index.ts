@@ -1,8 +1,8 @@
 /**
- * Public barrel for the BRouter client.
+ * Barrel public du client BRouter.
  *
- * Keep imports inside the panel pointing at this module so we can
- * reorganise internals freely.
+ * Garder les imports internes au panneau pointés sur ce module pour pouvoir
+ * réorganiser librement l'intérieur.
  */
 export * from './types';
 export {

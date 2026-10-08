@@ -76,11 +76,10 @@ export function useItineraryBrouterRouting({
     }
     setRouteLoading(false);
   }, [setRouteLoading]);
-  // When set to true, the next "full recompute" branch of the routing
-  // effect is skipped and the flag is cleared.  This is used by the
-  // recalculate-trace feature to prevent the effect from overwriting
-  // the freshly-recalculated route with a single (often failing)
-  // end-to-end BRouter request.
+  // À true, la prochaine branche « recalcul complet » de l'effet de routage est
+  // sautée et le drapeau est remis à zéro. Sert à la fonction de recalcul du
+  // tracé pour empêcher l'effet d'écraser le tracé tout juste recalculé par une
+  // unique requête BRouter de bout en bout (souvent en échec).
   const skipRouteRecomputeRef = useRef(false);
   const skipNextRouteRecompute = useCallback(() => {
     skipRouteRecomputeRef.current = true;
@@ -216,7 +215,7 @@ export function useItineraryBrouterRouting({
   const expertProfileKey = active?.expertProfile
     ? JSON.stringify(active.expertProfile)
     : '';
-  // Trail / Running switch the BRF to the pedestrian network.
+  // Trail / course basculent le BRF sur le réseau piéton.
   const discipline = normalizeDiscipline(active?.discipline);
 
   const brfInputs = useMemo(() => {
@@ -408,7 +407,7 @@ export function useItineraryBrouterRouting({
             return;
           }
           setRouteWarnings(resolvedWarnings);
-          // Render route immediately with native BRouter elevation data
+          // Afficher le tracé tout de suite avec les altitudes natives de BRouter
           const refinementBase: { current: RouteRefinementBase | null } = { current: null };
           setProject((project) => {
             const next = applyPendingTraceAppend(project, target, route, null);
@@ -480,10 +479,9 @@ export function useItineraryBrouterRouting({
       return;
     }
 
-    // After a segment-by-segment recalculation the source flips from
-    // 'gpx' → 'brouter' which re-triggers this effect.  Skip the full
-    // recompute once so we don't overwrite the result with a failing
-    // single-request route.
+    // Après un recalcul segment par segment, la source passe de 'gpx' à
+    // 'brouter', ce qui relance cet effet. Sauter une fois le recalcul complet
+    // pour ne pas écraser le résultat par un tracé en une requête qui échoue.
     if (skipRouteRecomputeRef.current) {
       skipRouteRecomputeRef.current = false;
       logger.brouter.info('skipping full recompute (recalculate-trace guard)');
@@ -628,7 +626,7 @@ export function useItineraryBrouterRouting({
             'm | pts=',
             route.coordinates.length,
           );
-          // Render route immediately with native BRouter elevation data & unblock UI
+          // Afficher le tracé tout de suite avec les altitudes natives de BRouter et débloquer l'interface
           const refinementBase: { current: RouteRefinementBase | null } = { current: null };
           setProject((project) => {
             const next = applyRecomputedRoute(project, target, route, null);

@@ -10,7 +10,7 @@ import type { ResolvedRouteRequest } from './resolveRouteRequest';
 
 const KM_PER_DEGREE = (12_742 * Math.PI) / 360;
 
-/** Route along the 6°E meridian, one point per km. */
+/** Tracé le long du méridien 6°E, un point par km. */
 function meridianRoute(km: number): RoutePoints {
   return Array.from({ length: km + 1 }, (_, index) => ({ lat: 44 + index / KM_PER_DEGREE, lon: 6, distanceM: index * 1000 }));
 }
@@ -46,7 +46,7 @@ describe('resolveElasticRoutePatch', () => {
       end: { lat: stored[25]!.lat, lon: stored[25]!.lon, kind: 'waypoint', distanceM: 25_000 },
       via: [],
     };
-    // Snapped ~400 m east of the stored route, never rejoins it.
+    // Accroché ~400 m à l'est du tracé stocké, ne le rejoint jamais.
     const routePatch = vi.fn(async () => resolved(along(stored, 5, 25, 0.005)));
 
     const error = await resolveElasticRoutePatch(patch, stored, new AbortController().signal, routePatch)
@@ -65,14 +65,14 @@ describe('resolveElasticRoutePatch', () => {
     const narrowed = narrowRoutePatchToEdit(whole, stored, { fromM: 200_000, toM: 201_000, projected: false });
     const routePatch = vi.fn(async (current: ItineraryPendingRoutePatch) => {
       if (current.start.kind === 'start') return resolved(along(stored, 0, 213));
-      // Every provisional start (km 187, then km 119) snaps 400 m away: seam refused.
+      // Chaque départ provisoire (km 187, puis km 119) s'accroche à 400 m : jonction refusée.
       const startKm = Math.round((current.start.distanceM ?? 0) / 1000);
       return resolved([[6.005, stored[startKm]!.lat], ...along(stored, startKm + 6, 213)]);
     });
 
     const result = await resolveElasticRoutePatch(narrowed, stored, new AbortController().signal, routePatch);
 
-    // ±12 km, then ±80 km, then the real start.
+    // ±12 km, puis ±80 km, puis le vrai départ.
     expect(routePatch).toHaveBeenCalledTimes(3);
     expect(result.patch.start.kind).toBe('start');
     expect(result.patch.end).toEqual(narrowed.end);
