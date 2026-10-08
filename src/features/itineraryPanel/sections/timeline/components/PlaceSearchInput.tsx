@@ -16,6 +16,7 @@ import {
   useState,
   type KeyboardEvent,
 } from 'react';
+import { useHasChanged } from '@/shared/hooks/useHasChanged';
 import { createPortal } from 'react-dom';
 import {
   geocodePlaces,
@@ -73,21 +74,25 @@ export function PlaceSearchInput({
     scale: number;
   } | null>(null);
 
-  // Garder le texte local synchronisé si le parent réinitialise la valeur (par ex. changement d'itinéraire).
-  useEffect(() => {
-    setText(value);
-  }, [value]);
+  // Garder le texte local synchronisé si le parent réinitialise la valeur (par ex. changement d'itinéraire),
+  // pendant le rendu.
+  const valueChanged = useHasChanged(value);
+  if (valueChanged) setText(value);
+
+  // Liste ouverte sur moins de 2 caractères : ni suggestions, ni erreur, ni chargement
+  // (gardé, donc un seul rendu de plus au plus).
+  const shortQuery = text.trim().length < 2;
+  if (open && shortQuery && (suggestions.length > 0 || error !== null || loading)) {
+    setSuggestions([]);
+    setError(null);
+    setLoading(false);
+  }
 
   // Recherche avec anti-rebond chaque fois que `text` change.
   useEffect(() => {
     if (!open) return;
     const trimmed = text.trim();
-    if (trimmed.length < 2) {
-      setSuggestions([]);
-      setError(null);
-      setLoading(false);
-      return;
-    }
+    if (trimmed.length < 2) return;
     const handle = window.setTimeout(() => {
       abortRef.current?.abort();
       const ctrl = new AbortController();

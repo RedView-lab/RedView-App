@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useHasChanged } from '@/shared/hooks/useHasChanged';
 import { useAppI18n } from '@/shared/i18n';
 import { PanelCheckbox } from '../../../components/controls';
 import { formatPauseDurationInput, parsePauseDurationInput } from '../../../lib/schedule';
@@ -83,9 +84,9 @@ function PoiPauseCell({
   const displayed = checked && value !== null ? formatPauseDurationInput(value) : '-';
   const [draft, setDraft] = useState(displayed);
 
-  useEffect(() => {
-    setDraft(displayed);
-  }, [displayed]);
+  // Valeur changée par le parent : le brouillon la reprend (pendant le rendu).
+  const displayedChanged = useHasChanged(displayed);
+  if (displayedChanged) setDraft(displayed);
 
   const commitDraft = () => {
     if (!checked) {

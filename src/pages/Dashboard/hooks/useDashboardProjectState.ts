@@ -5,6 +5,7 @@ import * as Sentry from '@sentry/react';
 import { normalizeItineraryProject } from '@/features/itineraryPanel/lib/project/defaultState';
 import { classifyProjectChange, extractProjectView } from '@/features/itineraryPanel/lib/project/layers';
 import type { ItineraryProject } from '@/features/itineraryPanel/types';
+import { useLatestRef } from '@/shared/hooks/useLatestRef';
 import { notify } from '@/shared/lib/notify';
 import {
   flushProjectViews,
@@ -92,10 +93,10 @@ export function useDashboardProjectState({
   const [projectBrowserOpen, setProjectBrowserOpen] = useState(true);
 
   const activeProjectSnapshotRef = useRef<ItineraryProject | null>(null);
-  const activeProjectIdRef = useRef<string | null>(null);
+  // Écrite aussi par openProject (avant le rendu suivant) ; jamais pendant le rendu.
+  const activeProjectIdRef = useLatestRef<string | null>(activeProjectId);
   const isClosingProjectRef = useRef(false);
   const suppressedInitialProjectIdRef = useRef<string | null>(null);
-  activeProjectIdRef.current = activeProjectId;
 
   const {
     flushSave,
@@ -191,7 +192,7 @@ export function useDashboardProjectState({
         if (!isStale()) setProjectLoading(false);
       }
     },
-    [flushPendingLocally, flushSave, queueProjectSave, resetSyncState],
+    [activeProjectIdRef, flushPendingLocally, flushSave, queueProjectSave, resetSyncState],
   );
 
   const closeProject = useCallback(async () => {
@@ -237,7 +238,7 @@ export function useDashboardProjectState({
       isClosingProjectRef.current = false;
       setIsClosingProject(false);
     }
-  }, [beforeCloseProject, captureThumbnailForProject, flushPendingLocally, flushSave, resetSyncState]);
+  }, [activeProjectIdRef, beforeCloseProject, captureThumbnailForProject, flushPendingLocally, flushSave, resetSyncState]);
 
   const saveActiveProject = useCallback(async (options?: { force?: boolean }) => {
     const id = activeProjectIdRef.current;
@@ -248,7 +249,7 @@ export function useDashboardProjectState({
       void captureThumbnailForProject(id);
     }
     return saved;
-  }, [captureThumbnailForProject, saveNow]);
+  }, [activeProjectIdRef, captureThumbnailForProject, saveNow]);
 
   /**
    * Met à jour `dashboard` (vue carte, tailles des panneaux). C'est de la vue
@@ -269,7 +270,7 @@ export function useDashboardProjectState({
       activeProjectSnapshotRef.current = next;
       queueProjectViewSave(id, extractProjectView(next));
     },
-    [],
+    [activeProjectIdRef],
   );
 
   /**
@@ -296,7 +297,7 @@ export function useDashboardProjectState({
       const id = activeProjectIdRef.current;
       if (id && (!change || change.view)) queueProjectViewSave(id, extractProjectView(composed));
     },
-    [queueProjectSave],
+    [activeProjectIdRef, queueProjectSave],
   );
 
   /**
@@ -311,7 +312,7 @@ export function useDashboardProjectState({
     if (activeProjectIdRef.current === initialProjectId) return;
 
     void openProject(initialProjectId);
-  }, [initialProjectId, openProject]);
+  }, [activeProjectIdRef, initialProjectId, openProject]);
 
   return {
     activeProjectId,

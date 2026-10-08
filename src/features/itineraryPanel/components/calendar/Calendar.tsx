@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useHasChanged } from '@/shared/hooks/useHasChanged';
 import { useAppI18n } from '@/shared/i18n';
 import { IconChevronLeft, IconChevronRight } from './icons';
 import { useMonthMatrix } from './useMonthMatrix';
@@ -53,17 +54,16 @@ export function Calendar({ value, onSelect, markedDates }: CalendarProps) {
     year: 'numeric',
   }).format(date);
 
-  // Resynchroniser le mois visible si le parent change la sélection de l'extérieur.
-  useEffect(() => {
-    if (!selected) return;
-    if (
-      selected.getFullYear() !== viewMonth.getFullYear() ||
-      selected.getMonth() !== viewMonth.getMonth()
-    ) {
-      setViewMonth(selected);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value]);
+  // Resynchroniser le mois visible si le parent change la sélection de l'extérieur
+  // (ajusté pendant le rendu : jamais un rendu avec l'ancien mois à l'écran).
+  const valueChanged = useHasChanged(value);
+  if (
+    valueChanged &&
+    selected &&
+    (selected.getFullYear() !== viewMonth.getFullYear() || selected.getMonth() !== viewMonth.getMonth())
+  ) {
+    setViewMonth(selected);
+  }
 
   const cells = useMonthMatrix(viewMonth);
   const markedSet = new Set(markedDates ?? []);

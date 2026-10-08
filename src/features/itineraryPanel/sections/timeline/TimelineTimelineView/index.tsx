@@ -8,6 +8,7 @@
  * dates et lit le parcours comme des points de contrôle planifiés.
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useHasChanged } from '@/shared/hooks/useHasChanged';
 import {
   BASE_HOUR_ROW_HEIGHT_PX,
   CARD_COMPACT_MIN_WIDTH_PX,
@@ -81,11 +82,9 @@ export function TimelineTimelineView({
   onRemove,
 }: TimelineTimelineViewProps) {
   const [localHourZoom, setLocalHourZoom] = useState(hourZoom);
-  useEffect(() => {
-    if (Number.isFinite(hourZoom)) {
-      setLocalHourZoom(hourZoom);
-    }
-  }, [hourZoom]);
+  // Zoom changé par le parent : repris pendant le rendu.
+  const hourZoomChanged = useHasChanged(hourZoom);
+  if (hourZoomChanged && Number.isFinite(hourZoom)) setLocalHourZoom(hourZoom);
 
   // Le plancher descend sous HOUR_ZOOM_MIN quand la barre verticale demande
   // « tout voir » : il faut alors pouvoir rentrer la journée entière.
@@ -135,9 +134,9 @@ export function TimelineTimelineView({
   const [multiDayCardDensity, setMultiDayCardDensity] = useState<CardDensity>('regular');
   const [singleDayCardDensity, setSingleDayCardDensity] = useState<CardDensity>('regular');
   const [now, setNow] = useState(() => new Date());
-  useEffect(() => {
-    setSelectedDayKey(defaultAnchorDayKey);
-  }, [defaultAnchorDayKey]);
+  // Jour d'ancrage changé (nouveau planning) : la sélection y revient (pendant le rendu).
+  const defaultAnchorDayKeyChanged = useHasChanged(defaultAnchorDayKey);
+  if (defaultAnchorDayKeyChanged) setSelectedDayKey(defaultAnchorDayKey);
 
   useEffect(() => {
     const node = scheduleRef.current;

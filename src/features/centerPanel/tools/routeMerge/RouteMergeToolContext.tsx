@@ -1,10 +1,10 @@
 import {
   useCallback,
-  useEffect,
   useMemo,
   useState,
   type ReactNode,
 } from 'react';
+import { useHasChanged } from '@/shared/hooks/useHasChanged';
 
 import { useProjectStoreOptional } from '@/features/itineraryPanel/context/ProjectStore/hooks';
 import { resolveRouteRequest } from '@/features/itineraryPanel/hooks/useItineraryBrouterRouting/resolveRouteRequest';
@@ -241,16 +241,19 @@ export function RouteMergeToolProvider({ children }: RouteMergeToolProviderProps
     });
   }, [canMerge, isMerging]);
 
-  useEffect(() => {
-    if (canMerge) return;
+  // Ajustés pendant le rendu quand leur source change (jamais un rendu de plus
+  // avec l'outil armé alors que la fusion n'est plus possible).
+  const canMergeChanged = useHasChanged(canMerge);
+  if (canMergeChanged && !canMerge) {
     setArmed(false);
     setSelectedIds([]);
     setIsMerging(false);
-  }, [canMerge]);
+  }
 
-  useEffect(() => {
+  const mergeableIdsChanged = useHasChanged(mergeableIds);
+  if (mergeableIdsChanged) {
     setSelectedIds((current) => current.filter((id) => mergeableIds.has(id)));
-  }, [mergeableIds]);
+  }
 
   // Pas pendant la fusion : `toggle` ne l'interrompt pas non plus.
   useEscapeToExit(armed && !isMerging, deactivate);

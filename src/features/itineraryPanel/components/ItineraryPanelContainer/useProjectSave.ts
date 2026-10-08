@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAppI18n } from '@/shared/i18n';
 import { isProjectCloudError } from '@/shared/services/projects';
+import { useLatestRef } from '@/shared/hooks/useLatestRef';
 import { useProjectSyncStatus } from '@/shared/hooks/useProjectSyncStatus';
 import type { ItineraryProject, ProjectSaveStatus } from '../../types';
 
@@ -85,8 +86,7 @@ export function useProjectSave({ projectId, onSaveProject, setProject }: UseProj
       ? t(autosaveStatus.message)
       : null;
 
-  const handleSaveProjectRef = useRef(handleSaveProject);
-  handleSaveProjectRef.current = handleSaveProject;
+  const handleSaveProjectRef = useLatestRef(handleSaveProject);
   useEffect(() => {
     if (!onSaveProject) return;
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -96,7 +96,7 @@ export function useProjectSave({ projectId, onSaveProject, setProject }: UseProj
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onSaveProject]);
+  }, [handleSaveProjectRef, onSaveProject]);
 
   return { handleSaveProject, displayedSaveStatus, displayedSaveMessage };
 }
