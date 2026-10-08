@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-RedView High-Resolution Weather Ingestion Daemon (Europe)
-Powered by DWD ICON-EU (0.0625° ~6.5 km) with Conformal Web Mercator Reprojection.
-Generates 48 hours of ultra-fast 2D raster tiles for 6 meteorological variables.
+Démon d'ingestion météo haute résolution de RedView (Europe)
+Alimenté par DWD ICON-EU (0.0625° ~6,5 km) avec reprojection conforme en Web Mercator.
+Produit 48 heures de tuiles raster 2D très rapides pour 6 variables météorologiques.
 """
 
 import os
@@ -22,7 +22,7 @@ import gribberish
 from PIL import Image
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Geographic & Grid Configuration: Europe
+# Configuration géographique et de grille : Europe
 # ─────────────────────────────────────────────────────────────────────────────
 BBOX = {
     "west": -18.0,
@@ -36,7 +36,7 @@ OUT_H = 1080
 FORECAST_HOURS = 48
 DWD_BASE = "https://opendata.dwd.de/weather/nwp/icon-eu/grib"
 
-# Variable scale ranges for 8-bit normalization [0..255]
+# Plages d'échelle des variables pour la normalisation 8 bits [0..255]
 VARIABLES = {
     "temperature": {"unit": "°C", "min": -40.0, "max": 50.0},
     "feelsLike": {"unit": "°C", "min": -40.0, "max": 50.0},
@@ -46,7 +46,7 @@ VARIABLES = {
     "windSpeed": {"unit": "km/h", "min": 0.0, "max": 150.0},
 }
 
-# DWD folder and variable name mapping
+# Correspondance des dossiers et des noms de variables du DWD
 DWD_VAR_MAP = {
     "temperature": ("t_2m", "T_2M"),
     "rain": ("tot_prec", "TOT_PREC"),
@@ -65,7 +65,7 @@ def mercator_y_to_lat(y: float) -> float:
     return math.degrees(2.0 * math.atan(math.exp(math.pi * (1.0 - 2.0 * y))) - math.pi / 2.0)
 
 
-# Precompute Web Mercator target coordinates
+# Précalcule les coordonnées cibles en Web Mercator
 y_north = lat_to_mercator_y(BBOX["north"])
 y_south = lat_to_mercator_y(BBOX["south"])
 merc_y_steps = np.linspace(y_north, y_south, OUT_H)
@@ -75,8 +75,8 @@ TARGET_LONS = np.linspace(BBOX["west"], BBOX["east"], OUT_W, dtype=np.float32)
 
 def find_latest_dwd_run() -> Tuple[str, str, datetime]:
     """
-    Finds the latest available DWD ICON-EU run (00, 03, 06, 09, 12, 15, 18, 21)
-    that has completed step 048.
+    Trouve le dernier run DWD ICON-EU disponible (00, 03, 06, 09, 12, 15, 18, 21)
+    dont l'échéance 048 est terminée.
     """
     now = datetime.now(timezone.utc)
     base_hours = ["21", "18", "15", "12", "09", "06", "03", "00"]
@@ -98,7 +98,7 @@ def find_latest_dwd_run() -> Tuple[str, str, datetime]:
             except Exception:
                 continue
 
-    # Fallback to run 00 of today
+    # Repli sur le run 00 d'aujourd'hui
     today_str = now.strftime("%Y%m%d")
     fallback_dt = now.replace(hour=0, minute=0, second=0, microsecond=0)
     print(f"[DWD ICON-EU] Fallback to run {today_str} 00z")
@@ -121,10 +121,10 @@ def fetch_and_decompress(url: str, retries: int = 3) -> Optional[bytes]:
 
 def calculate_apparent_temperature(temp_c: np.ndarray, rh_pct: np.ndarray, wind_kmh: np.ndarray) -> np.ndarray:
     """
-    Standard Australian BOM / NOAA Steadman Apparent Temperature Formula.
-    Valid across all temperature and humidity ranges.
+    Formule standard de température ressentie de Steadman (BOM australien / NOAA).
+    Valable sur toutes les plages de température et d'humidité.
     """
-    # Vapor pressure (hPa)
+    # Pression de vapeur (hPa)
     e = (rh_pct / 100.0) * 6.105 * np.exp((17.27 * temp_c) / (237.7 + temp_c))
     wind_ms = np.maximum(0.0, wind_kmh / 3.6)
     at = temp_c + 0.33 * e - 0.70 * wind_ms - 4.00
@@ -133,7 +133,7 @@ def calculate_apparent_temperature(temp_c: np.ndarray, rh_pct: np.ndarray, wind_
 
 def reproject_bilinear(raw_data: np.ndarray, lats: np.ndarray, lons: np.ndarray) -> np.ndarray:
     """
-    Fast vectorised bilinear interpolation from regular lat/lon to Web Mercator grid.
+    Interpolation bilinéaire vectorisée rapide d'une grille lat/lon régulière vers une grille Web Mercator.
     """
     lat_step = (lats[-1] - lats[0]) / (len(lats) - 1)
     lon_step = (lons[-1] - lons[0]) / (len(lons) - 1)
@@ -177,7 +177,7 @@ def process_step(
     lats_ref = last_known.get("lats_ref")
     lons_ref = last_known.get("lons_ref")
 
-    # 1. Download base variables concurrently
+    # 1. Télécharge les variables de base en parallèle
     def dl_var(item):
         var_key, (folder, code) = item
         url = f"{DWD_BASE}/{run_hour_str}/{folder}/icon-eu_europe_regular-lat-lon_single-level_{run_date_str}{run_hour_str}_{fff}_{code}.grib2.bz2"
@@ -213,7 +213,7 @@ def process_step(
                 if var_key in last_known:
                     fields[var_key] = last_known[var_key]
 
-    # Fill any missing variables from last_known
+    # Complète les variables manquantes depuis last_known
     for k, v in last_known.items():
         if k not in fields and k not in ("lats_ref", "lons_ref"):
             fields[k] = v
@@ -222,7 +222,7 @@ def process_step(
         print(f"[Warning] Step {step_idx:03d} incomplete")
         return step_idx, hour_iso, {}, None
 
-    # Compute hourly rain from cumulative TOT_PREC
+    # Calcule la pluie horaire à partir du cumul TOT_PREC
     raw_tot_prec = fields.get("rain_raw")
     if raw_tot_prec is not None:
         if prev_rain_arr is not None:
@@ -233,14 +233,14 @@ def process_step(
     else:
         fields["rain"] = np.zeros_like(fields["temperature"])
 
-    # Compute Apparent Temperature (feelsLike)
+    # Calcule la température ressentie (feelsLike)
     fields["feelsLike"] = calculate_apparent_temperature(
         fields["temperature"],
         fields.get("humidity", np.full_like(fields["temperature"], 65.0)),
         fields.get("windSpeed", np.full_like(fields["temperature"], 10.0)),
     )
 
-    # 2. Reproject each field to Web Mercator & Save PNG
+    # 2. Reprojette chaque champ en Web Mercator et enregistre le PNG
     out_paths: Dict[str, str] = {}
     for var_key in VARIABLES:
         raw_arr = fields.get(var_key)
@@ -267,7 +267,7 @@ def run_europe_pipeline(output_dir: str, forecast_hours: int = FORECAST_HOURS) -
     run_date_str, run_hour_str, run_dt = find_latest_dwd_run()
     now_utc = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
 
-    # Calculate hours since run to match current UTC timeline
+    # Calcule les heures depuis le run pour suivre la frise UTC actuelle
     hours_since_run = int((now_utc - run_dt).total_seconds() // 3600)
     start_step = max(0, min(hours_since_run, 24))
 
@@ -287,7 +287,7 @@ def run_europe_pipeline(output_dir: str, forecast_hours: int = FORECAST_HOURS) -
         f"from DWD ICON-EU run {run_date_str} {run_hour_str}z..."
     )
 
-    # Process sequentially for rain accumulation tracking, or in small parallel batches
+    # Traitement séquentiel pour suivre le cumul de pluie, ou par petits lots en parallèle
     valid_hours: List[str] = []
     prev_rain: Optional[np.ndarray] = None
     last_known: Dict[str, np.ndarray] = {}
@@ -309,7 +309,7 @@ def run_europe_pipeline(output_dir: str, forecast_hours: int = FORECAST_HOURS) -
             valid_hours.append(h_iso)
             print(f"   [Step +{i:02d}h] {h_iso} generated in {time.time()-t0:.2f}s")
 
-    # 3. Write metadata.json
+    # 3. Écrit metadata.json
     meta = {
         "model": "DWD ICON-EU High-Resolution (0.0625° ~6.5 km)",
         "updatedAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -338,7 +338,7 @@ def run_europe_pipeline(output_dir: str, forecast_hours: int = FORECAST_HOURS) -
     with open(meta_path, "w", encoding="utf-8") as f:
         json.dump(meta, f, indent=2)
 
-    # 4. Prune obsolete tiles from previous runs to cap storage strictly under ~150 MB (far below 10 GB limit)
+    # 4. Purge les tuiles obsolètes des runs précédents pour garder le stockage strictement sous ~150 Mo (bien en dessous de la limite de 10 Go)
     pruned = prune_obsolete_tiles(tiles_dir, valid_hours)
     if pruned > 0:
         print(f"[Storage Cap] Pruned {pruned} obsolete tiles. VPS disk usage strictly capped < 150 MB.")
@@ -352,9 +352,9 @@ def run_europe_pipeline(output_dir: str, forecast_hours: int = FORECAST_HOURS) -
 
 def prune_obsolete_tiles(tiles_dir: str, valid_hours: List[str]) -> int:
     """
-    Guarantees that disk usage on the VPS NEVER accumulates old files.
-    Deletes any .png file in tiles_dir whose timestamp is not in the current valid_hours.
-    Strictly caps total storage under ~150 MB (far below 10 GB limit).
+    Garantit que l'espace disque du VPS n'accumule JAMAIS d'anciens fichiers.
+    Supprime tout fichier .png de tiles_dir dont l'horodatage n'est pas dans les valid_hours courantes.
+    Plafonne strictement le stockage total sous ~150 Mo (bien en dessous de la limite de 10 Go).
     """
     valid_set = set(f"{v}_{h}.png" for v in VARIABLES for h in valid_hours)
     pruned_count = 0

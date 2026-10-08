@@ -14,13 +14,13 @@ for r in [0, 100, 300, 500, 700, 960, 1200, 1500, 1919]:
     row_vals = temp[r, :]
     print(f"Row {r:4d} (lat {lat:6.1f}): min={row_vals.min():5.1f}C, mean={row_vals.mean():5.1f}C, max={row_vals.max():5.1f}C")
 
-# Check France specifically:
-# Lat: 42 to 51 N -> rows approx:
+# Vérification sur la France en particulier :
+# Lat : 42 à 51 N -> lignes approximatives :
 # r = (90 - lat) / 180 * 1920
-# For lat 48.8 (Paris): r = (90 - 48.8) / 180 * 1920 = 439
-# Lon: -5 to +8 E -> cols approx:
+# Pour lat 48.8 (Paris) : r = (90 - 48.8) / 180 * 1920 = 439
+# Lon : -5 à +8 E -> colonnes approximatives :
 # c = (lon - (-180)) / 360 * 3840
-# For lon 2.3 (Paris): c = (2.3 + 180) / 360 * 3840 = 1944
+# Pour lon 2.3 (Paris) : c = (2.3 + 180) / 360 * 3840 = 1944
 r_paris = int(round((90.0 - 48.85) / 180.0 * 1920))
 c_paris = int(round((2.35 + 180.0) / 360.0 * 3840))
 print(f"Paris (48.85N, 2.35E): row={r_paris}, col={c_paris}, temp={temp[r_paris, c_paris]:.1f}C")

@@ -11,13 +11,13 @@ with open("/tmp/sample.grib2", "rb") as f:
 msg = gribberish.parse_grib_message(raw, 0)
 meta = msg.metadata
 raw_data = msg.data().reshape(meta.grid_shape)
-# Row 0 is North (top)
+# La ligne 0 est au nord (haut)
 full_europe = np.flipud(raw_data) - 273.15
 
 print("Full Europe shape:", full_europe.shape)
 print("Temp range:", round(full_europe.min(), 1), "to", round(full_europe.max(), 1), "C")
 
-# Encode to 8-bit PNG
+# Encodage en PNG 8 bits
 clamped = np.clip(full_europe, -40.0, 50.0)
 ratio = (clamped - (-40.0)) / (90.0)
 uint8_arr = np.round(ratio * 255.0).astype(np.uint8)

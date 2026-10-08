@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 """
-RedView Weather Daemon - Worldwide Ingestion & Tile Generator
-Global Meteorological Forecast Engine (+48h) for the ENTIRE WORLD.
-Source: NOAA Global Forecast System (GFS) 0.25° Regular Lat-Lon Grid via AWS S3 Open Data.
+Démon météo RedView - ingestion mondiale et production de tuiles
+Moteur de prévision météorologique mondial (+48 h) pour le MONDE ENTIER.
+Source : NOAA Global Forecast System (GFS), grille lat-lon régulière à 0,25°, via les données ouvertes AWS S3.
 
-Features:
-- 100% Worldwide Coverage: Latitudes [-85.05°, +85.05°], Longitudes [-180.0°, +180.0°]
-- Real Meteorological Forecast Data (Temperature, Apparent Temp, Rain, Cloud Cover, Humidity, Wind Gusts)
-- Direct HTTP Range-Request Pipeline on AWS S3 (< 800 KB per variable slice)
-- Rust-Native In-Memory GRIB2 Parsing (gribberish) in ~30 ms
-- Seamless 360° Antimeridian Longitude Rolling (-180° to +180°)
-- Ultra-Compact Grayscale PNG Tile Storage (~250 KB per global tile, ~72 MB total for 48h)
-- Sub-50ms HTTP Delivery via Nginx with Atomic Updates and Automatic Pruning
+Fonctions :
+- Couverture mondiale complète : latitudes [-85.05°, +85.05°], longitudes [-180.0°, +180.0°]
+- Vraies données de prévision (température, température ressentie, pluie, nébulosité, humidité, rafales)
+- Pipeline par requêtes HTTP Range directes sur AWS S3 (< 800 Ko par tranche de variable)
+- Analyse GRIB2 en mémoire, native en Rust (gribberish), en ~30 ms
+- Bouclage continu des longitudes sur 360° à l'antiméridien (-180° à +180°)
+- Stockage en tuiles PNG en niveaux de gris très compactes (~250 Ko par tuile mondiale, ~72 Mo au total pour 48 h)
+- Service HTTP en moins de 50 ms via Nginx, avec mises à jour atomiques et purge automatique
 """
 
 import os
@@ -29,7 +29,7 @@ import numpy as np
 import gribberish
 from PIL import Image
 
-# Global Geographic Extent: Full Planet (Earth -180° to +180°, -85.05° to +85.05°)
+# Étendue géographique mondiale : la planète entière (-180° à +180°, -85.05° à +85.05°)
 BBOX = {
     "west": -180.0,
     "south": -85.051129,
@@ -40,7 +40,7 @@ BBOX = {
 RAW_GRID_WIDTH = 1440
 RAW_GRID_HEIGHT = 721
 
-# 4K Ultra-HD Worldwide Canvas (~10 km effective resolution)
+# Canevas mondial 4K Ultra-HD (résolution effective ~10 km)
 GRID_WIDTH = 3840
 GRID_HEIGHT = 1920
 RESOLUTION_DEG = 0.09375  # 360° / 3840
@@ -67,13 +67,13 @@ def encode_array_to_bytes(arr: np.ndarray, vmin: float, vmax: float) -> np.ndarr
 
 def find_latest_gfs_run() -> Tuple[str, str, datetime]:
     """
-    Finds the latest available GFS synoptic run (00, 06, 12, 18)
-    that has completed uploading to AWS S3 (+48h steps available).
+    Trouve le dernier run synoptique GFS disponible (00, 06, 12, 18) dont
+    l'envoi sur AWS S3 est terminé (pas jusqu'à +48 h disponibles).
     """
     now = datetime.now(timezone.utc)
     candidates = []
 
-    # Check last 4 synoptic runs
+    # Vérifie les 4 derniers runs synoptiques
     base_hours = [0, 6, 12, 18]
     for day_offset in range(2):
         dt_day = now - timedelta(days=day_offset)
@@ -86,7 +86,7 @@ def find_latest_gfs_run() -> Tuple[str, str, datetime]:
         run_date_str = run_dt.strftime("%Y%m%d")
         run_hour_str = run_dt.strftime("%H")
 
-        # Test step f048 .idx existence
+        # Teste l'existence du .idx de l'échéance f048
         test_url = (
             f"{AWS_GFS_BASE}/gfs.{run_date_str}/{run_hour_str}/atmos/"
             f"gfs.t{run_hour_str}z.pgrb2.0p25.f048.idx"
@@ -100,7 +100,7 @@ def find_latest_gfs_run() -> Tuple[str, str, datetime]:
         except Exception:
             continue
 
-    # Fallback to run 00 of today or yesterday
+    # Repli sur le run 00 d'aujourd'hui ou d'hier
     today_str = now.strftime("%Y%m%d")
     fallback_dt = now.replace(hour=0, minute=0, second=0, microsecond=0)
     print(f"[NOAA GFS] Fallback to run {today_str} 00z")
@@ -109,7 +109,7 @@ def find_latest_gfs_run() -> Tuple[str, str, datetime]:
 
 def fetch_idx_and_parse_ranges(base_url: str) -> Optional[Dict[str, Tuple[int, Optional[int]]]]:
     """
-    Fetches the .idx file and extracts byte offsets for the 6 target variables.
+    Récupère le fichier .idx et en extrait les décalages d'octets des 6 variables visées.
     """
     idx_url = f"{base_url}.idx"
     try:
@@ -122,7 +122,7 @@ def fetch_idx_and_parse_ranges(base_url: str) -> Optional[Dict[str, Tuple[int, O
 
     lines = idx_text.strip().splitlines()
 
-    # Match rules for each variable
+    # Règles de correspondance de chaque variable
     patterns: Dict[str, Callable[[List[str]], bool]] = {
         "temperature": lambda parts: parts[3] == "TMP" and parts[4] == "2 m above ground",
         "feelsLike": lambda parts: parts[3] == "APTMP" and parts[4] == "2 m above ground",
@@ -149,7 +149,7 @@ def fetch_idx_and_parse_ranges(base_url: str) -> Optional[Dict[str, Tuple[int, O
 
 def fetch_byte_slice(url: str, start_byte: int, end_byte: Optional[int], retries: int = 3) -> Optional[bytes]:
     """
-    Downloads a single variable's byte range from AWS S3 via HTTP Range request.
+    Télécharge la plage d'octets d'une variable depuis AWS S3 par une requête HTTP Range.
     """
     range_header = f"bytes={start_byte}-{end_byte}" if end_byte is not None else f"bytes={start_byte}-"
     for attempt in range(retries):
@@ -173,13 +173,13 @@ def fetch_byte_slice(url: str, start_byte: int, end_byte: Optional[int], retries
 
 def decode_gfs_variable(raw_bytes: bytes, var_key: str) -> np.ndarray:
     """
-    Decodes GRIB2 message using native Rust parser, transforms physical units,
-    and rolls longitude from [0..360] to [-180..+180].
+    Décode un message GRIB2 avec l'analyseur Rust natif, convertit les unités
+    physiques et fait boucler la longitude de [0..360] à [-180..+180].
     """
     msg = gribberish.parse_grib_message(raw_bytes, 0)
     data = msg.data().reshape(msg.metadata.grid_shape)
 
-    # Unit transformations
+    # Conversions d'unités
     if var_key == "temperature" or var_key == "feelsLike":
         # Kelvin -> Celsius
         transformed = data - 273.15
@@ -194,9 +194,9 @@ def decode_gfs_variable(raw_bytes: bytes, var_key: str) -> np.ndarray:
     else:
         transformed = data
 
-    # Roll columns by 720 (half grid):
+    # Décale les colonnes de 720 (une demi-grille) :
     # Col 0 (0°E) -> Col 720 (0°E, Greenwich)
-    # Col 720 (180°E) -> Col 0 (-180°W / +180°E)
+    # Col 720 (180°E) -> Col 0 (-180°O / +180°E)
     rolled = np.roll(transformed, 720, axis=1)
     return rolled
 
@@ -210,8 +210,8 @@ def process_gfs_step(
     hour_iso: str
 ) -> Tuple[int, Dict[str, str]]:
     """
-    Downloads and processes all 6 variables for a single forecast hour.
-    Returns (step, generated_tile_paths).
+    Télécharge et traite les 6 variables d'une heure de prévision.
+    Renvoie (step, generated_tile_paths).
     """
     fff = f"{step:03d}"
     base_file_url = (
@@ -219,13 +219,13 @@ def process_gfs_step(
         f"gfs.t{run_hour_str}z.pgrb2.0p25.f{fff}"
     )
 
-    # 1. Fetch index file to locate byte ranges
+    # 1. Récupère le fichier d'index pour situer les plages d'octets
     ranges = fetch_idx_and_parse_ranges(base_file_url)
     if not ranges:
         print(f"[Warning] No index byte ranges found for step {step:03d}")
         return step, {}
 
-    # 2. Download byte slices concurrently
+    # 2. Télécharge les tranches d'octets en parallèle
     decompressed: Dict[str, bytes] = {}
     with ThreadPoolExecutor(max_workers=6) as executor:
         future_to_key = {
@@ -241,7 +241,7 @@ def process_gfs_step(
             except Exception as e:
                 print(f"[Warning] Error fetching {var_key} step {step:03d}: {e}")
 
-    # 3. Decode arrays and update last_known state
+    # 3. Décode les tableaux et met à jour l'état last_known
     processed_fields: Dict[str, np.ndarray] = {}
     for var_key, spec in VARIABLES.items():
         raw_b = decompressed.get(var_key)
@@ -262,7 +262,7 @@ def process_gfs_step(
             default_val = 15.0 if "temp" in var_key.lower() else 0.0
             processed_fields[var_key] = np.full((RAW_GRID_HEIGHT, RAW_GRID_WIDTH), default_val, dtype=np.float32)
 
-    # 4. Encode each field as 4K Ultra-HD 8-bit PNG (3840x1920)
+    # 4. Encode chaque champ en PNG 8 bits 4K Ultra-HD (3840x1920)
     out_paths: Dict[str, str] = {}
     for var_key, arr in processed_fields.items():
         spec = VARIABLES[var_key]
@@ -285,7 +285,7 @@ def run_ingestion_pipeline(output_dir: str, forecast_hours: int = FORECAST_HOURS
     run_date_str, run_hour_str, run_dt = find_latest_gfs_run()
     now_utc = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
 
-    # Determine forecast hours starting from current UTC hour
+    # Détermine les heures de prévision à partir de l'heure UTC actuelle
     hours_iso: List[str] = []
     step_indices: List[int] = []
 
@@ -337,11 +337,11 @@ def run_ingestion_pipeline(output_dir: str, forecast_hours: int = FORECAST_HOURS
             else:
                 print(f"  Step {step_idx:03d} ({hour_iso}) failed, skipping", flush=True)
 
-    # Maintain strict chronological ordering of forecast hours
+    # Garde un ordre chronologique strict des heures de prévision
     for idx in sorted(completed_steps.keys()):
         valid_hours.append(completed_steps[idx])
 
-    # 5. Write meta.json atomically
+    # 5. Écrit meta.json de façon atomique
     meta_payload = {
         "updatedAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "model": "NOAA GFS Global 4K Ultra-HD (3840x1920 Grid)",
@@ -379,7 +379,7 @@ def run_ingestion_pipeline(output_dir: str, forecast_hours: int = FORECAST_HOURS
         json.dump(meta_payload, f, indent=2)
     os.replace(meta_tmp, meta_path)
 
-    # 6. Prune obsolete tiles (keep only current forecast hours)
+    # 6. Purge les tuiles obsolètes (ne garde que les heures de prévision courantes)
     valid_filenames = set()
     for h in valid_hours:
         for var_key in VARIABLES.keys():

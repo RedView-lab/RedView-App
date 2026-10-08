@@ -4,7 +4,7 @@ import json
 import time
 import sys
 
-# Test 18 x 14 = 252 anchor points
+# Test de 18 x 14 = 252 points d'ancrage
 lats = [round(41.0 + i * (52.5 - 41.0) / 13, 3) for i in range(14)]
 lons = [round(-6.5 + j * (11.5 - (-6.5)) / 17, 3) for j in range(18)]
 
@@ -21,7 +21,7 @@ for idx in range(0, len(all_coords), chunk_size):
     url = f"https://api.open-meteo.com/v1/forecast?latitude={chunk_lats}&longitude={chunk_lons}&hourly=temperature_2m,apparent_temperature,precipitation,cloud_cover,relative_humidity_2m,wind_speed_10m&forecast_days=2"
     
     if idx > 0:
-        time.sleep(1.2)  # Respect rate limit
+        time.sleep(1.2)  # respecte la limite de débit
         
     req = urllib.request.Request(url, headers={"User-Agent": "RedView-Weather-Daemon/1.0"})
     try:

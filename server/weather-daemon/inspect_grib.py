@@ -15,13 +15,13 @@ while pos < total_len - 4:
     sec_id = data[pos+4]
     print(f"Section {sec_id} at {pos}: len {sec_len}")
     if sec_id == 3:
-        # Grid definition
+        # Définition de la grille
         template = struct.unpack(">H", data[pos+12:pos+14])[0]
         nx = struct.unpack(">I", data[pos+30:pos+34])[0]
         ny = struct.unpack(">I", data[pos+34:pos+38])[0]
         print(f"  Grid template {template}, nx={nx}, ny={ny}")
     elif sec_id == 5:
-        # Data representation
+        # Représentation des données
         num_points = struct.unpack(">I", data[pos+5:pos+9])[0]
         template = struct.unpack(">H", data[pos+9:pos+11])[0]
         print(f"  DRS template {template}, num points {num_points}")

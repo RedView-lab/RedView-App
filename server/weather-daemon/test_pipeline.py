@@ -44,7 +44,7 @@ def fetch_and_crop(var_folder: str, var_code: str, step: int):
     
     cropped = np.flipud(raw_data[lat_min_idx:lat_max_idx+1, lon_min_idx:lon_max_idx+1])
     
-    # Bilinear resize to OUT_W x OUT_H
+    # Redimensionnement bilinéaire vers OUT_W x OUT_H
     orig_h, orig_w = cropped.shape
     y_coords = np.linspace(0, orig_h - 1, OUT_H)
     x_coords = np.linspace(0, orig_w - 1, OUT_W)

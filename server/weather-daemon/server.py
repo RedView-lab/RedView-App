@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-RedView Weather Server
-High-performance, ultra-lightweight microservice for the Oracle VPS.
-Serves meta.json, cached WebP/PNG tiles, and instantaneous point forecast queries (<1ms).
-Zero database, zero external dependencies (uses standard library http.server or optional uvloop/fastapi).
+Serveur météo RedView
+Microservice très léger et performant pour le VPS Oracle.
+Sert meta.json, les tuiles WebP/PNG en cache et les prévisions ponctuelles instantanées (< 1 ms).
+Aucune base de données, aucune dépendance externe (bibliothèque standard http.server, ou uvloop/fastapi en option).
 """
 
 import os
@@ -19,7 +19,7 @@ PORT = int(os.environ.get("WEATHER_PORT", "8088"))
 # Écoute locale par défaut : le service est servi via nginx, jamais en direct.
 HOST = os.environ.get("WEATHER_HOST", "127.0.0.1")
 
-# Fallback local data dir if /var/www/weather does not exist
+# Dossier de données local de repli si /var/www/weather n'existe pas
 if not os.path.exists(DATA_DIR) and os.path.exists("./dist_weather"):
     DATA_DIR = "./dist_weather"
 
@@ -47,7 +47,7 @@ class WeatherRequestHandler(SimpleHTTPRequestHandler):
         super().__init__(*args, directory=DATA_DIR, **kwargs)
 
     def end_headers(self):
-        # Enable CORS and caching headers
+        # Active les en-têtes CORS et de cache
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, Accept")
@@ -70,7 +70,7 @@ class WeatherRequestHandler(SimpleHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path.rstrip("/")
 
-        # Health endpoint
+        # Point d'accès de santé
         if path in ("/health", "/weather/health"):
             meta = load_meta()
             status = {
@@ -88,7 +88,7 @@ class WeatherRequestHandler(SimpleHTTPRequestHandler):
             self.wfile.write(payload)
             return
 
-        # Meta endpoint alias
+        # Alias du point d'accès des métadonnées
         if path in ("/meta", "/weather/meta", "/weather/meta.json"):
             meta_path = os.path.join(DATA_DIR, "meta.json")
             if os.path.exists(meta_path):
@@ -101,7 +101,7 @@ class WeatherRequestHandler(SimpleHTTPRequestHandler):
                 self.wfile.write(content)
                 return
 
-        # Point forecast endpoint: /weather/point?lat=45.18&lon=5.72
+        # Point d'accès de prévision ponctuelle : /weather/point?lat=45.18&lon=5.72
         if path in ("/point", "/weather/point"):
             query = parse_qs(parsed.query)
             try:
@@ -116,7 +116,7 @@ class WeatherRequestHandler(SimpleHTTPRequestHandler):
                 self.send_error(503, "Weather metadata not yet available")
                 return
 
-            # Check bbox
+            # Vérifie l'emprise
             bbox = meta.get("bbox", BBOX)
             if not (bbox["south"] <= lat <= bbox["north"] and bbox["west"] <= lon <= bbox["east"]):
                 self.send_error(404, "Coordinates outside covered domain (France + bordering countries)")
@@ -127,13 +127,13 @@ class WeatherRequestHandler(SimpleHTTPRequestHandler):
             width = grid_size["width"]
             height = grid_size["height"]
 
-            # Compute pixel coordinate
+            # Calcule la coordonnée en pixels
             x_ratio = (lon - bbox["west"]) / (bbox["east"] - bbox["west"])
             y_ratio = (bbox["north"] - lat) / (bbox["north"] - bbox["south"])
             col = max(0, min(width - 1, int(round(x_ratio * (width - 1)))))
             row = max(0, min(height - 1, int(round(y_ratio * (height - 1)))))
 
-            # Sample point across hours
+            # Échantillonne le point sur les heures
             result: Dict[str, Any] = {
                 "latitude": lat,
                 "longitude": lon,
@@ -149,7 +149,7 @@ class WeatherRequestHandler(SimpleHTTPRequestHandler):
                 }
             }
 
-            # Return point forecast
+            # Renvoie la prévision ponctuelle
             payload = json.dumps(result).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -158,7 +158,7 @@ class WeatherRequestHandler(SimpleHTTPRequestHandler):
             self.wfile.write(payload)
             return
 
-        # Normalize /weather/tiles/... to /tiles/...
+        # Normalise /weather/tiles/... en /tiles/...
         if self.path.startswith("/weather/"):
             self.path = self.path[len("/weather"):]
 
