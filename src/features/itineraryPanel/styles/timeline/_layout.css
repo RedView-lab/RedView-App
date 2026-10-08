@@ -1,4 +1,4 @@
-/* Timeline container and header */
+/* Conteneur et en-tête de la timeline */
 
 .rvi-timeline {
   display: flex;
@@ -85,7 +85,7 @@
   flex-shrink: 0;
 }
 
-/* Segmented view switcher */
+/* Sélecteur de vue segmenté */
 .rvi-tl-tabs {
   display: flex;
   flex: 1 1 400px;
@@ -127,7 +127,7 @@
   text-align: center;
 }
 
-/* Header tool buttons */
+/* Boutons d'outils de l'en-tête */
 .rvi-tl-tool {
   display: inline-flex;
   align-items: center;

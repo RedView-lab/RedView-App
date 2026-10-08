@@ -1,4 +1,4 @@
-/* Tracage panel — Figma nodes 5918:103512 (folded) & 5918:112682 (unfolded) */
+/* Panneau Traçage — nœuds Figma 5918:103512 (replié) et 5918:112682 (déplié) */
 
 .rvi-tracage {
   display: flex;
@@ -22,7 +22,7 @@
   user-select: none;
 }
 
-/* ── Mode Selectors (Top Row) ────────────────────────── */
+/* ── Sélecteurs de mode (ligne du haut) ──────────────── */
 .rvi-tracage__mode-row {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -107,7 +107,7 @@
 
 /* Portal dropdown + items : apparence dans shared/styles/dropdown.css (.rv-dropdown) */
 
-/* ── Surfaces Section ────────────────────────── */
+/* ── Section Surfaces ────────────────────────── */
 .rvi-tracage__surfaces {
   display: flex;
   flex-direction: column;
@@ -154,7 +154,7 @@
   box-sizing: border-box;
 }
 
-/* Background grey track */
+/* Piste grise de fond */
 .rvi-tracage__slider-track {
   position: absolute;
   left: 0;
@@ -167,7 +167,7 @@
   pointer-events: none;
 }
 
-/* Active red line (not white-grey!) without glow */
+/* Ligne rouge active (pas blanc-gris !) sans halo */
 .rvi-tracage__slider-fill {
   position: absolute;
   top: 50%;
@@ -183,7 +183,7 @@
   transition: none !important;
 }
 
-/* Discrete ticks */
+/* Graduations discrètes */
 .rvi-tracage__slider-tick {
   position: absolute;
   width: 4px;
@@ -195,7 +195,7 @@
   transition: background-color 0.15s ease;
 }
 
-/* Knob Pill (38px x 24px) constrained so it NEVER crops on left or right */
+/* Pastille du bouton (38px x 24px) bornée pour n'être JAMAIS rognée à gauche ni à droite */
 .rvi-tracage__slider-knob {
   position: absolute;
   width: 38px;
@@ -261,7 +261,7 @@
   font-weight: 600;
 }
 
-/* Tolerance Column with red border */
+/* Colonne de tolérance avec bordure rouge */
 .rvi-tracage__tolerance-col {
   width: 70px;
   min-width: 70px;
@@ -360,7 +360,7 @@
   transform: rotate(180deg);
 }
 
-/* Smooth clean CSS Grid Accordion */
+/* Accordéon en grille CSS fluide et net */
 .rvi-tracage__params-accordion {
   display: grid;
   grid-template-rows: 0fr;
@@ -424,7 +424,7 @@
   user-select: none;
 }
 
-/* Small dropdown buttons with neutral outline */
+/* Petits boutons de liste avec contour neutre */
 .rvi-tracage__param-btn {
   width: 88px;
   min-width: 88px;
@@ -463,7 +463,7 @@
   text-align: left;
 }
 
-/* ── Checkbox Row ────────────────────────── */
+/* ── Ligne de case à cocher ────────────────────────── */
 .rvi-tracage__checkbox-row {
   display: flex;
   align-items: center;
@@ -509,7 +509,7 @@
   line-height: 1.2;
 }
 
-/* ── Reset & Save Action Buttons ────────────────────────── */
+/* ── Boutons d'action Réinitialiser et Enregistrer ────────────────────────── */
 .rvi-tracage__actions-row {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -550,7 +550,7 @@
   outline: none;
 }
 
-/* Secondary Reset Button */
+/* Bouton secondaire Réinitialiser */
 .rvi-tracage__reset-btn {
   background: rgb(var(--rv-ink) / 0.08);
   border: 1px solid rgb(var(--rv-ink) / 0.16);
@@ -567,7 +567,7 @@
   background: rgb(var(--rv-ink) / 0.06);
 }
 
-/* Primary Save Button */
+/* Bouton principal Enregistrer */
 .rvi-tracage__save-btn {
   background: #890000;
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -594,7 +594,7 @@
   flex-shrink: 0;
 }
 
-/* ── Custom Profile Dropdown Menu Enhancements ────────────────────────── */
+/* ── Améliorations du menu déroulant des profils personnalisés ────────────── */
 .rvi-tracage__mode-menu-item-row {
   display: flex;
   align-items: center;

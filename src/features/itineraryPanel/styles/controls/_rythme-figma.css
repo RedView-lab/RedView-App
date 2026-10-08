@@ -10,7 +10,7 @@
   color: var(--rv-text);
 }
 
-/* ── Row 1 : Date & Heure (Figma node 6025:114207) ────── */
+/* ── Ligne 1 : date et heure (nœud Figma 6025:114207) ────── */
 .rvi-rythme-figma__row-datetime {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -44,7 +44,7 @@
   min-width: 0;
 }
 
-/* Date rectangle: hugs content, exact Figma ratio */
+/* Rectangle de date : épouse son contenu, proportion exacte de Figma */
 .rvi-rythme-figma__chip-btn {
   height: 38px;
   border-radius: 6px;
@@ -143,7 +143,7 @@
   opacity: 0.9;
 }
 
-/* ── Labels (14px Regular) ─────────────────────────────── */
+/* ── Libellés (14px Regular) ───────────────────────────── */
 .rvi-rythme-figma__label-title {
   font-family: var(--rv-font-sans);
   font-style: normal;
@@ -493,7 +493,7 @@ button.rvi-rythme-figma__card-box.is-open {
   -moz-appearance: textfield;
 }
 
-/* Trail / Running: technicality segmented control */
+/* Trail / course : contrôle segmenté de la technicité */
 .rvi-rythme-figma__segmented {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -525,7 +525,7 @@ button.rvi-rythme-figma__card-box.is-selected {
   gap: 6px;
 }
 
-/* ── Checkbox Base (16x16, 4px radius, Figma node 143:3023) ── */
+/* ── Case à cocher de base (16x16, rayon 4px, nœud Figma 143:3023) ── */
 .rvi-rythme-figma__checkbox-box {
   width: 16px;
   height: 16px;

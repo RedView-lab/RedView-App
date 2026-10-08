@@ -1,4 +1,4 @@
-/* Panel shell — dimensions, background, typography, scrollbar */
+/* Shell du panneau — dimensions, fond, typographie, barre de défilement */
 
 .rvi-panel {
   --rvi-red: #890000;
@@ -23,9 +23,10 @@
   max-height: 100%;
   padding: 12px;
   background: var(--rvi-bg);
-  /* No backdrop-filter: the dashboard already paints a blurred copy of the map
-     behind this panel (MapBlurMirror). A second backdrop blur here was recomputed
-     on every map frame and every resize frame for no visible difference. */
+  /* Pas de backdrop-filter : le tableau de bord peint déjà une copie floutée de
+     la carte derrière ce panneau (MapBlurMirror). Un second flou d'arrière-plan
+     ici était recalculé à chaque image de la carte et du redimensionnement, sans
+     différence visible. */
   container-type: inline-size;
   container-name: rvipanel;
 
@@ -42,8 +43,8 @@
   overflow: hidden;
 }
 
-/* Portaled to <body>: position and size come from .rv-app-scaled-layer
-   (src/index.css), which keeps the panel density on every screen. */
+/* Portalé dans <body> : position et taille viennent de .rv-app-scaled-layer
+   (src/index.css), qui garde la densité du panneau sur chaque écran. */
 .rvi-panel-fullscreen-root {
   z-index: 2147483000;
   overflow: hidden;
@@ -104,7 +105,7 @@
   flex-direction: column;
   gap: 12px;
   overflow-y: auto;
-  /* Never hand the scroll over to the page (macOS rubber-band bounce). */
+  /* Ne jamais passer le défilement à la page (rebond élastique de macOS). */
   overscroll-behavior-y: contain;
   scrollbar-width: none;
   -ms-overflow-style: none;
@@ -144,10 +145,11 @@
   overflow-y: auto;
   overscroll-behavior-y: contain;
   /*
-   * Native scrolling only (trackpad momentum, smooth wheel): no JS wheel
-   * handler on the panel. The mode area is often shorter than its content
-   * (Rythme on a laptop), so it shows a thin scrollbar as a cue; the stable
-   * gutter keeps the layout from shifting when the bar appears.
+   * Défilement natif seulement (inertie du trackpad, molette fluide) : pas de
+   * gestionnaire de molette JS sur le panneau. La zone des modes est souvent plus
+   * courte que son contenu (Rythme sur un portable) : elle affiche donc une fine
+   * barre de défilement comme indice ; la gouttière stable évite que la mise en
+   * page se décale quand la barre apparaît.
    */
   scrollbar-width: thin;
   scrollbar-color: rgb(var(--rv-ink) / 0.22) transparent;
@@ -157,7 +159,7 @@
     transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-/* Safari (no scrollbar-color): same thin bar. */
+/* Safari (pas de scrollbar-color) : même barre fine. */
 .rvi-panel__mode-main::-webkit-scrollbar {
   width: 6px;
 }
@@ -183,10 +185,10 @@
 .rvi-panel__mode-main-collapse {
   width: 100%;
   /*
-   * Keeps its content height: as a flex item with `overflow: hidden` it would
-   * otherwise shrink to the mode area's max height and clip the bottom of the
-   * settings (custom-profile actions, POI list…) instead of letting the mode
-   * area scroll.
+   * Garde la hauteur de son contenu : en élément flex avec `overflow: hidden`, il
+   * rétrécirait sinon jusqu'à la hauteur max de la zone des modes et rognerait le
+   * bas des réglages (actions de profil personnalisé, liste des POI…) au lieu de
+   * laisser défiler la zone des modes.
    */
   flex-shrink: 0;
 }
@@ -280,12 +282,12 @@
   gap: 8px;
   align-items: center;
   width: 100%;
-  /* Allow rows to keep shrinking with the panel so sibling cells can stay
-     aligned instead of forcing horizontal clipping on narrow widths. */
+  /* Laisser les lignes rétrécir avec le panneau pour que les cellules sœurs
+     restent alignées au lieu de forcer un rognage horizontal sur les largeurs étroites. */
   min-width: 0;
 }
 
-/* Routing feedback banners (errors / smart-validator warnings). */
+/* Bandeaux de retour du routage (erreurs / avertissements du validateur intelligent). */
 .rvi-route-banner {
   margin: 8px 12px;
   padding: 8px 10px;

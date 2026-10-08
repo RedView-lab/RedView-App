@@ -1,4 +1,4 @@
-/* Itinerary pills + mode tabs */
+/* Pastilles d'itinéraire + onglets de mode */
 
 /* ── Itineraries ──────────────────────────────────────────────── */
 .rvi-itins {
@@ -125,7 +125,7 @@
   font-weight: 500;
 }
 
-/* Wrapper hosts the trash button next to the itinerary tab */
+/* L'enveloppe accueille le bouton corbeille à côté de l'onglet d'itinéraire */
 .rvi-itin-wrap {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 24px;
@@ -176,7 +176,7 @@
   z-index: 1200;
 }
 
-/* ── Mode tabs ────────────────────────────────────────────────── */
+/* ── Onglets de mode ──────────────────────────────────────────── */
 .rvi-itin--add {
   width: 100%;
   padding: 0 8px;
@@ -198,9 +198,9 @@
   flex: 0 0 auto;
 }
 
-/* ── Pending GPX import row ───────────────────────────────────────
-   Occupies the slot the imported itinerary will take. Non-interactive
-   (no hover/active state) so it never reads as a selectable tab. */
+/* ── Ligne d'import GPX en cours ──────────────────────────────────
+   Occupe l'emplacement que prendra l'itinéraire importé. Non interactive
+   (pas d'état survol/actif) pour ne jamais se lire comme un onglet sélectionnable. */
 .rvi-itin-wrap--pending {
   grid-template-columns: minmax(0, 1fr);
 }
@@ -292,7 +292,7 @@
   box-shadow: inset 0 0 0 1px rgb(var(--rv-ink) / 0.08);
 }
 
-/* No itinerary yet: the mode menu is inert (nothing to edit). */
+/* Pas encore d'itinéraire : le menu des modes est inerte (rien à éditer). */
 .rvi-mode:disabled {
   cursor: not-allowed;
   opacity: 0.4;

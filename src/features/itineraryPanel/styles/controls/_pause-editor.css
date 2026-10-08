@@ -35,7 +35,7 @@
   border-radius: 6px;
 }
 
-/* ---- Name pill ------------------------------------------------------------- */
+/* ---- Pastille de nom ------------------------------------------------------- */
 .rvi-pause-row__name {
   min-width: 64px;
   height: 28px;
@@ -80,7 +80,7 @@
   text-overflow: ellipsis;
 }
 
-/* Numeric chip */
+/* Puce numérique */
 .rvi-pause-chip {
   box-sizing: border-box;
   width: 48px;
@@ -129,7 +129,7 @@
   color: var(--rvi-text-faint);
 }
 
-/* ---- Remove (minus) button ------------------------------------------------- */
+/* ---- Bouton de suppression (moins) ----------------------------------------- */
 .rvi-pause-row__remove {
   all: unset;
   display: inline-flex;

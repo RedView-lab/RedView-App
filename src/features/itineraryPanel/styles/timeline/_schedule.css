@@ -1,9 +1,9 @@
-/* Agenda (view id `timeline`): day schedule.
+/* Agenda (vue d'id `timeline`) : planning de la journée.
  *
- * A block's top edge is its arrival time (minuteToCanvasTopPx). Its header
- * line — icon, name, pause, distance, time to next, actions, favourite — sits
- * on the top 24 px of the block whatever its height; a pause chip runs down
- * the block for the length of the pause. */
+ * Le bord haut d'un bloc est son heure d'arrivée (minuteToCanvasTopPx). Sa ligne
+ * d'en-tête — icône, nom, pause, distance, temps jusqu'au suivant, actions,
+ * favori — occupe les 24 px du haut du bloc quelle que soit sa hauteur ; une
+ * puce de pause descend le long du bloc sur la durée de la pause. */
 
 .rvi-tl-schedule {
   --rvi-tl-day-count: 1;

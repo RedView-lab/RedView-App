@@ -1,4 +1,4 @@
-/* Profile selector row + red save button */
+/* Ligne du sélecteur de profil + bouton rouge d'enregistrement */
 
 .rvi-redbtn {
   display: inline-flex;
@@ -18,19 +18,18 @@
 }
 .rvi-redbtn:hover { background: #a00000; color: var(--rv-on-accent); }
 
-/* Pixel-perfect "Calculer" button — Figma I1713:27356;1695:22640.
-   Spec: bg #890000, w_full, hug height (≈30px = 7+16+7), gap 4,
-   pl 8 / pr 10 / py 7, radius 6, icon 16, text 14 Medium white.
-   IMPORTANT: do NOT set min-height — the parent (.rvi-redbtn) already
-   forces 32px which made the button taller than the Figma spec; we
-   reset to `auto` so the button hugs its content like in Figma. */
+/* Bouton « Calculer » au pixel près — Figma I1713:27356;1695:22640.
+   Spec : fond #890000, w_full, hauteur ajustée (≈30px = 7+16+7), gap 4,
+   pl 8 / pr 10 / py 7, rayon 6, icône 16, texte 14 Medium blanc.
+   IMPORTANT : ne PAS poser de min-height — le parent (.rvi-redbtn) force déjà
+   32px, ce qui rendait le bouton plus haut que la spec Figma ; on remet `auto`
+   pour que le bouton épouse son contenu comme dans Figma. */
 .rvi-redbtn--full {
-  /* Force exactly the four corners to round AFTER the parent .rvi-redbtn
-     declared `all: unset` — some browsers mis-compute the right-side
-     border-radius when the button stretches to width:100% inside a
-     scrollable parent (visible as a "flat" right edge). Setting each
-     corner explicitly + overflow:hidden guarantees the clip happens on
-     the rendered background. */
+  /* Forcer l'arrondi des quatre coins exactement APRÈS le `all: unset` déclaré
+     par le parent .rvi-redbtn — certains navigateurs calculent mal le
+     border-radius de droite quand le bouton s'étire à width:100% dans un parent
+     défilant (visible comme un bord droit « plat »). Poser chaque coin
+     explicitement + overflow:hidden garantit que la découpe se fait sur le fond rendu. */
   width: 100%;
   box-sizing: border-box;
   height: auto;

@@ -1,4 +1,4 @@
-/* Top header: back button, title, privacy chip, save date/size, action icons */
+/* En-tête du haut : bouton retour, titre, puce de confidentialité, date/taille d'enregistrement, icônes d'action */
 
 .rvi-header {
   display: flex;
@@ -186,7 +186,7 @@
   }
 }
 
-/* Save CTA — same language as .rvi-redbtn (brand red, radius 6, 600 weight). */
+/* Bouton Enregistrer — même langage que .rvi-redbtn (rouge de la marque, rayon 6, graisse 600). */
 .rvi-header__save {
   all: unset;
   box-sizing: border-box;

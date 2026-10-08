@@ -1,4 +1,4 @@
-/* Timeline edit controls */
+/* Contrôles d'édition de la timeline */
 
 .rvi-tl-edit {
   display: flex;
@@ -130,7 +130,7 @@
   background: rgb(var(--rv-ink) / 0.08);
 }
 
-/* Split add button */
+/* Bouton d'ajout scindé */
 .rvi-tl-add-split {
   display: inline-flex;
   background: #890000;

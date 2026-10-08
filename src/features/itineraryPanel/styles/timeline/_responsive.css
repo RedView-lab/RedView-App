@@ -1,4 +1,4 @@
-/* Timeline responsive rules */
+/* Règles adaptatives de la timeline */
 
 /* Les colonnes et tailles de texte des cartes ne dépendent pas de la largeur
  * du panneau mais de celle d'une colonne-jour : voir `data-density` dans
@@ -57,10 +57,10 @@
   .rvi-tl-schedule__action { transition: none; }
 }
 
-/* ── "Tableau" control bar (Figma 855:22688) ──────────────────────────────
- * The bar holds "Points de passages automatiques [10 km]" + "Ajouter des
- * colonnes" on a single line. When the panel shrinks, the only element that
- * may give up space is the descriptive label — it ellipsises. The "10 km"
- * pill and "Ajouter des colonnes" button keep their natural width and never
- * overlap.
+/* ── Barre de contrôles « Tableau » (Figma 855:22688) ──────────────────────
+ * La barre tient « Points de passages automatiques [10 km] » + « Ajouter des
+ * colonnes » sur une seule ligne. Quand le panneau rétrécit, le seul élément
+ * qui peut céder de la place est le libellé descriptif — il prend des points
+ * de suspension. La pastille « 10 km » et le bouton « Ajouter des colonnes »
+ * gardent leur largeur naturelle et ne se chevauchent jamais.
  * ─────────────────────────────────────────────────────────────────────── */

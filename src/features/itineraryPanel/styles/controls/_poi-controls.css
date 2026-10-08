@@ -1,15 +1,15 @@
-/* POI section — gap-[8px] between rows (Figma 1716:52683). */
+/* Section POI — gap-[8px] entre les lignes (Figma 1716:52683). */
 .rvi-params--poi {
   gap: 8px;
 }
 
-/* Figma 1716:52620 — bottom action stack in POI keeps the tighter button padding */
+/* Figma 1716:52620 — la pile d'actions du bas de la section POI garde le padding de bouton plus serré */
 .rvi-params--poi .rvi-action-stack__button {
   gap: 8px;
   padding: 7px 8px;
 }
 
-/* "Charger" button — disabled state (no GPX or no enabled category). */
+/* Bouton « Charger » — état désactivé (pas de GPX ou aucune catégorie activée). */
 .rvi-redbtn.is-disabled,
 .rvi-redbtn[disabled] {
   opacity: 0.45;
@@ -23,7 +23,7 @@
   color: var(--rv-on-accent);
 }
 
-/* Inline POI status messages (errors / hints) below the load button. */
+/* Messages d'état des POI en ligne (erreurs / indications) sous le bouton de chargement. */
 .rvi-poi-msg {
   margin-top: 2px;
   padding: 6px 8px;

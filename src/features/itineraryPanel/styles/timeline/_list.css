@@ -1,4 +1,4 @@
-/* Shared list view */
+/* Vue liste partagée */
 
 .rvi-tl-list {
   display: flex;
@@ -112,7 +112,7 @@
   to   { opacity: 1; transform: translateY(0); }
 }
 
-/* Row card */
+/* Carte de ligne */
 .rvi-tl-row {
   display: flex;
   align-items: center;
@@ -318,7 +318,7 @@
   outline-offset: 1px;
 }
 
-/* Kind badge */
+/* Badge de type */
 .rvi-kind {
   position: relative;
   display: inline-flex;
@@ -377,7 +377,7 @@
   font-weight: 600;
 }
 
-/* Add row — Figma node 855:20479 */
+/* Ligne d'ajout — nœud Figma 855:20479 */
 .rvi-tl-add {
   position: relative;
   z-index: 1;
@@ -442,7 +442,7 @@
   box-sizing: border-box;
 }
 
-/* Add item dropdown */
+/* Liste déroulante d'ajout d'élément */
 /* Apparence : shared/styles/dropdown.css (.rv-dropdown) */
 .rvi-tl-kind-menu {
   position: fixed;

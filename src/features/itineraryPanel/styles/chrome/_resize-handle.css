@@ -1,4 +1,4 @@
-/* Resize handle (mirrors the right panel's _resize.css, flipped) */
+/* Poignée de redimensionnement (reprend _resize.css du panneau de droite, en miroir) */
 
 .rvi-panel__resize-handle {
   position: absolute;

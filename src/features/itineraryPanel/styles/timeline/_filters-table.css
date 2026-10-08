@@ -1,4 +1,4 @@
-/* Timeline filters and table controls */
+/* Filtres de la timeline et contrôles du tableau */
 
 .rvi-tl-filters {
   display: flex;
@@ -14,7 +14,7 @@
   letter-spacing: 0.01em;
 }
 
-/* ── "Tableau" horizontal control bar (Figma node 855:22688) ── */
+/* ── Barre de contrôles horizontale « Tableau » (nœud Figma 855:22688) ── */
 
 .rvi-tl-table {
   display: flex;
@@ -92,7 +92,7 @@
   background: rgb(var(--rv-ink) / 0.04);
   border-color: rgb(var(--rv-ink) / 0.16);
 }
-/* When auto-waypoints are enabled, the dropdown reads as active. */
+/* Quand les points de passage automatiques sont activés, la liste se lit comme active. */
 .rvi-tl-table__auto.is-on .rvi-tl-table__auto-value-btn {
   border-color: rgb(var(--rv-ink) / 0.24);
   background: rgb(var(--rv-ink) / 0.06);

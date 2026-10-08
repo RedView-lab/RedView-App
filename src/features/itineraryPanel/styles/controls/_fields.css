@@ -1,4 +1,4 @@
-/* Section titles, sliders, selects, inputs, toggles, checkboxes */
+/* Titres de section, curseurs, listes, champs, bascules, cases à cocher */
 
 .rvi-section-title {
   font-size: var(--rv-font-size-lg);
@@ -9,14 +9,14 @@
   line-height: 1.2;
 }
 
-/* ── Types de route rows — Figma 1697:23276…1697:23321 ──────────
-   Five horizontal rows of two cells. The generic `.rvi-row` already
-   handles gap-8 + flex-1 distribution via `.rvi-row > .rvi-lfield`. */
+/* ── Lignes des types de route — Figma 1697:23276…1697:23321 ─────
+   Cinq lignes horizontales de deux cellules. Le `.rvi-row` générique gère déjà
+   le gap-8 + la répartition flex-1 via `.rvi-row > .rvi-lfield`. */
 
-/* ── Input / chip input ──────────────────────────────────────── */
+/* ── Champ / champ puce ──────────────────────────────────────── */
 
 .rvi-chip-input {
-  /* Uniform, perfectly aligned grey chip input across all stacked rows */
+  /* Champ puce gris uniforme, parfaitement aligné sur toutes les lignes empilées */
   background: var(--rvi-bg-chip);
   border: none;
   border-radius: 6px;
@@ -85,7 +85,7 @@
   margin: 0;
 }
 
-/* ── Checkbox + label + trailing input/chip row ──────────────── */
+/* ── Ligne case + libellé + champ/puce de fin ──────────────── */
 .rvi-cfield {
   display: grid;
   grid-template-columns: 20px minmax(0, 1fr) var(--rvi-chip-w, 52px);
@@ -111,14 +111,14 @@
   white-space: nowrap;
 }
 
-/* Inside a horizontal row, sibling cells share available width */
+/* Dans une ligne horizontale, les cellules sœurs se partagent la largeur disponible */
 .rvi-row > .rvi-cfield {
   flex: 1 1 0;
   width: auto;
   min-width: 0;
 }
 
-/* ── Toggle row (full-width toggle + label + trailing icon) ──── */
+/* ── Ligne de bascule (bascule pleine largeur + libellé + icône de fin) ── */
 .rvi-toggle-row {
   display: flex;
   align-items: center;
@@ -159,12 +159,12 @@
   flex: 0 0 20px;
 }
 
-/* Tight-trailing variant */
+/* Variante à élément de fin serré */
 .rvi-toggle-row--tighttrail .rvi-toggle-row__trailing {
   margin-left: -8px;
 }
 
-/* ── Toggle switch ─────────────────────────────────────────── */
+/* ── Interrupteur ──────────────────────────────────────────── */
 .rvi-toggle {
   all: unset;
   position: relative;
@@ -204,7 +204,7 @@
   transform: translateX(16px);
 }
 
-/* Params block wrapper */
+/* Enveloppe du bloc de paramètres */
 .rvi-params {
   display: flex;
   flex-direction: column;
@@ -212,14 +212,14 @@
   width: 100%;
 }
 
-/* ── Two-cell row column distribution ────────────────────────── */
+/* ── Répartition des colonnes des lignes à deux cellules ─────── */
 .rvi-row:has(> .rvi-cfield + .rvi-cfield) {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
-/* ── Road types section: uniform size and alignment across all rows ── */
+/* ── Section types de route : taille et alignement uniformes sur toutes les lignes ── */
 
 .rvi-row:has(> .rvi-cfield + .rvi-cfield) > .rvi-cfield {
   flex: initial;
@@ -227,7 +227,7 @@
   min-width: 0;
 }
 
-/* ── Container Queries & Responsive Fallbacks ──────────────── */
+/* ── Requêtes de conteneur et replis adaptatifs ──────────────── */
 @container rvipanel (max-width: 320px) {
   .rvi-row:has(> .rvi-cfield + .rvi-cfield) {
     gap: 5px;
