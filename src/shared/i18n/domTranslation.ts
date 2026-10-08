@@ -31,7 +31,9 @@ export function translateString(text: string, lookup: TranslationLookup, vars?: 
   }
 
   const translated = lookup.get(normalized);
-  if (!translated) {
+  // Absent, ou déjà dans la langue cible : le texte garde sa typographie
+  // (apostrophe courbe, espace insécable) au lieu de prendre celle de la paire.
+  if (!translated || canonicalizeText(translated) === normalized) {
     return interpolateAppTranslation(text, vars);
   }
 

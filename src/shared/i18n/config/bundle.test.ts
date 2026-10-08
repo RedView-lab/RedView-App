@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { canonicalizeAppText, interpolateAppTranslation, translateAppText } from './bundle';
+import { APP_TRANSLATION_PAIRS } from './translations';
 
 describe('translateAppText', () => {
   it('translates a French source text to English and back', () => {
@@ -12,6 +13,13 @@ describe('translateAppText', () => {
     // { fr: 'Gravier', en: 'Gravel' } exists, but 'Gravel' is also French.
     expect(translateAppText('Gravel', undefined, 'fr')).toBe('Gravel');
     expect(translateAppText('Projets', undefined, 'fr')).toBe('Projets');
+  });
+
+  it('keeps the typography of a text already in the target language', () => {
+    const [pair] = APP_TRANSLATION_PAIRS.filter((p) => p.fr.includes("'"));
+    const curly = pair.fr.replace(/'/g, '’');
+    expect(translateAppText(curly, undefined, 'fr')).toBe(curly);
+    expect(translateAppText(curly, undefined, 'en')).toBe(pair.en);
   });
 
   it('matches through non-breaking spaces, curly apostrophes and extra whitespace', () => {

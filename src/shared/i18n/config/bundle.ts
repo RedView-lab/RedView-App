@@ -62,6 +62,10 @@ export function translateAppText(
   vars?: AppTranslationVars,
   locale: AppLocale = readDocumentAppLocale(),
 ): string {
-  const translated = canonicalLookup(locale).get(canonicalizeAppText(text)) ?? text;
-  return interpolateAppTranslation(translated, vars);
+  const canonical = canonicalizeAppText(text);
+  const translated = canonicalLookup(locale).get(canonical);
+  // Un texte déjà dans la langue cible garde sa typographie (apostrophe
+  // courbe, espace insécable) au lieu de prendre celle de la paire.
+  const result = translated === undefined || canonicalizeAppText(translated) === canonical ? text : translated;
+  return interpolateAppTranslation(result, vars);
 }
