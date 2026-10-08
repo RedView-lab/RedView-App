@@ -13,7 +13,7 @@ export interface TracageSyncResult {
  * Returns synchronized parameters when the user changes "Type d'activité".
  * Automatically updates:
  * - surface knob (Tarmac / Paved / Gravel / Other)
- * - all 8 "Paramètres additionnels" (Dénivelé, Pentes max., Axes majeurs, Voies cyclables,
+ * - all 8 "Paramètres additionnels" (Dénivelé, Pente max, Axes majeurs, Voies cyclables,
  *   Bois, Intersections, Ferry, Villes)
  * - routing priorities (duration, distance, elevation, tranquility)
  */
@@ -200,7 +200,7 @@ export function syncTracageOnActivityChange(
  * Returns synchronized parameters when the user changes "Mode de traçage".
  * Dynamically updates:
  * - Dénivelé (elevationPreference)
- * - Pentes max. (maxSlopePercent)
+ * - Pente max (maxSlopePercent)
  * - Intersections (turns)
  * - Bois (woods)
  * - Voies cyclables (bikeLanes)

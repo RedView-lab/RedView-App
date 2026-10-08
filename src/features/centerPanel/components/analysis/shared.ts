@@ -25,7 +25,7 @@ export type FilterKey = keyof AnalysisFiltersState;
 
 const surfaceFilterOptions: ReadonlyArray<{ value: RouteSurfaceFilter; label: string }> = [
   { value: 'all', label: 'Toutes surfaces' },
-  { value: 'asphalt', label: 'Asphalte' },
+  { value: 'asphalt', label: 'Goudron' },
   { value: 'paved', label: 'Pavé / béton' },
   { value: 'gravel', label: 'Gravel' },
   { value: 'other', label: 'Autre (terre, sable)' },

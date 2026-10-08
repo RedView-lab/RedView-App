@@ -66,7 +66,7 @@ export function ParamDropdownItem({
 }
 
 /**
- * Slope (Pentes max.) Picker with red border & unclipped Portal positioning.
+ * Slope (Pente max) Picker with red border & unclipped Portal positioning.
  */
 export function SlopeParamItem({
   label,

@@ -2217,10 +2217,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Turns"
   },
   {
-    "fr": "Pentes max.",
-    "en": "Max slope"
-  },
-  {
     "fr": "Villes",
     "en": "Cities"
   },
@@ -2803,10 +2799,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Toutes surfaces",
     "en": "All surfaces"
-  },
-  {
-    "fr": "Asphalte",
-    "en": "Asphalt"
   },
   {
     "fr": "Pavé / béton",
@@ -3439,14 +3431,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Zoom de l'agenda",
     "en": "Schedule zoom"
-  },
-  {
-    "fr": "Réduire le zoom",
-    "en": "Zoom out"
-  },
-  {
-    "fr": "Augmenter le zoom",
-    "en": "Zoom in"
   },
   {
     "fr": "Zoom",
@@ -4291,10 +4275,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Voie piétonne",
     "en": "Pedestrian way"
-  },
-  {
-    "fr": "Bitume",
-    "en": "Asphalt"
   },
   {
     "fr": "Gravier",
@@ -7550,7 +7530,7 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   },
   {
     "fr": "Analyser le terrain",
-    "en": "Terrain analysis"
+    "en": "Analyze terrain"
   },
   {
     "fr": "Ligne de pente",
@@ -8387,10 +8367,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Revêtements",
     "en": "Surface types"
-  },
-  {
-    "fr": "Bitume / Asphalte",
-    "en": "Tarmac / Asphalt"
   },
   {
     "fr": "Pavé / Béton",

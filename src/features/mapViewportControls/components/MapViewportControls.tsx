@@ -41,7 +41,7 @@ interface SurfaceLegendItem {
 }
 
 const SURFACE_LEGEND_ITEMS: readonly SurfaceLegendItem[] = [
-  { id: 'asphalt', label: 'Bitume / Asphalte' },
+  { id: 'asphalt', label: 'Goudron' },
   { id: 'paved', label: 'Pavé / Béton' },
   { id: 'gravel', label: 'Gravier / Piste' },
   { id: 'dirt', label: 'Terre / Sentier' },

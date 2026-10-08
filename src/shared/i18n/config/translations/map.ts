@@ -60,7 +60,6 @@ export const mapTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'Afficher le panneau droit', en: 'Show right panel' },
   { fr: 'Légende du tracé', en: 'Route legend' },
   { fr: 'Revêtements', en: 'Surface types' },
-  { fr: 'Bitume / Asphalte', en: 'Tarmac / Asphalt' },
   { fr: 'Pavé / Béton', en: 'Cobbles / Concrete' },
   { fr: 'Gravier / Piste', en: 'Gravel / Track' },
   { fr: 'Terre / Sentier', en: 'Dirt / Trail' },

@@ -210,7 +210,7 @@ export const lidarTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'Hauteur', en: 'Height' },
   { fr: 'Avalanche', en: 'Avalanche' },
   { fr: 'Profil', en: 'Profile' },
-  { fr: 'Analyser le terrain', en: 'Terrain analysis' },
+  { fr: 'Analyser le terrain', en: 'Analyze terrain' },
   { fr: 'Ligne de pente', en: 'Fall line' },
   { fr: 'Exposition avalanche', en: 'Avalanche exposure' },
   { fr: 'Épingler le point', en: 'Pin the point' },

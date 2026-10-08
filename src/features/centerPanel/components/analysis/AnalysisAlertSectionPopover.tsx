@@ -32,7 +32,7 @@ export interface AnalysisAlertSelection {
 }
 
 const SURFACE_LABELS: Record<Surface, string | null> = {
-  asphalt: 'Bitume',
+  asphalt: 'Goudron',
   paved: 'Pavé / béton',
   gravel: 'Gravier',
   dirt: 'Terre',

@@ -4,9 +4,15 @@
  * toast/confirm messages) and checks each one against the { fr, en } pairs in
  * src/shared/i18n/config/translations/*.ts.
  *
- * Run: node scripts/quality/i18n-audit.mjs [--json out.json] [--list]
+ * Run: node scripts/quality/i18n-audit.mjs [--json out.json] [--list] [--strict]
  *   --json <file>  write the missing strings (with locations) as JSON
  *   --list         print every missing string with its first location
+ *   --strict       exit 1 on any missing string, conflicting pair or dynamic
+ *                  template (quality gate: npm run i18n:check, part of check)
+ *
+ * Tests, the co-editing simulator and the files of NOT_UI_FILES are not
+ * scanned; TECHNICAL_STRINGS lists the few strings in UI-looking positions
+ * that never reach the screen (each with its reason).
  *
  * Coverage = translated / (translated + missing) over unique strings.
  * Language-neutral strings (units, acronyms, brand names, numbers) are counted
@@ -27,6 +33,28 @@ const translationsDir = join(srcDir, 'shared', 'i18n', 'config', 'translations')
 const args = process.argv.slice(2);
 const jsonOut = args.includes('--json') ? args[args.indexOf('--json') + 1] : null;
 const listMissing = args.includes('--list');
+const strict = args.includes('--strict');
+
+/** Not UI: tests and fixtures, data with proper nouns, labels that are French by design. */
+const NOT_UI_FILES = [
+  /\.test\.tsx?$/,
+  /[\\/]src[\\/]shared[\\/]test[\\/]/,
+  /[\\/]features[\\/]collab[\\/]sim[\\/]/, // co-editing simulator fixtures
+  /[\\/]features[\\/]lidar[\\/]lib[\\/]japan[\\/]/, // prefecture and dataset names (proper nouns)
+  /[\\/]shared[\\/]lib[\\/]analytics[\\/]labels\.ts$/, // Umami labels, plain French on purpose (docs/analytics)
+  /[\\/]shared[\\/]i18n[\\/]config[\\/]types\.ts$/, // language names, each written in its own language
+];
+
+/** Strings in UI-looking positions that never reach the screen. */
+const TECHNICAL_STRINGS = new Set([
+  'Flow-Py block without its job', // worker protocol error (lidar avalanche pool)
+  'WebGPU', 'WebGL 2', // renderer names in the viewer's debug line
+]);
+/** Same, for template literals: a prefix of their static text. */
+const TECHNICAL_TEMPLATE_PREFIXES = [
+  'Cache terrain ', // label of a background cache-write task (logs)
+  'BRouter HTTP ', 'BRouter upload HTTP ', // raw upstream error, mapped to a translated message by brouterErrorMessage
+];
 
 // --- helpers ---------------------------------------------------------------
 
@@ -82,7 +110,8 @@ function isNeutral(text) {
 /** Looks like an identifier, CSS class, path, URL, key… rather than prose. */
 function looksTechnical(text) {
   if (/^https?:\/\//.test(text) || /^\/[\w\-/.]*$/.test(text) || /^[.#]?[\w-]+\.(svg|png|jpg|webp|css|js|ts)$/.test(text)) return true;
-  if (/^[a-z0-9]+([_\-.:/][a-z0-9]+)+$/i.test(text) && !/\s/.test(text)) return true; // kebab/snake/dotted ids
+  if (/^[a-z0-9]+([_\-.:/]+[a-z0-9]+)+$/i.test(text) && !/\s/.test(text)) return true; // kebab/snake/dotted/BEM ids
+  if (/^[\s.]*[a-z0-9]+(\.[a-z0-9]+)+$/i.test(text) && !/\s\w/.test(text.trim())) return true; // ".json.gz" file suffixes
   if (/^[a-z]+[A-Z][A-Za-z0-9]*$/.test(text)) return true; // camelCase
   if (/^[A-Z0-9_]{2,}$/.test(text) && text.includes('_')) return true; // CONST_CASE
   if (/^(rgba?|hsla?|var|calc|url|translate|scale|rotate|linear-gradient)\(/.test(text)) return true;
@@ -138,7 +167,7 @@ const dynamic = []; // template literals in UI positions
 function record(text, kind, sf, node) {
   const canonical = canonicalize(text);
   if (!canonical || canonical.length < 2) return;
-  if (looksTechnical(canonical)) return;
+  if (looksTechnical(canonical) || TECHNICAL_STRINGS.has(canonical)) return;
   if (!/[A-Za-zÀ-ÿ]/.test(canonical)) return;
   const { line } = sf.getLineAndCharacterOfPosition(node.getStart(sf));
   const loc = `${relative(root, sf.fileName).replace(/\\/g, '/')}:${line + 1}`;
@@ -152,6 +181,7 @@ function record(text, kind, sf, node) {
 
 function recordDynamic(node, sf, kind) {
   if (/^---context:/m.test(node.head.text) || /brf-template/.test(sf.fileName)) return; // BRouter profile source, not UI
+  if (TECHNICAL_TEMPLATE_PREFIXES.some((prefix) => node.head.text.startsWith(prefix))) return;
   const staticText = [node.head.text, ...node.templateSpans.map((s) => s.literal.text)].join(' ');
   if (!/[A-Za-zÀ-ÿ]{3,}/.test(staticText) || isNeutral(canonicalize(staticText))) return;
   if (looksTechnical(canonicalize(staticText))) return;
@@ -273,7 +303,7 @@ function extract(file) {
   visit(sf);
 }
 
-const files = walkFiles(srcDir).filter((f) => !f.startsWith(translationsDir));
+const files = walkFiles(srcDir).filter((f) => !f.startsWith(translationsDir) && !NOT_UI_FILES.some((re) => re.test(f)));
 for (const file of files) extract(file);
 
 const pairs = readPairs();
@@ -330,4 +360,9 @@ console.log(`[i18n-audit] coverage: ${coverage.toFixed(1)}%`);
 if (jsonOut) {
   writeFileSync(jsonOut, JSON.stringify({ coverage, translated, neutral, missing, dynamic }, null, 2), 'utf-8');
   console.log(`[i18n-audit] wrote ${jsonOut}`);
+}
+
+if (strict && (missing.length > 0 || duplicates > 0 || dynamic.length > 0)) {
+  console.error('[i18n-audit] --strict: every UI string needs a { fr, en } pair, no pair may conflict, and no template literal may sit in a UI position (use t(\'… {{var}} …\', { var })). Run with --list for the details.');
+  process.exit(1);
 }

@@ -33,6 +33,9 @@ const FAST_STEPS = [
   { id: 'test', script: 'test', fullScript: 'test:coverage', label: 'Tests unitaires (Vitest)', fullLabel: 'Tests unitaires (Vitest) + planchers de couverture' },
   { id: 'knip', script: 'knip', label: 'Code et dépendances morts (knip)' },
   { id: 'cycles', script: 'cycles', label: "Cycles d'imports (madge)" },
+  // Chaque texte d'interface a sa paire { fr, en }, aucune paire ne se contredit,
+  // aucun gabarit en position d'interface (scripts/quality/i18n-audit.mjs --strict).
+  { id: 'i18n', script: 'i18n:check', label: 'Traductions (i18n, strict)' },
 ];
 
 /** Étapes lourdes de --full, en série, seulement si les rapides passent. */

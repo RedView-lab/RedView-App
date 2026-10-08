@@ -13,9 +13,9 @@ const FEATURE_CATEGORY_LABELS: Record<string, string> = {
 };
 
 const SURFACE_LABELS: Record<string, string> = {
-  asphalt: 'Bitume',
-  asphalted: 'Bitume',
-  chipseal: 'Bitume',
+  asphalt: 'Goudron',
+  asphalted: 'Goudron',
+  chipseal: 'Goudron',
   cobblestone: 'Pavés',
   compacted: 'Compacté',
   concrete: 'Béton',
@@ -25,7 +25,7 @@ const SURFACE_LABELS: Record<string, string> = {
   gravel: 'Gravier',
   ground: 'Terre',
   metal: 'Métal',
-  paved: 'Bitume',
+  paved: 'Goudron',
   paving_stones: 'Pavés',
   pebblestone: 'Galets',
   rock: 'Roche',

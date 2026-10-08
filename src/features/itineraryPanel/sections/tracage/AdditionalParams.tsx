@@ -35,7 +35,7 @@ export function AdditionalParams({ roadTypes, isFoot, onChangeRoadType }: Additi
       <div className={`rvi-tracage__params-accordion${paramsOpen ? ' is-open' : ''}`}>
         <div className="rvi-tracage__params-accordion-inner">
           <div className="rvi-tracage__params-grid">
-            {/* Row 1: Dénivelé & Pentes max. */}
+            {/* Row 1: Dénivelé & Pente max */}
             <div className="rvi-tracage__params-row">
               <ParamDropdownItem
                 label={t('Dénivelé')}
@@ -43,7 +43,7 @@ export function AdditionalParams({ roadTypes, isFoot, onChangeRoadType }: Additi
                 onChange={(val) => onChangeRoadType?.('elevationPreference', val)}
               />
               <SlopeParamItem
-                label={t('Pentes max.')}
+                label={t('Pente max')}
                 value={roadTypes.maxSlopePercent ?? 12}
                 options={isFoot ? FOOT_SLOPE_OPTIONS : SLOPE_OPTIONS}
                 onChange={(val) => onChangeRoadType?.('maxSlopePercent', val)}

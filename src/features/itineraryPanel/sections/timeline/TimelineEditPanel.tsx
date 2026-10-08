@@ -75,7 +75,7 @@ export function TimelineEditPanel({
               className="rvi-tl-edit__zoom-btn"
               onClick={() => onChangeZoomLevel?.(clampZoom(zoomLevel - ZOOM_STEP))}
               disabled={zoomLevel <= ZOOM_MIN}
-              aria-label={t('Réduire le zoom')}
+              aria-label={t('Dézoomer')}
             >
               <IconMinus size={14} />
             </button>
@@ -84,7 +84,7 @@ export function TimelineEditPanel({
               className="rvi-tl-edit__zoom-btn"
               onClick={() => onChangeZoomLevel?.(clampZoom(zoomLevel + ZOOM_STEP))}
               disabled={zoomLevel >= ZOOM_MAX}
-              aria-label={t('Augmenter le zoom')}
+              aria-label={t('Zoomer')}
             >
               <IconPlus size={14} />
             </button>
