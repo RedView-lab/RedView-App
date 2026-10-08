@@ -39,8 +39,8 @@ function itinerary(id: string, pointCount: number): ItineraryShape {
     id,
     timeline: [],
     gpxRoute: pointCount > 0
-      ? { points: Array.from({ length: pointCount }, (_, i) => ({ lat: 45 + i * 0.001, lon: 6 + i * 0.001, ele: 1000 })) } as Itinerary['gpxRoute']
-      : null,
+      ? { name: null, points: Array.from({ length: pointCount }, (_, i) => ({ lat: 45 + i * 0.001, lon: 6 + i * 0.001 })) } as unknown as NonNullable<Itinerary['gpxRoute']>
+      : undefined,
   };
 }
 
