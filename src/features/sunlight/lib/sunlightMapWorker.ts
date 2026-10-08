@@ -1,23 +1,24 @@
 /**
- * sunlightMapWorker.ts — Cumulative sunshine overlay computation.
+ * sunlightMapWorker.ts — Calcul de la surcouche d'ensoleillement cumulé.
  *
- * For the chosen `isoDate` and "current" local time, computes for every
- * viewport pixel the number of MINUTES of direct sunlight that pixel has
- * already received since solar midnight. The result is colorized through
- * user-configured `bands` (e.g. green 0–60min, yellow 60–120min, …) and
- * returned as a PNG blob for direct ingestion as a Mapbox image source.
+ * Pour la date `isoDate` choisie et l'heure locale « actuelle », calcule pour
+ * chaque pixel de la vue le nombre de MINUTES de soleil direct déjà reçues
+ * depuis minuit solaire. Le résultat est coloré selon les `bands` réglées par
+ * l'utilisateur (p. ex. vert 0–60 min, jaune 60–120 min, …) et renvoyé sous
+ * forme de blob PNG, chargé directement comme source image Mapbox.
  *
- * Design notes (v2 — rewrite for responsiveness):
- *   • One grid, one exposure cache per quality tier. Cache key is
- *     `(sampleGen, isoDate, stepMinutes, observerTimeZone)`. The observer's
- *     lat/lon is NOT part of the key — across a viewport the sun position
- *     varies by far less than the integration step, so re-keying on map drift
- *     would wipe a perfectly usable cache. The time zone is: it maps the
- *     integrated wall-clock minutes onto instants.
- *   • Time advances → only the missing tranches are integrated (true O(Δt)).
- *   • The loop is async-yielding (`setTimeout(0)` every BATCH_STEPS) so:
- *       1. Progress messages reach the main thread mid-flight.
- *       2. A newer compute request can preempt a stale in-flight one.
+ * Notes de conception (v2 — réécriture pour la réactivité) :
+ *   • Une grille et un cache d'exposition par niveau de qualité. La clé du cache
+ *     est `(sampleGen, isoDate, stepMinutes, observerTimeZone)`. La lat/lon de
+ *     l'observateur N'EN FAIT PAS partie — sur une vue, la position du soleil
+ *     varie bien moins que le pas d'intégration, et changer de clé à chaque
+ *     dérive de la carte effacerait un cache parfaitement utilisable. Le fuseau
+ *     en fait partie : il convertit les minutes d'horloge intégrées en instants.
+ *   • Le temps avance → seules les tranches manquantes sont intégrées (vrai O(Δt)).
+ *   • La boucle rend la main de façon asynchrone (`setTimeout(0)` toutes les
+ *     BATCH_STEPS) pour que :
+ *       1. les messages de progression atteignent le fil principal en cours de route ;
+ *       2. une requête de calcul plus récente puisse préempter un calcul périmé en cours.
  */
 import { getSunPositionForLocalMinutes } from './sun-calc';
 import {
@@ -30,14 +31,15 @@ import { applyPolygonMaskToRgba, rasterizePolygonMask } from './polygonMask';
 import { rawPng } from './shadowWorkerEncoding';
 import { sunlightBandIndex } from './sunlightBands';
 
-/** Target grid cap. ~150 k pixels keeps a single horizon sweep ≲ 5 ms. */
+/** Plafond visé pour la grille. ~150 k pixels gardent un balayage d'horizon ≲ 5 ms. */
 const GRID_MAX_W = 448;
 const GRID_MAX_H = 336;
 /**
- * Steps processed before yielding to the event loop. In `preview` (time-scrub)
- * we yield often so a newer compute can preempt quickly; in `full` quality we
- * can process many more steps per yield because responsiveness to cancellation
- * matters less and each yield costs ~1 ms of event-loop overhead.
+ * Pas traités avant de rendre la main à la boucle d'événements. En `preview`
+ * (glissement du curseur de temps), on rend la main souvent pour qu'un calcul
+ * plus récent préempte vite ; en qualité `full`, on traite bien plus de pas par
+ * rendu de main, car la réactivité à l'annulation compte moins et chaque
+ * rendu de main coûte ~1 ms à la boucle d'événements.
  */
 const BATCH_STEPS_PREVIEW = 6;
 const BATCH_STEPS_FULL = 16;
@@ -65,19 +67,19 @@ interface ComputeRequest {
   type: 'sm-compute';
   id: number;
   isoDate: string;
-  /** Minutes since local midnight, 0..1440. */
+  /** Minutes depuis minuit local, 0..1440. */
   currentMinutes: number;
-  /** Riemann step size in minutes. */
+  /** Pas de Riemann, en minutes. */
   stepMinutes: number;
-  /** Sun-position observer location and timezone. */
+  /** Lieu et fuseau de l'observateur pour la position du soleil. */
   observerLat: number;
   observerLon: number;
   observerTimeZone: string;
   bands: BandSpec[];
-  /** 0..1 final layer alpha multiplier. */
+  /** Multiplicateur d'alpha final de la couche, 0..1. */
   opacity: number;
   quality: 'preview' | 'full';
-  /** Analysis-zone ring ([lng, lat, …]) — output is masked to the polygon. */
+  /** Anneau de la zone d'analyse ([lng, lat, …]) — la sortie est masquée au polygone. */
   zoneRing?: number[] | null;
 }
 
@@ -103,7 +105,7 @@ interface ExposureCache {
   isoDate: string;
   stepMinutes: number;
   observerTimeZone: string;
-  /** Last cumulative minute boundary actually integrated. */
+  /** Dernière borne de minutes cumulées réellement intégrée. */
   lastMinutes: number;
   exposure: Float32Array;
 }
@@ -117,7 +119,7 @@ interface ViewportState {
 
 let state: ViewportState | null = null;
 let nextSampleGen = 1;
-/** Monotonic compute token used for cooperative cancellation. */
+/** Jeton de calcul monotone utilisé pour l'annulation coopérative. */
 let currentComputeToken = 0;
 
 self.onmessage = (e: MessageEvent<Request>) => {
@@ -125,8 +127,8 @@ self.onmessage = (e: MessageEvent<Request>) => {
   if (msg.type === 'sm-sample') {
     handleSample(msg).catch((err) => postError(msg.id, err));
   } else if (msg.type === 'sm-compute') {
-    // Bump the token BEFORE dispatching so any older compute loop notices
-    // its token is stale at the next batch boundary and aborts.
+    // Incrémente le jeton AVANT l'envoi pour que toute boucle de calcul plus
+    // ancienne voie que son jeton est périmé au prochain lot et abandonne.
     currentComputeToken += 1;
     const myToken = currentComputeToken;
     handleCompute(msg, myToken).catch((err) => postError(msg.id, err));
@@ -164,7 +166,7 @@ async function handleSample(msg: SampleRequest) {
   };
   const sampleGen = nextSampleGen++;
   state = { sampleGen, bounds: msg.bounds, grid, caches: { full: null, preview: null } };
-  // Invalidate any in-flight compute bound to the previous generation.
+  // Invalide tout calcul en cours lié à la génération précédente.
   currentComputeToken += 1;
 
   post({
@@ -198,10 +200,11 @@ async function handleCompute(msg: ComputeRequest, token: number): Promise<void> 
     && cache.exposure.length === grid.gridW * grid.gridH;
 
   if (!cacheValid) {
-    // Reuse the previous buffer when the grid size is unchanged (common case:
-    // only the viewport overshoot changed). Saves a ~150 KB allocation per
-    // re-sample on the sunlight-map grid. The buffer is zeroed below; the
-    // NaN sentinel for exposure is 0, so a fresh integration starts clean.
+    // Réutilise le tampon précédent quand la taille de grille ne change pas (cas
+    // courant : seul le dépassement de la vue a changé). Économise une allocation
+    // de ~150 Ko par rééchantillonnage sur la grille d'ensoleillement. Le tampon
+    // est remis à zéro plus bas ; la sentinelle NaN de l'exposition vaut 0, donc
+    // une nouvelle intégration part de zéro.
     const prev = state.caches[cacheSlot];
     const reusable = prev && prev.exposure.length === grid.gridW * grid.gridH
       ? prev.exposure
@@ -217,7 +220,7 @@ async function handleCompute(msg: ComputeRequest, token: number): Promise<void> 
       exposure,
     };
   } else if (currentMinutes < cache!.lastMinutes) {
-    // Scrubbed backwards → reset and re-integrate (cache stays warm).
+    // Retour en arrière du curseur → remise à zéro et nouvelle intégration (le cache reste chaud).
     cache!.exposure.fill(0);
     cache!.lastMinutes = 0;
   }
@@ -241,8 +244,9 @@ async function handleCompute(msg: ComputeRequest, token: number): Promise<void> 
 
   postProgress(msg.id, 0, totalSteps, t);
 
-  // Larger batches in full quality: fewer event-loop yields = less overhead,
-  // and the user isn't scrubbing so preemption latency is non-critical.
+  // Lots plus grands en pleine qualité : moins de rendus de main = moins de
+  // surcoût, et l'utilisateur ne fait pas glisser le curseur, donc la latence de
+  // préemption n'est pas critique.
   const batchSteps = msg.quality === 'preview' ? BATCH_STEPS_PREVIEW : BATCH_STEPS_FULL;
 
   while (t < currentMinutes) {
@@ -342,9 +346,10 @@ function accumulateExposureAt(
     grid.scratchShadowElev,
   );
   const elev = grid.elev;
-  // Sweep now returns a soft penumbra (0..255). A cell counts as "lit"
-  // when more than half the sun disc is visible — matches a real
-  // sun-exposure meter better than the legacy hard 0/255 binary.
+  // Le balayage renvoie maintenant une pénombre douce (0..255). Une cellule
+  // compte comme « éclairée » quand plus de la moitié du disque solaire est
+  // visible — plus proche d'un vrai compteur d'ensoleillement que l'ancien
+  // binaire strict 0/255.
   for (let i = 0; i < mask.length; i++) {
     if (mask[i] < 128 && !Number.isNaN(elev[i])) {
       exposure[i] += dtMinutes;
@@ -352,7 +357,7 @@ function accumulateExposureAt(
   }
 }
 
-/** `bands` arrive sorted by minMinutes (serializeBands). */
+/** Les `bands` arrivent triées par minMinutes (serializeBands). */
 function colorize(
   exposure: Float32Array,
   elev: Float32Array,
@@ -366,7 +371,7 @@ function colorize(
   if (alpha === 0 || bands.length === 0) return out;
 
   for (let i = 0; i < exposure.length; i++) {
-    // No DEM under the cell: no exposure to report (would read as "0 min").
+    // Pas de DEM sous la cellule : aucune exposition à signaler (se lirait « 0 min »).
     if (Number.isNaN(elev[i])) continue;
     const band = bands[sunlightBandIndex(exposure[i], bands)];
     if (!band || !band.visible) continue;
@@ -390,8 +395,8 @@ function nowMs(): number {
 }
 
 function yieldEventLoop(): Promise<void> {
-  // setTimeout(0) (not Promise.resolve) — microtasks can't interleave new
-  // MessageEvents, which would defeat cancellation.
+  // setTimeout(0) (pas Promise.resolve) — les microtâches ne laissent pas passer
+  // de nouveaux MessageEvent, ce qui empêcherait l'annulation.
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 

@@ -15,15 +15,17 @@ import { setSunLightOverride } from '@/features/map3d/lib/mapEnvironment';
 import { resolveTimeZoneAt } from '@/shared/lib/timeZoneAt';
 
 /**
- * Computes real sun position from date/time and map center.
+ * Calcule la position réelle du soleil à partir de la date / heure et du centre
+ * de la carte.
  *
- * We intentionally do NOT modulate the whole scene brightness anymore. The
- * previous fog/lightPreset cycle made the entire screen brighten/darken so much
- * that terrain shadows became hard to read. The sunlight system now keeps the
- * scene lighting visually neutral and only uses the sun position for shadow
- * direction and informational sunrise/sunset times. Scene lights and fog are
- * owned by `map3d/lib/mapEnvironment` (jour / crépuscule / nuit): this hook
- * only publishes the real sun direction as an override.
+ * Volontairement, on NE module PLUS la luminosité de toute la scène. L'ancien
+ * cycle brouillard / lightPreset éclaircissait et assombrissait tant l'écran
+ * que les ombres du relief devenaient difficiles à lire. Le système
+ * d'ensoleillement garde désormais un éclairage de scène visuellement neutre et
+ * n'utilise la position du soleil que pour la direction des ombres et les
+ * heures de lever / coucher affichées. Les lumières et le brouillard de la scène
+ * appartiennent à `map3d/lib/mapEnvironment` (jour / crépuscule / nuit) : ce
+ * hook publie seulement la vraie direction du soleil comme forçage.
  */
 export interface UseSunlightOptions {
   enabled: boolean;
@@ -33,11 +35,12 @@ export interface UseSunlightOptions {
   time: string;
   trajectoryEnabled: boolean;
   /**
-   * Real-time GPU shadow casting on 3D geometry (Mapbox `cast-shadows`).
-   * This is the expensive path: on styles with fill-extrusion buildings (e.g.
-   * the light "Standard" basemap) it forces a shadow-map pass over every
-   * extruded building each frame and tanks FPS in cities. Tied to the same
-   * "Ombres" toggle as the DEM ray-traced overlay so the user has one knob.
+   * Ombres portées GPU en temps réel sur la géométrie 3D (`cast-shadows` de
+   * Mapbox). C'est le chemin coûteux : sur les styles avec bâtiments extrudés
+   * (p. ex. le fond clair « Standard »), il impose à chaque image une passe de
+   * shadow map sur chaque bâtiment extrudé et effondre les FPS en ville. Lié au
+   * même interrupteur « Ombres » que la surcouche DEM par lancer de rayons, pour
+   * que l'utilisateur n'ait qu'un seul réglage.
    */
   shadowEnabled: boolean;
 }
@@ -45,9 +48,9 @@ export interface UseSunlightOptions {
 export interface UseSunlightResult {
   sunriseTime: string;
   sunsetTime: string;
-  /** Current sun azimuth in degrees (0=N, CW). Updated on each apply. */
+  /** Azimut actuel du soleil en degrés (0 = N, sens horaire). Mis à jour à chaque application. */
   sunAzimuthDeg: number;
-  /** Current sun altitude in degrees (-90..+90). Updated on each apply. */
+  /** Altitude actuelle du soleil en degrés (-90..+90). Mise à jour à chaque application. */
   sunAltitudeDeg: number;
   observerLat: number | null;
   observerLon: number | null;
@@ -66,7 +69,7 @@ function getHostTimeZone(): string | null {
 }
 
 async function lookupTimeZoneForPoint(point: Pick<SunObserverPoint, 'lat' | 'lng'>): Promise<string | null> {
-  // ~100 m buckets: plenty for zone borders, bounded cache while panning.
+  // Classes de ~100 m : bien assez pour les limites de fuseau, cache borné pendant les déplacements.
   const key = `${point.lat.toFixed(3)},${point.lng.toFixed(3)}`;
   const existing = timeZoneLookupCache.get(key);
   if (existing) return existing;
@@ -74,7 +77,7 @@ async function lookupTimeZoneForPoint(point: Pick<SunObserverPoint, 'lat' | 'lng
   const resolved = resolveTimeZoneAt(point.lng, point.lat);
   timeZoneLookupCache.set(key, resolved);
   void resolved.then((timeZone) => {
-    // A failed table load must not stick: the next lookup retries.
+    // Un chargement de table raté ne doit pas rester collé : la recherche suivante réessaie.
     if (!timeZone) timeZoneLookupCache.delete(key);
   });
   return resolved;
@@ -96,8 +99,8 @@ export function useSunlight(
     timeZone: string | null;
   } | null>(null);
 
-  // Stable refs so the moveend listener always sees the latest values without
-  // re-subscribing on every render.
+  // Réfs stables pour que l'écouteur moveend voie toujours les dernières valeurs
+  // sans se réabonner à chaque rendu.
   const optsRef = useRef(opts);
   useEffect(() => {
     optsRef.current = opts;
@@ -136,7 +139,7 @@ export function useSunlight(
     let cancelled = false;
     void lookupTimeZoneForPoint(observerPoint).then((resolvedTimeZone) => {
       if (cancelled) return;
-      // Table unavailable: the browser zone keeps the overlays usable.
+      // Table indisponible : le fuseau du navigateur garde les surcouches utilisables.
       const timeZone = resolvedTimeZone ?? getHostTimeZone();
       setObserverTimeZoneState((prev) => (
         prev?.key === observerPointKey && prev.timeZone === timeZone
@@ -264,7 +267,7 @@ export function useSunlight(
     sunPos.altitudeDeg,
   ]);
 
-  // Back to the environment's default light direction when the panel is disabled.
+  // Retour à la direction de lumière par défaut de l'environnement quand le panneau est désactivé.
   useEffect(() => {
     if (!map || !isMapLoaded) return;
     if (opts.enabled) return;

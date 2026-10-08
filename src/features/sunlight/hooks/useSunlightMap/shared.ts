@@ -1,8 +1,9 @@
 /**
- * Shared types & helpers for `useSunlightMap`.
+ * Types et aides partagés de `useSunlightMap`.
  *
- * Mirrors the pattern used by `useShadowImage` (shared.ts / hook.ts split) so
- * the cast-shadow and cumulative-sunshine overlays stay structurally aligned.
+ * Reprend le découpage de `useShadowImage` (shared.ts / hook.ts) pour que les
+ * surcouches d'ombres portées et d'ensoleillement cumulé gardent la même
+ * structure.
  */
 import type { Map as MapboxMap } from 'mapbox-gl';
 import type {
@@ -30,14 +31,15 @@ export const BOUNDS_OVERSHOOT = 0.10;
 export const BLOB_REVOKE_DELAY_MS = 1500;
 
 /**
- * Riemann integration step (minutes). 15 min strikes a good balance between
- * accuracy (≈ 4° azimuth resolution near solar noon) and compute cost
- * (≈ 56 sweeps for a 14h photoperiod). Using a SINGLE step size means the
- * worker cache is unified across scrub and full-quality requests.
+ * Pas d'intégration de Riemann (minutes). 15 min est un bon compromis entre
+ * précision (≈ 4° de résolution en azimut près du midi solaire) et coût de
+ * calcul (≈ 56 balayages pour une photopériode de 14 h). Un pas UNIQUE fait
+ * que le cache du worker est commun aux requêtes de glissement et de pleine
+ * qualité.
  */
 export const STEP_MINUTES = 15;
 
-/** Acceptable fill ratio before we keep retrying the sample. */
+/** Taux de remplissage acceptable avant d'arrêter de relancer l'échantillonnage. */
 export const MIN_USABLE_SAMPLE_FILL_RATIO = 0.65;
 export const STYLE_PREPARATION_RETRY_DELAY_MS = 250;
 export const PARTIAL_SAMPLE_RETRY_DELAY_MS = 1200;
@@ -47,16 +49,17 @@ export type BoundsTuple = [number, number, number, number];
 type ComputeQuality = 'preview' | 'full';
 
 /**
- * Analysis-zone restriction for the sunshine overlays: the DEM grid is
- * sampled over `bounds` (the polygon bbox + adaptive overshoot for shadows
- * cast from outside the zone) and the output PNG is alpha-masked to `ring`.
+ * Restriction des surcouches d'ensoleillement à la zone d'analyse : la grille
+ * DEM est échantillonnée sur `bounds` (l'emprise du polygone + un dépassement
+ * adaptatif pour les ombres projetées depuis l'extérieur de la zone) et le PNG
+ * de sortie est masqué en alpha par `ring`.
  */
 interface SunlightAnalysisZone {
-  /** Stable key — changes force a full re-sample. */
+  /** Clé stable — un changement force un rééchantillonnage complet. */
   key: string;
-  /** [west, south, east, north] polygon bbox. */
+  /** Emprise du polygone [ouest, sud, est, nord]. */
   bounds: BoundsTuple;
-  /** Flat [lng, lat, lng, lat, …] closed ring payload for the workers. */
+  /** Anneau fermé à plat [lng, lat, lng, lat, …] envoyé aux workers. */
   ring: number[];
 }
 
@@ -66,17 +69,17 @@ export interface UseSunlightMapOptions {
   date: string;
   /** HH:mm */
   time: string;
-  /** Observer point used for all solar calculations. */
+  /** Point d'observation utilisé pour tous les calculs solaires. */
   observerLat: number | null;
   observerLon: number | null;
   observerTimeZone: string | null;
-  /** True while the user is dragging the time slider. */
+  /** Vrai pendant que l'utilisateur fait glisser le curseur de temps. */
   timeScrubbing: boolean;
-  /** 0..1 overlay opacity. */
+  /** Opacité de la surcouche, 0..1. */
   opacity: number;
-  /** User-configured colour bands. */
+  /** Bandes de couleur réglées par l'utilisateur. */
   bands: readonly SunlightBand[];
-  /** Analysis zone restricting the overlay (zone-gated widget). */
+  /** Zone d'analyse qui restreint la surcouche (widget conditionné à une zone). */
   analysisZone?: SunlightAnalysisZone | null;
 }
 
@@ -85,7 +88,7 @@ export interface UseSunlightMapRuntimeOptions {
   registerReload?: OverlayReloadRegistrar;
 }
 
-// ── Worker protocol ────────────────────────────────────────────────────────
+// ── Protocole du worker ────────────────────────────────────────────────────
 
 export interface SmSampleAck {
   id: number;
@@ -181,20 +184,22 @@ export function withOvershoot(b: BoundsTuple, factor: number): BoundsTuple {
 }
 
 /**
- * Picks a viewport-overshoot factor that grows as the sun sinks, so off-screen
- * peaks still cast their shadow into the visible area during the cumulative
- * sunlight integration (low sun → very long shadows → wider overshoot needed).
+ * Choisit un facteur de dépassement de la vue qui grandit quand le soleil
+ * baisse, pour que les sommets hors écran projettent encore leur ombre dans la
+ * zone visible pendant l'intégration de l'ensoleillement cumulé (soleil bas →
+ * ombres très longues → dépassement plus large).
  *
- * Bucketed by sun altitude so the DEM is only re-sampled when the bucket
- * changes (≤5°, ≤10°, ≤15°, ≤25°), not on every pixel of a time-scrub drag.
+ * Rangé par classe d'altitude du soleil : le DEM n'est rééchantillonné que
+ * quand la classe change (≤5°, ≤10°, ≤15°, ≤25°), pas à chaque pixel d'un
+ * glissement du curseur de temps.
  *
- * @param rawBounds      Viewport bounds (west, south, east, north) BEFORE overshoot.
- * @param sunAltitudeDeg Representative sun altitude for the integration span.
- *                       Callers typically pass the altitude at the current time,
- *                       which is a good proxy for the worst-case shadow length.
- * @param lastBucket     Bucket of the currently-sampled grid (or `null` if none).
- * @returns `{ overshoot, bucket, resample }` — `resample` is true iff the
- *          bucket changed and the DEM must be re-sampled at the new overshoot.
+ * @param rawBounds      Emprise de la vue (ouest, sud, est, nord) AVANT dépassement.
+ * @param sunAltitudeDeg Altitude représentative du soleil sur la période intégrée.
+ *                       Les appelants passent en général l'altitude à l'heure
+ *                       courante, bonne approximation de la pire longueur d'ombre.
+ * @param lastBucket     Classe de la grille actuellement échantillonnée (ou `null` s'il n'y en a pas).
+ * @returns `{ overshoot, bucket, resample }` — `resample` vaut true si et seulement
+ *          si la classe a changé et que le DEM doit être rééchantillonné au nouveau dépassement.
  */
 export function chooseAdaptiveOvershoot(
   rawBounds: BoundsTuple,
@@ -227,10 +232,11 @@ export function chooseDemZoom(map: MapboxMap, gridW: number): number {
   return Math.max(DEM_MIN_SAMPLE_ZOOM, Math.min(DEM_MAX_SAMPLE_ZOOM, Math.round(ideal)));
 }
 
-// ── Analysis-zone variants ─────────────────────────────────────────────────
-// Same budget as the viewport versions, but sized from the zone bbox: the
-// grid keeps its full resolution concentrated on the polygon, so a small
-// zone gets a much finer metres-per-cell sample than the whole viewport.
+// ── Variantes en zone d'analyse ────────────────────────────────────────────
+// Même budget que les versions vue, mais dimensionné sur l'emprise de la zone :
+// la grille garde toute sa résolution concentrée sur le polygone, donc une
+// petite zone reçoit un échantillon bien plus fin en mètres par cellule que la
+// vue entière.
 
 function mercYDeg(latDeg: number): number {
   const clamped = Math.max(-85.051129, Math.min(85.051129, latDeg));
@@ -320,7 +326,7 @@ export function setSunlightMapLayerOpacity(map: MapboxMap, opacity: number): voi
     map.setLayoutProperty(SUNLIGHT_MAP_LAYER_ID, 'visibility', clamped > 0 ? 'visible' : 'none');
     map.setPaintProperty(SUNLIGHT_MAP_LAYER_ID, 'raster-opacity', clamped);
   } catch {
-    /* no-op */
+    /* rien à faire */
   }
 }
 
@@ -348,11 +354,11 @@ export function ensureSunlightMapSourceAndLayer(
         id: SUNLIGHT_MAP_LAYER_ID,
         type: 'raster',
         source: SUNLIGHT_MAP_SOURCE_ID,
-        // We want the sunlight tint to sit BELOW the cast-shadow layer so the
-        // dark ridges remain readable on top of the green/yellow/red zones.
-        // Mapbox's `top` slot is what the shadow layer uses; with no slot
-        // specified the layer is inserted above the basemap but below
-        // slot-positioned layers — exactly the order we want.
+        // La teinte d'ensoleillement doit passer SOUS la couche d'ombres portées
+        // pour que les crêtes sombres restent lisibles au-dessus des zones
+        // vertes / jaunes / rouges. La couche d'ombres utilise le slot `top` de
+        // Mapbox ; sans slot, la couche est insérée au-dessus du fond de carte
+        // mais sous les couches placées dans un slot — exactement l'ordre voulu.
         paint: {
           'raster-opacity': Math.max(0, Math.min(1, opacity)),
           'raster-fade-duration': 0,
@@ -402,10 +408,11 @@ export interface BandPayload {
 }
 
 /**
- * Serializes the user-facing `SunlightBand[]` into a worker-friendly array:
- *   • Hex colours → RGB triples (worker does no DOM work).
- *   • Sorted ascending by `minMinutes` so the colorize loop can short-circuit.
- *   • Discards malformed entries silently.
+ * Sérialise les `SunlightBand[]` de l'interface en tableau adapté au worker :
+ *   • couleurs hexadécimales → triplets RGB (le worker ne fait rien du DOM) ;
+ *   • tri croissant par `minMinutes` pour que la boucle de coloration puisse
+ *     s'arrêter tôt ;
+ *   • entrées mal formées écartées sans bruit.
  */
 export function serializeBands(bands: readonly SunlightBand[]): BandPayload[] {
   return bands
@@ -427,7 +434,7 @@ export function serializeBands(bands: readonly SunlightBand[]): BandPayload[] {
     .sort((a, b) => a.minMinutes - b.minMinutes);
 }
 
-/** Lightweight content hash for the bands payload → re-render only on change. */
+/** Empreinte légère du contenu des bandes → nouveau rendu seulement s'il change. */
 export function hashBandPayload(payload: BandPayload[]): string {
   return payload
     .map((b) => `${b.minMinutes}-${b.maxMinutes}-${b.r}-${b.g}-${b.b}-${b.visible ? 1 : 0}`)

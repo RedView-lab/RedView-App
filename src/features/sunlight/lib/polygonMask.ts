@@ -1,15 +1,16 @@
 /**
- * Polygon rasterization mask for the analysis zone, used by the sunlight
- * workers (cast-shadow image + cumulative sunshine map) to trim their PNG
- * output to the user-drawn polygon.
+ * Masque de rastérisation du polygone de la zone d'analyse, utilisé par les
+ * workers d'ensoleillement (image d'ombres portées + carte d'ensoleillement
+ * cumulé) pour rogner leur PNG au polygone dessiné par l'utilisateur.
  *
- * Projection matches the elevation-grid sampling in dem-grid-worker.ts /
- * shadowWorker.ts: columns linear in longitude, rows linear in MERCATOR-Y —
- * NOT linear in latitude. Using the same mapping keeps the mask perfectly
- * registered with the colorized grid.
+ * La projection est celle de l'échantillonnage de la grille d'altitudes dans
+ * dem-grid-worker.ts / shadowWorker.ts : colonnes linéaires en longitude,
+ * lignes linéaires en Y MERCATOR — PAS linéaires en latitude. Le même
+ * appariement garde le masque parfaitement calé sur la grille colorée.
  *
- * 2× supersampled scanline fill + 2×2 box downsample = ~1 cell feathered
- * edge (no aliasing against the terrain overlay).
+ * Remplissage par lignes suréchantillonné 2× + réduction par moyenne 2×2 =
+ * bord adouci d'environ une cellule (pas de crénelage contre la surcouche du
+ * relief).
  */
 
 export type MaskBounds = [number, number, number, number];
@@ -21,12 +22,12 @@ function mercY(latDeg: number): number {
 }
 
 /**
- * @param flatRing [lng, lat, lng, lat, …] polygon ring (closed or open).
- * @param bounds   Sampled grid bounds [west, south, east, north].
- * @param w        Grid width in cells.
- * @param h        Grid height in cells.
- * @returns w×h mask (255 inside, 0 outside, feathered boundary) or null when
- *          the ring is degenerate / wholly outside the bounds.
+ * @param flatRing Anneau du polygone [lng, lat, lng, lat, …] (fermé ou ouvert).
+ * @param bounds   Emprise de la grille échantillonnée [ouest, sud, est, nord].
+ * @param w        Largeur de la grille, en cellules.
+ * @param h        Hauteur de la grille, en cellules.
+ * @returns masque w×h (255 dedans, 0 dehors, bord adouci) ou null quand
+ *          l'anneau est dégénéré / entièrement hors de l'emprise.
  */
 export function rasterizePolygonMask(
   flatRing: readonly number[],
@@ -37,7 +38,7 @@ export function rasterizePolygonMask(
   if (!Array.isArray(flatRing) || flatRing.length < 6 || w <= 0 || h <= 0) return null;
   const [west, south, east, north] = bounds;
   const spanX = east - west;
-  // mercY grows northwards while grid rows grow southwards (row 0 = north).
+  // mercY croît vers le nord tandis que les lignes de la grille croissent vers le sud (ligne 0 = nord).
   const nMercY = mercY(north);
   const sMercY = mercY(south);
   const spanY = nMercY - sMercY;
@@ -54,7 +55,7 @@ export function rasterizePolygonMask(
     py[i] = ((nMercY - mercY(lat)) / spanY) * h;
   }
 
-  // 2× supersampled coverage buffer.
+  // Tampon de couverture suréchantillonné 2×.
   const ss = 2;
   const sw = w * ss;
   const sh = h * ss;
@@ -82,7 +83,7 @@ export function rasterizePolygonMask(
     }
   }
 
-  // 2×2 average downsample → feathered alpha.
+  // Réduction par moyenne 2×2 → alpha adouci.
   const out = new Uint8Array(w * h);
   for (let r = 0; r < h; r++) {
     const sRow = r * ss * sw;
@@ -95,7 +96,7 @@ export function rasterizePolygonMask(
   return out;
 }
 
-/** Applies the mask to a straight RGBA buffer's alpha channel. */
+/** Applique le masque au canal alpha d'un tampon RGBA non prémultiplié. */
 export function applyPolygonMaskToRgba(rgba: Uint8Array, mask: Uint8Array): void {
   const n = mask.length;
   for (let j = 0; j < n; j++) {

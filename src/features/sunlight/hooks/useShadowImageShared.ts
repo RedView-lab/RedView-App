@@ -28,19 +28,19 @@ export interface UseShadowImageOptions {
   opacity: number;
   timeScrubbing: boolean;
   /**
-   * Analysis zone restricting the overlay: DEM grid sampled over the polygon
-   * bbox (+ adaptive overshoot — shadows come from relief OUTSIDE the zone)
-   * and the output PNG masked to the polygon.
+   * Zone d'analyse qui restreint la surcouche : grille DEM échantillonnée sur
+   * l'emprise du polygone (+ dépassement adaptatif — les ombres viennent du
+   * relief HORS de la zone) et PNG de sortie masqué au polygone.
    */
   analysisZone?: ShadowAnalysisZone | null;
 }
 
 interface ShadowAnalysisZone {
-  /** Stable key — changes force a full re-sample. */
+  /** Clé stable — un changement force un rééchantillonnage complet. */
   key: string;
-  /** [west, south, east, north] polygon bbox. */
+  /** Emprise du polygone [ouest, sud, est, nord]. */
   bounds: BoundsTuple;
-  /** Flat [lng, lat, lng, lat, …] closed ring payload for the worker. */
+  /** Anneau fermé à plat [lng, lat, lng, lat, …] envoyé au worker. */
   ring: number[];
 }
 
@@ -106,22 +106,25 @@ export function effectiveOverlayOpacity(enabled: boolean, opacity: number, altit
 }
 
 /**
- * Twilight / night uniform veil strength sent to the shadow worker as
- * `nightFloor` (0..1). The worker uses it as `alpha = max(castShadow, floor)`
- * inside `encodeShadowRgba()`, so when the sun is below the horizon and the
- * cast-shadow buffer is empty (worker short-circuits at `sunAltDeg <= 0`),
- * this is the ONLY thing keeping the overlay non-transparent.
+ * Intensité du voile uniforme de crépuscule / nuit envoyée au worker d'ombres
+ * sous le nom `nightFloor` (0..1). Le worker l'applique comme
+ * `alpha = max(castShadow, floor)` dans `encodeShadowRgba()` : quand le soleil
+ * est sous l'horizon et que le tampon d'ombres portées est vide (le worker
+ * s'arrête court à `sunAltDeg <= 0`), c'est la SEULE chose qui empêche la
+ * surcouche d'être transparente.
  *
- * Without this, late-evening / night frames produced a fully transparent PNG
- * even though `effectiveOverlayOpacity()` had already forced the raster
- * layer opacity to 1.0 — the symptom was "no shadow / no darkening at
- * night" while the SW kept handing back perfectly transparent tiles.
+ * Sans lui, les images de fin de soirée / de nuit donnaient un PNG entièrement
+ * transparent alors que `effectiveOverlayOpacity()` avait déjà forcé l'opacité
+ * de la couche raster à 1,0 — le symptôme était « pas d'ombre / pas
+ * d'assombrissement la nuit » pendant que le SW renvoyait des tuiles
+ * parfaitement transparentes.
  *
- * Ramp matches astronomical twilight bands so dusk reads naturally:
- *   • sun ≥  0°  → 0          (daylight, cast shadows do all the work)
- *   • sun =  0°… −6°  civil twilight     → 0    → 0.30
- *   • sun = −6°…−12°  nautical twilight  → 0.30 → 0.50
- *   • sun ≤ −12°  astronomical / night   → 0.55 (capped, never opaque)
+ * La rampe suit les bandes de crépuscule astronomique pour que la tombée du
+ * jour se lise naturellement :
+ *   • soleil ≥  0°  → 0          (jour, les ombres portées font tout le travail)
+ *   • soleil =  0°… −6°  crépuscule civil        → 0    → 0,30
+ *   • soleil = −6°…−12°  crépuscule nautique     → 0,30 → 0,50
+ *   • soleil ≤ −12°  astronomique / nuit         → 0,55 (plafonné, jamais opaque)
  */
 export function computeNightFloor(altitudeDeg: number): number {
   if (!Number.isFinite(altitudeDeg) || altitudeDeg >= 0) return 0;
@@ -165,10 +168,10 @@ export function chooseGridSize(map: MapboxMap): { gridW: number; gridH: number }
   return { gridW: w, gridH: h };
 }
 
-// ── Analysis-zone variants ─────────────────────────────────────────────────
-// Same grid budget as the viewport version, but sized from the zone bbox: a
-// small zone gets a much finer metres-per-cell DEM sample (better shadow
-// fidelity) and needs far fewer DEM tiles.
+// ── Variantes en zone d'analyse ────────────────────────────────────────────
+// Même budget de grille que la version vue, mais dimensionné sur l'emprise de
+// la zone : une petite zone reçoit un échantillon DEM bien plus fin en mètres
+// par cellule (ombres plus fidèles) et demande beaucoup moins de tuiles DEM.
 
 function mercYDeg(latDeg: number): number {
   const clamped = Math.max(-85.051129, Math.min(85.051129, latDeg));
@@ -222,20 +225,22 @@ export function withOvershoot(
 }
 
 /**
- * Picks a viewport-overshoot factor that grows as the sun sinks, so off-screen
- * peaks still cast their shadow into the visible area.
+ * Choisit un facteur de dépassement de la vue qui grandit quand le soleil
+ * baisse, pour que les sommets hors écran projettent encore leur ombre dans la
+ * zone visible.
  *
- * The factor is bucketed by sun altitude (see `sunAltitudeOvershootBucket`):
- * the DEM is only re-sampled when the sun crosses a bucket boundary (≤5°, ≤10°,
- * ≤15°, ≤25°), not on every pixel of a time-scrub drag. Between buckets the
- * previous factor is reused — `lastBucket` carries the bucket the current
- * sample was taken at, and is updated in place when a re-sample is required.
+ * Le facteur est rangé par classe d'altitude du soleil (voir
+ * `sunAltitudeOvershootBucket`) : le DEM n'est rééchantillonné que quand le
+ * soleil franchit une limite de classe (≤5°, ≤10°, ≤15°, ≤25°), pas à chaque
+ * pixel d'un glissement du curseur de temps. Entre deux classes, le facteur
+ * précédent est réutilisé — `lastBucket` porte la classe de l'échantillon
+ * courant, et il est mis à jour sur place quand un rééchantillonnage est requis.
  *
- * @param rawBounds      Viewport bounds (west, south, east, north) BEFORE overshoot.
- * @param sunAltitudeDeg Current sun altitude in degrees.
- * @param lastBucket     Bucket of the currently-sampled grid (or `null` if none).
- * @returns `{ overshoot, bucket, resample }` — `resample` is true iff the
- *          bucket changed and the DEM must be re-sampled at the new overshoot.
+ * @param rawBounds      Emprise de la vue (ouest, sud, est, nord) AVANT dépassement.
+ * @param sunAltitudeDeg Altitude actuelle du soleil, en degrés.
+ * @param lastBucket     Classe de la grille actuellement échantillonnée (ou `null` s'il n'y en a pas).
+ * @returns `{ overshoot, bucket, resample }` — `resample` vaut true si et seulement
+ *          si la classe a changé et que le DEM doit être rééchantillonné au nouveau dépassement.
  */
 export function chooseAdaptiveOvershoot(
   rawBounds: BoundsTuple,
@@ -244,16 +249,16 @@ export function chooseAdaptiveOvershoot(
 ): { overshoot: number; bucket: number; resample: boolean } {
   const bucket = sunAltitudeOvershootBucket(sunAltitudeDeg);
   if (lastBucket !== null && lastBucket === bucket) {
-    // Same bucket → keep the previous factor; caller caches it.
+    // Même classe → on garde le facteur précédent ; l'appelant le met en cache.
     return { overshoot: NaN, bucket, resample: false };
   }
   const [w, , e, n] = rawBounds;
-  const midLat = n; // good enough for the cos(lat) term
+  const midLat = n; // suffisant pour le terme cos(lat)
   const cosLat = Math.cos((midLat * Math.PI) / 180);
   const viewportWidthM = ((e - w) * Math.PI * 6378137 * cosLat) / 180;
-  // `adaptiveOvershoot` estimates the shadow length of a typical peak; the
-  // fallback peak height inside it keeps this robust even before we have
-  // sampled the actual viewport relief.
+  // `adaptiveOvershoot` estime la longueur d'ombre d'un sommet typique ; la
+  // hauteur de sommet par défaut qu'il contient le garde robuste avant même
+  // d'avoir échantillonné le relief réel de la vue.
   const overshoot = adaptiveOvershoot(sunAltitudeDeg, NaN, viewportWidthM);
   return { overshoot, bucket, resample: true };
 }
@@ -283,7 +288,7 @@ export function setShadowLayerOpacity(map: MapboxMap, opacity: number): void {
     map.setLayoutProperty(LAYER_ID, 'visibility', clampedOpacity > 0 ? 'visible' : 'none');
     map.setPaintProperty(LAYER_ID, 'raster-opacity', clampedOpacity);
   } catch {
-    /* no-op */
+    /* rien à faire */
   }
 }
 

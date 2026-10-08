@@ -1,51 +1,58 @@
 /**
- * shadowSweep.ts — Single source of truth for the O(N) horizon cast-shadow sweep.
+ * shadowSweep.ts — Source unique du balayage d'horizon O(N) des ombres portées.
  *
- * Consumed by BOTH the cast-shadow worker (`shadowWorker.ts`) and the cumulative
- * sunlight-map worker (`sunlightMapWorker.ts`, via `dem-grid-worker.ts`). The two
- * workers previously each maintained their own copy of the algorithm; this module
- * ends that divergence — there is now exactly one sweep implementation to profile,
- * benchmark and reason about.
+ * Utilisé à la fois par le worker d'ombres portées (`shadowWorker.ts`) et par
+ * le worker de carte d'ensoleillement cumulé (`sunlightMapWorker.ts`, via
+ * `dem-grid-worker.ts`). Les deux workers avaient chacun leur copie de
+ * l'algorithme ; ce module met fin à cette divergence — il n'y a plus qu'une
+ * implémentation du balayage à profiler, mesurer et comprendre.
  *
- * Algorithm (unchanged from the rewrite that retired the per-tile raster source):
- * a single propagation pass per sun direction. The "shadow elevation" buffer holds,
- * for every cell, the altitude of the highest shadow-casting ray seen so far along
- * the reverse-sun direction. A cell is shadowed when that propagated ray sits above
- * its own terrain elevation.
+ * Algorithme (inchangé depuis la réécriture qui a retiré la source raster par
+ * tuile) : une seule passe de propagation par direction du soleil. Le tampon
+ * « altitude d'ombre » contient, pour chaque cellule, l'altitude du plus haut
+ * rayon porteur d'ombre vu jusque-là dans la direction opposée au soleil. Une
+ * cellule est à l'ombre quand ce rayon propagé passe au-dessus de sa propre
+ * altitude.
  *
- * Performance work in this version (validated bit-identical to the legacy inner loop
- * across 26 azimuth/altitude configurations on a 200×200 terrain with 5% NaN holes,
- * ~20-26× faster on production grid sizes):
- *   • Dedicated `noInterp` fast path — collapses the bilinear blend (v0*1 + v1*0 = v0)
- *     to skip the multiply. v1 is still *read* so the NaN-tolerant chain behaves
- *     identically to the interpolation path (shadows survive crossing DEM holes).
- *   • Inline NaN test (`el !== el`) instead of `Number.isNaN(el)` (non-inlinable
- *     function call on the hot inner loop).
- *   • Precomputed predecessor base offset hoisted out of the inner loop.
+ * Optimisations de cette version (validées identiques au bit près à l'ancienne
+ * boucle interne sur 26 configurations azimut / altitude, sur un terrain de
+ * 200×200 avec 5 % de trous NaN ; ~20 à 26× plus rapide aux tailles de grille
+ * de production) :
+ *   • chemin rapide `noInterp` dédié — réduit le mélange bilinéaire
+ *     (v0*1 + v1*0 = v0) pour éviter la multiplication. v1 est quand même *lu*
+ *     pour que la chaîne tolérante aux NaN se comporte comme le chemin avec
+ *     interpolation (les ombres survivent à la traversée des trous du DEM) ;
+ *   • test de NaN en ligne (`el !== el`) au lieu de `Number.isNaN(el)` (appel
+ *     de fonction non inlinable dans la boucle interne critique) ;
+ *   • décalage de base du prédécesseur précalculé, sorti de la boucle interne.
  *
- * Cells need not be square: the viewport grids follow the canvas aspect while
- * their bounds follow the (pitched) map extent, and the preview/sunlight grids
- * are capped per axis. The sun azimuth is a metric direction, so it is turned
- * into cell units (row component scaled by cellSizeX / cellSizeY) before the
- * sweep axis and the per-step shift are chosen. Square cells keep a ratio of
- * exactly 1, i.e. the historical results bit for bit.
+ * Les cellules ne sont pas forcément carrées : les grilles de vue suivent le
+ * rapport d'aspect du canvas tandis que leur emprise suit l'étendue (inclinée)
+ * de la carte, et les grilles d'aperçu / d'ensoleillement sont plafonnées par
+ * axe. L'azimut du soleil est une direction métrique : il est donc converti en
+ * unités de cellule (composante en ligne multipliée par cellSizeX / cellSizeY)
+ * avant de choisir l'axe de balayage et le décalage par pas. Des cellules
+ * carrées gardent un rapport d'exactement 1, donc les résultats historiques au
+ * bit près.
  *
- * NOTE on floating-point tie-breaking: the legacy algorithm (and this one) does NOT
- * snap fractional weights near 0 or 1. On realistic terrain the resulting interpolation
- * noise at near-cardinal / exact-diagonal azimuths is sub-pixel and invisible — it was
- * empirically confirmed (see test-diagonal-bug.mts) that az=45°/135°/225°/315° produce
- * shadow coverage statistically indistinguishable from their neighbours. Snapping was
- * therefore deliberately NOT introduced: it would diverge from legacy for no perceptual
- * benefit and risk subtle regressions near DEM holes.
+ * NOTE sur le départage en virgule flottante : l'ancien algorithme (comme
+ * celui-ci) n'arrondit PAS les poids fractionnaires proches de 0 ou 1. Sur un
+ * terrain réaliste, le bruit d'interpolation qui en résulte aux azimuts
+ * quasi cardinaux / exactement diagonaux est sous-pixel et invisible — il a été
+ * confirmé empiriquement (voir test-diagonal-bug.mts) que az = 45°/135°/225°/315°
+ * donnent une couverture d'ombre statistiquement indiscernable de leurs
+ * voisins. L'arrondi n'a donc volontairement PAS été introduit : il divergerait
+ * de l'ancien comportement sans bénéfice perceptible et risquerait des
+ * régressions subtiles près des trous du DEM.
  */
 
-/** Sentinel stored in `shadowElev` for NaN (missing-DEM) cells, preserved across propagation. */
+/** Sentinelle stockée dans `shadowElev` pour les cellules NaN (DEM manquant), conservée pendant la propagation. */
 const NEG_INFINITY = -Infinity;
 
 export interface ShadowSweepScratch {
-  /** Output byte buffer: 0 = lit, 255 = fully cast-shadow, intermediate = soft penumbra. */
+  /** Tampon d'octets de sortie : 0 = éclairé, 255 = entièrement à l'ombre portée, intermédiaire = pénombre douce. */
   shadow: Uint8Array;
-  /** Scratch Float32 buffer propagating ray altitudes — no need to clear it. */
+  /** Tampon Float32 de travail qui propage les altitudes des rayons — inutile de le vider. */
   shadowElev: Float32Array;
 }
 
@@ -57,17 +64,17 @@ export function createShadowSweepScratch(size: number): ShadowSweepScratch {
 }
 
 /**
- * Single-pass O(N) horizon sweep.
+ * Balayage d'horizon O(N) en une passe.
  *
- * @param elev     Row-major Float32 elevation grid; `NaN` marks missing cells.
- * @param W        Grid width (columns, east → +col).
- * @param H        Grid height (rows, south → +row).
- * @param sunAzDeg Sun azimuth in degrees, 0 = north, clockwise.
- * @param sunAltDeg Sun altitude in degrees above horizon (≤0 or ≥89 short-circuits to all-lit).
- * @param cellSizeX Metric cell width  at the grid mid-latitude (metres).
- * @param cellSizeY Metric cell height at the grid mid-latitude (metres).
- * @param scratch  Pre-allocated scratch buffers (`shadow` + `shadowElev`), at least `W*H` each.
- * @returns `scratch.shadow` — bytes where 0 = lit, 255 = fully shadowed.
+ * @param elev     Grille d'altitudes Float32 ligne par ligne ; `NaN` marque les cellules manquantes.
+ * @param W        Largeur de la grille (colonnes, est → +col).
+ * @param H        Hauteur de la grille (lignes, sud → +ligne).
+ * @param sunAzDeg Azimut du soleil en degrés, 0 = nord, sens horaire.
+ * @param sunAltDeg Altitude du soleil en degrés au-dessus de l'horizon (≤0 ou ≥89 : tout éclairé, sans calcul).
+ * @param cellSizeX Largeur métrique d'une cellule à la latitude moyenne de la grille (mètres).
+ * @param cellSizeY Hauteur métrique d'une cellule à la latitude moyenne de la grille (mètres).
+ * @param scratch  Tampons de travail préalloués (`shadow` + `shadowElev`), d'au moins `W*H` chacun.
+ * @returns `scratch.shadow` — octets où 0 = éclairé, 255 = entièrement à l'ombre.
  */
 export function computeShadowSweep(
   elev: Float32Array,
@@ -87,24 +94,27 @@ export function computeShadowSweep(
 
   const azRad = (sunAzDeg * Math.PI) / 180;
   const tanAlt = Math.tan((sunAltDeg * Math.PI) / 180);
-  // Shadow propagation direction (away from the sun) in cell units: metres
-  // east / south divided by the cell size, scaled by cellSizeX so that square
-  // cells multiply by exactly 1.
+  // Direction de propagation de l'ombre (à l'opposé du soleil) en unités de
+  // cellule : mètres vers l'est / le sud divisés par la taille de cellule,
+  // multipliés par cellSizeX pour que des cellules carrées multiplient par
+  // exactement 1.
   const shadowDC = -Math.sin(azRad);
   const shadowDR = Math.cos(azRad) * (cellSizeX / cellSizeY);
   const absDC = Math.abs(shadowDC);
   const absDR = Math.abs(shadowDR);
 
-  // Penumbra height (metres). Sun disc + atmospheric softening + per-cell
-  // anti-aliasing all roll into this single parameter. Low sun → wider
-  // penumbra: matches the way real evening shadows fade out.
+  // Hauteur de pénombre (mètres). Disque solaire + adoucissement
+  // atmosphérique + anticrénelage par cellule réunis dans ce seul paramètre.
+  // Soleil bas → pénombre plus large : comme les vraies ombres du soir qui
+  // s'estompent.
   const SOFTNESS_HEIGHT_M =
     2.5 + 6 * Math.max(0, Math.min(1, (35 - sunAltDeg) / 35));
   const invSoftness = 255 / SOFTNESS_HEIGHT_M;
 
   if (absDC >= absDR) {
-    // ── Column-major sweep ── iterate columns in the propagation order, walk
-    // each column top→bottom. The predecessor lives one column back.
+    // ── Balayage par colonnes ── parcourt les colonnes dans l'ordre de
+    // propagation, chaque colonne de haut en bas. Le prédécesseur est une
+    // colonne en arrière.
     const colStep = shadowDC > 0 ? 1 : -1;
     const rowShift = shadowDR / absDC;
     const rowShiftFloor = Math.floor(-rowShift);
@@ -121,7 +131,7 @@ export function computeShadowSweep(
     for (let c = colStart; c !== colEnd; c += colStep) {
       const predC = c - colStep;
       if (predC < 0 || predC >= W) {
-        // Edge column — no predecessor; seed shadowElev from elevation.
+        // Colonne de bord — pas de prédécesseur ; shadowElev part de l'altitude.
         for (let r = 0; r < H; r++) {
           const idx = r * W + c;
           const el = elev[idx];
@@ -130,13 +140,14 @@ export function computeShadowSweep(
         continue;
       }
       if (noInterp) {
-        // Fast path: fr === 0, so the bilinear blend collapses to v0 alone
-        // (predElev = v0*1 + v1*0). v1 is never needed — when v0 is the
-        // NaN sentinel we bail exactly as the legacy `noInterp` branch did
-        // (shadows stop at DEM holes along a purely cardinal sun direction).
-        // The bounds check mirrors the interpolation path (`predR1 >= H`)
-        // so edge rows behave identically. Net win: single read, no
-        // multiply, no `Number.isNaN` call.
+        // Chemin rapide : fr === 0, donc le mélange bilinéaire se réduit à v0
+        // (predElev = v0*1 + v1*0). v1 n'est jamais nécessaire — quand v0 est la
+        // sentinelle NaN, on abandonne exactement comme l'ancienne branche
+        // `noInterp` (les ombres s'arrêtent aux trous du DEM pour une direction
+        // du soleil purement cardinale). Le test de bornes reprend celui du
+        // chemin avec interpolation (`predR1 >= H`) pour que les lignes de bord
+        // se comportent pareil. Gain net : une seule lecture, pas de
+        // multiplication, pas d'appel à `Number.isNaN`.
         for (let r = 0; r < H; r++) {
           const idx = r * W + c;
           const el = elev[idx];
@@ -207,8 +218,8 @@ export function computeShadowSweep(
       }
     }
   } else {
-    // ── Row-major sweep ── iterate rows in propagation order, walk each row
-    // left→right. The predecessor lives one row back.
+    // ── Balayage par lignes ── parcourt les lignes dans l'ordre de propagation,
+    // chaque ligne de gauche à droite. Le prédécesseur est une ligne en arrière.
     const rowStep = shadowDR > 0 ? 1 : -1;
     const colShift = shadowDC / absDR;
     const colShiftFloor = Math.floor(-colShift);
@@ -235,10 +246,11 @@ export function computeShadowSweep(
       }
       const predRowOffset = predR * W;
       if (noInterp) {
-        // Fast path: fc === 0, bilinear blend collapses to v0 alone
-        // (predElev = v0*1 + v1*0). v1 is never needed — when v0 is the NaN
-        // sentinel we bail exactly as the legacy `noInterp` branch did.
-        // Bounds check mirrors the interpolation path (`predC1 >= W`).
+        // Chemin rapide : fc === 0, le mélange bilinéaire se réduit à v0
+        // (predElev = v0*1 + v1*0). v1 n'est jamais nécessaire — quand v0 est la
+        // sentinelle NaN, on abandonne exactement comme l'ancienne branche
+        // `noInterp`. Le test de bornes reprend celui du chemin avec
+        // interpolation (`predC1 >= W`).
         for (let c = 0; c < W; c++) {
           const idx = r * W + c;
           const el = elev[idx];
@@ -313,16 +325,17 @@ export function computeShadowSweep(
 }
 
 /**
- * Adaptive viewport-overshoot factor for shadow sampling.
+ * Facteur adaptatif de dépassement de la vue pour l'échantillonnage des ombres.
  *
- * A mountain's shadow on flat ground reaches `peakHeightM / tan(altitude)` metres.
- * With a fixed 10–15% overshoot, an off-screen 2000 m peak at sun-altitude 10°
- * casts an 11 km shadow that silently disappears at the viewport edge. This helper
- * grows the overshoot as the sun sinks, so peaks just outside the viewport still
- * contribute their shadow into the visible area.
+ * L'ombre d'une montagne sur terrain plat atteint `peakHeightM / tan(altitude)`
+ * mètres. Avec un dépassement fixe de 10 à 15 %, un sommet de 2000 m hors écran
+ * avec un soleil à 10° projette une ombre de 11 km qui disparaît sans bruit au
+ * bord de la vue. Cette aide agrandit le dépassement quand le soleil baisse,
+ * pour que les sommets juste hors de la vue projettent encore leur ombre dans
+ * la zone visible.
  *
- * Returns a factor clamped to `[MIN, MAX]`. `MAX` is conservative enough to keep
- * the DEM tile count under the worker's `MAX_SAMPLE_TILE_COUNT` ceiling.
+ * Renvoie un facteur borné à `[MIN, MAX]`. `MAX` est assez prudent pour garder
+ * le nombre de tuiles DEM sous le plafond `MAX_SAMPLE_TILE_COUNT` du worker.
  */
 export function adaptiveOvershoot(
   sunAltitudeDeg: number,
@@ -336,22 +349,23 @@ export function adaptiveOvershoot(
   if (!Number.isFinite(sunAltitudeDeg) || sunAltitudeDeg >= 89 || viewportWidthM <= 0) {
     return MIN_OVERSHOOT;
   }
-  const alt = Math.max(0.5, sunAltitudeDeg); // clamp to avoid tan→∞ blow-up at the horizon
+  const alt = Math.max(0.5, sunAltitudeDeg); // borné pour éviter l'explosion tan → ∞ à l'horizon
   const peak = Number.isFinite(peakHeightM) && peakHeightM > 0 ? peakHeightM : FALLBACK_PEAK_M;
-  // Shadow length in metres (one side). Half-extent on each side of the viewport.
+  // Longueur d'ombre en mètres (d'un côté). Demi-étendue de chaque côté de la vue.
   const shadowM = peak / Math.tan((alt * Math.PI) / 180);
-  // Factor = (shadow half-extent) / (half viewport width). Overshoot 1.0 ≈ doubles the
-  // sampled bounds, which already costs ~4× tiles, so cap firmly.
+  // Facteur = (demi-étendue de l'ombre) / (demi-largeur de la vue). Un dépassement
+  // de 1,0 ≈ double l'emprise échantillonnée, ce qui coûte déjà ~4× de tuiles :
+  // plafond ferme.
   const factor = shadowM / (viewportWidthM * 0.5);
   return Math.max(MIN_OVERSHOOT, Math.min(MAX_OVERSHOOT, factor));
 }
 
 /**
- * Quantises a sun altitude into coarse buckets so the adaptive-overshoot logic
- * only re-samples the DEM when the shadow length has materially changed — not on
- * every pixel of a time-scrub drag.
+ * Quantifie l'altitude du soleil en classes grossières pour que le dépassement
+ * adaptatif ne rééchantillonne le DEM que quand la longueur d'ombre a vraiment
+ * changé — pas à chaque pixel d'un glissement du curseur de temps.
  *
- * Bucket boundaries: ≤5°, ≤10°, ≤15°, ≤25°, >25°. Returns a small integer key.
+ * Limites des classes : ≤5°, ≤10°, ≤15°, ≤25°, >25°. Renvoie une petite clé entière.
  */
 export function sunAltitudeOvershootBucket(sunAltitudeDeg: number): number {
   if (!Number.isFinite(sunAltitudeDeg)) return 0;

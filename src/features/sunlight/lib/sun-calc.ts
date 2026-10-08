@@ -1,13 +1,14 @@
 /**
- * Sun position & sunrise/sunset calculator.
+ * Calcul de la position du soleil et des heures de lever / coucher.
  *
- * Implements the standard astronomical algorithms used by the SunCalc library
- * (Vladimir Agafonkin, BSD-2). Inputs are observer coordinates plus either a
- * real instant (`Date`) or a local wall-clock date/time resolved in an IANA
- * timezone. This keeps the solar system correct for any mapped location rather
- * than accidentally using the viewer machine timezone.
+ * Implémente les algorithmes astronomiques classiques de la bibliothèque
+ * SunCalc (Vladimir Agafonkin, BSD-2). Les entrées sont les coordonnées de
+ * l'observateur plus, soit un instant réel (`Date`), soit une date / heure
+ * locale résolue dans un fuseau IANA. Le calcul solaire reste ainsi juste pour
+ * n'importe quel lieu de la carte, sans utiliser par accident le fuseau de la
+ * machine de l'utilisateur.
  *
- * Reference:
+ * Références :
  *   - https://github.com/mourner/suncalc
  *   - https://gml.noaa.gov/grad/solcalc/calcdetails.html
  */

@@ -75,7 +75,7 @@ export async function loadTileWithParents(
       if (elev) return { leafX: x, leafY: y, dataX: x, dataY: y, dataZ: z, elev };
     }
   } catch {
-    /* ignore fetch error */
+    /* erreur de requête ignorée */
   }
   return { leafX: x, leafY: y, dataX: x, dataY: y, dataZ: z, elev: null };
 }

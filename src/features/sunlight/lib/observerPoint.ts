@@ -23,7 +23,7 @@ export function resolveSunObserverPoint(map: MapboxMap): SunObserverPoint | null
       lng = projected.lng;
       lat = projected.lat;
     } catch {
-      // Fall back to Mapbox's logical center if the screen-center unproject fails.
+      // Repli sur le centre logique de Mapbox si la déprojection du centre de l'écran échoue.
     }
   }
 

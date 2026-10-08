@@ -1,14 +1,16 @@
 /**
- * Sun Ray — True 3D line rendered via CustomLayerInterface.
+ * Rayon de soleil — vraie ligne 3D rendue via CustomLayerInterface.
  *
- * Uses Mapbox's projection matrix (`renderingMode: '3d'`) to draw a line
- * from a fixed anchor point on the terrain up into the sky along the sun
- * direction.  The vertices are stored in Mercator coordinates and only
- * change when the sun position (date/time) is updated — NOT on camera
- * moves.  This makes the ray 100 % static during pan/rotate/zoom.
+ * Utilise la matrice de projection de Mapbox (`renderingMode: '3d'`) pour
+ * tracer une ligne depuis un point d'ancrage fixe sur le terrain jusque dans
+ * le ciel, dans la direction du soleil. Les sommets sont stockés en
+ * coordonnées Mercator et ne changent que quand la position du soleil
+ * (date / heure) est mise à jour — PAS lors des mouvements de caméra. Le rayon
+ * est donc 100 % immobile pendant les déplacements, rotations et zooms.
  *
- * The anchor ring is rendered in the same custom layer so the point and the
- * line stay perfectly locked together during camera motion.
+ * L'anneau d'ancrage est rendu dans la même couche personnalisée pour que le
+ * point et la ligne restent parfaitement solidaires pendant les mouvements de
+ * caméra.
  */
 import type { CustomLayerInterface, Map as MapboxMap } from 'mapbox-gl';
 import mapboxgl from 'mapbox-gl';
@@ -27,7 +29,7 @@ function hasStyleLayer(map: MapboxMap, layerId: string): boolean {
   }
 }
 
-// ── Color helpers ──────────────────────────────────────────────────────
+// ── Aides de couleur ───────────────────────────────────────────────────
 
 function sunRayColor(altitudeDeg: number): [number, number, number] {
   if (altitudeDeg <= 6) return [1.0, 0.88, 0.70];
@@ -41,7 +43,7 @@ function sunRayCircleColor(altitudeDeg: number): [number, number, number] {
   return [1.0, 1.0, 0.99];
 }
 
-// ── GLSL shaders ───────────────────────────────────────────────────────
+// ── Shaders GLSL ───────────────────────────────────────────────────────
 
 const VERT = `
 precision highp float;
@@ -95,7 +97,7 @@ void main() {
 }
 `;
 
-// ── Shader compile helper ──────────────────────────────────────────────
+// ── Aide de compilation des shaders ────────────────────────────────────
 
 function compileShader(gl: WebGL2RenderingContext, type: number, src: string): WebGLShader {
   const shader = gl.createShader(type);
@@ -152,7 +154,7 @@ class SunRayLayer implements CustomLayerInterface {
   private pointUFillColor: WebGLUniformLocation | null = null;
   private pointUStrokeWidth: WebGLUniformLocation | null = null;
 
-  /** Pre-computed Mercator vertices: [anchorX, anchorY, anchorZ, srcX, srcY, srcZ] */
+  /** Sommets Mercator précalculés : [anchorX, anchorY, anchorZ, srcX, srcY, srcZ] */
   private vertices = new Float32Array(6);
   private anchorLng: number | null = null;
   private anchorLat: number | null = null;
@@ -189,7 +191,7 @@ class SunRayLayer implements CustomLayerInterface {
 
     this.syncAnchorElevation();
 
-    // Upload vertices to GPU when they change
+    // Envoie les sommets au GPU quand ils changent
     if (this.needsBufferUpload) {
       gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
       gl.bufferData(gl.ARRAY_BUFFER, this.vertices, gl.DYNAMIC_DRAW);
@@ -201,7 +203,7 @@ class SunRayLayer implements CustomLayerInterface {
       ? 0.92
       : Math.max(0.3, Math.min(0.92, (this.altitudeDeg + 2) / 14));
 
-    // ── Save GL state ────────────────────────────────────────────
+    // ── Sauvegarde de l'état GL ──────────────────────────────────
     const prevProgram = gl.getParameter(gl.CURRENT_PROGRAM);
     const prevBuffer = gl.getParameter(gl.ARRAY_BUFFER_BINDING);
     const prevBlend = gl.isEnabled(gl.BLEND);
@@ -222,7 +224,7 @@ class SunRayLayer implements CustomLayerInterface {
     gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
 
     gl.useProgram(this.lineProgram);
-    gl.lineWidth(2.0); // GPU capped at implementation limit, usually 1–10
+    gl.lineWidth(2.0); // le GPU plafonne à sa limite d'implémentation, en général 1 à 10
     gl.uniformMatrix4fv(this.lineUMatrix, false, matrix);
     gl.uniform4f(this.lineUColor, r, g, b, alpha);
     gl.enableVertexAttribArray(this.lineAPos);
@@ -240,7 +242,7 @@ class SunRayLayer implements CustomLayerInterface {
     gl.vertexAttribPointer(this.pointAPos, 3, gl.FLOAT, false, 0, 0);
     gl.drawArrays(gl.POINTS, 0, 1);
 
-    // ── Restore GL state ─────────────────────────────────────────
+    // ── Restauration de l'état GL ────────────────────────────────
     if (!prevLineAttrEnabled && this.lineAPos >= 0) gl.disableVertexAttribArray(this.lineAPos);
     if (!prevPointAttrEnabled && this.pointAPos >= 0) gl.disableVertexAttribArray(this.pointAPos);
     if (prevBlend) gl.enable(gl.BLEND); else gl.disable(gl.BLEND);
@@ -267,7 +269,7 @@ class SunRayLayer implements CustomLayerInterface {
     this.gl = null;
   }
 
-  // ── Public update ──────────────────────────────────────────────
+  // ── Mise à jour publique ───────────────────────────────────────
 
   updatePosition(
     azimuthDeg: number,
@@ -289,9 +291,10 @@ class SunRayLayer implements CustomLayerInterface {
   private syncAnchorElevation(): void {
     if (!this.map || this.anchorLng == null || this.anchorLat == null) return;
 
-    // Terrain LOD can fluctuate while the camera is moving, which makes the
-    // ray anchor visibly wobble during rotate/zoom. Only resample once the
-    // camera is stable so the indicator remains visually locked in place.
+    // Le LOD du terrain peut fluctuer pendant que la caméra bouge, ce qui fait
+    // trembler visiblement l'ancrage du rayon pendant les rotations / zooms. On
+    // ne rééchantillonne qu'une fois la caméra stable pour que l'indicateur
+    // reste visuellement fixe.
     if (this.map.isMoving()) {
       return;
     }
@@ -316,14 +319,14 @@ class SunRayLayer implements CustomLayerInterface {
       this.anchorElevation + SUN_RAY_ANCHOR_LIFT_METERS,
     );
 
-    // Source: far point along the sun direction in the sky
+    // Source : point lointain dans le ciel, dans la direction du soleil
     const azRad = (this.azimuthDeg * Math.PI) / 180;
     const altRad = (this.altitudeDeg * Math.PI) / 180;
     const cosAlt = Math.cos(altRad);
     const sunEast = Math.sin(azRad) * cosAlt;
     const sunNorth = Math.cos(azRad) * cosAlt;
     const sunUp = Math.sin(altRad);
-    // Ray length in metres — long enough to always exit the viewport
+    // Longueur du rayon en mètres — assez longue pour toujours sortir de la vue
     const rayLenM = 60000;
     const ms = anchor.meterInMercatorCoordinateUnits();
 
@@ -331,14 +334,14 @@ class SunRayLayer implements CustomLayerInterface {
     this.vertices[1] = anchor.y;
     this.vertices[2] = anchor.z;
     this.vertices[3] = anchor.x + sunEast * rayLenM * ms;
-    this.vertices[4] = anchor.y - sunNorth * rayLenM * ms; // Mercator Y flipped
+    this.vertices[4] = anchor.y - sunNorth * rayLenM * ms; // Y Mercator inversé
     this.vertices[5] = anchor.z + sunUp * rayLenM * ms;
 
     this.needsBufferUpload = true;
   }
 }
 
-// ── Module-level singleton + public API ────────────────────────────────
+// ── Singleton du module + API publique ─────────────────────────────────
 
 let sunRayInstance: SunRayLayer | null = null;
 
@@ -358,7 +361,7 @@ export function removeSunRayLayer(map: MapboxMap): void {
       map.removeLayer(SUN_RAY_LAYER_ID);
     }
   } catch {
-    /* map may be tearing down */
+    /* la carte est peut-être en cours de destruction */
   }
   sunRayInstance = null;
 }

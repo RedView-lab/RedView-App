@@ -1,14 +1,14 @@
 /**
- * dem-grid-worker.ts — Pure DEM sampling utilities, safe to import from any
- * Web Worker module.
+ * dem-grid-worker.ts — Utilitaires purs d'échantillonnage du DEM, importables
+ * depuis n'importe quel module de Web Worker.
  *
- * Extracted so the cast-shadow worker (`shadowWorker.ts`) and the cumulative
- * sunlight-map worker (`sunlightMapWorker.ts`) share one battle-tested DEM
- * pipeline instead of diverging copies.
+ * Extraits pour que le worker d'ombres portées (`shadowWorker.ts`) et le worker
+ * de carte d'ensoleillement cumulé (`sunlightMapWorker.ts`) partagent un seul
+ * pipeline DEM éprouvé au lieu de copies qui divergent.
  *
- * Responsibility: given a viewport bbox, build a `Float32Array` elevation
- * grid by reading Terrain-RGB tiles out of the SW's CacheStorage. No
- * worker-global state lives here — each call is self-contained.
+ * Rôle : à partir de l'emprise de la vue, construire une grille d'altitudes
+ * `Float32Array` en lisant les tuiles Terrain-RGB dans le CacheStorage du SW.
+ * Aucun état global de worker ici — chaque appel est autonome.
  */
 import { latToMercY, lngLatToMercTile } from './shadowWorkerEncoding';
 import { computeShadowSweep } from './shadowSweep';
@@ -25,28 +25,29 @@ const MAX_PARENT_WALK = 4;
 export type BoundsTuple = [number, number, number, number];
 
 export interface ElevationGridSampleResult {
-  /** Row-major Float32 grid, `NaN` for missing cells. */
+  /** Grille Float32 ligne par ligne, `NaN` pour les cellules manquantes. */
   elev: Float32Array;
-  /** Filled / total counts to let callers compute coverage ratio. */
+  /** Nombres de cellules remplies / totales, pour que l'appelant calcule le taux de couverture. */
   filled: number;
   total: number;
-  /** True if the viewport spans too many tiles even at MIN_SAMPLE_DEM_ZOOM. */
+  /** Vrai si la vue couvre trop de tuiles, même à MIN_SAMPLE_DEM_ZOOM. */
   tooMany: boolean;
-  /** Actual DEM zoom used after auto-downgrade (≤ requested `demZoom`). */
+  /** Zoom DEM réellement utilisé après rétrogradation automatique (≤ `demZoom` demandé). */
   effectiveZoom: number;
   downgraded: boolean;
-  /** Metric cell size at the grid's mid-latitude (metres). */
+  /** Taille métrique d'une cellule à la latitude moyenne de la grille (mètres). */
   cellSizeX: number;
   cellSizeY: number;
 }
 
 /**
- * Builds a `gridW × gridH` elevation grid for `bounds`. Auto-downgrades
- * `demZoom` until the viewport covers at most `MAX_SAMPLE_TILE_COUNT` tiles.
+ * Construit une grille d'altitudes `gridW × gridH` pour `bounds`. Rétrograde
+ * `demZoom` automatiquement jusqu'à ce que la vue couvre au plus
+ * `MAX_SAMPLE_TILE_COUNT` tuiles.
  *
- * Cells with no cached coverage (even after a 4-step parent walk + one live
- * fetch attempt) are left as `NaN`. Callers should check `filled / total`
- * before consuming the grid.
+ * Les cellules sans couverture en cache (même après une remontée de 4 niveaux
+ * de parents + une tentative de requête réseau) restent à `NaN`. Les appelants
+ * doivent vérifier `filled / total` avant d'utiliser la grille.
  */
 export async function sampleViewportElevationGrid(
   bounds: BoundsTuple,
@@ -223,7 +224,7 @@ async function loadTileWithParents(
       if (elev) return { leafX: x, leafY: y, dataX: x, dataY: y, dataZ: z, elev };
     }
   } catch {
-    /* network/abort */
+    /* réseau / annulation */
   }
   return { leafX: x, leafY: y, dataX: x, dataY: y, dataZ: z, elev: null };
 }
@@ -309,15 +310,15 @@ function bilinearSample(
 }
 
 /**
- * Single-pass O(N) horizon sweep. `out` must be (gridW*gridH) bytes; written
- * with 0 = lit, 255 = fully cast-shadow, intermediate = soft penumbra.
- * `shadowElev` is a scratch Float32 buffer used internally to propagate ray
- * altitudes — no need to clear it.
+ * Balayage d'horizon O(N) en une passe. `out` doit faire (gridW*gridH) octets ;
+ * écrit avec 0 = éclairé, 255 = entièrement à l'ombre portée, intermédiaire =
+ * pénombre douce. `shadowElev` est un tampon Float32 de travail utilisé en
+ * interne pour propager les altitudes des rayons — inutile de le vider.
  *
- * Thin wrapper over `computeShadowSweep` (shadowSweep.ts), which is now the
- * single source of truth for the sweep algorithm shared by the cast-shadow and
- * sunlight-map workers. The wrapper exists to preserve this module's existing
- * `(out, shadowElev)` signature used by `sunlightMapWorker.ts`.
+ * Fine enveloppe de `computeShadowSweep` (shadowSweep.ts), désormais la source
+ * unique de l'algorithme de balayage partagé par les workers d'ombres portées
+ * et de carte d'ensoleillement. L'enveloppe garde la signature
+ * `(out, shadowElev)` de ce module, utilisée par `sunlightMapWorker.ts`.
  */
 export function computeHorizonSweepShadow(
   elev: Float32Array,
