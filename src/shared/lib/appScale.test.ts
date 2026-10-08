@@ -24,7 +24,7 @@ describe('computeAppScale', () => {
     expect(computeAppScale({ w, h })).toBe(1);
   });
 
-  // Browser window inside the screen (menu bar and tabs taken off).
+  // Fenêtre du navigateur dans l'écran (barre de menus et onglets retirés).
   it.each([
     ['MacBook Air 13" ≈ 0.87', 1440, 790, 0.866],
     ['MacBook Pro 14" ≈ 0.89', 1512, 860, 0.894],

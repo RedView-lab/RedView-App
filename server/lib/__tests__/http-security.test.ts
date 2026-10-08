@@ -252,7 +252,7 @@ describe('createRateLimiter', () => {
     expect(hit('a', 1)).toBe(false);
     hit('b', 1);
     hit('c', 1);
-    // 'a' was evicted: its counter starts over.
+    // 'a' a été évincé : son compteur repart de zéro.
     expect(hit('a', 1)).toBe(true);
   });
 });

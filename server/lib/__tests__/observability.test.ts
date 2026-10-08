@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { captureServerError, flushServerObservability, initServerObservability } from '../observability.mjs';
 
-// Stand-in for GlitchTip: records the envelopes the SDK posts.
+// Substitut de GlitchTip : enregistre les enveloppes que le SDK envoie.
 const envelopes: string[] = [];
 let receiver: http.Server;
 let dsn = '';

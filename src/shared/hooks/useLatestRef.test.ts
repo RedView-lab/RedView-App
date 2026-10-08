@@ -41,7 +41,7 @@ describe('useLatestRef', () => {
     const { result, rerender } = renderHook(
       (value: { zoom: number }) => {
         const ref = useLatestRef(value);
-        // Stable callback, as handed to map.on() once.
+        // Callback stable, comme celui passé une fois à map.on().
         return { ref, read: () => ref.current.zoom };
       },
       { initialProps: { zoom: 5 } },
@@ -61,8 +61,8 @@ describe('useLatestRef', () => {
   });
 
   it('never exposes the value of a render that React discarded', () => {
-    // An assignment during render (`ref.current = value`) would leave 'boom'
-    // in the ref although that render never committed.
+    // Une affectation pendant le rendu (`ref.current = value`) laisserait 'boom'
+    // dans la réf alors que ce rendu n'a jamais été validé.
     vi.spyOn(console, 'error').mockImplementation(() => {});
     class Boundary extends Component<{ children: ReactNode }, { failed: boolean }> {
       state = { failed: false };

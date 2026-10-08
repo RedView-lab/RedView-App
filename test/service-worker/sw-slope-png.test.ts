@@ -4,10 +4,11 @@ import vm from 'node:vm';
 import zlib from 'node:zlib';
 import { describe, it, expect } from 'vitest';
 
-// The slope overlay tiles are encoded in the browser by the Service Worker's
-// classic scripts (public/sw-dem/core/terrain-rgb.js), loaded here in a vm
-// context as the SW and its slope worker pool importScripts() them. The test
-// lives with the server ones for Node's types (zlib, Buffer).
+// Les tuiles de la surcouche de pente sont encodées dans le navigateur par
+// les scripts classiques du Service Worker (public/sw-dem/core/terrain-rgb.js),
+// chargés ici dans un contexte vm comme le SW et son pool de workers de pente
+// les importScripts(). Le test vit avec ceux du serveur pour les types de Node
+// (zlib, Buffer).
 type SwPng = {
   zlibDeflateRle: (data: Uint8Array) => Uint8Array;
   buildGrayPng: (width: number, height: number, gray: Uint8Array) => Promise<Blob>;
@@ -29,7 +30,7 @@ function seeded(seed: number): () => number {
   return () => ((s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
 }
 
-/** Smooth slope-like gray field (sqrt-gamma bytes) with a little texture. */
+/** Champ gris lisse façon pente (octets en gamma racine) avec un peu de texture. */
 function slopeField(size: number): Uint8Array {
   const rnd = seeded(3);
   const out = new Uint8Array(size * size);
@@ -50,7 +51,7 @@ function paethPredictor(a: number, b: number, c: number): number {
   return pa <= pb && pa <= pc ? a : pb <= pc ? b : c;
 }
 
-/** PNG scanlines of `gray`, Paeth-filtered like buildGrayPng. */
+/** Lignes PNG de `gray`, filtrées en Paeth comme buildGrayPng. */
 function paeth(gray: Uint8Array, width: number, height: number): Uint8Array {
   const out = new Uint8Array(height * (width + 1));
   for (let y = 0; y < height; y++) {
@@ -88,8 +89,8 @@ describe('zlibDeflateRle (slope tile PNG stream)', () => {
       new Uint8Array(0),
       Uint8Array.of(42),
       Uint8Array.of(5, 5, 5, 5),
-      new Uint8Array(1 << 20), // one byte value: matches spanning many blocks
-      Uint8Array.from(runs), // every run length, across the 258 cap
+      new Uint8Array(1 << 20), // une seule valeur d'octet : des correspondances qui couvrent beaucoup de blocs
+      Uint8Array.from(runs), // chaque longueur de répétition, de part et d'autre du plafond de 258
       Uint8Array.from({ length: 100_000 }, () => (rnd() * 256) | 0),
     ];
     for (let t = 0; t < 40; t++) {
@@ -130,7 +131,7 @@ describe('buildGrayPng', () => {
       chunks.push(type);
       if (type === 'IHDR') {
         expect(view.getUint32(pos + 8)).toBe(512);
-        expect(png[pos + 8 + 9]).toBe(0); // colour type: gray
+        expect(png[pos + 8 + 9]).toBe(0); // type de couleur : gris
       }
       if (type === 'IDAT') idat.push(Buffer.from(png.subarray(pos + 8, pos + 8 + len)));
       expect(view.getUint32(pos + 8 + len)).toBe(zlib.crc32(png.subarray(pos + 4, pos + 8 + len)));

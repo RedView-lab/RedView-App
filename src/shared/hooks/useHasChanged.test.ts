@@ -25,7 +25,7 @@ describe('useHasChanged', () => {
     );
     seen.length = 0;
     rerender('b');
-    // Render with the change, then React's immediate restart without it.
+    // Rendu avec le changement, puis relance immédiate de React sans lui.
     expect(seen).toEqual([true, false]);
     seen.length = 0;
     rerender('b');

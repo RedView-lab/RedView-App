@@ -117,7 +117,7 @@ describe('createRequestLogger', () => {
     await fetch(`${base}/boom`);
     await expect.poll(() => lines.length).toBe(1);
     expect(lines[0]).toMatchObject({ level: 50, route: '/:page', res: { statusCode: 500 } });
-    // No synthetic error whose stack only shows pino-http internals.
+    // Pas d'erreur synthétique dont la pile ne montre que les rouages de pino-http.
     expect(lines[0]).not.toHaveProperty('err');
   });
 

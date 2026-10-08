@@ -20,7 +20,7 @@ describe('useKeyedValue', () => {
     });
     const first = result.current;
     expect(first).toEqual({ id: 'a', items: ['x'] });
-    // New array with the same signature: same object handed back.
+    // Nouveau tableau de même signature : le même objet est renvoyé.
     rerender({ id: 'a', signature: 's1', items: ['x'] });
     expect(result.current).toBe(first);
   });
@@ -62,7 +62,7 @@ describe('useKeyedValue', () => {
       },
       { initialProps: { id: 'a', signature: 's1', items: ['x'] }, strict: true },
     );
-    const afterMount = runs.length; // StrictMode mounts effects twice
+    const afterMount = runs.length; // StrictMode monte les effets deux fois
     rerender({ id: 'a', signature: 's1', items: ['x'] });
     rerender({ id: 'a', signature: 's1', items: ['x'] });
     expect(runs.length).toBe(afterMount);

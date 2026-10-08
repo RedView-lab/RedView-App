@@ -3,7 +3,7 @@ import { decompressProjectPayload, gzipProjectJson } from './compression';
 import { MAX_CLOUD_PROJECT_PAYLOAD_CHARS } from './limits';
 import { encodeProjectPayload, type PayloadWorkerRequest } from './payloadEncoding';
 
-// A 200 000-character document limit keeps the over-limit case small (12 M in the app).
+// Une limite de document de 200 000 caractères garde le cas hors limite petit (12 M dans l'application).
 vi.mock('./limits', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./limits')>()),
   MAX_CLOUD_PROJECT_PAYLOAD_CHARS: 200_000,
@@ -26,7 +26,7 @@ describe('encodeProjectPayload', () => {
   });
 
   it('keeps the gzip for the bucket when its base64 would not fit in the document', async () => {
-    // Near-incompressible text (~6.5 bits/char): its gzip in base64 exceeds the document limit.
+    // Texte presque incompressible (~6,5 bits/caractère) : son gzip en base64 dépasse la limite du document.
     const bytes = new Uint8Array(400_000);
     let x = 2463534242; // xorshift32
     for (let i = 0; i < bytes.length; i++) {
@@ -45,7 +45,7 @@ describe('encodeProjectPayload', () => {
   });
 });
 
-/** Worker double running the real encoder, asynchronously, like payloadWorker.ts. */
+/** Double du worker qui exécute le vrai encodeur, de façon asynchrone, comme payloadWorker.ts. */
 function stubWorker(options: { crash?: boolean } = {}) {
   const created: unknown[] = [];
   class FakeWorker {

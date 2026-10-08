@@ -10,7 +10,7 @@ describe('translateAppText', () => {
   });
 
   it("keeps a text already written in the target language (the locale's own keys win)", () => {
-    // { fr: 'Gravier', en: 'Gravel' } exists, but 'Gravel' is also French.
+    // { fr: 'Gravier', en: 'Gravel' } existe, mais 'Gravel' est aussi du français.
     expect(translateAppText('Gravel', undefined, 'fr')).toBe('Gravel');
     expect(translateAppText('Projets', undefined, 'fr')).toBe('Projets');
   });

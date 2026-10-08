@@ -4,10 +4,11 @@ import vm from 'node:vm';
 import zlib from 'node:zlib';
 import { describe, it, expect } from 'vitest';
 
-// The DEM tiles are encoded in the browser by the Service Worker's classic
-// scripts (public/sw-dem/core/terrain-rgb.js), loaded here in a vm context as
-// the SW importScripts() them. The PNG is decoded independently (inflate +
-// PNG unfiltering) to check what any decoder (Mapbox, createImageBitmap) reads.
+// Les tuiles DEM sont encodées dans le navigateur par les scripts classiques
+// du Service Worker (public/sw-dem/core/terrain-rgb.js), chargés ici dans un
+// contexte vm comme le SW les importScripts(). Le PNG est décodé
+// indépendamment (inflate + défiltrage PNG) pour vérifier ce que lit
+// n'importe quel décodeur (Mapbox, createImageBitmap).
 type SwDem = {
   encodeTerrainRGBPng: (elevations: Float32Array) => Promise<Blob>;
   decodedTerrainRgbGet: (blob: Blob) => Float32Array | undefined;
@@ -25,7 +26,7 @@ function loadSwDem(): SwDem {
 const sw = loadSwDem();
 const SIZE = 256;
 
-/** Alpine-like surface: two ridges, a cliff, sea level and a below-datum pit. */
+/** Surface de type alpin : deux crêtes, une falaise, le niveau de la mer et une fosse sous le zéro. */
 function surface(): Float32Array {
   const out = new Float32Array(SIZE * SIZE);
   for (let y = 0; y < SIZE; y++) {
@@ -33,14 +34,14 @@ function surface(): Float32Array {
       let h = 1800 + 900 * Math.sin(x / 41) * Math.cos(y / 33) + 150 * Math.sin((x + 2 * y) / 7) + 0.37 * x;
       if (x > 200) h += 400; // cliff
       if (y < 8) h = 0; // sea
-      if (x < 4 && y > 240) h = -12.3; // below the datum
+      if (x < 4 && y > 240) h = -12.3; // sous le zéro
       out[y * SIZE + x] = h;
     }
   }
   return out;
 }
 
-/** Pixels of a non-interlaced 8-bit PNG (any filter), as `channels` bytes per pixel. */
+/** Pixels d'un PNG 8 bits non entrelacé (tout filtre), à `channels` octets par pixel. */
 function decodePng(png: Uint8Array): { colorType: number; channels: number; pixels: Uint8Array } {
   const view = new DataView(png.buffer, png.byteOffset, png.byteLength);
   let pos = 8;

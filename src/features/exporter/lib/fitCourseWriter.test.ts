@@ -23,7 +23,7 @@ function courseMessages(seed: number, points: number): Array<[number, Record<str
       positionLong: semicircles(6 + Math.sin(i / 300) * 0.02),
       distance: Math.round(i * 11.13 * 100) / 100 + rnd() * 0.004,
     };
-    // Some points without altitude: the record definition alternates.
+    // Quelques points sans altitude : la définition du record alterne.
     if (rnd() > 0.1) record.altitude = Math.round((800 + 400 * Math.sin(i / 700) + rnd()) * 10) / 10;
     return record;
   });
@@ -44,7 +44,7 @@ function courseMessages(seed: number, points: number): Array<[number, Record<str
     [M.EVENT, { timestamp: at(0), event: 'timer', eventType: 'start' }],
     ...records.map((record): [number, Record<string, unknown>] => [M.RECORD, record]),
   ];
-  // More than 16 course point shapes (name lengths): the local message slots wrap.
+  // Plus de 16 formes de course point (longueurs de nom) : les emplacements de message local bouclent.
   for (let k = 0; k < 40; k++) {
     const record = records[Math.floor(rnd() * points)]!;
     const name = `${names[k % names.length]}${'·'.repeat(k % 23)}`;
@@ -74,7 +74,7 @@ function encodeWithWriter(messages: Array<[number, Record<string, unknown>]>): U
   return writer.close();
 }
 
-/** Index of the first differing byte, -1 when identical. */
+/** Indice du premier octet différent, -1 si identiques. */
 function firstDifference(a: Uint8Array, b: Uint8Array): number {
   for (let i = 0; i < Math.max(a.length, b.length); i++) if (a[i] !== b[i]) return i;
   return -1;

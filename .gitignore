@@ -1,18 +1,18 @@
-# ── Dependencies ───────────────────────────────────────────────
+# ── Dépendances ────────────────────────────────────────────────
 node_modules
 
-# ── Build outputs ──────────────────────────────────────────────
+# ── Sorties de build ───────────────────────────────────────────
 dist
 dist-ssr
 dist-verify
 dist-*
 coverage
 __pycache__/
-# Rust crates (vendor/*)
+# Crates Rust (vendor/*)
 target/
 **/target/
 
-# ── Logs ───────────────────────────────────────────────────────
+# ── Journaux─────────────────────────────────────────────────────
 logs
 *.log
 npm-debug.log*
@@ -21,14 +21,14 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-# ── Environment and operations secrets ─────────────────────────
+# ── Environnement et secrets d'exploitation ────────────────────
 *.local
 .env
 .env.*
 !.env.example
 COOLIFY.txt
 
-# ── Editors and OS ─────────────────────────────────────────────
+# ── Éditeurs et système ────────────────────────────────────────
 .vscode/*
 !.vscode/extensions.json
 .idea
@@ -41,7 +41,7 @@ COOLIFY.txt
 Untitled*.txt
 start-dev.bat
 
-# ── Local tooling (assistants, design caches, scratch files) ───
+# ── Outils locaux (assistants, caches de design, brouillons) ───
 .claude/
 .claudeignore
 skills-lock.json
@@ -50,15 +50,15 @@ skills-lock.json
 .workbuddy-ai/
 .zcode/
 
-# ── Local development data ─────────────────────────────────────
-# Real-time server file storage (server/multiplayer/fileStorage.ts)
+# ── Données de développement locales ───────────────────────────
+# Stockage de fichiers du serveur temps réel (server/multiplayer/fileStorage.ts)
 .multiplayer-data/
 .multiplayer-data-*/
-# Crawl caches of the LiDAR index (scripts/lidar-index) and design workbench outputs
+# Caches d'exploration de l'index LiDAR (scripts/lidar-index) et sorties du design workbench
 scripts/lidar-index/.cache/
 scripts/design-workbench/.cache/
 scripts/design-workbench/out/
 
-# ── Benchmark outputs (regenerated on every run) ──────────────
+# ── Sorties des bancs (régénérées à chaque exécution) ─────────
 script-test-bench/reports/
 script-test-bench/routing-quality/vps/dist/

@@ -1,4 +1,4 @@
-# https://editorconfig.org — shared editor defaults (line endings are left to Git).
+# https://editorconfig.org — réglages d'éditeur partagés (les fins de ligne sont laissées à Git).
 root = true
 
 [*]

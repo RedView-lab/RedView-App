@@ -2,8 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { buildPoiHitMask, pickPoiHit, poiHitDistancePx, type PoiHitMask } from './poi-hit-mask';
 
 /**
- * Synthetic sprite, like `rasterizePoiSprite` lays them out: a canvas made
- * symmetric around the anchor, a drawn shape and a soft shadow ring.
+ * Sprite synthétique, disposé comme le fait `rasterizePoiSprite` : un canvas
+ * rendu symétrique autour de l'ancrage, une forme dessinée et un anneau
+ * d'ombre douce.
  */
 function sprite(
   halfW: number,
@@ -16,7 +17,7 @@ function sprite(
   const rgba = new Uint8ClampedArray(width * height * 4);
   for (let py = 0; py < height; py += 1) {
     for (let px = 0; px < width; px += 1) {
-      // Device px centre → CSS px relative to the anchor.
+      // Centre en px physiques → px CSS relatifs à l'ancrage.
       const x = (px + 0.5) / pixelRatio - halfW;
       const y = (py + 0.5) / pixelRatio - halfH;
       rgba[(py * width + px) * 4 + 3] = alphaAt(x, y);
@@ -25,7 +26,7 @@ function sprite(
   return buildPoiHitMask(rgba, width, height, pixelRatio, halfW, halfH);
 }
 
-/** Round POI: 10.5 px disc in a 66 px image, shadow ring up to 16 px. */
+/** POI rond : disque de 10,5 px dans une image de 66 px, anneau d'ombre jusqu'à 16 px. */
 const disc = (pixelRatio = 2) => sprite(33, 33, pixelRatio, (x, y) => {
   const r = Math.hypot(x, y);
   if (r <= 10.5) return 255;
@@ -33,7 +34,7 @@ const disc = (pixelRatio = 2) => sprite(33, 33, pixelRatio, (x, y) => {
   return 0;
 });
 
-/** Favourite pin: head circle above the tip (anchor), in an 88×126 image. */
+/** Épingle de favori : cercle de tête au-dessus de la pointe (ancrage), dans une image de 88×126. */
 const pin = (pixelRatio = 2) => sprite(44, 63, pixelRatio, (x, y) => {
   const head = Math.hypot(x, y + 17.7) <= 14.3;
   const tip = y <= 0.8 && y >= -8 && Math.abs(x) <= (0.8 - y) * 0.9;
@@ -56,7 +57,7 @@ describe('buildPoiHitMask', () => {
     expect(poiHitDistancePx(mask, 9, 0)).toBe(0);
     expect(poiHitDistancePx(mask, 20, 0)).toBeGreaterThan(8);
     expect(poiHitDistancePx(mask, 20, 0)).toBeLessThan(11);
-    // Outside the image entirely: still a finite, larger distance.
+    // Entièrement hors de l'image : distance toujours finie, et plus grande.
     expect(poiHitDistancePx(mask, 60, 0)).toBeGreaterThan(40);
   });
 
@@ -65,7 +66,7 @@ describe('buildPoiHitMask', () => {
     expect(mask.bounds!.maxY).toBeLessThanOrEqual(2);
     expect(mask.bounds!.minY).toBeLessThan(-30);
     expect(poiHitDistancePx(mask, 0, -18)).toBe(0);
-    // 20 px under the tip: inside the old image box, far from the drawing.
+    // 20 px sous la pointe : dans l'ancienne boîte de l'image, loin du dessin.
     expect(poiHitDistancePx(mask, 0, 20)).toBeGreaterThan(15);
   });
 
@@ -103,13 +104,13 @@ describe('pickPoiHit', () => {
   });
 
   it('gives a favourite drawn above an overlapping round POI', () => {
-    // Round POI 22 px right of the pin tip: its old image box covered the pin head.
+    // POI rond 22 px à droite de la pointe de l'épingle : son ancienne boîte d'image couvrait la tête de l'épingle.
     const candidates = [
       { key: 'round', mask: round, drawRank: 0, placements: [{ x: 122, y: 100, scale: 1 }] },
       { key: 'fav', mask: fav, drawRank: 5, placements: [{ x: 100, y: 100, scale: 1 }] },
     ];
     expect(pickPoiHit(candidates, { x: 100, y: 82 }, 3)).toBe('fav');
-    // On the round disc itself, outside the pin: the round POI.
+    // Sur le disque rond lui-même, hors de l'épingle : le POI rond.
     expect(pickPoiHit(candidates, { x: 128, y: 100 }, 3)).toBe('round');
   });
 
@@ -127,7 +128,7 @@ describe('pickPoiHit', () => {
       { key: 'a', mask: round, drawRank: 9, placements: [{ x: 100, y: 100, scale: 1 }] },
       { key: 'b', mask: round, drawRank: 0, placements: [{ x: 124, y: 100, scale: 1 }] },
     ];
-    // 1 px from b's edge, 2 px from a's: b despite its lower rank.
+    // À 1 px du bord de b, à 2 px de celui de a : b malgré son rang inférieur.
     expect(pickPoiHit(candidates, { x: 112.2, y: 100 }, 3)).toBe('b');
   });
 
@@ -138,7 +139,7 @@ describe('pickPoiHit', () => {
   });
 
   it('keeps the hovered POI under the pointer on both of its placements', () => {
-    // Hovered: drawn lifted by 4 px and scaled ×1.03; its resting place still counts.
+    // Survolé : dessiné soulevé de 4 px et agrandi ×1,03 ; sa place au repos compte encore.
     const placements = [
       { x: 100, y: 100, scale: 1 },
       { x: 100, y: 96, scale: 1.03 },

@@ -34,7 +34,7 @@ describe('buildCopiedName', () => {
 });
 
 describe('folder tree', () => {
-  // root ─ a ─ b ─ c, and d at the root.
+  // racine ─ a ─ b ─ c, et d à la racine.
   const folders = [folder('a', null, 'Alpes'), folder('b', 'a', 'Été'), folder('c', 'b', 'Juillet'), folder('d', null)];
 
   it('builds the breadcrumb from the root down to the current folder', () => {
