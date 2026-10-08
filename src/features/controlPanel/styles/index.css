@@ -1,5 +1,5 @@
-/* Imports every style file for the control panel. Edit the sub-files, not
-   the bundle. Source of truth: Figma node 1407:17211. */
+/* Importe tous les fichiers de style du panneau de contrôle. Modifier les
+   sous-fichiers, pas l'ensemble. Référence : nœud Figma 1407:17211. */
 @import './foundation/index.css';
 @import './layout/index.css';
 @import './controls/index.css';

@@ -6,15 +6,15 @@ import { Toggle } from './Toggle';
 interface SectionProps {
   title: string;
   icon?: ReactNode;
-  /** If provided, renders an inline toggle switch in the header. */
+  /** Si fourni, affiche un interrupteur dans l'en-tête. */
   toggle?: { checked: boolean; onChange?: (v: boolean) => void; disabled?: boolean };
-  /** Initial collapsed/expanded state. */
+  /** État initial replié / déplié. */
   defaultOpen?: boolean;
-  /** Controlled open state. Omit for uncontrolled. */
+  /** État ouvert contrôlé. À omettre pour un composant non contrôlé. */
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   children?: ReactNode;
-  /** Removes the top border (used for first section). */
+  /** Retire la bordure du haut (pour la première section). */
   noTopBorder?: boolean;
 }
 
@@ -39,7 +39,7 @@ export function Section({
   if (!isOpen && fullyOpen) setFullyOpen(false);
   useEffect(() => {
     if (!isOpen) return;
-    const timer = setTimeout(() => setFullyOpen(true), 280); // matches CSS transition duration
+    const timer = setTimeout(() => setFullyOpen(true), 280); // correspond à la durée de transition CSS
     return () => clearTimeout(timer);
   }, [isOpen]);
 

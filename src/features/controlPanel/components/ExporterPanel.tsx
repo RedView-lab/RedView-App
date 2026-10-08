@@ -31,9 +31,9 @@ const VIDEO_FORMAT_OPTIONS: { value: VideoExportFormat; label: string }[] = [
   { value: 'mp4-portrait', label: 'MP4 9:16' },
 ];
 
-// Itinerary export formats selectable in the dropdown. KML is listed
-// alongside GPX/FIT so the user can send favorited POIs + the trace to a
-// watch/bike computer (Garmin, Coros) or a visualizer (Google Earth).
+// Formats d'export d'itinéraire proposés dans la liste. KML figure à côté de
+// GPX / FIT pour que l'utilisateur puisse envoyer les POI favoris + la trace
+// vers une montre / un compteur (Garmin, Coros) ou un visualiseur (Google Earth).
 const ITINERARY_FORMAT_OPTIONS: { value: ItineraryExportFormat; label: string }[] = [
   { value: 'gpx', label: 'GPX' },
   { value: 'kml', label: 'KML' },

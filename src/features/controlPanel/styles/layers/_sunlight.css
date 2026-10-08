@@ -1,4 +1,4 @@
-/* Sunlight section specific styles */
+/* Styles propres à la section Ensoleillement */
 
 .rvc-sunlight {
   display: flex;
@@ -46,7 +46,7 @@
   flex-shrink: 0;
 }
 
-/* Checkbox override for sunlight: respect gray as instructed by user */
+/* Surcharge des cases à cocher de l'ensoleillement : gris, comme demandé par l'utilisateur */
 .rvc-sunlight__option-main .rvc-cp-checkbox__box {
   border-color: rgb(var(--rv-ink) / 0.28);
   background: rgb(var(--rv-ink) / 0.08);

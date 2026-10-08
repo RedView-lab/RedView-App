@@ -39,7 +39,7 @@ const SUNLIGHT_SCALE_OPTIONS = SUPPORTED_SUNLIGHT_SCALE_SETTINGS.map((setting) =
 }));
 
 /**
- * Converts ISO YYYY-MM-DD to display DD/MM/YY.
+ * Convertit une date ISO AAAA-MM-JJ en affichage JJ/MM/AA.
  */
 function formatDateShort(iso: string, locale: string): string {
   const value = new Date(`${iso}T00:00:00`);
@@ -60,7 +60,7 @@ function getMinutesFromTime(timeStr: string) {
   return (hh || 0) * 60 + (mm || 0);
 }
 
-// ── Inline editable duration input component ─────────────────────────
+// ── Champ de durée modifiable en ligne ───────────────────────────────
 
 interface InlineDurationInputProps {
   valueMinutes: number;
@@ -158,7 +158,7 @@ function InlineDurationInput({
 }
 
 
-// ── Main SunlightSection Component ───────────────────────────────────
+// ── Composant principal SunlightSection ──────────────────────────────
 
 export function SunlightSection({
   state,

@@ -25,8 +25,9 @@ export interface UseControlPanelTerrainStateArgs {
   initialControlPanel: ControlPanelPersistedState;
   updateProjectControlPanel: (mut: (draft: ControlPanelPersistedState) => void) => void;
   /**
-   * Analysis zone (slope + altitude are zone-gated widgets): null while no
-   * polygon is drawn → the overlays stay unmounted.
+   * Zone d'analyse (pente et altitude sont des widgets conditionnés à une
+   * zone) : null tant qu'aucun polygone n'est dessiné → les surcouches restent
+   * démontées.
    */
   analysisZone: {
     key: string;

@@ -4,10 +4,10 @@
    - Stepped (Remplissage): legend grid (eye | hex | %-range | °-range)
 */
 
-/* ── Opacity row ──────────────────────────────────────────────────── */
+/* ── Ligne d'opacité ──────────────────────────────────────────────── */
 
 .rvc-slopes__opacity-row {
-  padding: 3px 0; /* matches Figma py-[3px] */
+  padding: 3px 0; /* correspond au py-[3px] de Figma */
 }
 
 .rvc-slopes__opacity-control {
@@ -37,7 +37,7 @@
   white-space: nowrap;
 }
 
-/* ── Bands container (shared) ─────────────────────────────────────── */
+/* ── Conteneur des bandes (partagé) ───────────────────────────────── */
 
 .rvc-slopes__bands {
   display: flex;
@@ -47,7 +47,7 @@
   margin-top: 4px;
 }
 
-/* ── Unified band list ────────────────────────────────────────────── */
+/* ── Liste unifiée des bandes ─────────────────────────────────────── */
 
 .rvc-slopes__band-row {
   display: flex;
@@ -67,7 +67,7 @@
   height: 16px;
 }
 
-/* ── Editable band label (replaces old band-label) ────────────────── */
+/* ── Libellé de bande modifiable (remplace l'ancien band-label) ───── */
 
 .rvc-slopes__band-label-editable {
   flex: 1 1 0;
@@ -83,7 +83,7 @@
   overflow: hidden;
 }
 
-/* Static degree value (non-editable: 0° first, 90° last) */
+/* Valeur en degrés statique (non modifiable : 0° en premier, 90° en dernier) */
 .rvc-slopes__deg-value {
   display: inline-flex;
   align-items: center;
@@ -97,7 +97,7 @@
   text-align: center;
 }
 
-/* Clickable degree button — shows hover state, indicates editability */
+/* Bouton de degrés cliquable — état de survol, signale qu'il est modifiable */
 .rvc-slopes__deg-btn {
   display: inline-flex;
   align-items: center;
@@ -130,7 +130,7 @@
   outline-offset: 1px;
 }
 
-/* Active edit input — inline text field */
+/* Champ d'édition actif — champ texte en ligne */
 .rvc-slopes__deg-input {
   display: inline-flex;
   align-items: center;
@@ -158,7 +158,7 @@
   box-shadow: 0 0 0 3px rgba(45, 191, 140, 0.2);
 }
 
-/* Separator between min and max */
+/* Séparateur entre min et max */
 .rvc-slopes__deg-sep {
   opacity: 0.4;
   font-weight: 400;
@@ -166,7 +166,7 @@
   user-select: none;
 }
 
-/* Category label after the degree range */
+/* Libellé de catégorie après la plage de degrés */
 .rvc-slopes__band-category {
   opacity: 0.45;
   font-weight: 500;
@@ -179,8 +179,8 @@
   min-width: 0;
 }
 
-/* Color picker chip — bordered, transparent bg, 140px wide.
-   Matches Figma node 1791:73022 (border rgba(255,255,255,0.08),
+/* Pastille de sélection de couleur — bordée, fond transparent, 140 px de large.
+   Correspond au nœud Figma 1791:73022 (bordure rgba(255,255,255,0.08),
    pl-[10px] pr-[6px] py-[5px], gap-[4px], rounded-[5px]).
 */
 .rvc-slopes__color-chip {

@@ -19,10 +19,10 @@ export interface BasemapRenderConfig {
 
 type BasemapOption = BasemapRenderConfig;
 
-// Stick to Mapbox-owned public styles so the app only pays for the same GL JS
-// map usage it already has, without introducing custom Styles API churn. The
-// two "Standard" entries are RedView themes: Mapbox Outdoors v12 recoloured
-// client-side (see `features/map3d/lib/basemapThemes`).
+// On s'en tient aux styles publics de Mapbox pour que l'application ne paie que
+// l'usage de carte GL JS qu'elle a déjà, sans les remous d'une API Styles
+// personnalisée. Les deux entrées « Standard » sont des thèmes RedView : Mapbox
+// Outdoors v12 recoloré côté client (voir `features/map3d/lib/basemapThemes`).
 const MAPBOX_BASEMAPS: readonly BasemapOption[] = [
   {
     id: 'standard',
@@ -82,8 +82,8 @@ export function buildBasemapList(activeId: BasemapId | null | undefined): Basema
   });
 }
 
-// Vector basemaps (RedView themes / Outdoors) take the contour overlay;
-// satellite imagery is too busy for it.
+// Les fonds vectoriels (thèmes RedView / Outdoors) acceptent la surcouche des
+// courbes de niveau ; l'imagerie satellite est trop chargée pour elle.
 const CONTOUR_LINE_BASEMAPS: ReadonlySet<BasemapId> = new Set<BasemapId>(['standard', 'dark', 'topographic']);
 
 export function basemapSupportsContourLines(id: BasemapId | null | undefined): boolean {

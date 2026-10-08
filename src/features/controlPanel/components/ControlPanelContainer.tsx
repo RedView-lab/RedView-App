@@ -111,7 +111,7 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
 
   const itineraries = projectStore?.project.itineraries;
 
-  // A route created in the LiDAR viewer becomes a plain GPX itinerary.
+  // Une trace créée dans le visualiseur LiDAR devient un simple itinéraire GPX.
   const addLidarRouteItinerary = useCallback(
     (route: LidarRouteOverlayItem) => {
       trackAnalyticsEvent({ name: 'itinerary_added', data: { method: 'lidar' } });
@@ -184,16 +184,16 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
     onLidarRouteCreate: addLidarRouteItinerary,
     onLidarRouteDuplicate: useCallback(
       (sourceRouteId: string, route: LidarRouteOverlayItem) => {
-        // Same id/name/colour as the viewer's copy; profile, timeline… come
-        // from the project's own duplicate.
+        // Même id / nom / couleur que la copie du visualiseur ; profil, frise…
+        // viennent du doublon propre au projet.
         const duplicated = projectStore?.duplicateItinerary(sourceRouteId, {
           id: route.id,
           name: route.name,
           color: route.color,
           visible: route.visible,
         });
-        // A route the project does not know (drawn in a viewer without the
-        // app open) is added as a plain copy instead.
+        // Une trace que le projet ne connaît pas (dessinée dans un visualiseur
+        // sans l'application ouverte) est ajoutée comme simple copie.
         if (!duplicated && !projectStore?.project.itineraries.some((it) => it.id === route.id)) {
           addLidarRouteItinerary(route);
         }

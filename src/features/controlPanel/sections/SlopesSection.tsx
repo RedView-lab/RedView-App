@@ -41,7 +41,7 @@ const COLORIZATION_OPTIONS: { value: SlopeColorization; label: string }[] = [
   { value: 'gradient', label: 'Dégradé' },
 ];
 
-// Figma node 1792:73208 — dropdown options "Pourcentage" / "Inclinaison (°)"
+// Nœud Figma 1792:73208 — options de la liste « Pourcentage » / « Inclinaison (°) »
 const SCALE_OPTIONS: { value: SlopeScale; label: string }[] = [
   { value: 'percent', label: 'Pourcentage' },
   { value: 'degree', label: 'Inclinaison (°)' },
@@ -60,30 +60,30 @@ function hexLabel(color: string): string {
   return color.replace('#', '').toUpperCase();
 }
 
-// ── Inline editable numeric input ─────────────────────────────────────
-// Renders as text by default. Click to enter edit mode, type a number,
-// commit on Enter / blur, cancel on Escape. Supports two units:
-//   - 'degree' : raw degrees, range 0..90, suffix "°", maxLength 2
-//   - 'percent': percent slope, range 0..1000, suffix "%", maxLength 4
-// On commit, the value is converted back to degrees (the canonical unit)
-// before being passed to the parent via `onCommit`.
+// ── Champ numérique modifiable en ligne ───────────────────────────────
+// Affiché comme du texte par défaut. Un clic passe en édition ; on tape un
+// nombre, validé sur Entrée / perte du focus, annulé sur Échap. Deux unités :
+//   - 'degree' : degrés bruts, plage 0..90, suffixe « ° », maxLength 2
+//   - 'percent' : pente en pourcentage, plage 0..1000, suffixe « % », maxLength 4
+// À la validation, la valeur est reconvertie en degrés (l'unité canonique)
+// avant d'être transmise au parent via `onCommit`.
 
 type InlineUnit = 'degree' | 'percent';
 
 interface InlineNumericInputProps {
-  /** Current value in degrees (canonical unit). */
+  /** Valeur actuelle en degrés (unité canonique). */
   valueDeg: number;
-  /** Display unit. */
+  /** Unité d'affichage. */
   unit: InlineUnit;
-  /** Is this value editable? First band min (0°) and last band max (90°) are not. */
+  /** La valeur est-elle modifiable ? Le min de la première bande (0°) et le max de la dernière (90°) ne le sont pas. */
   editable: boolean;
-  /** Called with the new value in DEGREES on commit. */
+  /** Appelé avec la nouvelle valeur en DEGRÉS à la validation. */
   onCommit: (deg: number) => void;
   className?: string;
 }
 
 function degToPct(deg: number): number {
-  if (deg >= 90) return 9999; // sentinel — caller never commits this
+  if (deg >= 90) return 9999; // sentinelle — l'appelant ne valide jamais cette valeur
   return Math.round(Math.tan((deg * Math.PI) / 180) * 100);
 }
 function pctToDeg(pct: number): number {
@@ -109,7 +109,7 @@ function InlineNumericInput({
   const [draft, setDraft] = useState(display);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Auto-focus & select when entering edit mode
+  // Focus et sélection automatiques à l'entrée en édition
   useEffect(() => {
     if (editing && inputRef.current) {
       inputRef.current.focus();
@@ -121,10 +121,10 @@ function InlineNumericInput({
     setEditing(false);
     const normalizedDraft = draft.replace(',', '.');
     const parsed = isPercent ? parseInt(normalizedDraft, 10) : parseFloat(normalizedDraft);
-    if (Number.isNaN(parsed)) return; // revert silently
+    if (Number.isNaN(parsed)) return; // retour à la valeur précédente sans bruit
     let nextDeg: number;
     if (isPercent) {
-      // Clamp percent to [0, 9999] then convert to degrees
+      // Borne le pourcentage à [0, 9999] puis convertit en degrés
       const pct = Math.max(0, Math.min(9999, parsed));
       nextDeg = Math.max(0, Math.min(90, pctToDeg(pct)));
     } else {
@@ -191,7 +191,7 @@ function InlineNumericInput({
   );
 }
 
-// ── Band row component ────────────────────────────────────────────────
+// ── Composant de ligne de bande ───────────────────────────────────────
 
 interface BandRowProps {
   band: SlopeBand;
@@ -224,17 +224,17 @@ function BandRow({
     [bandIndex, onBreakpointChange],
   );
 
-  // Build the label — show range with inline editable values
-  const minEditable = !isFirst; // first band always starts at 0°
-  const maxEditable = !isLast;  // last band always ends at 90°
+  // Construit le libellé — affiche la plage avec des valeurs modifiables en ligne
+  const minEditable = !isFirst; // la première bande commence toujours à 0°
+  const maxEditable = !isLast;  // la dernière bande finit toujours à 90°
 
   // Category name from label, e.g. "0 - 7% (Modéré)" → "Modéré"
   const categoryMatch = band.label?.match(/\(([^)]+)\)/);
   const category = categoryMatch ? categoryMatch[1] : '';
 
-  // The displayed unit (% or °) toggles via `scale`. The breakpoints stored
-  // in the container are always in degrees — InlineNumericInput converts
-  // back to degrees on commit so the canonical state stays unit-free.
+  // L'unité affichée (% ou °) bascule via `scale`. Les seuils stockés dans le
+  // conteneur sont toujours en degrés — InlineNumericInput reconvertit en
+  // degrés à la validation pour que l'état canonique reste sans unité.
   const unit: InlineUnit = scale === 'percent' ? 'percent' : 'degree';
 
   return (
@@ -281,7 +281,7 @@ function BandRow({
   );
 }
 
-// ── Main section ──────────────────────────────────────────────────────
+// ── Section principale ────────────────────────────────────────────────
 
 export function SlopesSection({
   enabled,

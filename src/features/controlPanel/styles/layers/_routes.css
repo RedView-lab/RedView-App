@@ -1,4 +1,4 @@
-/* Routes section — pixel-perfect from Figma node 1749:57675 */
+/* Section Itinéraires — au pixel près d'après le nœud Figma 1749:57675 */
 
 .rvc-routes__list {
   display: flex;
@@ -112,7 +112,7 @@
   font-weight: 600;
   line-height: 1;
   font-variant-numeric: tabular-nums;
-  /* hide spin buttons */
+  /* masque les boutons de défilement numérique */
   -moz-appearance: textfield;
   appearance: textfield;
 }

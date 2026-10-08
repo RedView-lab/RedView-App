@@ -40,11 +40,12 @@ function altitudeColorModeFromPanel(colorization: AltitudeColorization): Altitud
 }
 
 /**
- * Persistence (project document + localStorage) stays off the interaction
- * path: an opacity drag emits ~60 changes/s and every project write
- * re-renders the dashboard (~80 ms each, two writes per tick before). The map
- * follows the local state at once; one write lands when the value settles and
- * a pending one is flushed on unmount (project switch, panel teardown).
+ * La persistance (document du projet + localStorage) reste hors du chemin
+ * d'interaction : un glisser d'opacité émet ~60 changements/s et chaque
+ * écriture du projet redessine le tableau de bord (~80 ms chacune, deux
+ * écritures par cran avant). La carte suit tout de suite l'état local ; une
+ * écriture part quand la valeur se stabilise, et une écriture en attente est
+ * vidée au démontage (changement de projet, fermeture du panneau).
  */
 const ALTITUDE_PERSIST_DELAY_MS = 250;
 
@@ -143,10 +144,10 @@ export function useTerrainAltitudeState({
     [altitudeState.hiddenBandIds],
   );
 
-  // ── Altitude source follows the 3D terrain DEM ───────────────────────
-  // The overlay re-reads the exact tiles the terrain streams (AWS Terrarium
-  // in fast-30m, SW DEM cache for the active profile in HD) — never a second
-  // DEM pipeline.
+  // ── La source d'altitude suit le DEM du terrain 3D ───────────────────
+  // La surcouche relit exactement les tuiles que diffuse le terrain (AWS
+  // Terrarium en fast-30m, cache DEM du SW pour le profil actif en HD) —
+  // jamais un second pipeline DEM.
   const dem3dQuality = useSyncExternalStore(subscribeDem3dQuality, getActiveDem3dQuality);
   const demProfile = useSyncExternalStore(subscribeDemProfilePreference, getActiveDemProfilePreference);
   const altitudeSourceOptions = useMemo<AltitudeTileSourceOptions>(
@@ -177,7 +178,7 @@ export function useTerrainAltitudeState({
     [altitudeCategories, altitudeHiddenIds, altitudeState],
   );
 
-  // Functional updates: consecutive slider ticks never read a stale state.
+  // Mises à jour fonctionnelles : des crans consécutifs du curseur ne lisent jamais un état périmé.
   const handlers = {
     onAltitudeEnabledChange: useCallback(
       (enabled: boolean) => setAltitudeState((prev) => ({ ...prev, enabled })),

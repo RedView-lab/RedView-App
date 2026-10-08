@@ -1,4 +1,4 @@
-/* Basemaps section */
+/* Section Fonds de carte */
 
 .rvc-basemaps__list {
   display: flex;
@@ -37,7 +37,7 @@
   flex: 0 0 auto;
   border-radius: 5px;
   overflow: hidden;
-  /* Hairline drawn over the thumbnail so light and dark maps both keep an edge. */
+  /* Filet tracé sur la miniature pour que cartes claires et sombres gardent un bord. */
   outline: 1px solid rgb(var(--rv-ink) / 0.14);
   outline-offset: -1px;
 }

@@ -17,10 +17,11 @@ import '../styles/index.css';
 const SHOW_WIND_AND_SUNLIGHT_SECTIONS = false;
 
 /**
- * Unified left-dock control panel for RedView (Figma frame 1407:17211).
+ * Panneau de contrôle unifié de RedView, ancré à gauche (cadre Figma 1407:17211).
  *
- * Width 300px, dark glassmorphic background. All sections are auto-layout,
- * collapsible, and plug into the existing backend features through handlers.
+ * Largeur 300 px, fond sombre en verre dépoli. Toutes les sections sont en
+ * auto-layout, repliables, et se branchent sur les fonctions existantes via
+ * des gestionnaires.
  */
 export function ControlPanel({
   state,

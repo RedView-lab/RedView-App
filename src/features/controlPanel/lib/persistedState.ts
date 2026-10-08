@@ -92,9 +92,10 @@ export interface ControlPanelPersistedState {
   };
   sunlightMapExpanded: boolean;
   /**
-   * Single user-drawn polygon focusing the terrain widgets (slopes /
-   * altitude / sunlight). Zone drawing is currently disabled (the control
-   * panel passes `analysisZone: null`), so this stays null.
+   * Polygone unique dessiné par l'utilisateur, qui concentre les widgets de
+   * terrain (pentes / altitude / ensoleillement). Le dessin de zone est
+   * actuellement désactivé (le panneau de contrôle passe
+   * `analysisZone: null`), donc il reste null.
    */
   analysisZone?: AnalysisZone | null;
   lidarTilesHidden?: Record<string, boolean>;
@@ -122,13 +123,14 @@ const DEFAULT_SECTIONS_OPEN: ControlPanelSectionsOpenState = {
 };
 
 /**
- * Default label categories for a brand-new project.
+ * Catégories d'étiquettes par défaut d'un tout nouveau projet.
  *
- * Without an explicit `labelsState`, `useOverlayLabelsState` falls back to the
- * GLOBAL `redview_label_prefs` localStorage entry — i.e. whatever categories
- * the user last toggled in a *previous* project. A new project must always
- * start with labels ON, so the defaults are materialised here from the label
- * config instead of being inherited.
+ * Sans `labelsState` explicite, `useOverlayLabelsState` se replie sur l'entrée
+ * localStorage GLOBALE `redview_label_prefs` — c'est-à-dire les catégories que
+ * l'utilisateur a basculées en dernier dans un projet *précédent*. Un nouveau
+ * projet doit toujours démarrer avec les étiquettes ACTIVÉES : les valeurs par
+ * défaut sont donc matérialisées ici depuis la configuration des étiquettes au
+ * lieu d'être héritées.
  */
 function buildDefaultLabelBackend(): Record<LabelCategory, boolean> {
   const backend = {} as Record<LabelCategory, boolean>;
@@ -139,12 +141,12 @@ function buildDefaultLabelBackend(): Record<LabelCategory, boolean> {
 }
 
 /**
- * Default control-panel state for a brand-new project.
+ * État par défaut du panneau de contrôle d'un tout nouveau projet.
  *
- * Product defaults once a project is created:
- * - Basemap: satellite, 30 m resolution (`fast-30m`).
- * - Labels ON; contours / slopes / altitude / weather / wind / snow / sunlight OFF.
- * - Every collapsible section starts collapsed.
+ * Valeurs produit à la création d'un projet :
+ * - Fond de carte : satellite, résolution 30 m (`fast-30m`).
+ * - Étiquettes ACTIVÉES ; courbes / pentes / altitude / météo / vent / neige / ensoleillement DÉSACTIVÉS.
+ * - Toutes les sections repliables démarrent repliées.
  */
 export function createDefaultControlPanelPersistedState(): ControlPanelPersistedState {
   const labelBackend = buildDefaultLabelBackend();

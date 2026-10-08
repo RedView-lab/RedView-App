@@ -1,4 +1,4 @@
-/* Labels section — pixel-perfect match for Figma frame 1749:57639 */
+/* Section Étiquettes — correspondance au pixel près avec le cadre Figma 1749:57639 */
 
 .rvc-labels__grid {
   display: flex;
@@ -13,7 +13,7 @@
   min-width: 0;
 }
 
-/* Each checkbox row: 30px tall, 6px vertical padding (Figma spec) */
+/* Chaque ligne à case à cocher : 30 px de haut, 6 px de marge verticale (spécification Figma) */
 .rvc-labels__col .rvc-cp-checkbox {
   height: 30px;
   padding: 6px 0;

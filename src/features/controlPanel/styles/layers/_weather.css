@@ -1,4 +1,4 @@
-/* Weather section */
+/* Section Météo */
 
 .rvc-weather__native-input {
   position: absolute;
@@ -218,7 +218,7 @@
   text-align: center;
 }
 
-/* Day selector (forecast tab) */
+/* Sélecteur de jour (onglet prévision) */
 
 .rvc-weather__day-selector {
   display: flex;

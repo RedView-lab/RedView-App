@@ -16,14 +16,14 @@ interface SelectProps<T extends string = string> {
   width?: number | string;
   className?: string;
   placeholder?: string;
-  /** Rendered on the left side of the value, e.g. a color swatch. */
+  /** Affiché à gauche de la valeur, p. ex. une pastille de couleur. */
   startAdornment?: ReactNode;
-  /** Optional class variant. */
+  /** Variante de classe optionnelle. */
   variant?: 'default' | 'solid';
   disabled?: boolean;
 }
 
-/** Custom dropdown styled per Figma node 1792:73224. */
+/** Liste déroulante personnalisée, stylée d'après le nœud Figma 1792:73224. */
 export function Select<T extends string = string>({
   value,
   options,

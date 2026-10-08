@@ -37,7 +37,7 @@ export function isLegacyTemperaturePalette(palette: WeatherPaletteConfig | undef
     const b0 = palette.bands[0]?.maxValue;
     const b1 = palette.bands[1]?.maxValue;
     const b2 = palette.bands[2]?.maxValue;
-    // Legacy [0, 10, 20] breakpoints
+    // Anciens seuils [0, 10, 20]
     if (b0 === 0 && b1 === 10 && b2 === 20) return true;
   }
   return false;
@@ -49,7 +49,7 @@ export function isLegacyFeelsLikePalette(palette: WeatherPaletteConfig | undefin
     const b0 = palette.bands[0]?.maxValue;
     const b1 = palette.bands[1]?.maxValue;
     const b2 = palette.bands[2]?.maxValue;
-    // Legacy [0, 10, 20] or [-5, 8, 18] breakpoints
+    // Anciens seuils [0, 10, 20] ou [-5, 8, 18]
     if ((b0 === 0 && b1 === 10 && b2 === 20) || (b0 === -5 && b1 === 8 && b2 === 18)) return true;
   }
   return false;

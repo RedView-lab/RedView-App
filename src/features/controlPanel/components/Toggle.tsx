@@ -5,7 +5,7 @@ interface ToggleProps {
   disabled?: boolean;
 }
 
-/** _Toggle base — Figma red switch: translucent track (OFF), #890000 (ON), white knob with 1px border. */
+/** _Toggle base — interrupteur rouge Figma : piste translucide (OFF), #890000 (ON), bouton blanc avec bordure de 1 px. */
 export function Toggle({ checked, onChange, ariaLabel, disabled = false }: ToggleProps) {
   return (
     <button

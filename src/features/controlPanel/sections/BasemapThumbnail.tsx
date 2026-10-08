@@ -1,11 +1,12 @@
 import type { BasemapId } from '../types';
 
 /*
- * Miniature map of each basemap: the same little landscape (lake top right,
- * wood bottom left, a main road and a lane) drawn in the basemap's own
- * colours, so the four rows read as one family and differ only by style.
- * Map content: identical in both app themes, like the map itself. Colours of
- * the two RedView themes come from `map3d/lib/basemapThemes/palettes.ts`.
+ * Miniature de chaque fond de carte : le même petit paysage (lac en haut à
+ * droite, bois en bas à gauche, une route principale et un chemin) dessiné
+ * dans les couleurs du fond, pour que les quatre lignes se lisent comme une
+ * famille et ne diffèrent que par le style. Contenu de carte : identique dans
+ * les deux thèmes de l'application, comme la carte elle-même. Les couleurs des
+ * deux thèmes RedView viennent de `map3d/lib/basemapThemes/palettes.ts`.
  */
 
 const MAIN_ROAD = 'M0 8.6C4.6 7.6 7.8 9 10.4 11.6S15.8 16.6 20 15.6';
@@ -41,7 +42,7 @@ function TopographicThumb() {
       <rect width="20" height="20" fill="#F2F0E6" />
       <path d={WOOD} fill="#D3E5C4" />
       <path d={LAKE} fill="#A9D2EE" />
-      {/* Hillshade on the lee side of the ridge. */}
+      {/* Ombrage sur le versant sous le vent de la crête. */}
       <path
         d="M9.4 4C11.4 5 11.8 7.6 12.8 9.8C13.8 12 15.4 13.4 14.6 15.6C13.4 15.2 12.2 14 10.8 13.2C11.8 11.6 11.4 9.6 10.8 7.8C10.4 6.4 10 5.2 9.4 4Z"
         fill="#5A4A32"
@@ -67,14 +68,14 @@ function SatelliteThumb() {
   return (
     <>
       <rect width="20" height="20" fill="#5A6440" />
-      {/* Field patchwork. */}
+      {/* Mosaïque de champs. */}
       <path d="M0 0H8L7.2 6H0Z" fill="#76804C" />
       <path d="M8 0H12.6L12.2 5.2L7.2 6Z" fill="#938C5C" />
       <path d="M0 6H7.2L6.6 11.2H0Z" fill="#4C5C36" />
       <path d="M7.2 6L12.2 5.2L12.6 10.2L6.6 11.2Z" fill="#82894F" />
       <path d="M12.6 10.2L20 9.4V20H13.4Z" fill="#6B7546" />
       <path d="M6.6 11.2L12.6 10.2L13.4 20H6Z" fill="#8E8A5E" />
-      {/* Forest canopy. */}
+      {/* Canopée de la forêt. */}
       <path d="M0 11.2H6.6L6 20H0Z" fill="#2F3E27" />
       <g fill="#3F5232">
         <circle cx="1.6" cy="13" r="1.1" />

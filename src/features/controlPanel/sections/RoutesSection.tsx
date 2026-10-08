@@ -44,9 +44,9 @@ interface OpacityPillProps {
 }
 
 /**
- * "52 %" pill — clicking turns the label into an inline editable input.
- * Commits on blur or Enter, cancels on Escape. Values are clamped to
- * 0–100 and rounded to integers.
+ * Pastille « 52 % » — un clic transforme le libellé en champ modifiable.
+ * Valide à la perte du focus ou sur Entrée, annule sur Échap. Les valeurs sont
+ * bornées à 0–100 et arrondies à l'entier.
  */
 function OpacityPill({ value, onChange }: OpacityPillProps) {
   const { t } = useAppI18n();

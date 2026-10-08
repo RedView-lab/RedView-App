@@ -160,16 +160,14 @@ export function useTerrainSlopeState({
     };
   }, []);
 
-  // ── Terrain-driven or Zone-driven slope overlay ─────────────────────
-  // If an analysis zone is active: maximum quality LiDAR HD pipeline
-  // If no zone: directly driven by the local terrain DEM (30m or HD surface/terrain)
-  // ── Slope overlay ───────────────────────────────────────────────────
-  // ── Slope overlay ───────────────────────────────────────────────────
-  // Follows selected quality ('auto' | '30m' | '1m' | '0.40m'):
-  // - auto: directly inherits 3D terrain DEM (30m or HD surface/terrain)
-  // - 30m: served directly from 30m AWS Terrarium tiles
-  // - 1m: served from 1m LiDAR Terrain MNT
-  // - 0.40m: served from 0.40m LiDAR Surface MNS
+  // ── Surcouche de pente pilotée par le terrain ou par la zone ──────────
+  // Avec une zone d'analyse active : pipeline LiDAR HD en qualité maximale.
+  // Sans zone : pilotée directement par le DEM local du terrain (30 m ou surface / terrain HD).
+  // Suit la qualité choisie ('auto' | '30m' | '1m' | '0.40m') :
+  // - auto : hérite directement du DEM du terrain 3D (30 m ou surface / terrain HD)
+  // - 30m : servie directement par les tuiles AWS Terrarium 30 m
+  // - 1m : servie par le MNT terrain LiDAR 1 m
+  // - 0.40m : servie par le MNS surface LiDAR 0,40 m
   const slopeSourceOptions = useMemo(() => {
     const selected = slopeState.resolution || 'auto';
 

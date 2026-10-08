@@ -48,7 +48,7 @@ export function parseDurationInput(input: string): number | null {
   const clean = input.trim().toLowerCase().replace(',', '.');
   if (!clean) return null;
 
-  // Format "1h20" or "1h 20" or "1h20m"
+  // Format « 1h20 », « 1h 20 » ou « 1h20m »
   const hmMatch = /^(\d+)\s*h\s*(\d+)?\s*m?$/i.exec(clean);
   if (hmMatch) {
     const h = parseInt(hmMatch[1], 10);
@@ -62,7 +62,7 @@ export function parseDurationInput(input: string): number | null {
     return Math.round(parseFloat(decHMatch[1]) * 60);
   }
 
-  // Format "20min" or "20m" or "20 min"
+  // Format « 20min », « 20m » ou « 20 min »
   const minMatch = /^(\d+)\s*(?:min|m)$/i.exec(clean);
   if (minMatch) {
     return parseInt(minMatch[1], 10);
@@ -74,7 +74,7 @@ export function parseDurationInput(input: string): number | null {
     return parseInt(colonMatch[1], 10) * 60 + parseInt(colonMatch[2], 10);
   }
 
-  // Pure number (assume minutes if >= 10, or hours if <= 6)
+  // Nombre seul (minutes si >= 10, heures si <= 6)
   const num = parseFloat(clean);
   if (Number.isFinite(num)) {
     if (num <= 12 && clean.includes('.')) {

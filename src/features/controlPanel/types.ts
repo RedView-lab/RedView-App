@@ -1,6 +1,6 @@
 /**
- * Control Panel types — unified sidebar for RedView
- * Maps to backend features: map3d, lidar, labels, fitPredictor, slope, weather
+ * Types du panneau de contrôle — barre latérale unifiée de RedView
+ * Correspond aux fonctions : map3d, lidar, labels, fitPredictor, slope, weather
  */
 
 import type {
@@ -24,9 +24,9 @@ export type BasemapId =
 export interface Basemap {
   id: BasemapId;
   label: string;
-  /** visible in the map */
+  /** visible sur la carte */
   visible: boolean;
-  /** currently active (selected) basemap */
+  /** fond de carte actuellement actif (sélectionné) */
   active?: boolean;
 }
 
@@ -51,7 +51,7 @@ interface MapEnvironmentControl {
 
 export interface LidarTile {
   id: string;
-  /** e.g. "Tuile 1 (LIDAR) (2102mo) (2026 IGN)" */
+  /** p. ex. « Tuile 1 (LIDAR) (2102mo) (2026 IGN) » */
   label: string;
   sizeMb?: number;
   year?: number;
@@ -85,7 +85,7 @@ export interface RouteItem {
 interface RoutesSectionState {
   enabled: boolean;
   items: RouteItem[];
-  /** Global route line width in px. */
+  /** Épaisseur globale des lignes de trace, en px. */
   traceWidthPx: number;
   /** Finesse des traces dessinées (vue) ; `auto` suit la 2D / 3D et le relief. */
   quality: RouteDisplayQuality;
@@ -109,12 +109,12 @@ export interface SlopeBand {
   degreeRange: string;
   /** Optional richer label, e.g. "0% - 12% (Modéré)" */
   label?: string;
-  /** hex with or without # */
+  /** hexadécimal avec ou sans # */
   color: string;
   visible: boolean;
-  /** Numeric lower bound in degrees (inclusive). Always 0 for first band. */
+  /** Borne inférieure numérique en degrés (incluse). Toujours 0 pour la première bande. */
   minDeg: number;
-  /** Numeric upper bound in degrees (exclusive). Always 90 for last band. */
+  /** Borne supérieure numérique en degrés (exclue). Toujours 90 pour la dernière bande. */
   maxDeg: number;
 }
 
@@ -192,11 +192,11 @@ export interface WeatherLayer {
 export interface WeatherState {
   enabled: boolean;
   customDateEnabled: boolean;
-  /** ISO yyyy-mm-dd */
+  /** ISO aaaa-mm-jj */
   date: string;
   /** HH:mm */
   time: string;
-  /** 0 | 1 | 2 — forecast day offset from today */
+  /** 0 | 1 | 2 — décalage du jour de prévision par rapport à aujourd'hui */
   forecastDay: number;
   layers: WeatherLayer[];
   palettes: Partial<Record<WeatherLayerKey, WeatherPaletteConfig>>;
@@ -210,7 +210,7 @@ interface ContourLinesState extends ToggleOnlySection {
   interval: ContourIntervalSetting;
   /** 0..100 */
   opacity: number;
-  /** True when the active basemap supports the contour overlay UX. */
+  /** Vrai quand le fond de carte actif prend en charge la surcouche des courbes de niveau. */
   available: boolean;
 }
 
@@ -234,17 +234,17 @@ export interface SunlightState {
   customDateEnabled: boolean;
   date: string;
   time: string;
-  /** True while the user is actively dragging the time slider. */
+  /** Vrai pendant que l'utilisateur fait glisser le curseur de temps. */
   timeScrubbing: boolean;
   sunriseTime: string;
   sunsetTime: string;
-  /** DEM ray-traced terrain shadows */
+  /** Ombres du relief par lancer de rayons sur le DEM */
   shadowEnabled: boolean;
-  /** Cumulative sunlight raster overlay */
+  /** Surcouche raster d'ensoleillement cumulé */
   sunlightMapEnabled: boolean;
-  /** Shadow overlay opacity 0..100 */
+  /** Opacité de la surcouche d'ombres, 0..100 */
   shadowOpacity: number;
-  /** Sunlight map overlay opacity 0..100 */
+  /** Opacité de la surcouche de carte d'ensoleillement, 0..100 */
   sunlightMapOpacity: number;
   scaleSetting: SunlightScaleSetting;
   bands: SunlightBand[];
@@ -281,7 +281,7 @@ export interface ControlPanelHandlers {
   onLidarSelectionCancel?: () => void;
   /** Annule le téléchargement LiDAR en cours (clic sur le bouton de progression). */
   onLidarDownloadCancel?: () => void;
-  /** Triggered when the user clicks the eye icon on a tile — opens 3D viewer. */
+  /** Déclenché quand l'utilisateur clique sur l'œil d'une tuile — ouvre le visualiseur 3D. */
   onLidarTileOpen?: (id: string) => void;
 
   onLabelsEnabledChange?: (enabled: boolean) => void;
@@ -306,8 +306,8 @@ export interface ControlPanelHandlers {
   onSlopeOpacityChange?: (value: number) => void;
   onSlopeBandColorChange?: (id: string, color: string) => void;
   onSlopeBandVisibilityToggle?: (id: string) => void;
-  /** Called when the user edits a band's degree breakpoint inline.
-   *  bandIndex is 0-based. field is 'min' or 'max'. valueDeg is the new angle in degrees. */
+  /** Appelé quand l'utilisateur modifie en ligne un seuil en degrés d'une bande.
+   *  bandIndex commence à 0. field vaut 'min' ou 'max'. valueDeg est le nouvel angle en degrés. */
   onSlopeBandBreakpointChange?: (bandIndex: number, field: 'min' | 'max', valueDeg: number) => void;
 
   onAltitudeEnabledChange?: (enabled: boolean) => void;
@@ -350,12 +350,12 @@ export interface ControlPanelProps extends ControlPanelHandlers {
   onSectionOpenChange?: (section: ControlPanelSectionKey, open: boolean) => void;
   sunlightMapExpanded?: boolean;
   onSunlightMapExpandedChange?: (open: boolean) => void;
-  /** False while no analysis zone is drawn — zone-gated sections show a hint. */
+  /** Faux tant qu'aucune zone d'analyse n'est dessinée — les sections conditionnées à une zone affichent une aide. */
   analysisZoneActive?: boolean;
-  /** Optional px width the panel shell should render at ('100%' = fill its host, used during live resize). */
+  /** Largeur optionnelle en px de la coque du panneau ('100%' = remplit son hôte, utilisé pendant le redimensionnement). */
   width?: number | '100%';
-  /** Mouse-down handler on the drag-to-resize handle (left edge). */
+  /** Gestionnaire mouse-down sur la poignée de redimensionnement (bord gauche). */
   onResizeStart?: (ev: import('react').MouseEvent<HTMLDivElement>) => void;
-  /** Toggles an active visual state while dragging. */
+  /** Active un état visuel pendant le glisser. */
   isResizing?: boolean;
 }

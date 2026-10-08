@@ -1,9 +1,9 @@
-/* Reusable controls: toggle / checkbox / select / slider / icon button /
-   visibility chip / swatch / row utilities */
+/* Contrôles réutilisables : interrupteur / case à cocher / liste / curseur /
+   bouton icône / pastille de visibilité / pastille de couleur / utilitaires de ligne */
 
-/* ── Toggle switch — Figma "_Toggle base" (206:5002 / instance 3026:27097)
-   Slim 32×16 pill: translucent track with border (OFF) / #890000 red track (ON),
-   white knob with 1px border (#3F3F3F when OFF, #700000 when ON) and shadow-xs. */
+/* ── Interrupteur — Figma « _Toggle base » (206:5002 / instance 3026:27097)
+   Pilule fine 32×16 : piste translucide bordée (OFF) / piste rouge #890000 (ON),
+   bouton blanc avec bordure de 1 px (#3F3F3F en OFF, #700000 en ON) et shadow-xs. */
 .rvc-toggle {
   all: unset;
   position: relative;

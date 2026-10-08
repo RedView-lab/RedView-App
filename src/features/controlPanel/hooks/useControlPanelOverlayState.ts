@@ -23,8 +23,9 @@ export interface UseControlPanelOverlayStateArgs {
   initialControlPanel: ControlPanelPersistedState;
   updateProjectControlPanel: (mut: (draft: ControlPanelPersistedState) => void) => void;
   /**
-   * Analysis zone restricting the sunlight overlays (zone-gated widgets):
-   * null while no polygon is drawn → overlays stay off / get disabled.
+   * Zone d'analyse qui restreint les surcouches d'ensoleillement (widgets
+   * conditionnés à une zone) : null tant qu'aucun polygone n'est dessiné → les
+   * surcouches restent éteintes / sont désactivées.
    */
   analysisZone: {
     key: string;

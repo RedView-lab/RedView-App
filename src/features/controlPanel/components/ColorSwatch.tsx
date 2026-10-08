@@ -1,5 +1,5 @@
 interface ColorSwatchProps {
-  /** Hex color (with or without leading #). */
+  /** Couleur hexadécimale (avec ou sans # initial). */
   color: string;
   size?: number;
 }

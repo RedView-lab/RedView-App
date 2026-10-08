@@ -323,7 +323,7 @@ export function WeatherSection({
       open={open}
       onOpenChange={onOpenChange}
     >
-      {/* Discrete day slider for forecast */}
+      {/* Curseur de jour discret pour la prévision */}
       <div className="rvc-weather__day-selector">
         <div className="rvc-weather__day-slider-wrapper">
           <Slider
@@ -348,7 +348,7 @@ export function WeatherSection({
         </div>
       </div>
 
-      {/* Time row for forecast */}
+      {/* Ligne d'heure pour la prévision */}
       <div className="rvc-weather__time-row">
         <span className="rvc-weather__time-bound">{forecastBoundsStart}</span>
         <div style={{ flex: 1, padding: '0 4px', display: 'flex', alignItems: 'center' }}>
@@ -395,7 +395,7 @@ export function WeatherSection({
         )
       )}
 
-      {/* Layer list */}
+      {/* Liste des couches */}
       <div className="rvc-weather__layers">
         {displayedLayers.map((layer) => {
           const modeOptions = getModeOptions(layer.key);
