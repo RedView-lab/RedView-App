@@ -24,7 +24,7 @@ function describeCandidateUrl(url: string): string {
       return `${zoneName}/${fileName}`;
     }
   } catch {
-    // Ignore parse failures and keep the raw URL.
+    // Ignorer les échecs de parse et garder l'URL brute.
   }
   return url;
 }

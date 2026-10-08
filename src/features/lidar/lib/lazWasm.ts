@@ -1,11 +1,11 @@
 /**
- * Pre-compiles /laz-perf.wasm once on the main thread so the compiled
- * WebAssembly.Module can be transferred to Web Workers via postMessage.
+ * Précompile /laz-perf.wasm une fois sur le thread principal pour que le
+ * WebAssembly.Module compilé puisse être transmis aux Web Workers par postMessage.
  *
- * In Firefox and Zen Browser (Gecko), WebAssembly compilation inside Web Workers
- * is subject to strict CSP rules ("CompileError: call to WebAssembly.instantiate() blocked by CSP").
- * Instantiating an already-compiled WebAssembly.Module inside a Worker does NOT trigger
- * code compilation and works seamlessly under any CSP.
+ * Dans Firefox et Zen Browser (Gecko), la compilation WebAssembly dans un Web Worker
+ * est soumise à des règles CSP strictes (« CompileError: call to WebAssembly.instantiate() blocked by CSP »).
+ * Instancier un WebAssembly.Module déjà compilé dans un Worker ne déclenche AUCUNE
+ * compilation de code et fonctionne sous n'importe quelle CSP.
  */
 
 let lazWasmModulePromise: Promise<WebAssembly.Module | null> | null = null;

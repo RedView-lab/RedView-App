@@ -21,7 +21,7 @@ const tile: LodTile = {
 };
 const expected = new Uint8Array([...encodeLodTileIndex(tile.header, tile.nodes), ...tile.packed]);
 
-/** OPFS directory double: one file, written through a sync access handle or a writable stream. */
+/** Doublure de répertoire OPFS : un fichier, écrit par un sync access handle ou un flux en écriture. */
 function fakeDirectory(mode: 'sync' | 'writable', options: { shortWrite?: boolean } = {}) {
   let bytes = new Uint8Array(0);
   const removed: string[] = [];

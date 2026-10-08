@@ -3,10 +3,10 @@ import type { JapanZoneNumber, JapanTileCoord } from './types';
 import type { Jgd2011ZoneCrs } from '../../types';
 
 /**
- * Coordinate helpers for Japan LiDAR point clouds in JGD2011 Plane Rectangular Coordinate Systems (Zones 1 to 19).
+ * Outils de coordonnées pour les nuages de points LiDAR japonais dans les systèmes plans rectangulaires JGD2011 (zones 1 à 19).
  *
- * Japan uses JGD2011 (GRS80 ellipsoid) divided into 19 Plane Rectangular CS zones (EPSG:6669 to EPSG:6687).
- * Vertical datum: Tokyo Peil (T.P. / 東京湾平均海面).
+ * Le Japon utilise le JGD2011 (ellipsoïde GRS80) découpé en 19 zones de systèmes plans rectangulaires (EPSG:6669 à EPSG:6687).
+ * Référence verticale : Tokyo Peil (T.P. / 東京湾平均海面).
  */
 
 const PROJ_WGS84 = 'EPSG:4326';
@@ -42,7 +42,7 @@ export const JGD2011_ZONE_DEFS: Record<JapanZoneNumber, Jgd2011ZoneDef> = {
   19: { zone: 19, epsg: 'EPSG:6687', crsName: 'JGD2011_ZONE_19', lat0: 26.0, lon0: 154.0, description: 'Minamitorishima' },
 };
 
-// Register all 19 JGD2011 Plane Rectangular zones in Proj4
+// Enregistre dans Proj4 les 19 zones planes rectangulaires JGD2011
 for (let z = 1; z <= 19; z++) {
   const def = JGD2011_ZONE_DEFS[z as JapanZoneNumber];
   const projString = `+proj=tmerc +lat_0=${def.lat0} +lon_0=${def.lon0} +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs +type=crs`;
@@ -50,10 +50,10 @@ for (let z = 1; z <= 19; z++) {
   proj4.defs(def.crsName, projString);
 }
 
-// Bounding box covering all territory of Japan
+// Emprise couvrant tout le territoire japonais
 const JAPAN_BBOX_WGS84 = { west: 122.0, south: 20.0, east: 154.5, north: 46.0 };
 
-/** Check if coordinates are inside Japan territory */
+/** Indique si les coordonnées sont sur le territoire japonais */
 export function isInJapanCoverage(lon: number, lat: number): boolean {
   return (
     lon >= JAPAN_BBOX_WGS84.west &&
@@ -63,15 +63,15 @@ export function isInJapanCoverage(lon: number, lat: number): boolean {
   );
 }
 
-/** Automatically detect official JGD2011 zone (1..19) for given WGS84 coordinates */
+/** Détecte automatiquement la zone officielle JGD2011 (1..19) de coordonnées WGS84 */
 function detectJapanZone(lon: number, lat: number): JapanZoneNumber {
-  // Nansei Islands / Okinawa / Remote
+  // Îles Nansei / Okinawa / îles éloignées
   if (lat < 28.0) {
     if (lon > 150.0) return 19; // Minamitorishima
     if (lon > 138.0 && lat < 21.0) return 18; // Okinotorishima
     if (lon > 139.0 && lon < 144.0) return 14; // Ogasawara
     if (lon > 130.0) return 17; // Daito
-    if (lon > 126.0) return 15; // Okinawa Main Island
+    if (lon > 126.0) return 15; // Île principale d'Okinawa
     return 16; // Miyako / Yaeyama
   }
 
@@ -84,7 +84,7 @@ function detectJapanZone(lon: number, lat: number): JapanZoneNumber {
 
   // Tohoku
   if (lat >= 36.8 && lon >= 139.6 && lat < 41.5) {
-    if (lon < 139.8 && lat < 38.0) return 9; // Tochigi / Gunma border
+    if (lon < 139.8 && lat < 38.0) return 9; // Limite Tochigi / Gunma
     return 10;
   }
 
@@ -93,7 +93,7 @@ function detectJapanZone(lon: number, lat: number): JapanZoneNumber {
     return 9;
   }
 
-  // Chubu / Tokai (Shizuoka, Yamanashi, Nagano, Niigata)
+  // Chūbu / Tōkai (Shizuoka, Yamanashi, Nagano, Niigata)
   if (lon >= 137.5 && lon <= 139.2 && lat >= 34.5 && lat <= 38.5) {
     return 8;
   }
@@ -118,12 +118,12 @@ function detectJapanZone(lon: number, lat: number): JapanZoneNumber {
     return 4;
   }
 
-  // Chugoku West (Hiroshima, Yamaguchi, Shimane)
+  // Chūgoku ouest (Hiroshima, Yamaguchi, Shimane)
   if (lon >= 130.8 && lon <= 133.5 && lat >= 33.8 && lat <= 36.5) {
     return 3;
   }
 
-  // Kyushu East/Central
+  // Kyūshū est/centre
   if (lat >= 30.5 && lat <= 34.2 && lon >= 129.8 && lon <= 132.2) {
     return 2;
   }
@@ -133,7 +133,7 @@ function detectJapanZone(lon: number, lat: number): JapanZoneNumber {
     return 1;
   }
 
-  // Fallback: Find zone with closest central meridian
+  // Repli : zone dont le méridien central est le plus proche
   let bestZone: JapanZoneNumber = 9;
   let minDiff = Infinity;
   for (let z = 1; z <= 13; z++) {
@@ -146,20 +146,20 @@ function detectJapanZone(lon: number, lat: number): JapanZoneNumber {
   return bestZone;
 }
 
-/** Convert WGS84 [lon, lat] to native JGD2011 (East, North) in metres */
+/** Convertit un WGS84 [lon, lat] en JGD2011 natif (Est, Nord) en mètres */
 export function wgs84ToJapan(lon: number, lat: number, zone?: JapanZoneNumber): [number, number] {
   const z = zone ?? detectJapanZone(lon, lat);
   const def = JGD2011_ZONE_DEFS[z];
   return proj4(PROJ_WGS84, def.epsg, [lon, lat]) as [number, number];
 }
 
-/** Convert native JGD2011 (East, North) in metres to WGS84 [lon, lat] */
+/** Convertit un JGD2011 natif (Est, Nord) en mètres en WGS84 [lon, lat] */
 export function japanToWgs84(eastM: number, northM: number, zone: JapanZoneNumber): [number, number] {
   const def = JGD2011_ZONE_DEFS[zone];
   return proj4(def.epsg, PROJ_WGS84, [eastM, northM]) as [number, number];
 }
 
-/** Convert a WGS84 point to the SW-corner of its 1 km JGD2011 tile */
+/** Convertit un point WGS84 en coin SO de sa tuile JGD2011 de 1 km */
 export function wgs84ToJapanTileCoord(lon: number, lat: number, zone?: JapanZoneNumber): JapanTileCoord {
   const z = zone ?? detectJapanZone(lon, lat);
   const [eastM, northM] = wgs84ToJapan(lon, lat, z);
@@ -170,7 +170,7 @@ export function wgs84ToJapanTileCoord(lon: number, lat: number, zone?: JapanZone
   };
 }
 
-/** Native JGD2011 bounds (metres) of the 1 km × 1 km tile */
+/** Emprise JGD2011 native (mètres) de la tuile de 1 km × 1 km */
 export function getJapanTileBounds(coord: JapanTileCoord): {
   minE: number;
   minN: number;
@@ -185,7 +185,7 @@ export function getJapanTileBounds(coord: JapanTileCoord): {
   };
 }
 
-/** Stable string key for Japan tile cache / dedup */
+/** Clé texte stable pour le cache / la déduplication des tuiles japonaises */
 export function japanTileKey(coord: JapanTileCoord): string {
   return `JP_Z${String(coord.zone).padStart(2, '0')}_E${coord.eastKm}_N${coord.northKm}`;
 }

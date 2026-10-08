@@ -143,7 +143,7 @@ const SELECTION_LAYERS: Record<(typeof LAYER_ORDER)[number], SelectionLayer> = {
   },
 };
 
-/** First selection layer present in the style: coverage overlays go under it. */
+/** Première couche de sélection présente dans le style : les couches de couverture passent dessous. */
 function firstSelectionLayerId(map: MapboxMap): string | undefined {
   try {
     return LAYER_ORDER.find((layerId) => map.getLayer(layerId));
@@ -153,18 +153,19 @@ function firstSelectionLayerId(map: MapboxMap): string | undefined {
 }
 
 /**
- * Adds the missing selection layers, each right under the next selection
- * layer already present, so the stack is always LAYER_ORDER without moving
- * anything. This runs on every `styledata`: it must not touch the style when
- * nothing is missing. (It used to `moveLayer` all four layers on each call;
- * Mapbox marks the style dirty even for a no-op move, so every `styledata`
- * produced the next one — a style update every frame, forever: terrain drape
- * cache flushed each frame, full label placement, map never idle.)
+ * Ajoute les couches de sélection manquantes, chacune juste sous la couche de
+ * sélection suivante déjà présente : la pile reste toujours LAYER_ORDER sans
+ * rien déplacer. Appelé à chaque `styledata` : ne doit pas toucher au style
+ * quand rien ne manque. (Avant, chaque appel faisait `moveLayer` sur les quatre
+ * couches ; Mapbox marque le style modifié même pour un déplacement nul, donc
+ * chaque `styledata` produisait le suivant — une mise à jour du style à chaque
+ * image, sans fin : cache de drapage du terrain vidé à chaque image, placement
+ * complet des libellés, carte jamais au repos.)
  */
 function ensureSelectionLayers(map: MapboxMap): boolean {
   if (!canInspectStyle(map)) return false;
 
-  // Each section is isolated so a single failure doesn't prevent the rest.
+  // Chaque section est isolée : un échec n'empêche pas les autres.
   try {
     if (!map.getSource(SOURCE_ID)) {
       map.addSource(SOURCE_ID, {
@@ -187,8 +188,8 @@ function ensureSelectionLayers(map: MapboxMap): boolean {
     } catch { /* skip */ }
   });
 
-  // Source may not be immediately queryable right after addSource during a style
-  // graph rebuild — signal success only when we can actually retrieve it.
+  // La source peut ne pas être interrogeable juste après addSource pendant une
+  // reconstruction du graphe de style — ne signaler le succès que si on la retrouve.
   return Boolean(map.getSource(SOURCE_ID));
 }
 
@@ -207,7 +208,7 @@ function removeSelectionLayers(map: MapboxMap): void {
       map.removeSource(SOURCE_ID);
     }
   } catch {
-    /* map may be tearing down */
+    /* la carte est peut-être en cours de destruction */
   }
 }
 
@@ -264,14 +265,14 @@ export function useLidarSelection(
       return true;
     };
 
-    // Selection last pushed, and to which source instance (a style reload
-    // recreates it empty): a sync that changes nothing pushes nothing — each
-    // `setData` is a worker re-parse and a source update.
+    // Dernière sélection poussée, et vers quelle instance de source (un
+    // rechargement du style la recrée vide) : une synchro qui ne change rien ne
+    // pousse rien — chaque `setData` est un re-parse dans le worker et une mise à jour de la source.
     let pushedSource: GeoJSONSource | null = null;
     let pushedKey = '';
 
-    // Returns true when data was successfully pushed, false when the style
-    // graph was not ready (caller can schedule a retry).
+    // Renvoie true quand les données ont été poussées, false quand le graphe
+    // de style n'était pas prêt (l'appelant peut programmer un nouvel essai).
     const updateSourceData = (): boolean => {
       if (!canMutateOverlayStyle() && !promoteStyleFallbackIfUsable()) return false;
 
@@ -305,11 +306,11 @@ export function useLidarSelection(
 
     const scheduleOverlaySync = () => {
       clearScheduledSync();
-      if (updateSourceData()) return;  // fast path — style already ready
+      if (updateSourceData()) return;  // voie rapide — style déjà prêt
       syncFrameRef.current = window.requestAnimationFrame(() => {
         syncFrameRef.current = null;
         if (updateSourceData()) return;
-        // Style still not ready — cascade: 150 ms then 500 ms retries.
+        // Style toujours pas prêt — en cascade : nouvel essai à 150 ms puis 500 ms.
         syncTimeoutRef.current = window.setTimeout(() => {
           syncTimeoutRef.current = null;
           if (updateSourceData()) return;
@@ -440,7 +441,7 @@ export function useLidarSelection(
         const center = map.getCenter();
         void loadFileTileIndex(wgs84ToTileCoord(center.lng, center.lat), center.lng, center.lat);
       } catch {
-        /* map may be tearing down */
+        /* la carte est peut-être en cours de destruction */
       }
     };
 

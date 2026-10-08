@@ -53,9 +53,9 @@ export function isDownloadCancelledError(err: unknown): boolean {
 }
 
 /**
- * Ends a download at once, without trying the next URL of the tile: a
- * cancellation, or a full storage (each candidate would be fetched again,
- * hundreds of MB, to fail the same way).
+ * Termine un téléchargement sur-le-champ, sans essayer l'URL suivante de la
+ * tuile : une annulation, ou un stockage plein (chaque candidate serait
+ * retéléchargée, des centaines de Mo, pour échouer de la même façon).
  */
 export function isFinalDownloadError(err: unknown): boolean {
   return isDownloadCancelledError(err) || err instanceof StorageFullError;

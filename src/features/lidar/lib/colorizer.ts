@@ -10,17 +10,17 @@ const WMTS_ZOOM = 19;
 const IGN_ORTHO_URL = (z: number, x: number, y: number) =>
   `https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&FORMAT=image/jpeg&TILEMATRIXSET=PM&TILEMATRIX=${z}&TILEROW=${y}&TILECOL=${x}`;
 
-// swisstopo — SWISSIMAGE (Switzerland). Public WMTS, CORS-enabled, no key.
-// The 3857 matrix set uses the same Web-Mercator tile grid as IGN PM, so the
-// existing wgs84→pixel math (`wgs84ToAbsPixel`) works unchanged.
-// Sub-domains wmts0..9 are load-balanced; we pick one per tile to spread load.
+// swisstopo — SWISSIMAGE (Suisse). WMTS public, CORS activé, sans clé.
+// Le jeu de matrices 3857 utilise la même grille de tuiles Web Mercator que
+// IGN PM, donc le calcul wgs84→pixel existant (`wgs84ToAbsPixel`) marche tel quel.
+// Les sous-domaines wmts0..9 sont répartis : on en choisit un par tuile pour étaler la charge.
 const SWISS_ORTHO_URL = (z: number, x: number, y: number) => {
   const sub = (x + y) % 10;
   return `https://wmts${sub}.geo.admin.ch/1.0.0/ch.swisstopo.swissimage/default/current/3857/${z}/${x}/${y}.jpeg`;
 };
 
-// New Zealand: Esri World Imagery through `fetchEsriImageryTile`, which skips
-// Esri's "Map data not yet available" placeholders (see nz/esriImagery.ts).
+// Nouvelle-Zélande : Esri World Imagery via `fetchEsriImageryTile`, qui écarte
+// les tuiles de remplacement « Map data not yet available » d'Esri (voir nz/esriImagery.ts).
 function orthoUrlForCrs(crs: DetectedCrs, z: number, x: number, y: number): string {
   if (crs === 'CH1903_LV95') return SWISS_ORTHO_URL(z, x, y);
   return beneluxOrthoTileUrl(crs, z, x, y) ?? IGN_ORTHO_URL(z, x, y);
@@ -60,7 +60,7 @@ async function fetchOrthoTile(
 ): Promise<Uint8Array | null> {
   try {
     if (isJgd2011Crs(crs)) {
-      // GSI (Geospatial Information Authority of Japan / 国土地理院) — Seamless Orthophotos
+      // GSI (Geospatial Information Authority of Japan / 国土地理院) — orthophotos continues
       const gsiCol = tileX >> (zoom - 18);
       const gsiRow = tileY >> (zoom - 18);
       const subX = (tileX & 1) * 128;
@@ -102,9 +102,9 @@ function wgs84ToAbsPixel(lon: number, lat: number, zoom: number): [number, numbe
 
 const ORTHO_FETCH_CONCURRENCY = 48;
 
-// Per-worker cache of in-flight/decoded ortho tiles, so a prefetch started
-// from the COPC header bounds (while points are still decoding) is reused by
-// the colorization pass.
+// Cache par worker des tuiles ortho en cours de téléchargement ou décodées :
+// un préchargement lancé depuis l'emprise de l'en-tête COPC (pendant que les
+// points se décodent encore) est réutilisé par la passe de colorisation.
 const orthoTileCache = new Map<string, Promise<Uint8Array | null>>();
 const orthoFetchQueue: Array<() => void> = [];
 let orthoFetchesInFlight = 0;
@@ -168,8 +168,8 @@ function computeOrthoTileRange(bounds: PointCloudData['bounds'], crs: DetectedCr
 }
 
 /**
- * Starts downloading the ortho tiles covering `bounds` (typically the COPC
- * header extent) without waiting for them. `colorizePointCloud` picks them up.
+ * Lance le téléchargement des tuiles ortho couvrant `bounds` (en général
+ * l'emprise de l'en-tête COPC) sans les attendre. `colorizePointCloud` les reprend.
  */
 export function prefetchOrthoTiles(bounds: PointCloudData['bounds'], crs: DetectedCrs): void {
   const range = computeOrthoTileRange(bounds, crs);
@@ -193,7 +193,7 @@ export async function colorizePointCloud(
 
   const invDx = 1 / (bounds.maxX - bounds.minX);
   const invDy = 1 / (bounds.maxY - bounds.minY);
-  // Positions are relative to `origin`: express the bounds in the same frame.
+  // Les positions sont relatives à `origin` : exprimer l'emprise dans le même repère.
   const xMin = bounds.minX - origin.x;
   const yMin = bounds.minY - origin.y;
 

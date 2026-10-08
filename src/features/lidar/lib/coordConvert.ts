@@ -24,13 +24,13 @@ import {
   type JapanZoneNumber,
 } from './japan';
 
-// Register Lambert93 (EPSG:2154)
+// Enregistre le Lambert 93 (EPSG:2154)
 proj4.defs('EPSG:2154', '+proj=lcc +lat_0=46.5 +lon_0=3 +lat_1=49 +lat_2=44 +x_0=700000 +y_0=6600000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs +type=crs');
 
 // Register RGR92 / UTM 40S (EPSG:2975) — Réunion
 proj4.defs('EPSG:2975', '+proj=utm +zone=40 +south +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs +type=crs');
 
-// Register NZTM2000 (EPSG:2193) — New Zealand
+// Enregistre le NZTM2000 (EPSG:2193) — Nouvelle-Zélande
 proj4.defs('EPSG:2193', '+proj=tmerc +lat_0=0 +lon_0=173 +k=0.9996 +x_0=1600000 +y_0=10000000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs +type=crs');
 
 const PROJ_LAMB93 = 'EPSG:2154';
@@ -54,17 +54,17 @@ export function detectCrs(minY: number, maxY: number, minX?: number, maxX?: numb
   const meanY = (minY + maxY) / 2;
   const meanX = minX !== undefined && maxX !== undefined ? (minX + maxX) / 2 : undefined;
 
-  // Swiss LV95 northings are ~1.07–1.30 Mm; eastings ~2.48–2.84 Mm.
+  // Ordonnées LV95 suisses ~1,07–1,30 Mm ; abscisses ~2,48–2,84 Mm.
   if (meanY > 1_000_000 && meanY < 1_400_000) {
     if (meanX === undefined || (meanX > 2_300_000 && meanX < 3_000_000)) return 'CH1903_LV95';
   }
 
-  // NZTM2000 northings are ~4.7–6.3 Mm; eastings ~1.0–2.2 Mm.
+  // Ordonnées NZTM2000 ~4,7–6,3 Mm ; abscisses ~1,0–2,2 Mm.
   if (meanY > 4_500_000 && meanY < 6_500_000) {
     if (meanX !== undefined && meanX > 1_350_000 && meanX < 2_500_000) return 'NZTM2000';
   }
 
-  // Japan Plane Rectangular CS coordinates are centered around 0 (typically between -400 km and +400 km)
+  // Les coordonnées des systèmes plans rectangulaires japonais sont centrées sur 0 (en général entre -400 km et +400 km)
   if (meanY > -500_000 && meanY < 500_000 && meanX !== undefined && meanX > -500_000 && meanX < 500_000) {
     return 'JGD2011_ZONE_09';
   }
@@ -127,10 +127,10 @@ export function fromWgs84(lon: number, lat: number, crs: DetectedCrs): [number, 
 }
 
 /**
- * Grid bearing of true north at a projected point, in degrees clockwise from
- * the CRS +Y axis (meridian convergence: about −5°…+5° across Lambert-93). A
- * true azimuth A points along the grid bearing A + this value; the LiDAR
- * scenes are laid out on the CRS grid, not on true north.
+ * Gisement du nord vrai en un point projeté, en degrés dans le sens horaire
+ * depuis l'axe +Y du CRS (convergence des méridiens : environ −5°…+5° sur le
+ * Lambert-93). Un azimut vrai A pointe selon le gisement A + cette valeur ;
+ * les scènes LiDAR sont posées sur la grille du CRS, pas sur le nord vrai.
  */
 export function trueNorthGridBearingDeg(x: number, y: number, crs: DetectedCrs): number {
   const [lon, lat] = toWgs84(x, y, crs);
@@ -205,7 +205,7 @@ function formatKmCoordinate(val: number): string {
 export function buildTileFileName(xKm: number, yKm: number, crs: DetectedCrs, altRef?: AltitudeRef): string {
   const info = getTileInfo(crs);
   if (crs === 'CH1903_LV95') {
-    // Swiss naming: SW corner (xKm = east km, yKm = north km).
+    // Nommage suisse : coin SO (xKm = km est, yKm = km nord).
     const x4 = String(xKm).padStart(4, '0');
     const y4 = String(yKm).padStart(4, '0');
     return `LHD_${info.territory}_${x4}_${y4}_PTS_CH1903_LV95_${altRef ?? info.altRef}`;
@@ -217,13 +217,13 @@ export function buildTileFileName(xKm: number, yKm: number, crs: DetectedCrs, al
     return `LHD_${info.territory}_${x4}_${y4}_PTS_${crs}_${altRef ?? info.altRef}`;
   }
   if (isJgd2011Crs(crs)) {
-    // Japan naming: SW corner with signed/formatted km coordinates
+    // Nommage japonais : coin SO avec coordonnées en km signées/formatées
     const xEnc = formatKmCoordinate(xKm);
     const yEnc = formatKmCoordinate(yKm);
     return `LHD_${info.territory}_${xEnc}_${yEnc}_PTS_${crs}_${altRef ?? info.altRef}`;
   }
-  // IGN LiDAR HD naming convention: tiles are identified by their NW corner.
-  // X = west edge km (xKm), Y = north edge km (yKm + 1) since yKm is the south edge.
+  // Convention de nommage IGN LiDAR HD : les tuiles sont identifiées par leur coin NO.
+  // X = bord ouest en km (xKm), Y = bord nord en km (yKm + 1), yKm étant le bord sud.
   const x4 = String(xKm).padStart(4, '0');
   const y4 = String(yKm + 1).padStart(4, '0');
   return `LHD_${info.territory}_${x4}_${y4}_PTS_${crs}_${altRef ?? info.altRef}`;
@@ -314,7 +314,7 @@ export function tileCoordToWgs84Polygon(coord: TileCoord): [number, number][] {
  * des données LiDAR sous le point) au lieu de la détection géographique.
  */
 export function wgs84ToTileCoord(lon: number, lat: number, options?: { japanZone?: JapanZoneNumber }): TileCoord {
-  // Japan coverage check
+  // Test de couverture Japon
   if (isInJapanCoverage(lon, lat)) {
     const jp = wgs84ToJapanTileCoord(lon, lat, options?.japanZone);
     const crsName = `JGD2011_ZONE_${String(jp.zone).padStart(2, '0')}` as DetectedCrs;
@@ -328,7 +328,7 @@ export function wgs84ToTileCoord(lon: number, lat: number, options?: { japanZone
     };
   }
 
-  // New Zealand coverage check
+  // Test de couverture Nouvelle-Zélande
   if (isInNzCoverage(lon, lat)) {
     const nz = wgs84ToNzTileCoord(lon, lat);
     const info = getTileInfo('NZTM2000');
@@ -341,7 +341,7 @@ export function wgs84ToTileCoord(lon: number, lat: number, options?: { japanZone
     };
   }
 
-  // Swiss coverage check
+  // Test de couverture Suisse
   if (isInSwissCoverage(lon, lat)) {
     const swiss = wgs84ToSwissTileCoord(lon, lat);
     const info = getTileInfo('CH1903_LV95');

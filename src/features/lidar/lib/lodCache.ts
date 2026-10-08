@@ -1,20 +1,20 @@
 // ============================================
-// LiDAR LOD cache (OPFS): one file per tile, nodes readable one by one
+// Cache LOD LiDAR (OPFS) : un fichier par tuile, nœuds lisibles un par un
 // ============================================
 //
-// Layout (little-endian):
-//   header (160 B): magic "RVL1", version, pointCount, nodeCount,
+// Disposition (little-endian) :
+//   en-tête (160 o) : magic "RVL1", version, pointCount, nodeCount,
 //     bounds 6×f64, origin 3×f64, cube min 3×f64 + size f64, root spacing f64,
-//     flags u8 (bit 0 = embedded RGB), crs length u8 + crs bytes
-//   node table: nodeCount × 24 B (depth, x, y, z, count, first point index; u32)
-//   point data (16-byte aligned): node blocks of LOD_POINT_STRIDE bytes/point
-// Opening a cached tile reads only the header and the table; the viewer then
-// streams node blocks with `File.slice()` as the LOD asks for them.
-// Version 1 stored 12-byte points without the filtered attributes; such a
-// file is upgraded instead of rebuilt (`upgradeLegacyLodTile`): no LAZ
-// decoding, no orthophoto download.
+//     flags u8 (bit 0 = RVB intégré), longueur du crs u8 + octets du crs
+//   table des nœuds : nodeCount × 24 o (depth, x, y, z, count, index du premier point ; u32)
+//   données des points (alignées sur 16 octets) : blocs de nœuds de LOD_POINT_STRIDE octets/point
+// Ouvrir une tuile en cache ne lit que l'en-tête et la table ; le viewer
+// lit ensuite les blocs de nœuds en flux avec `File.slice()` à la demande du LOD.
+// La version 1 stockait des points de 12 octets sans les attributs filtrés ; un
+// tel fichier est mis à niveau au lieu d'être reconstruit (`upgradeLegacyLodTile`) :
+// pas de décodage LAZ, pas de téléchargement d'orthophoto.
 //
-// Kept free of app imports so the cache worker stays small.
+// Sans import de l'app, pour que le worker du cache reste petit.
 
 import type { DetectedCrs } from '../types';
 import {
@@ -30,16 +30,16 @@ export const LIDAR_OPFS_DIR = 'lidar-hd';
 const MAGIC = 0x314c5652; // "RVL1"
 const VERSION = 2;
 const LEGACY_VERSION = 1;
-/** Point record of version 1: position, class, intensity, RGB, padding. */
+/** Enregistrement de point de la version 1 : position, classe, intensité, RVB, bourrage. */
 const LEGACY_POINT_STRIDE = 12;
 const HEADER_BYTES = 160;
 const NODE_ENTRY_BYTES = 24;
 const MAX_CRS_BYTES = HEADER_BYTES - 130;
 
-// The LOD and terrain caches bake the ortho colours in. When a territory's
-// imagery source changes, its revision suffix changes so those tiles are
-// recoloured from the cached LAZ; the previous keys are listed as legacy.
-// NZ `_c2`: Esri "Map data not yet available" placeholders no longer used.
+// Les caches LOD et terrain intègrent les couleurs ortho. Quand la source
+// d'imagerie d'un territoire change, son suffixe de révision change pour que
+// ces tuiles soient recolorisées depuis le LAZ en cache ; les clés précédentes sont listées comme anciennes.
+// NZ `_c2` : les tuiles de remplacement Esri « Map data not yet available » ne sont plus utilisées.
 const COLOUR_REVISIONS: ReadonlyArray<{ match: RegExp; suffix: string }> = [
   { match: /_PTS_NZTM2000_/, suffix: '_c2' },
 ];
@@ -52,7 +52,7 @@ export function lodCacheKey(lazFileName: string): string {
   return lazFileName.replace(/(\.copc)?\.laz$/, `.lod_v2${colourRevisionSuffix(lazFileName)}`);
 }
 
-/** Version 1 cache of the same tile and colours (see `upgradeLegacyLodTile`). */
+/** Cache version 1 de la même tuile et des mêmes couleurs (voir `upgradeLegacyLodTile`). */
 function legacyLodCacheKey(lazFileName: string): string {
   return lazFileName.replace(/(\.copc)?\.laz$/, `.lod_v1${colourRevisionSuffix(lazFileName)}`);
 }
@@ -60,7 +60,7 @@ function legacyLodCacheKey(lazFileName: string): string {
 export interface OpenedLodTile {
   header: LodTileHeader;
   nodes: LodNode[];
-  /** Byte offset of the point data in the file. */
+  /** Décalage en octets des données des points dans le fichier. */
   dataOffset: number;
   file: File;
 }
@@ -69,7 +69,7 @@ function align16(value: number): number {
   return Math.ceil(value / 16) * 16;
 }
 
-/** Header + node table, padded so the point data starts 16-byte aligned. */
+/** En-tête + table des nœuds, complétés pour que les données des points commencent alignées sur 16 octets. */
 export function encodeLodTileIndex(header: LodTileHeader, nodes: LodNode[]): Uint8Array {
   const crsBytes = new TextEncoder().encode(header.crs);
   if (crsBytes.length > MAX_CRS_BYTES) throw new Error(`CRS name too long for the LOD cache: ${header.crs}`);
@@ -158,7 +158,7 @@ async function getLidarDirectory(): Promise<FileSystemDirectoryHandle | null> {
   }
 }
 
-/** Sync access handle of OPFS, exposed in dedicated workers only. */
+/** Sync access handle de l'OPFS, exposé dans les workers dédiés uniquement. */
 interface SyncAccessHandle {
   truncate(size: number): void;
   write(buffer: Uint8Array, options: { at: number }): number;
@@ -167,9 +167,9 @@ interface SyncAccessHandle {
 }
 
 /**
- * Writes `parts` back to back. In a worker (where the LOD cache is built) a
- * sync access handle writes in place: `createWritable` writes a swap file
- * that `close()` then moves into place, ~2× the time for a 375 MB tile.
+ * Écrit `parts` bout à bout. Dans un worker (où le cache LOD est construit), un
+ * sync access handle écrit sur place : `createWritable` écrit un fichier
+ * d'échange que `close()` met ensuite en place, ~2× le temps pour une tuile de 375 Mo.
  */
 async function writeOpfsFile(handle: FileSystemFileHandle, parts: Uint8Array[]): Promise<void> {
   const openSync = (handle as unknown as { createSyncAccessHandle?: () => Promise<SyncAccessHandle> }).createSyncAccessHandle;
@@ -199,7 +199,7 @@ async function writeOpfsFile(handle: FileSystemFileHandle, parts: Uint8Array[]):
   }
 }
 
-/** Writes a tile; returns false when OPFS is unavailable or the write failed. */
+/** Écrit une tuile ; renvoie false quand l'OPFS est indisponible ou que l'écriture a échoué. */
 export async function saveLodTile(lazFileName: string, tile: LodTile): Promise<boolean> {
   const dir = await getLidarDirectory();
   if (!dir) return false;
@@ -213,13 +213,13 @@ export async function saveLodTile(lazFileName: string, tile: LodTile): Promise<b
     try {
       await dir.removeEntry(fileName);
     } catch {
-      /* nothing to clean */
+      /* rien à nettoyer */
     }
     return false;
   }
 }
 
-/** Opens a cached tile (header + node table only), or null when absent/invalid. */
+/** Ouvre une tuile en cache (en-tête + table des nœuds seulement), ou null si absente/invalide. */
 export async function openLodTile(lazFileName: string): Promise<OpenedLodTile | null> {
   const dir = await getLidarDirectory();
   if (!dir) return null;
@@ -243,10 +243,10 @@ export async function openLodTile(lazFileName: string): Promise<OpenedLodTile | 
 }
 
 /**
- * Rewrites a version 1 cache of `lazFileName` as version 2: records widened
- * to 16 bytes, filtered attributes computed, then the old file removed.
- * Node blocks are read one by one, so only the new tile is held in memory.
- * Resolves to false when there is no usable version 1 file (or OPFS fails).
+ * Réécrit un cache version 1 de `lazFileName` en version 2 : enregistrements
+ * élargis à 16 octets, attributs filtrés calculés, puis ancien fichier supprimé.
+ * Les blocs de nœuds sont lus un par un : seule la nouvelle tuile est en mémoire.
+ * Se résout à false quand il n'y a pas de fichier version 1 utilisable (ou que l'OPFS échoue).
  */
 export async function upgradeLegacyLodTile(lazFileName: string): Promise<boolean> {
   const dir = await getLidarDirectory();
@@ -278,7 +278,7 @@ export async function upgradeLegacyLodTile(lazFileName: string): Promise<boolean
       const src = k * LEGACY_POINT_STRIDE;
       const dst = byteOffset + k * LOD_POINT_STRIDE;
       packed.set(block.subarray(src, src + 11), dst);
-      // Filtered copies; the cell means of nodes with children replace them below.
+      // Copies filtrées ; les moyennes par cellule des nœuds avec enfants les remplacent plus bas.
       packed[dst + 11] = block[src + 7]!;
       packed[dst + 12] = block[src + 8]!;
       packed[dst + 13] = block[src + 9]!;
@@ -294,7 +294,7 @@ export async function upgradeLegacyLodTile(lazFileName: string): Promise<boolean
   try {
     await dir.removeEntry(legacyName);
   } catch {
-    /* already gone */
+    /* déjà supprimé */
   }
   return true;
 }
@@ -304,7 +304,7 @@ export async function readLodNodeBlock(tile: OpenedLodTile, node: LodNode): Prom
   return tile.file.slice(start, start + node.count * LOD_POINT_STRIDE).arrayBuffer();
 }
 
-/** In-memory twin of `OpenedLodTile` when OPFS cannot store the tile. */
+/** Jumeau en mémoire de `OpenedLodTile` quand l'OPFS ne peut pas stocker la tuile. */
 export function createInMemoryLodTile(tile: LodTile): OpenedLodTile {
   const index = encodeLodTileIndex(tile.header, tile.nodes);
   const blob = new Blob([index as Uint8Array<ArrayBuffer>, tile.packed as Uint8Array<ArrayBuffer>]);

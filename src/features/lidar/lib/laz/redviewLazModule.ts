@@ -1,8 +1,8 @@
 /**
- * Compiles the RedView LAZ decoder once on the main thread; the
- * WebAssembly.Module is handed to the decode workers (see redviewLaz.ts and
- * lazWasm.ts for the CSP reason). Null where it cannot load: the workers then
- * decode with laz-perf.
+ * Compile le décodeur LAZ de RedView une fois sur le thread principal ; le
+ * WebAssembly.Module est transmis aux workers de décodage (voir redviewLaz.ts et
+ * lazWasm.ts pour la raison CSP). Null là où il ne peut pas se charger : les
+ * workers décodent alors avec laz-perf.
  */
 import wasmUrl from './pkg/redviewlaz_bg.wasm?url';
 

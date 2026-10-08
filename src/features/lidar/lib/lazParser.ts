@@ -39,9 +39,9 @@ function makeGetter(ab: ArrayBuffer): Getter {
 }
 
 /**
- * Km-aligned origin for the float32 positions. Snapping to whole kilometres
- * keeps origins of neighbouring tiles exact multiples of 1000 m, so re-basing
- * tiles onto a shared scene origin is lossless.
+ * Origine alignée sur le km pour les positions float32. Arrondir au kilomètre
+ * garde les origines des tuiles voisines multiples exacts de 1000 m : ramener
+ * les tuiles à une origine de scène commune se fait sans perte.
  */
 export function computeLocalOrigin(min: readonly number[]): PointCloudOrigin {
   const snap = (value: number | undefined) => (
@@ -74,30 +74,31 @@ export interface DecodedCopcChunks {
   positions: Float32Array;
   classifications: Uint8Array;
   intensities: Uint16Array;
-  /** High bytes of the embedded 16-bit RGB (PDRF 7/8), or null when the format has no colour. */
+  /** Octets de poids fort du RVB 16 bits intégré (PDRF 7/8), ou null quand le format n'a pas de couleur. */
   colors: Uint8Array | null;
-  /** Largest raw 16-bit RGB channel value seen (0 without colour), see `hasUsableEmbeddedRgb`. */
+  /** Plus grande valeur brute 16 bits d'un canal RVB vue (0 sans couleur), voir `hasUsableEmbeddedRgb`. */
   maxRgb: number;
   count: number;
   bounds: PointCloudBounds;
 }
 
-/** COPC mandates PDRF 6/7/8, which share the X/Y/Z/Classification layout. */
+/** COPC impose les PDRF 6/7/8, qui partagent la disposition X/Y/Z/Classification. */
 export function canFastDecodeCopc(header: { pointDataRecordFormat: number }): boolean {
   const format = header.pointDataRecordFormat & 0x3f;
   return format === 6 || format === 7 || format === 8;
 }
 
-/** PDRF 7/8 store Red/Green/Blue as u16 at byte 30 (after the f64 GPS time). */
+/** Les PDRF 7/8 stockent Red/Green/Blue en u16 à l'octet 30 (après le temps GPS f64). */
 function copcRgbOffset(pointDataRecordFormat: number): number | null {
   const format = pointDataRecordFormat & 0x3f;
   return format === 7 || format === 8 ? 30 : null;
 }
 
 /**
- * Embedded colour is used only when it is 16-bit scaled as the LAS spec
- * requires (some channel above 255): all-zero RGB means "not colourised",
- * and 8-bit-scaled values would have been truncated by the `>> 8` decode.
+ * La couleur intégrée n'est utilisée que si elle est à l'échelle 16 bits comme
+ * l'exige la spécification LAS (un canal au-dessus de 255) : un RVB tout à zéro
+ * signifie « non colorisé », et des valeurs à l'échelle 8 bits auraient été
+ * tronquées par le `>> 8` du décodage.
  */
 export function hasUsableEmbeddedRgb(maxRgb: number): boolean {
   return maxRgb > 255;
@@ -114,9 +115,9 @@ function compareCopcKeys(a: string, b: string): number {
 }
 
 /**
- * Walks every hierarchy page (a COPC hierarchy may be split into child pages,
- * which the root page only references) and returns the non-empty nodes,
- * coarse levels first.
+ * Parcourt chaque page de hiérarchie (une hiérarchie COPC peut être découpée en
+ * pages filles, que la page racine ne fait que référencer) et renvoie les nœuds
+ * non vides, niveaux grossiers d'abord.
  */
 async function loadCopcNodes(getter: Getter, rootPage: Hierarchy.Page): Promise<CopcNodeEntry[]> {
   const { Copc } = await import('copc');
@@ -142,10 +143,10 @@ async function loadCopcNodes(getter: Getter, rootPage: Hierarchy.Page): Promise<
 }
 
 /**
- * Decompresses COPC chunks and extracts only what the viewer needs
- * (X/Y/Z relative to `origin`, Classification), reading each decoded record
- * straight from the laz-perf heap. Equivalent to `Copc.loadPointDataView` +
- * per-point getters, without the per-point Uint8Array/closure overhead.
+ * Décompresse des chunks COPC et n'extrait que ce dont le viewer a besoin
+ * (X/Y/Z relatifs à `origin`, Classification), en lisant chaque enregistrement
+ * décodé directement dans le tas de laz-perf. Équivaut à `Copc.loadPointDataView`
+ * + accesseurs par point, sans le coût d'un Uint8Array/d'une closure par point.
  */
 export function decodeCopcChunks(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -165,7 +166,7 @@ export function decodeCopcChunks(
   let maxRgb = 0;
   const [sx, sy, sz] = header.scale as [number, number, number];
   const [ox, oy, oz] = header.offset as [number, number, number];
-  // Offsets relative to the local origin (float64): x_local = X * sx + lox.
+  // Décalages relatifs à l'origine locale (float64) : x_local = X * sx + lox.
   const lox = ox - origin.x;
   const loy = oy - origin.y;
   const loz = oz - origin.z;
@@ -240,7 +241,7 @@ export function decodeCopcChunks(
   };
 }
 
-/** Reads the COPC header + full hierarchy and returns the chunk list (coarse levels first). */
+/** Lit l'en-tête COPC + la hiérarchie complète et renvoie la liste des chunks (niveaux grossiers d'abord). */
 export async function readCopcLayout(buffer: ArrayBuffer): Promise<{
   header: CopcDecodeHeader & { min: number[]; max: number[] };
   nodes: CopcNodeEntry[];
@@ -260,7 +261,7 @@ export async function readCopcLayout(buffer: ArrayBuffer): Promise<{
   };
 }
 
-/** Hierarchy summary handed to the viewer with the decoded points. */
+/** Résumé de la hiérarchie transmis au viewer avec les points décodés. */
 export function toCopcHierarchyInfo(nodes: CopcNodeEntry[], cube: readonly number[], spacing: number): CopcHierarchyInfo {
   return {
     nodes: nodes.map((node) => ({ key: node.key, pointCount: node.pointCount })),
@@ -274,7 +275,7 @@ export async function parseLazBuffer(
   onProgress?: (phase: string, percent: number) => void,
   hintCrs?: DetectedCrs,
   wasmModule?: WebAssembly.Module,
-  /** RedView LAZ decoder (lib/laz/) for COPC files; laz-perf without it or if it fails. */
+  /** Décodeur LAZ de RedView (lib/laz/) pour les fichiers COPC ; laz-perf sans lui ou s'il échoue. */
   redviewLazModule?: WebAssembly.Module | null,
 ): Promise<PointCloudData> {
   onProgress?.('Chargement du parser LAZ...', 0);
@@ -285,7 +286,7 @@ export async function parseLazBuffer(
   ]);
   const fileBytes = new Uint8Array(buffer);
 
-  // Try COPC first
+  // Essayer le COPC d'abord
   try {
     onProgress?.('Décompression COPC...', 10);
     const getter = makeGetter(buffer);
@@ -353,7 +354,7 @@ export async function parseLazBuffer(
       copc: toCopcHierarchyInfo(allNodes, copc.info.cube, copc.info.spacing),
     };
   } catch {
-    // Not COPC — parse as regular LAZ/LAS
+    // Pas du COPC — parser comme un LAZ/LAS classique
   }
 
   onProgress?.('Décompression LAZ...', 10);
@@ -529,8 +530,8 @@ function tryGetter(view: any, dimension: string): ((index: number) => number) | 
 }
 
 /**
- * Copies X/Y/Z (made relative to `origin` in float64), Classification and,
- * when the format has it, RGB out of copc Views.
+ * Copie X/Y/Z (rendus relatifs à `origin` en float64), Classification et,
+ * quand le format l'a, le RVB depuis les Views de copc.
  */
 function extractViewPoints(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
