@@ -99,7 +99,9 @@ describe('ItineraryTabs', () => {
 
   it('l\'œil masque ou affiche sans sélectionner', () => {
     const { view, onToggleVisibility, onSelect } = render();
-    const hiddenEye = row('Variante gravel').querySelector<HTMLButtonElement>('.rvi-itin__eye')!;
+    // Frère de la ligne, pas dedans (pas de bouton dans un bouton).
+    expect(row('Variante gravel').querySelector('.rvi-itin__eye')).toBeNull();
+    const hiddenEye = row('Variante gravel').parentElement!.querySelector<HTMLButtonElement>('.rvi-itin__eye')!;
     expect(hiddenEye.getAttribute('aria-label')).toMatch(/^Afficher l['’]itinéraire$/);
     view.click(hiddenEye);
     expect(onToggleVisibility).toHaveBeenCalledWith('b');

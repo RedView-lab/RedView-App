@@ -93,6 +93,9 @@ function SummaryRow({
           ? t('{{name}} commence à {{distance}} km', { name: itinerary.name, distance: startDistanceKm.toFixed(1) })
           : itinerary.name
       }
+      // Clic n'importe où sur la ligne à la souris ; au clavier, le nom est le
+      // bouton (la ligne contient d'autres boutons : un bouton dans un bouton
+      // n'est pas annoncé correctement, WCAG 4.1.2). Son clic remonte ici.
       onClick={
         mergeArmed && mergeSelectable
           ? () => onSelectForMerge?.(itinerary.id)
@@ -100,24 +103,6 @@ function SummaryRow({
             ? () => onSelectItinerary?.(itinerary.id)
             : undefined
       }
-      onKeyDown={
-        mergeArmed && mergeSelectable
-          ? (event) => {
-              if (event.key !== 'Enter' && event.key !== ' ') return;
-              event.preventDefault();
-              onSelectForMerge?.(itinerary.id);
-            }
-          : !isEditing
-            ? (event) => {
-                if (event.key !== 'Enter' && event.key !== ' ') return;
-                event.preventDefault();
-                onSelectItinerary?.(itinerary.id);
-              }
-            : undefined
-      }
-      role="button"
-      tabIndex={0}
-      aria-pressed={mergeArmed && mergeSelectable ? isMergeSelected : isActive}
     >
       <div className="rvc-center-summary__route" style={{ opacity: analysisVisible ? 1 : 0.45 }}>
         {hasChildren ? (
@@ -175,16 +160,18 @@ function SummaryRow({
             autoFocus
           />
         ) : (
-          <span
+          <button
+            type="button"
             className="rvc-center-summary__name"
             title={t('{{name}} · Double-cliquez pour renommer', { name: itinerary.name })}
+            aria-pressed={mergeArmed && mergeSelectable ? isMergeSelected : isActive}
             onDoubleClick={(event) => {
               event.stopPropagation();
               onStartRename?.(itinerary);
             }}
           >
             {itinerary.name}
-          </span>
+          </button>
         )}
       </div>
       <div className="rvc-center-summary__metrics">

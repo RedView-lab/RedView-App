@@ -245,6 +245,13 @@
 }
 
 .rvc-center-summary__name {
+  /* Bouton (sélection au clavier) dessiné comme le texte qu'il était. */
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
   display: block;
   flex: 1 1 auto;
   min-width: 0;
@@ -256,6 +263,12 @@
   cursor: text;
   mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 16px), transparent 100%);
   -webkit-mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 16px), transparent 100%);
+}
+
+.rvc-center-summary__name:focus-visible {
+  outline: 2px solid rgb(var(--rv-ink) / 0.6);
+  outline-offset: 1px;
+  border-radius: 2px;
 }
 
 .rvc-center-summary__inline-input {

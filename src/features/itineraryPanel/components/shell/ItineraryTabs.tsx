@@ -177,10 +177,25 @@ export function ItineraryTabs({
               key={it.id}
               className={`rvi-itin-wrap${isActive ? ' is-active' : ''}${it.visible === false ? ' is-hidden' : ''}`}
             >
+              {/* Hors de la ligne (role="button") : un bouton dans un bouton n'est
+                  pas annoncé correctement (WCAG 4.1.2). Placé sur la ligne en CSS. */}
+              <button
+                type="button"
+                className="rvi-itin__eye"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleVisibility?.(it.id);
+                }}
+                aria-label={it.visible !== false ? t('Masquer l’itinéraire') : t('Afficher l’itinéraire')}
+                aria-pressed={it.visible !== false}
+                title={it.visible !== false ? t('Masquer l’itinéraire') : t('Afficher l’itinéraire')}
+              >
+                {it.visible !== false ? <IconEye size={16} /> : <IconEyeOff size={16} />}
+              </button>
               <div
                 role="button"
                 tabIndex={0}
-                className={`rvi-itin${isActive ? ' is-active' : ''}`}
+                className={`rvi-itin rvi-itin--with-eye${isActive ? ' is-active' : ''}`}
                 onClick={() => {
                   if (isEditing) return;
                   onSelect?.(it.id);
@@ -194,19 +209,6 @@ export function ItineraryTabs({
                 }}
                 aria-pressed={isActive}
               >
-                <button
-                  type="button"
-                  className="rvi-itin__eye"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onToggleVisibility?.(it.id);
-                  }}
-                  aria-label={it.visible !== false ? t('Masquer l’itinéraire') : t('Afficher l’itinéraire')}
-                  aria-pressed={it.visible !== false}
-                  title={it.visible !== false ? t('Masquer l’itinéraire') : t('Afficher l’itinéraire')}
-                >
-                  {it.visible !== false ? <IconEye size={16} /> : <IconEyeOff size={16} />}
-                </button>
                 <span className="rvi-itin__swatch" style={{ background: it.color }} />
                 <span className="rvi-itin__main">
                   {isEditing ? (

@@ -30,6 +30,14 @@
   min-width: 0;
 }
 .rvi-itin:hover { background: rgb(var(--rv-ink) / 0.04); }
+/* `all: unset` retire aussi le contour de focus : sans lui, la ligne
+ * sélectionnée au clavier ne se voit pas (WCAG 2.4.7). */
+.rvi-itin:focus-visible {
+  outline: 2px solid rgb(var(--rv-ink) / 0.6);
+  outline-offset: -2px;
+}
+/* Place réservée à l'œil, frère de la ligne posé dessus (voir plus bas). */
+.rvi-itin--with-eye { padding-left: 32px; }
 .rvi-itin.is-active {
   background: light-dark(rgb(var(--rv-ink) / 0.06), rgba(0, 0, 0, 0.4));
 }
@@ -51,6 +59,19 @@
   border-radius: 4px;
   cursor: pointer;
   transition: color 0.15s ease, background 0.15s ease, opacity 0.15s ease;
+}
+.rvi-itin-wrap > .rvi-itin__eye {
+  position: absolute;
+  z-index: 1;
+  /* 8 px de marge de la ligne, moins le padding de la zone cliquable. */
+  left: 5px;
+  top: 50%;
+  margin: 0;
+  transform: translateY(-50%);
+}
+.rvi-itin__eye:focus-visible {
+  outline: 2px solid rgb(var(--rv-ink) / 0.6);
+  outline-offset: -1px;
 }
 .rvi-itin__eye:hover {
   color: var(--rv-text);
