@@ -29,6 +29,7 @@ import { PoiMarkerManager } from '../lib/poi-markers';
 import type { UsePoiPopupActions } from '../lib/poi-popup';
 import { matchesPoiCategory } from '@/features/itineraryPanel/sections/timeline/poiCategoryMatch';
 import { buildRouteGeometrySignature } from '@/features/itineraryPanel/lib/routes';
+import { useLatestRef } from '@/shared/hooks/useLatestRef';
 import '../styles/floating-markers.css';
 
 // Réexporté pour que les consommateurs existants continuent d'importer depuis le module du hook.
@@ -122,6 +123,17 @@ function mergeCorridorWithSavedFeatures(
   return Array.from(map.values());
 }
 
+interface CorridorSearchState {
+  /** Itinéraire auquel appartient cet état. */
+  routeId: string | null;
+  loading: boolean;
+  error: string | null;
+  /** Progression 0..1 des requêtes en corridor ; null quand rien ne tourne. */
+  progress: number | null;
+}
+
+const IDLE_SEARCH = { loading: false, error: null, progress: null } as const;
+
 export function usePoi(
   map: MapboxMap | null,
   isMapLoaded: boolean,
@@ -158,43 +170,32 @@ export function usePoi(
    */
   refinedPoiIds: ReadonlySet<number> | null = null,
 ) {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState<CorridorSearchState>(() => ({ routeId, ...IDLE_SEARCH }));
+  // Un changement d'itinéraire rend aussitôt la recherche inactive : l'état
+  // d'une autre trace n'est jamais montré, et une recherche abandonnée qui
+  // répond encore ne touche plus celui de la nouvelle.
+  const { loading, error, progress: corridorProgress } = search.routeId === routeId ? search : IDLE_SEARCH;
   const [poiCount, setPoiCount] = useState(0);
-  /** Progression 0..1 des requêtes en corridor ; null quand rien ne tourne. */
-  const [corridorProgress, setCorridorProgress] = useState<number | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
   const managerRef = useRef<PoiMarkerManager | null>(null);
   const lastCorridorFeatures = useRef<PoiFeature[]>([]);
 
-  // Recopie les entrées réactives dans des réfs pour que les callbacks stables lisent des valeurs fraîches.
-  const enabledRef = useRef(enabledCategories);
-  enabledRef.current = enabledCategories;
-  const searchCategoriesRef = useRef(searchCategories ?? enabledCategories);
-  searchCategoriesRef.current = searchCategories ?? enabledCategories;
-  const favorisEnabledRef = useRef(favorisEnabled);
-  favorisEnabledRef.current = favorisEnabled;
-  const poisRouteEnabledRef = useRef(poisRouteEnabled);
-  poisRouteEnabledRef.current = poisRouteEnabled;
-  const selectedPoiCategoriesRef = useRef(selectedPoiCategories);
-  selectedPoiCategoriesRef.current = selectedPoiCategories;
-  const refinedPoiIdsRef = useRef(refinedPoiIds);
-  refinedPoiIdsRef.current = refinedPoiIds;
-  const gpxRef = useRef(gpxRoute);
-  gpxRef.current = gpxRoute;
-  const radiusRef = useRef(radiusM);
-  radiusRef.current = radiusM;
-  const maxLateralDistanceByCategoryRef = useRef(maxLateralDistanceByCategory);
-  maxLateralDistanceByCategoryRef.current = maxLateralDistanceByCategory;
-  const onCorridorUpdateRef = useRef(onCorridorUpdate);
-  onCorridorUpdateRef.current = onCorridorUpdate;
-  const onCorridorCompleteRef = useRef(onCorridorComplete);
-  onCorridorCompleteRef.current = onCorridorComplete;
-  const popupActionsRef = useRef<UsePoiPopupActions>(popupActions);
-  popupActionsRef.current = popupActions;
-  const initialFeaturesRef = useRef<PoiFeature[] | null>(initialFeatures);
-  initialFeaturesRef.current = initialFeatures;
+  // Entrées réactives lues par les callbacks stables : dernière valeur validée (useLatestRef).
+  const routeIdRef = useLatestRef(routeId);
+  const enabledRef = useLatestRef(enabledCategories);
+  const searchCategoriesRef = useLatestRef(searchCategories ?? enabledCategories);
+  const favorisEnabledRef = useLatestRef(favorisEnabled);
+  const poisRouteEnabledRef = useLatestRef(poisRouteEnabled);
+  const selectedPoiCategoriesRef = useLatestRef(selectedPoiCategories);
+  const refinedPoiIdsRef = useLatestRef(refinedPoiIds);
+  const gpxRef = useLatestRef(gpxRoute);
+  const radiusRef = useLatestRef(radiusM);
+  const maxLateralDistanceByCategoryRef = useLatestRef(maxLateralDistanceByCategory);
+  const onCorridorUpdateRef = useLatestRef(onCorridorUpdate);
+  const onCorridorCompleteRef = useLatestRef(onCorridorComplete);
+  const popupActionsRef = useLatestRef(popupActions);
+  const initialFeaturesRef = useLatestRef(initialFeatures);
 
   // Clés de dépendance stables pour les effets qui réagissent aux changements de sens.
   const enabledCategoriesKey = Array.from(enabledCategories).sort().join('|');
@@ -278,7 +279,7 @@ export function usePoi(
     );
 
     return [...favorites, ...filteredNonFavorites];
-  }, []);
+  }, [enabledRef, favorisEnabledRef, gpxRef, maxLateralDistanceByCategoryRef, poisRouteEnabledRef, radiusRef, refinedPoiIdsRef, selectedPoiCategoriesRef]);
 
   /**
    * Ce que la recherche enregistre dans l'itinéraire : tous les favoris +
@@ -301,7 +302,7 @@ export function usePoi(
         clampCorridorRadiusM(radiusRef.current),
       ),
     ];
-  }, []);
+  }, [gpxRef, maxLateralDistanceByCategoryRef, radiusRef, searchCategoriesRef]);
 
   const syncRenderedFeatures = useCallback((features: PoiFeature[]) => {
     const manager = managerRef.current;
@@ -326,9 +327,11 @@ export function usePoi(
     const controller = new AbortController();
     abortRef.current = controller;
 
-    setLoading(true);
-    setError(null);
-    setCorridorProgress(0);
+    const searchRouteId = routeIdRef.current;
+    const updateSearch = (patch: Partial<CorridorSearchState>) => {
+      setSearch((current) => (current.routeId === searchRouteId ? { ...current, ...patch } : current));
+    };
+    setSearch({ routeId: searchRouteId, loading: true, error: null, progress: 0 });
 
     // Polyligne simplifiée (tolérance <= r/4, sommets de virage conservés)
     // puis densifiée dans le budget de points du serveur, interrogée avec
@@ -345,7 +348,7 @@ export function usePoi(
         signal: controller.signal,
         onProgress: (deduped, { done, total }) => {
           if (controller.signal.aborted) return;
-          setCorridorProgress(total > 0 ? done / total : 0);
+          updateSearch({ progress: total > 0 ? done / total : 0 });
           // Le tick vide « requête démarrée » ne doit PAS effacer les POI
           // affichés (il vidait tous les marqueurs et les reconstruisait tous à
           // la réponse), et le tick final est traité une fois par la branche de
@@ -369,14 +372,13 @@ export function usePoi(
       // Échec : on ne touche NI aux POI enregistrés NI à la timeline NI à la
       // signature de recherche (onCorridorComplete n'est pas appelé) ; le
       // panneau affiche l'erreur et propose « Réessayer ».
-      setError(describeCorridorError(err));
+      updateSearch({ error: describeCorridorError(err) });
     } finally {
       if (!controller.signal.aborted) {
-        setLoading(false);
-        setCorridorProgress(null);
+        updateSearch({ loading: false, progress: null });
       }
     }
-  }, [buildRenderableFeatures, buildStoredFeatures, syncRenderedFeatures]);
+  }, [buildRenderableFeatures, buildStoredFeatures, syncRenderedFeatures, gpxRef, initialFeaturesRef, onCorridorCompleteRef, onCorridorUpdateRef, radiusRef, routeIdRef, searchCategoriesRef]);
 
   // ── Déclencheurs publics ──────────────────────────────────────────
 
@@ -384,15 +386,13 @@ export function usePoi(
     if (managerRef.current && gpxRef.current) {
       void fetchCorridorPois();
     }
-  }, [fetchCorridorPois]);
+  }, [fetchCorridorPois, gpxRef]);
 
   const cancelSearchCorridor = useCallback(() => {
     abortRef.current?.abort();
     abortRef.current = null;
-    setLoading(false);
-    setCorridorProgress(null);
-    setError(null);
-  }, []);
+    setSearch({ routeId: routeIdRef.current, ...IDLE_SEARCH });
+  }, [routeIdRef]);
 
   // ── Cycle de vie du gestionnaire de marqueurs ─────────────────────
 
@@ -414,23 +414,19 @@ export function usePoi(
       manager.destroy();
       setPoiCount(0);
     };
-  }, [map, isMapLoaded, buildRenderableFeatures]);
+  }, [map, isMapLoaded, buildRenderableFeatures, initialFeaturesRef, popupActionsRef]);
 
   // ── Cycle de vie au changement de trace ───────────────────────────
 
   useEffect(() => {
     abortRef.current?.abort();
     abortRef.current = null;
-    setLoading(false);
-    setCorridorProgress(null);
-    setError(null);
     if (!managerRef.current) return;
     const all = deduplicateFeatures(initialFeaturesRef.current);
     lastCorridorFeatures.current = all;
     const seed = buildRenderableFeatures(all);
     syncRenderedFeatures(seed);
-    setPoiCount(seed.length);
-  }, [routeId, buildRenderableFeatures, syncRenderedFeatures]);
+  }, [routeId, buildRenderableFeatures, syncRenderedFeatures, initialFeaturesRef]);
 
   // ── Réaction aux changements de catégorie / distance / filtre ─────
 
@@ -445,6 +441,7 @@ export function usePoi(
         : deduplicateFeatures(initialFeaturesRef.current);
     syncRenderedFeatures(buildRenderableFeatures(source));
   }, [
+    initialFeaturesRef,
     map,
     isMapLoaded,
     enabledCategoriesKey,
@@ -480,7 +477,7 @@ export function usePoi(
     lastCorridorFeatures.current = all;
     const seed = buildRenderableFeatures(all);
     syncRenderedFeatures(seed);
-  }, [map, isMapLoaded, initialFeaturesKey, buildRenderableFeatures, syncRenderedFeatures]);
+  }, [map, isMapLoaded, initialFeaturesKey, buildRenderableFeatures, syncRenderedFeatures, initialFeaturesRef]);
 
   const openPoiMarker = useCallback(
     (poiId: number | string, category?: string, coords?: { lat: number; lon: number }) => {
