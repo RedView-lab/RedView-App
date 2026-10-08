@@ -320,6 +320,55 @@ async function handleRouteQuery(
 /* POST → /brouter/profile (envoi d'un BRF personnalisé)               */
 /* ------------------------------------------------------------------ */
 
+type UploadOutcome =
+  | { kind: 'ok'; upstreamRes: Response; text: string; waitedMs: number }
+  | { kind: 'busy' | 'timeout' | 'unreachable'; waitedMs?: number };
+
+/** Envois en cours, par id de profil (contenu identique). */
+const PROFILE_UPLOADS_IN_FLIGHT = new Map<string, Promise<UploadOutcome>>();
+
+/**
+ * Un envoi vers BRouter, partagé par toutes les demandes simultanées du même
+ * profil. BRouter écrit le profil dans un fichier nommé d'après son id puis
+ * le compile : deux envois concurrents du même id réécrivaient ce fichier
+ * pendant que l'autre le lisait — profil tronqué, « does not contain
+ * expressions for context node », tracé en échec (banc vps-load du 08/10,
+ * préréglages courants en rafale). Partager l'envoi supprime la course et la
+ * compilation en double. Il passe par la file (_lib/upstreamGate.ts) et va à
+ * son terme même si un demandeur part : les autres l'attendent.
+ */
+async function uploadProfileOnce(url: string, profileText: string): Promise<UploadOutcome> {
+  let slot: UpstreamSlot;
+  try {
+    slot = await brouterGate.acquire();
+  } catch (error) {
+    if (error instanceof UpstreamBusyError) return { kind: 'busy' };
+    throw error;
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
+  try {
+    const upstreamRes = await fetch(url, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'text/plain; charset=UTF-8',
+        Accept: 'application/json,text/plain',
+      },
+      body: profileText,
+    });
+    const text = await upstreamRes.text();
+    return { kind: 'ok', upstreamRes, text, waitedMs: slot.waitedMs };
+  } catch (err) {
+    const isAbort = (err as { name?: string } | undefined)?.name === 'AbortError';
+    if (!isAbort) console.error('[brouter] profile upload upstream unreachable:', err);
+    return { kind: isAbort ? 'timeout' : 'unreachable', waitedMs: slot.waitedMs };
+  } finally {
+    clearTimeout(timer);
+    slot.release();
+  }
+}
+
 async function handleProfileUpload(
   req: ApiRequest,
   res: ApiResponse,
@@ -374,46 +423,28 @@ async function handleProfileUpload(
   const profileId = `custom_${crypto.createHash('sha256').update(profileText, 'utf8').digest('hex').slice(0, 16)}`;
   const url = `${base}/brouter/profile/${encodeURIComponent(profileId)}`;
 
-  const controller = new AbortController();
-  let clientGone = false;
-  const onClientClose = () => {
-    if (res.writableFinished) return;
-    clientGone = true;
-    controller.abort();
-  };
-  res.once('close', onClientClose);
-  // La compilation d'un profil occupe aussi un fil de BRouter.
-  const slot = await acquireBrouterSlot(res, controller.signal, () => clientGone);
-  res.off('close', onClientClose);
-  if (!slot) return;
-  const timer = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
-
-  let upstreamRes: Response;
-  let text: string;
-  try {
-    upstreamRes = await fetch(url, {
-      method: 'POST',
-      signal: controller.signal,
-      headers: {
-        'Content-Type': 'text/plain; charset=UTF-8',
-        Accept: 'application/json,text/plain',
-      },
-      body: profileText,
-    });
-    text = await upstreamRes.text();
-  } catch (err) {
-    clearTimeout(timer);
-    slot.release();
-    const isAbort = (err as { name?: string } | undefined)?.name === 'AbortError';
-    if (!isAbort) console.error('[brouter] profile upload upstream unreachable:', err);
-    return res.status(isAbort ? 504 : 502).json({
-      error: isAbort
+  // Mêmes réglages = même profil = même id : des envois simultanés partagent
+  // un seul envoi vers BRouter (voir uploadProfileOnce).
+  let job = PROFILE_UPLOADS_IN_FLIGHT.get(profileId);
+  if (!job) {
+    job = uploadProfileOnce(url, profileText).finally(() => PROFILE_UPLOADS_IN_FLIGHT.delete(profileId));
+    PROFILE_UPLOADS_IN_FLIGHT.set(profileId, job);
+  }
+  const outcome = await job;
+  if (outcome.waitedMs !== undefined) res.setHeader('X-Upstream-Wait-Ms', String(Math.round(outcome.waitedMs)));
+  if (outcome.kind === 'busy') {
+    res.setHeader('Retry-After', '5');
+    res.setHeader('Cache-Control', 'no-store');
+    return res.status(503).json({ error: 'BRouter busy, retry shortly' });
+  }
+  if (outcome.kind !== 'ok') {
+    return res.status(outcome.kind === 'timeout' ? 504 : 502).json({
+      error: outcome.kind === 'timeout'
         ? `BRouter profile upload timeout after ${UPLOAD_TIMEOUT_MS}ms`
         : 'BRouter upstream unreachable',
     });
   }
-  clearTimeout(timer);
-  slot.release();
+  const { upstreamRes, text } = outcome;
 
   // Jamais de cache pour les envois de profil.
   res.setHeader('Cache-Control', 'no-store');

@@ -159,6 +159,23 @@ describe('api/brouter — file d’attente vers BRouter', () => {
     expect(upload.status).toBe(200);
   });
 
+  it('des envois simultanés du même profil partagent un seul envoi vers BRouter', async () => {
+    const profile = 'assign turnInstructionMode = 1\n';
+    const uploads = Array.from({ length: 3 }, () => call(handler, { upload: '1' }, 'POST', profile));
+    await flush();
+    expect(brouter.inFlight.filter((entry) => entry.url.includes('/profile/'))).toHaveLength(1);
+    brouter.inFlight[0]!.finish();
+    await Promise.all(uploads.map((captured) => captured.done));
+    expect(brouter.fetchMock).toHaveBeenCalledTimes(1);
+    expect(uploads.every((captured) => captured.status === 200)).toBe(true);
+    // Une fois terminé, un nouvel envoi repart vers BRouter (rien n'est gardé en cache).
+    const again = call(handler, { upload: '1' }, 'POST', profile);
+    await flush();
+    brouter.inFlight[0]!.finish();
+    await again.done;
+    expect(brouter.fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it('une réponse du cache ne passe pas par la file', async () => {
     const first = call(handler, route(1));
     await flush();
