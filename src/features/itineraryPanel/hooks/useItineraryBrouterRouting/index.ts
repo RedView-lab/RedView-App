@@ -12,7 +12,6 @@ import {
 } from '../../lib/brouter';
 import type { RouteProfilePoint } from '../../lib/route-metrics';
 import type { Itinerary, ItineraryProject } from '../../types';
-import { refineRouteProfileWithIgnAltimetry } from '../../lib/route-metrics';
 import {
   hasRouteLayer,
   removeRouteLayer,
@@ -23,18 +22,12 @@ import {
   isRouteSeamError,
   routeSeamJoins,
 } from '../../lib/routes';
-import {
-  anchorRoutePatchBound,
-  isBrouterUnmappedPointError,
-  type UseItineraryBrouterRoutingArgs,
-} from '../useItineraryBrouterRoutingShared';
+import { isBrouterUnmappedPointError, type UseItineraryBrouterRoutingArgs } from '../useItineraryBrouterRoutingShared';
 
 import { useDerivedComputeGate, useProjectStoreOptional } from '../../context/ProjectStore/hooks';
 import {
-  applyPendingRoutePatch,
   applyPendingTraceAppend,
   applyRecomputedRoute,
-  applyRefinedRouteProfile,
   applyUnroutableRouteCleared,
   captureRouteRefinementBase,
   type RouteRefinementBase,
@@ -45,74 +38,13 @@ import {
   routeStampMatches,
 } from './routingInputs';
 import { resolveRouteRequest } from './resolveRouteRequest';
-import { resolveElasticRoutePatch } from './elasticRoutePatch';
 import type { RouteRequestBase } from './customProfileFetch';
 import { planPendingRouteEdit, type UnresolvedRouteEdit } from './pendingEditPlan';
 import { trackRouteComputed, trackRouteFailed } from './routingAnalytics';
+import { createRouteLoadingStore, dispatchRouteLoading } from './routeLoadingStore';
+import { startBackgroundRefinement } from './backgroundRefinement';
+import { ensureRoutePatchJob, UNJOINABLE_EDIT_KEY, VERIFY_STORED_ROUTE, type PatchJob } from './routePatchJob';
 import { logger } from '@/shared/lib/logger';
-
-/** Marqueur « tracé restauré par undo/redo, à vérifier par estampille ». */
-const VERIFY_STORED_ROUTE = '#verify-stored-route';
-/**
- * Édition locale qui ne se recolle pas au tracé stocké sans ligne droite :
- * enregistrée comme non résolue sous cette clé, elle force le recalcul complet
- * (cf. planPendingRouteEdit).
- */
-const UNJOINABLE_EDIT_KEY = '#unjoinable-edit';
-
-/**
- * Patch local en vol pour un itinéraire. Il ne dépend pas de l'itinéraire
- * actif : changer de sélection (ou éditer un autre itinéraire) ne l'annule
- * pas ; seuls une nouvelle édition du même itinéraire, un undo / redo ou le
- * démontage le remplacent.
- */
-interface PatchJob {
-  pendingKey: string;
-  /** Entrées de routage (profil, zones…) avec lesquelles il est routé. */
-  inputsSignature: string;
-  ctrl: AbortController;
-}
-
-function dispatchRouteLoading(loading: boolean) {
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('rv-route-loading', { detail: { loading } }));
-  }
-}
-
-/**
- * « Calcul en cours » de l'itinéraire actif. C'est l'état du planificateur de
- * requêtes (minuteur d'anti-rebond, AbortController, jobs de patch : tous hors
- * React, en refs), pas un état dérivé du rendu : posé quand une requête est
- * programmée ou lancée — y compris par l'effet de routage — et levé quand elle
- * aboutit, échoue ou est annulée. Une seule source pour React
- * (useSyncExternalStore) et pour le curseur de la carte (`rv-route-loading`,
- * émis à chaque écriture comme avant, même valeur répétée comprise).
- */
-interface RouteLoadingStore {
-  get: () => boolean;
-  subscribe: (listener: () => void) => () => void;
-  set: (loading: boolean) => void;
-}
-
-function createRouteLoadingStore(): RouteLoadingStore {
-  let loading = false;
-  const listeners = new Set<() => void>();
-  return {
-    get: () => loading,
-    subscribe(listener) {
-      listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
-      };
-    },
-    set(next) {
-      dispatchRouteLoading(next);
-      if (next === loading) return;
-      loading = next;
-      for (const listener of listeners) listener();
-    },
-  };
-}
 
 export function useItineraryBrouterRouting({
   active,
@@ -217,25 +149,6 @@ export function useItineraryBrouterRouting({
       settleRouteState(nextError);
     });
   }, [settleRouteState]);
-  const resolveIgnAltimetryRouteProfile = useCallback(
-    async (route: BrouterRoute, signal: AbortSignal, reason: string) => {
-      if (signal.aborted) return null;
-      try {
-        return await refineRouteProfileWithIgnAltimetry(route, signal);
-      } catch (error) {
-        if ((error as { name?: string }).name === 'AbortError') return null;
-        console.warn(`[BRouter] ${reason}: IGN altimetry refinement failed`, error);
-        return null;
-      }
-    },
-    [],
-  );
-  /**
-   * Affinage altimétrique MNT (IGN 1 m en France, Copernicus ailleurs) d'un
-   * tracé tout juste appliqué, en arrière-plan. Le résultat se rattache au
-   * tracé affiné (cf. applyRefinedRouteProfile), pas à l'édition en attente
-   * déjà effacée par la 1re application.
-   */
   const refineRouteInBackground = useCallback(
     (
       itineraryId: string,
@@ -244,23 +157,9 @@ export function useItineraryBrouterRouting({
       applyWithProfile: (project: ItineraryProject, profile: RouteProfilePoint[]) => ItineraryProject,
       reason: string,
     ) => {
-      if (route.distanceM > 500_000) return;
-      const refinements = refinementAbortRef.current;
-      refinements.get(itineraryId)?.abort();
-      const ctrl = new AbortController();
-      refinements.set(itineraryId, ctrl);
-      void resolveIgnAltimetryRouteProfile(route, ctrl.signal, reason).then((profile) => {
-        if (refinements.get(itineraryId) === ctrl) refinements.delete(itineraryId);
-        const base = baseBox.current;
-        if (!profile || ctrl.signal.aborted || !base) return;
-        setProject((project) => applyRefinedRouteProfile(
-          project,
-          base,
-          (baseProject) => applyWithProfile(baseProject, profile),
-        ));
-      });
+      startBackgroundRefinement(refinementAbortRef.current, setProject, itineraryId, route, baseBox, applyWithProfile, reason);
     },
-    [resolveIgnAltimetryRouteProfile, setProject],
+    [setProject],
   );
   const requestRouteRefresh = useCallback(() => {
     setRouteRefreshNonce((current) => current + 1);
@@ -272,128 +171,25 @@ export function useItineraryBrouterRouting({
     jobs.delete(itineraryId);
   }, []);
 
-  /**
-   * Route l'édition locale en attente (`pendingRoutePatch`) d'un itinéraire,
-   * actif ou non : une édition faite sur un itinéraire non sélectionné (ou
-   * dont on change la sélection pendant le calcul) est routée quand même.
-   * Rien n'est relancé si le même patch est déjà en vol.
-   */
+  /** Route l'édition locale en attente d'un itinéraire, actif ou non (voir `ensureRoutePatchJob`). */
   const ensurePatchJob = useCallback(
     (itinerary: Itinerary, pendingKey: string) => {
-      const jobs = patchJobsRef.current;
-      const isActive = () => activeRef.current?.id === itinerary.id;
-      // Profil ou zones changés pendant le calcul : relancé avec les nouveaux.
-      const inputsSignature = getRoutingInputsSignature(itinerary);
-      const running = jobs.get(itinerary.id);
-      if (running?.pendingKey === pendingKey && running.inputsSignature === inputsSignature) {
-        if (isActive()) setRouteLoading(true);
-        return;
-      }
-      abortPatchJob(itinerary.id);
-
-      const pendingRoutePatch = itinerary.pendingRoutePatch;
-      const existingRoutePoints = itinerary.gpxRoute?.points ?? null;
-      if (!pendingRoutePatch || !existingRoutePoints || existingRoutePoints.length < 2) return;
-
-      const patchPoints = [pendingRoutePatch.start, ...pendingRoutePatch.via, pendingRoutePatch.end];
-      const bounds = checkRouteWithinFrance(patchPoints);
-      if (!bounds.ok) {
-        if (isActive()) deferRouteState(bounds.reason ?? 'Itinéraire hors zone autorisée.');
-        return;
-      }
-
-      const ctrl = new AbortController();
-      jobs.set(itinerary.id, { pendingKey, inputsSignature, ctrl });
-      if (isActive()) {
-        setRouteLoading(true);
-        queueMicrotask(() => {
-          setRouteRequestNonce((current) => current + 1);
-          setRouteError(null);
-        });
-      }
-      const releaseCompute = gate.beginCompute('route', itinerary.id);
-      const unresolvedEdits = unresolvedEditsRef.current;
-      unresolvedEdits.set(itinerary.id, { kind: 'patch', pendingKey });
-      const polygons = formatForbiddenZonePolygons(itinerary.forbiddenZones);
-      const target = { itineraryId: itinerary.id, pendingKey };
-      const t0 = performance.now();
-      logger.brouter.info(
-        'local patch START itinerary=',
-        itinerary.id,
-        'start=',
-        `${pendingRoutePatch.start.lon},${pendingRoutePatch.start.lat}`,
-        'end=',
-        `${pendingRoutePatch.end.lon},${pendingRoutePatch.end.lat}`,
-        'via=',
-        pendingRoutePatch.via.length,
-      );
-
-      resolveElasticRoutePatch(pendingRoutePatch, existingRoutePoints, ctrl.signal, (patch) => resolveRouteRequest({
-        itinerary,
-        signal: ctrl.signal,
-        requestBase: {
-          // Bornes intermédiaires prises sur le tracé stocké : la jonction s'y fait.
-          start: anchorRoutePatchBound(patch.start, existingRoutePoints),
-          end: anchorRoutePatchBound(patch.end, existingRoutePoints),
-          via: patch.via,
-          polygons,
-          signal: ctrl.signal,
-        },
-        setRouteWarnings: (warnings) => {
-          if (isActive()) setRouteWarnings(warnings);
-        },
-      }))
-        .then(({ route, resolvedWarnings, patch: routedPatch }) => {
-          if (ctrl.signal.aborted) return;
-          if (isActive()) setRouteWarnings(resolvedWarnings);
-          // Render route immediately with native BRouter elevation data
-          const refinementBase: { current: RouteRefinementBase | null } = { current: null };
-          setProject((project) => {
-            const next = applyPendingRoutePatch(project, target, route, null, routedPatch);
-            refinementBase.current = captureRouteRefinementBase(project, next, target.itineraryId);
-            return next;
-          });
-          if (unresolvedEdits.get(itinerary.id)?.pendingKey === pendingKey) unresolvedEdits.delete(itinerary.id);
-          // Le tracé patché porte l'estampille de ses entrées : vérifié par
-          // elle au prochain passage de l'effet de routage.
-          routedInputKeysRef.current.set(itinerary.id, VERIFY_STORED_ROUTE);
-          trackRouteComputed('patch', itinerary, route, performance.now() - t0);
-          logger.brouter.info(
-            'local patch OK in',
-            Math.round(performance.now() - t0),
-            'ms | dist=',
-            (route.distanceM / 1000).toFixed(2),
-            'km | pts=',
-            route.coordinates.length,
-          );
-          refineRouteInBackground(
-            target.itineraryId,
-            route,
-            refinementBase,
-            (project, profile) => applyPendingRoutePatch(project, target, route, profile, routedPatch),
-            'local patch',
-          );
-        })
-        .catch((error: unknown) => {
-          if ((error as { name?: string }).name === 'AbortError' || ctrl.signal.aborted) return;
-          if (isRouteSeamError(error)) {
-            // Édition impossible à recoller sans ligne droite : tout le tracé
-            // est recalculé, seul résultat sans ligne droite (tout de suite si
-            // l'itinéraire est actif, sinon à sa prochaine sélection).
-            console.warn('[BRouter] local edit does not join the stored route: full recompute', error);
-            unresolvedEdits.set(itinerary.id, { kind: 'patch', pendingKey: UNJOINABLE_EDIT_KEY });
-            if (isActive()) requestRouteRefresh();
-            return;
-          }
-          console.error('[BRouter local patch fail]', error);
-          trackRouteFailed('patch', error);
-          if (isActive()) setRouteError(formatBrouterErrorMessage(error));
-        })
-        .finally(() => {
-          releaseCompute();
-          if (jobs.get(itinerary.id)?.ctrl === ctrl) jobs.delete(itinerary.id);
-          if (!ctrl.signal.aborted && isActive()) setRouteLoading(false);
-        });
+      ensureRoutePatchJob({
+        jobs: patchJobsRef.current,
+        activeId: () => activeRef.current?.id,
+        abortPatchJob,
+        gate,
+        unresolvedEdits: unresolvedEditsRef.current,
+        routedInputKeys: routedInputKeysRef.current,
+        setProject,
+        setRouteLoading,
+        bumpRouteRequestNonce: () => setRouteRequestNonce((current) => current + 1),
+        setRouteError,
+        setRouteWarnings,
+        deferRouteState,
+        requestRouteRefresh,
+        refineRouteInBackground,
+      }, itinerary, pendingKey);
     },
     [abortPatchJob, deferRouteState, gate, refineRouteInBackground, requestRouteRefresh, setProject, setRouteLoading],
   );
