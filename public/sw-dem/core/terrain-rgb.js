@@ -1,13 +1,14 @@
 // ---------------------------------------------------------------------------
-// Terrain-RGB PNG encoding & decoding
-// Uses a raw PNG encoder to avoid OffscreenCanvas color-management (sRGB
-// gamma / ICC profiles) which corrupts the exact pixel values needed by
-// Mapbox's raster-color-mix decode.
+// Encodage et décodage des PNG Terrain-RGB
+// Utilise un encodeur PNG brut pour éviter la gestion des couleurs
+// d'OffscreenCanvas (gamma sRGB / profils ICC), qui altère les valeurs exactes
+// de pixels dont a besoin le décodage raster-color-mix de Mapbox.
 // ---------------------------------------------------------------------------
 
-// ── Raw PNG encoder ───────────────────────────────────────────────────
-// Builds a minimal valid PNG from an RGBA Uint8Array without any canvas
-// involvement. Guarantees bit-exact pixel values and no embedded ICC profile.
+// ── Encodeur PNG brut ────────────────────────────────────────────────
+// Construit un PNG minimal valide à partir d'un Uint8Array RGBA, sans aucun
+// canvas. Garantit des valeurs de pixels exactes au bit près et aucun profil
+// ICC embarqué.
 
 function _pngCrc32Table() {
   const t = new Uint32Array(256);
@@ -41,21 +42,22 @@ function _pngChunk(type, data) {
   return buf;
 }
 
-// ── zlib stream: run-length matches + dynamic Huffman ─────────────────
-// CompressionStream('deflate') is zlib level 6, whose LZ77 match search
-// costs 20-30 ms on a Paeth-filtered 512² slope tile (Chromium, Node) and
-// gains nothing there: the residuals of a smooth field have no far repeats.
-// Measured on real tiles (Mont-Blanc z12/z13, Lyon, Paris): level 6 gives
-// 69-98 KB, zlib's Z_RLE strategy 69-95 KB at a tenth of the time. This is
-// that strategy — a byte repeating the previous one becomes a distance-1
-// match (flat ground, sea), everything else a Huffman-coded literal — with
-// one dynamic block per 16 K symbols like zlib. Every tree keeps at least two
-// codes, as zlib's encoder does, so all inflaters accept it (an incomplete
-// code-length code is an error for zlib's inflate).
-// Used for the opaque gray slope tile (buildGrayPng) and the Up-filtered RGB
-// DEM tile (encodeTerrainRGBPng). Not for unfiltered rows: Terrain-RGB RGBA
-// triplets repeat at distance 4 and gray + alpha pairs at distance 2, where
-// level 6 stays 12-50 % smaller.
+// ── Flux zlib : correspondances par répétition + Huffman dynamique ───
+// CompressionStream('deflate') correspond au niveau 6 de zlib, dont la
+// recherche de correspondances LZ77 coûte 20 à 30 ms sur une tuile de pente
+// 512² filtrée en Paeth (Chromium, Node) sans rien y gagner : les résidus d'un
+// champ lisse n'ont pas de répétitions lointaines. Mesuré sur de vraies tuiles
+// (Mont-Blanc z12/z13, Lyon, Paris) : le niveau 6 donne 69 à 98 Ko, la stratégie
+// Z_RLE de zlib 69 à 95 Ko en dix fois moins de temps. C'est cette stratégie —
+// un octet qui répète le précédent devient une correspondance à distance 1
+// (sol plat, mer), tout le reste un littéral codé en Huffman — avec un bloc
+// dynamique tous les 16 K symboles comme zlib. Chaque arbre garde au moins deux
+// codes, comme l'encodeur de zlib, pour que tous les décompresseurs l'acceptent
+// (un code de longueurs de codes incomplet est une erreur pour l'inflate de zlib).
+// Utilisé pour la tuile de pente grise opaque (buildGrayPng) et la tuile DEM RGB
+// filtrée en Up (encodeTerrainRGBPng). Pas pour les lignes non filtrées : les
+// triplets RGBA du Terrain-RGB se répètent à distance 4 et les paires gris +
+// alpha à distance 2, où le niveau 6 reste 12 à 50 % plus petit.
 
 const _ZRLE_BLOCK_SYMBOLS = 16384;
 const _ZRLE_LEN_BASE = [3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31,
@@ -73,9 +75,10 @@ const _ZRLE_LEN_CODE = (() => {
   return t;
 })();
 
-// Huffman code lengths ≤ maxBits for `freq` (two-queue construction on the
-// sorted leaves; frequencies halved and rebuilt in the rare case a code is
-// too long). The caller guarantees at least two non-zero frequencies.
+// Longueurs de codes Huffman ≤ maxBits pour `freq` (construction à deux files
+// sur les feuilles triées ; fréquences divisées par deux et reconstruction dans
+// le rare cas où un code est trop long). L'appelant garantit au moins deux
+// fréquences non nulles.
 function _zrleCodeLengths(freq, maxBits) {
   const lengths = new Uint8Array(freq.length);
   const symbols = [];
@@ -112,7 +115,7 @@ function _zrleCodeLengths(freq, maxBits) {
   }
 }
 
-// Canonical codes (RFC 1951 §3.2.2), bit-reversed for LSB-first output.
+// Codes canoniques (RFC 1951 §3.2.2), bits inversés pour une sortie LSB d'abord.
 function _zrleCodes(lengths) {
   const count = new Uint16Array(16);
   for (let s = 0; s < lengths.length; s++) count[lengths[s]]++;
@@ -153,13 +156,13 @@ function _zrleAdler32(data) {
   return ((b << 16) | a) >>> 0;
 }
 
-// zlib stream (RFC 1950) of `data`, readable by any inflater.
+// Flux zlib (RFC 1950) de `data`, lisible par tout décompresseur.
 function zlibDeflateRle(data) {
   const n = data.length;
   let out = new Uint8Array(Math.max(1024, (n >> 1) + 1024));
   let pos = 2;
   out[0] = 0x78; // deflate, 32 K window
-  out[1] = 0x01; // FLEVEL 0 (fastest), FCHECK so that 0x7801 % 31 === 0
+  out[1] = 0x01; // FLEVEL 0 (le plus rapide), FCHECK tel que 0x7801 % 31 === 0
   let bitBuf = 0;
   let bitCnt = 0;
   const put = (value, bits) => {
@@ -214,7 +217,7 @@ function zlibDeflateRle(data) {
     let nDist = 30;
     while (nDist > 1 && distLen[nDist - 1] === 0) nDist--;
 
-    // Code lengths of both trees as one sequence, run-length coded (16/17/18).
+    // Longueurs de codes des deux arbres en une seule suite, codée par répétition (16/17/18).
     const seq = new Uint8Array(nLit + nDist);
     seq.set(litLen.subarray(0, nLit), 0);
     seq.set(distLen.subarray(0, nDist), nLit);
@@ -242,8 +245,8 @@ function zlibDeflateRle(data) {
     let nCl = 19;
     while (nCl > 4 && clLen[_ZRLE_CL_ORDER[nCl - 1]] === 0) nCl--;
 
-    // Worst case: 21 bits per symbol (15 + 5 extra + 1 distance) + the
-    // block header (≤ 316 code-length ops of 14 bits).
+    // Pire cas : 21 bits par symbole (15 + 5 bits supplémentaires + 1 distance) +
+    // l'en-tête du bloc (≤ 316 opérations de longueur de code de 14 bits).
     const need = pos + count * 3 + 1024;
     if (need > out.length) {
       const grown = new Uint8Array(Math.max(need, out.length * 2));
@@ -296,8 +299,8 @@ function zlibDeflateRle(data) {
 }
 
 async function buildRawPng(width, height, rgba) {
-  // Build raw scanlines: filter-byte(0) + row RGBA data per row.
-  // `set(subarray)` is a native memcpy — ~10x faster than a JS byte loop.
+  // Construit les lignes brutes : octet de filtre (0) + données RGBA de chaque ligne.
+  // `set(subarray)` est un memcpy natif — ~10× plus rapide qu'une boucle JS octet par octet.
   const rowLen = width * 4;
   const rowBytes = 1 + rowLen;
   const raw = new Uint8Array(height * rowBytes);
@@ -310,10 +313,10 @@ async function buildRawPng(width, height, rgba) {
   return buildPngFromScanlines(width, height, raw);
 }
 
-// Assemble a PNG from pre-built scanlines (filter byte + row data).
-// `colorType`: 6 = RGBA (default), 2 = RGB, 4 = gray + alpha.
+// Assemble un PNG à partir de lignes déjà construites (octet de filtre + données).
+// `colorType` : 6 = RGBA (défaut), 2 = RGB, 4 = gris + alpha.
 async function buildPngFromScanlines(width, height, raw, colorType = 6) {
-  // Compress with deflate via CompressionStream
+  // Compression deflate via CompressionStream
   const cs = new CompressionStream('deflate');
   const writer = cs.writable.getWriter();
   writer.write(raw);
@@ -322,7 +325,7 @@ async function buildPngFromScanlines(width, height, raw, colorType = 6) {
   return buildPngFromZlib(width, height, new Uint8Array(compressed), colorType);
 }
 
-// PNG around an already compressed zlib stream of the scanlines.
+// PNG autour d'un flux zlib déjà compressé des lignes.
 function buildPngFromZlib(width, height, compData, colorType) {
   // PNG signature
   const sig = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
@@ -356,20 +359,22 @@ function buildPngFromZlib(width, height, compData, colorType) {
   return new Blob([png], { type: 'image/png' });
 }
 
-// ── Gray + alpha PNG (colour type 4, Sub filter) ──────────────────────
-// Slope tiles carry ONE meaningful byte per pixel (the sqrt-gamma angle) plus
-// the NoData / zone alpha: half the scanline bytes of RGBA, so deflate runs on
-// half the data. Image decoders expand it to RGBA with R = G = B = gray, which
-// is exactly what Mapbox's raster-color-mix [90, 0, 0, 0] reads.
-// Kept on zlib level 6: the alpha bytes interleaved with the gray ones break
-// the runs, and zlibDeflateRle came out 12-18 % larger on real zone tiles.
+// ── PNG gris + alpha (type de couleur 4, filtre Sub) ─────────────────
+// Les tuiles de pente portent UN octet utile par pixel (l'angle en gamma
+// racine) plus l'alpha NoData / zone : moitié moins d'octets par ligne qu'en
+// RGBA, donc deflate travaille sur moitié moins de données. Les décodeurs
+// d'image l'étendent en RGBA avec R = G = B = gris, exactement ce que lit le
+// raster-color-mix [90, 0, 0, 0] de Mapbox.
+// Reste au niveau 6 de zlib : les octets d'alpha entrelacés avec les gris
+// cassent les répétitions, et zlibDeflateRle donnait 12 à 18 % de plus sur de
+// vraies tuiles de zone.
 async function buildGrayAlphaPng(width, height, gray, alpha) {
   const rowBytes = 1 + width * 2;
   const raw = new Uint8Array(height * rowBytes);
   for (let y = 0; y < height; y++) {
     const off = y * rowBytes;
     const src = y * width;
-    raw[off] = 1; // filter type: Sub (residual vs the previous pixel)
+    raw[off] = 1; // type de filtre : Sub (résidu par rapport au pixel précédent)
     let prevGray = 0;
     let prevAlpha = 0;
     for (let x = 0; x < width; x++) {
@@ -385,13 +390,13 @@ async function buildGrayAlphaPng(width, height, gray, alpha) {
   return buildPngFromScanlines(width, height, raw, 4);
 }
 
-// ── Gray PNG (colour type 0, Paeth filter) ────────────────────────────
-// Fully opaque single-channel tile (the usual slope tile): one byte per
-// pixel. Paeth predicts from the left, upper and upper-left pixels, which
-// suits the smooth 2D field of an upsampled slope raster: measured on a
-// 512² LiDAR-like tile, 15 ms / 121 KB vs 27 ms / 147 KB for gray+alpha Sub.
-// zlibDeflateRle then brings a real 512² tile from 22-34 ms (level 6) to a
-// few ms at the same size.
+// ── PNG gris (type de couleur 0, filtre Paeth) ───────────────────────
+// Tuile à un seul canal, entièrement opaque (la tuile de pente habituelle) : un
+// octet par pixel. Paeth prédit à partir des pixels de gauche, du dessus et en
+// haut à gauche, ce qui convient au champ 2D lisse d'un raster de pente
+// suréchantillonné : mesuré sur une tuile 512² de type LiDAR, 15 ms / 121 Ko
+// contre 27 ms / 147 Ko en gris+alpha Sub. zlibDeflateRle fait ensuite passer
+// une vraie tuile 512² de 22-34 ms (niveau 6) à quelques ms pour la même taille.
 async function buildGrayPng(width, height, gray) {
   const rowBytes = 1 + width;
   const raw = new Uint8Array(height * rowBytes);
@@ -415,35 +420,34 @@ async function buildGrayPng(width, height, gray) {
   return buildPngFromZlib(width, height, zlibDeflateRle(raw), 0);
 }
 
-// ── Slope-optimised PNG encoder (RGBA, Sub filter) ────────────────────
-// Dedicated fast path for slope tiles. The DEM/altitude encoders still use
-// buildRawPng (filter 0 = None) because they encode THREE meaningful bytes
-// per pixel that don't benefit much from prediction. Slope tiles are
-// essentially single-channel smooth gradients — every pixel is highly
-// correlated with its left neighbour — so applying the PNG Sub filter
-// (filter type 1) converts the scanline into near-zero residuals that
-// deflate compresses in a fraction of the time and to a fraction of the
-// size. On a typical 256×256 slope tile:
-//   filter 0 (None)  → ~6-12 KB after deflate, ~3-6 ms CPU
-//   filter 1 (Sub)   → ~2-4 KB after deflate, ~1-2 ms CPU
-// The decoder (Mapbox raster source, browser PNG decoder) handles every
-// standard PNG filter transparently, so no client-side change is needed.
+// ── Encodeur PNG optimisé pour les pentes (RGBA, filtre Sub) ─────────
+// Chemin rapide dédié aux tuiles de pente. Les encodeurs DEM / altitude
+// utilisent toujours buildRawPng (filtre 0 = None) parce qu'ils encodent TROIS
+// octets utiles par pixel qui profitent peu de la prédiction. Les tuiles de
+// pente sont pour l'essentiel des gradients lisses à un canal — chaque pixel
+// est fortement corrélé à son voisin de gauche —, donc le filtre PNG Sub
+// (type 1) transforme la ligne en résidus quasi nuls que deflate compresse en
+// une fraction du temps et de la taille. Sur une tuile de pente 256×256 typique :
+//   filtre 0 (None) → ~6 à 12 Ko après deflate, ~3 à 6 ms de CPU
+//   filtre 1 (Sub)  → ~2 à 4 Ko après deflate, ~1 à 2 ms de CPU
+// Le décodeur (source raster Mapbox, décodeur PNG du navigateur) gère tous les
+// filtres PNG standard de façon transparente : aucun changement côté client.
 async function buildRawPngSlope(width, height, rgba) {
   const rowBytes = 1 + width * 4;
   const raw = new Uint8Array(height * rowBytes);
-  // Sub filter (type 1): residual = byte - byte_four_bytes_back (same channel
-  // of the previous pixel). 4 channels → stride 4. Bound check on the first
-  // pixel of each row (no left neighbour → residual = raw value).
+  // Filtre Sub (type 1) : résidu = octet - octet_quatre_positions_avant (même
+  // canal du pixel précédent). 4 canaux → pas de 4. Cas particulier du premier
+  // pixel de chaque ligne (pas de voisin de gauche → résidu = valeur brute).
   for (let y = 0; y < height; y++) {
     const off = y * rowBytes;
     const srcRow = y * width * 4;
     raw[off] = 1; // filter type: Sub
-    // First pixel of the row: no left neighbour → store as-is.
+    // Premier pixel de la ligne : pas de voisin de gauche → stocké tel quel.
     raw[off + 1] = rgba[srcRow];
     raw[off + 2] = rgba[srcRow + 1];
     raw[off + 3] = rgba[srcRow + 2];
     raw[off + 4] = rgba[srcRow + 3];
-    // Remaining pixels: subtract the byte 4 positions back.
+    // Pixels suivants : on soustrait l'octet situé 4 positions avant.
     for (let x = 4; x < width * 4; x++) {
       raw[off + 1 + x] = (rgba[srcRow + x] - rgba[srcRow + x - 4]) & 0xff;
     }
@@ -462,8 +466,8 @@ async function buildRawPngSlope(width, height, rgba) {
   ihdrView.setUint32(0, width);
   ihdrView.setUint32(4, height);
   ihdrData[8] = 8;  // bit depth
-  ihdrData[9] = 6;  // color type: RGBA (same as buildRawPng so Mapbox decode
-                    // path is identical; only the in-PNG filter differs).
+  ihdrData[9] = 6;  // type de couleur : RGBA (comme buildRawPng, pour que le décodage Mapbox
+                    // suive le même chemin ; seul le filtre interne au PNG diffère).
   ihdrData[10] = 0;
   ihdrData[11] = 0;
   ihdrData[12] = 0;
@@ -482,10 +486,11 @@ async function buildRawPngSlope(width, height, rgba) {
 
 // ── Encode elevations → Terrain-RGB PNG ───────────────────────────────
 
-// Pre-computed flat sea-level DEM tile (all pixels at elevation=0).
-// Lazily generated once — returned for any failed DEM request so that Mapbox GL
-// always has a valid terrain mesh to drape satellite imagery onto.
-// Without this, Mapbox renders white for areas with no DEM → broken globe.
+// Tuile DEM plate précalculée au niveau de la mer (tous les pixels à altitude=0).
+// Générée une seule fois à la demande — renvoyée pour toute requête DEM en échec,
+// pour que Mapbox GL ait toujours un maillage de terrain valide sur lequel
+// draper l'imagerie satellite. Sans elle, Mapbox affiche du blanc là où il n'y a
+// pas de DEM → globe cassé.
 let _flatDemTilePromise = null;
 
 function getFlatDemTile() {
@@ -503,32 +508,33 @@ function getFlatDemTile() {
   return _flatDemTilePromise;
 }
 
-// Writes the Terrain-RGB scanlines directly: RGB (colour type 2, the alpha was
-// always 255) with PNG's Up filter (each byte minus the one above), compressed
-// by zlibDeflateRle. Neighbouring rows of an elevation field differ little,
-// so the residuals are small bytes that Huffman codes well without any match
-// search. Measured in Chromium against the former RGBA unfiltered tile through
-// CompressionStream (level 6): real Terrarium tiles (Mont-Blanc z12, Chamonix
-// z13, Aiguilles z14, Beauce z12) 3.1-4.6 ms / 45-62 KB instead of
-// 5.7-10.2 ms / 60-88 KB; a noisy 0.40 m-like surface 5.1 ms / 88 KB instead
-// of 8.6 ms / 113 KB. Level 6 on the filtered rows is smaller on smooth tiles
-// (26-41 KB) but 84 % slower on noisy ones, where its match search finds
-// nothing. Decoded slightly faster too (createImageBitmap + getImageData).
-// Decoders read any PNG colour type and filter, so tiles already cached in the
-// old format stay valid.
+// Écrit directement les lignes du Terrain-RGB : RGB (type de couleur 2, l'alpha
+// valait toujours 255) avec le filtre Up du PNG (chaque octet moins celui du
+// dessus), compressé par zlibDeflateRle. Les lignes voisines d'un champ
+// d'altitude diffèrent peu : les résidus sont de petits octets que Huffman code
+// bien sans recherche de correspondances. Mesuré dans Chromium contre
+// l'ancienne tuile RGBA non filtrée passée par CompressionStream (niveau 6) :
+// vraies tuiles Terrarium (Mont-Blanc z12, Chamonix z13, Aiguilles z14, Beauce
+// z12) 3,1-4,6 ms / 45-62 Ko au lieu de 5,7-10,2 ms / 60-88 Ko ; une surface
+// bruitée de type 0,40 m 5,1 ms / 88 Ko au lieu de 8,6 ms / 113 Ko. Le niveau 6
+// sur les lignes filtrées est plus petit sur les tuiles lisses (26-41 Ko) mais
+// 84 % plus lent sur les bruitées, où sa recherche ne trouve rien. Décodage un
+// peu plus rapide aussi (createImageBitmap + getImageData).
+// Les décodeurs lisent tous les types de couleur et filtres PNG : les tuiles
+// déjà en cache dans l'ancien format restent valides.
 //
-// The same loop also produces the exact Float32 grid a later decode of this
-// blob would return (`-10000 + val * 0.1`, computed with the same integer
-// `val`), and seeds DECODED_TERRAIN_RGB_CACHE with it: the health guard,
-// the overzoom flat check and slope/altitude decodes of a freshly built tile
-// then cost nothing.
+// La même boucle produit aussi la grille Float32 exacte que renverrait un
+// décodage ultérieur de ce blob (`-10000 + val * 0.1`, calculée avec le même
+// `val` entier) et en amorce DECODED_TERRAIN_RGB_CACHE : le garde-fou de santé,
+// le test de planéité de l'overzoom et les décodages pente / altitude d'une
+// tuile fraîchement construite ne coûtent alors rien.
 async function encodeTerrainRGBPng(elevations) {
   const size = DEM_TILE_SIZE;
   const rowLen = size * 3;
   const rowBytes = 1 + rowLen;
   const raw = new Uint8Array(size * rowBytes);
   const decoded = new Float32Array(size * size);
-  // Bytes of the row above (zeros above the first row: Up = None there).
+  // Octets de la ligne du dessus (des zéros au-dessus de la première ligne : Up = None).
   const above = new Uint8Array(rowLen);
 
   for (let y = 0; y < size; y++) {
@@ -544,7 +550,7 @@ async function encodeTerrainRGBPng(elevations) {
       const r = (val >> 16) & 0xff;
       const g = (val >> 8) & 0xff;
       const b = val & 0xff;
-      // Uint8Array stores the difference modulo 256, as the filter wants.
+      // Uint8Array stocke la différence modulo 256, comme le veut le filtre.
       raw[o] = r - above[p];
       raw[o + 1] = g - above[p + 1];
       raw[o + 2] = b - above[p + 2];
@@ -562,27 +568,29 @@ async function encodeTerrainRGBPng(elevations) {
   return blob;
 }
 
-// ── Decode Terrain-RGB PNG → Float32 elevations ───────────────────────
+// ── Décodage d'un PNG Terrain-RGB → altitudes Float32 ────────────────
 //
-// Memoized by Blob identity via a WeakMap. The same Blob is regularly
-// decoded multiple times in a single tick:
-//   * slope handler decodes its DEM blob, then altitude handler decodes
-//     the SAME blob a few ms later when both overlays are on
-//   * composite paths decode their Mapbox base blob, then build-tile
-//     decodes the same Mapbox blob again as the AWS prefill source
-//   * tryParentOverzoom decodes a parent blob to check flat-line stats
-//     and then overzoomDemTile decodes the same parent blob again
-// Each decode is ~8-20 ms (createImageBitmap + getImageData + Float32
-// loop for a 256² tile, more for 512² Mapbox). On a 100-tile zoom-in
-// with slope+altitude both on, that's ~2-4 s of SW-thread CPU saved.
+// Mémoïsé par identité de Blob via une WeakMap. Le même Blob est souvent
+// décodé plusieurs fois dans le même tick :
+//   * le handler de pente décode son blob DEM, puis le handler d'altitude
+//     décode le MÊME blob quelques ms plus tard quand les deux overlays sont actifs
+//   * les chemins de composition décodent leur blob Mapbox de base, puis
+//     build-tile redécode le même blob Mapbox comme source de préremplissage AWS
+//   * tryParentOverzoom décode un blob parent pour vérifier ses statistiques de
+//     planéité, puis overzoomDemTile redécode le même blob parent
+// Chaque décodage coûte ~8 à 20 ms (createImageBitmap + getImageData + boucle
+// Float32 pour une tuile 256², plus pour une tuile Mapbox 512²). Sur un zoom
+// avant de 100 tuiles avec pentes et altitude actives, cela économise ~2 à 4 s
+// de CPU sur le fil du SW.
 //
-// Bounded LRU (Map in insertion order), NOT a WeakMap: DEM_HOT_CACHE keeps
-// up to 2048 tile blobs alive, and a WeakMap pinned one 256 KB Float32 grid
-// per blob (up to ~512 MB of SW heap) that was never read again — hot-tier
-// reads go through Response.blob(), which yields a new Blob identity.
-// 128 entries (~32 MB) still covers every burst reuse (guard, overzoom,
-// slope neighbours, sibling parents). Returns a SHARED Float32Array, so
-// callers must NOT mutate it in place (composite.js copies before despike).
+// LRU borné (Map dans l'ordre d'insertion), PAS une WeakMap : DEM_HOT_CACHE
+// garde jusqu'à 2048 blobs de tuiles vivants, et une WeakMap épinglait une
+// grille Float32 de 256 Ko par blob (jusqu'à ~512 Mo de tas du SW) jamais
+// relue — les lectures du niveau chaud passent par Response.blob(), qui
+// produit une nouvelle identité de Blob. 128 entrées (~32 Mo) couvrent encore
+// toutes les réutilisations en rafale (garde-fou, overzoom, voisines de pente,
+// parents frères). Renvoie un Float32Array PARTAGÉ : les appelants ne doivent
+// PAS le modifier en place (composite.js copie avant le despike).
 const DECODED_TERRAIN_RGB_CACHE_MAX = 128;
 const DECODED_TERRAIN_RGB_CACHE = new Map();
 
@@ -684,9 +692,9 @@ async function decodeTerrainRGBBlobUncached(blob) {
 }
 
 /**
- * Direct Float32Array to Float32Array Catmull-Rom upsampler.
- * Avoids temporary array allocations in the inner loop and eliminates
- * intermediate PNG encode/decode steps.
+ * Suréchantillonneur Catmull-Rom direct de Float32Array vers Float32Array.
+ * Évite les allocations de tableaux temporaires dans la boucle interne et les
+ * étapes intermédiaires d'encodage / décodage PNG.
  */
 function overzoomDemElevations(parentElevations, parentZ, parentX, parentY, targetZ, targetX, targetY) {
   if (!parentElevations) return null;
@@ -694,11 +702,11 @@ function overzoomDemElevations(parentElevations, parentZ, parentX, parentY, targ
   const dz = targetZ - parentZ;
   const nChildren = 1 << dz; // e.g. dz=2 → 4 sub-tiles per axis
 
-  // Which child within the parent grid
+  // Quel enfant dans la grille du parent
   const childX = targetX - (parentX << dz);
   const childY = targetY - (parentY << dz);
 
-  // Guard: target tile must actually lie inside the parent.
+  // Garde-fou : la tuile cible doit vraiment se trouver dans le parent.
   if (childX < 0 || childY < 0 || childX >= nChildren || childY >= nChildren) {
     if (DEBUG) console.warn(
       `[sw-dem][overzoom] child OOB: target ${targetZ}/${targetX}/${targetY} not inside parent ${parentZ}/${parentX}/${parentY} (child=${childX},${childY} max=${nChildren - 1})`,
@@ -706,8 +714,8 @@ function overzoomDemElevations(parentElevations, parentZ, parentX, parentY, targ
     return null;
   }
 
-  // Source pixel region in the parent tile
-  const srcSize = size / nChildren; // pixels covered by one child
+  // Région de pixels source dans la tuile parente
+  const srcSize = size / nChildren; // pixels couverts par un enfant
   const srcX0 = childX * srcSize;
   const srcY0 = childY * srcSize;
 
@@ -730,7 +738,7 @@ function overzoomDemElevations(parentElevations, parentZ, parentX, parentY, targ
       const ix = Math.floor(sx);
       const fx = sx - ix;
 
-      // Catmull-Rom 4×4 kernel without inner-loop array allocations
+      // Noyau Catmull-Rom 4×4 sans allocation de tableau dans la boucle interne
       const r0 = cubicHermite(pSample(ix - 1, iy - 1), pSample(ix, iy - 1), pSample(ix + 1, iy - 1), pSample(ix + 2, iy - 1), fx);
       const r1 = cubicHermite(pSample(ix - 1, iy),     pSample(ix, iy),     pSample(ix + 1, iy),     pSample(ix + 2, iy),     fx);
       const r2 = cubicHermite(pSample(ix - 1, iy + 1), pSample(ix, iy + 1), pSample(ix + 1, iy + 1), pSample(ix + 2, iy + 1), fx);
@@ -747,11 +755,11 @@ function overzoomDemElevations(parentElevations, parentZ, parentX, parentY, targ
 }
 
 /**
- * Given a parent DEM tile blob at (parentZ, parentX, parentY), extract the
- * sub-region corresponding to (targetZ, targetX, targetY) and bicubic
- * (Catmull-Rom) upsample it to DEM_TILE_SIZE × DEM_TILE_SIZE.
+ * À partir d'un blob de tuile DEM parente en (parentZ, parentX, parentY),
+ * extrait la sous-région correspondant à (targetZ, targetX, targetY) et la
+ * suréchantillonne en bicubique (Catmull-Rom) à DEM_TILE_SIZE × DEM_TILE_SIZE.
  *
- * Returns a Terrain-RGB PNG Blob, or null on failure.
+ * Renvoie un Blob PNG Terrain-RGB, ou null en cas d'échec.
  */
 async function overzoomDemTile(parentBlob, parentZ, parentX, parentY, targetZ, targetX, targetY) {
   const parentElevations = await decodeTerrainRGBBlob(parentBlob);

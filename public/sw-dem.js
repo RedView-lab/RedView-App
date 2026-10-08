@@ -1,108 +1,123 @@
 // ---------------------------------------------------------------------------
-// Service Worker — Client-side DEM + Ortho + Slope + Altitude tile processor
+// Service Worker — construction côté client des tuiles DEM + ortho + pente + altitude
 //
-// THIN ENTRY POINT — only loads sub-modules via importScripts(). All real
-// logic lives under /sw-dem/ subfolders grouped by responsibility:
+// POINT D'ENTRÉE MINIMAL — ne fait que charger les sous-modules par
+// importScripts(). Toute la logique vit dans les sous-dossiers de /sw-dem/,
+// rangés par responsabilité :
 //
-//   /sw-dem/core/               — config, geometry, interpolation, RGB decode.
-//   /sw-dem/sources/            — IGN / AWS / Mapbox / ortho / VHR ortho fetch adapters.
-//   /sw-dem/processing/         — tile build, composite, slope, altitude math.
-//   /sw-dem/swiss/              — swissSURFACE3D config, coords, COG, fetch, build.
-//   /sw-dem/norway/             — Norway NHM DTM WCS config, coords, build.
-//   /sw-dem/spain/              — Spain MDT WCS config, coords, build.
-//   /sw-dem/runtime/            — lifecycle, router, helpers, health, handlers.
+//   /sw-dem/core/               — config, géométrie, interpolation, décodage RGB.
+//   /sw-dem/sources/            — adaptateurs de récupération IGN / AWS / Mapbox / ortho / ortho THR.
+//   /sw-dem/processing/         — construction des tuiles, composition, calculs pente et altitude.
+//   /sw-dem/swiss/              — config, coordonnées, COG, récupération, construction swissSURFACE3D.
+//   /sw-dem/norway/             — config, coordonnées, construction du WCS NHM DTM norvégien.
+//   /sw-dem/spain/              — config, coordonnées, construction du WCS MDT espagnol.
+//   /sw-dem/runtime/            — cycle de vie, routeur, fonctions d'appui, santé, handlers.
 //
-// Contract with the page (useMap.ts):
-//   1. page registers SW and waits for controllerchange
-//   2. ONLY THEN does the page add /dem-tiles/ and /ortho-tiles/ sources
+// Contrat avec la page (useMap.ts) :
+//   1. la page enregistre le SW et attend controllerchange
+//   2. SEULEMENT ENSUITE elle ajoute les sources /dem-tiles/ et /ortho-tiles/
 //
-// Consequence: DEM fetches are entirely local/public-source driven
-// (IGN/swissALTI/AWS Terrarium). We NEVER synthesize a fake "flat" elevation
-// tile; on genuine misses we return 204 so the renderer can reuse parent mesh.
+// Conséquence : les fetchs de DEM ne dépendent que de sources locales ou
+// publiques (IGN / swissALTI / AWS Terrarium). On ne synthétise JAMAIS de fausse
+// tuile d'altitude « plate » ; sur un vrai échec on renvoie 204, pour que le
+// rendu puisse réutiliser le maillage parent.
 // ---------------------------------------------------------------------------
-// Cache stamp — bumped on every cache-invalidating change so the browser
-// detects a byte diff in this file and triggers install→activate→purge.
-// Current: dem-tiles-v54-rgb-up-rle / radar-v3 / dem-negative-v30 / slope-tiles-v3-rle / vhr-tiles-v1 / altitude-stale-v1
-// 2026-10-08 comments-only: runtime/router.js and radar-handler.js cite
-// server/lib/http-security.mjs (moved). No cache name changes: nothing purged.
-// 2026-10-07 ortho-transparent-literal: a missing ortho tile is answered with
-// the checked TRANSPARENT_PNG literal (runtime/dem-helpers.js) instead of an
-// OffscreenCanvas encode, which could reject the fetch (audit d-sw-router,
-// 15 failures → 0). Tile bytes for real tiles unchanged.
-// 2026-10-07 dem-rgb-up-rle: the Terrain-RGB DEM tile (encodeTerrainRGBPng)
-// is RGB with PNG's Up filter, compressed by zlibDeflateRle, instead of RGBA
-// unfiltered through CompressionStream's level 6: 1.7-3.3× faster to encode
-// and 10-36 % smaller in Chromium (real Terrarium tiles and a noisy 0.40 m-like
-// surface), same elevations. Old tiles stay valid (any decoder reads both) —
-// MAP_CACHE_EPOCH not bumped.
-// 2026-10-06 slope-rle: the opaque gray slope tile (buildGrayPng) is
-// compressed by zlibDeflateRle (core/terrain-rgb.js: distance-1 matches +
-// dynamic Huffman, zlib's Z_RLE) instead of CompressionStream's level 6,
-// whose match search cost 20-33 ms per 512² tile in Chromium for the same
-// size; the whole slope tile build went from 24 to 11 ms. Same pixels,
-// different PNG bytes: cached tiles stay valid — MAP_CACHE_EPOCH not bumped.
-// 2026-10-04 video-final: the LiDAR HD WMS rasters are dispatched under a
-// bytes-in-flight budget (ign-scheduler.js) instead of up to 64 at once — on
-// a ~2 MB/s line they crossed the 15 s fetch timeout and the tiles fell back
-// to stand-ins (42 % of a 0.40 m flyover video's relief). The flyover video's
-// terrain requests (`rv-src=video`) skip the stand-ins and retry a
-// provisional build for up to 30 s (dem-handler/index.js). Tile bytes
-// unchanged — MAP_CACHE_EPOCH not bumped.
-// 2026-10-03 altitude-stale: an /altitude-tiles request whose DEM tile was not
-// final yet (LiDAR pending under load, cancelled build, stand-in) answered a
-// transparent tile that Mapbox kept for good — holes in the altitude overlay
-// on a cold load. It now serves the cached ancestor DEM overzoomed, uncached,
-// and the page reloads the source on ALTITUDE_TILES_STALE when the real tile
-// lands (tracker shared with slope: runtime/derived-tile-stale.js). Tile
-// bytes unchanged — MAP_CACHE_EPOCH not bumped.
-// 2026-10-03 module-split: sources/ign-fetcher.js, processing/build-tile.js and
-// runtime/lifecycle.js split into smaller scripts (same code, new
-// importScripts list). Tile bytes unchanged — MAP_CACHE_EPOCH not bumped.
-// 2026-10-02 gesture-cancel: a camera gesture (rotate, pitch, pan, zoom) no
-// longer flushes/aborts the LiDAR fetches of the terrain tiles still on
-// screen — they used to fall back to the correlation MNS / AWS 30 m and stay
-// cached that way (relief "jumping" to 30 m when turning the camera). The
-// page posts the DEM tiles it still waits on (DEM_WANTED_TILES): only the
-// others' work is dropped. A cancelled fetch is retried or answered 204
-// uncached, never committed as a fallback; a legacy-MNS surface is
-// provisional (short cache + WMS recovery). MAP_CACHE_EPOCH bumped (purge).
-// 2026-10-02 vhr-ortho: /vhr-tiles overlay (satellite basemap, z18–21, 512 px) —
-// IGN PCRS 5 cm + THR 5–10 cm via WMS-R in EPSG:3857, gated by per-layer
-// z14 coverage masks, transparent elsewhere so Mapbox Satellite shows.
-// 2026-10-01 slope-terrain-aligned: the overlay requests the 3D terrain's own
-// DEM tiles (z = floor(zoom − 1) instead of round(zoom + 1): 16–64× fewer DEM
-// builds), slope 2× Catmull-Rom gray+alpha, per-row cell size, in-flight
-// neighbours awaited, provisional tiles rebuilt when the missing DEM lands,
-// parent-slope fallback instead of holes, no gesture cancellation (slope and
-// altitude passthrough), stand-in DEMs no longer pinned by the resolver.
-// 2026-10-01 mns-1x: the 0.40 m MNS (3D basemap) is fetched at 1× again — 2×
-// pushed whole viewports past the 15 s IGN timeout and the map never loaded.
-// The 2× anti-aliasing stays on the 1 m terrain WMS only.
-// 2026-10-01 surface-standin: a transient MNS (0.40 m) failure no longer caches
-// bare earth for good — cached-parent overzoom first, every stand-in
-// short-cached, background MNS recovery (buildings stayed flat on zoom-in).
-// 2026-10-01 slope-lidar-wms-v2: LiDAR HD WMS fetched 2× + box-averaged (no
-// more row/column hatching), 1 m terrain on LiDAR HD MNT (RGE ALTI only fills
-// gaps), geopf 400 LayerNotDefined / 429 retried + WMS kept under 40 req/s,
-// no 0 m plateau when a partial tile has no background, worker DEM LRU keyed
-// by content, provisional slope tiles kept out of the hot tier and reloaded
-// by the page (SLOPE_TILES_STALE) — placeholder holes after a gesture.
-// 2026-10-01 slope-hd-outside-lidar: France border test by polygon edges (no
-// more FRANCE_BOUNDS bbox → NW Italy/BE/LU/DE back on AWS), HD slope outside
-// LiDAR footprints = 30 m slope (z>13 upsampled from z13), same-class
-// neighbour stitching, AWS fetch-slot leak fixed, CLAIM_CLIENTS message.
-// 2026-10-01 security: radar host allowlist + no raw passthrough, navigations bypass the SW.
-// 2026-10-01 tiles: valid 1x1 transparent PNG (bad IDAT CRC before) + router
-// rejects impossible tile coords (z>22, x/y >= 2^z) with 204.
-// 2026-08 zone-gated overlays: slope/altitude tiles may carry ?zone=<hash>
-// (masked, separate cache keys); analysis-zone registry + per-pixel mask (v5 Uniform Fast LiDAR).
-// 2026-09-30 altitude-passthrough: /altitude-tiles (HD only) is a read-through
-// alias of the DEM cache for the active profile — no altitude cache writes,
-// no DEM builds above z14.
-// 2026-09-30 hd-perf-1: cache-only health guard (no parent builds / overzoom
-// round-trip), bounded decode LRU seeded by the encoder, centre-first WMS
-// scheduling, static routes (non-tile requests bypass the SW). Tile bytes
-// unchanged — MAP_CACHE_EPOCH intentionally not bumped.
+// Tampon de cache — modifié à chaque changement qui invalide le cache, pour que
+// le navigateur détecte une différence d'octets dans ce fichier et déclenche
+// install→activate→purge.
+// Actuel : dem-tiles-v54-rgb-up-rle / radar-v3 / dem-negative-v30 / slope-tiles-v3-rle / vhr-tiles-v1 / altitude-stale-v1
+// 2026-10-08 commentaires seulement : commentaires des modules traduits en
+// français ; runtime/router.js et radar-handler.js citent
+// server/lib/http-security.mjs (déplacé). Aucun nom de cache ne change : rien
+// n'est purgé.
+// 2026-10-07 ortho-transparent-literal : une tuile ortho manquante reçoit le
+// littéral TRANSPARENT_PNG vérifié (runtime/dem-helpers.js) au lieu d'un encodage
+// OffscreenCanvas, qui pouvait rejeter le fetch (audit d-sw-router, 15 échecs →
+// 0). Octets des vraies tuiles inchangés.
+// 2026-10-07 dem-rgb-up-rle : la tuile DEM Terrain-RGB (encodeTerrainRGBPng) est
+// en RGB avec le filtre Up du PNG, compressée par zlibDeflateRle, au lieu d'un
+// RGBA non filtré passé par le niveau 6 de CompressionStream : encodage 1,7 à
+// 3,3× plus rapide et 10 à 36 % plus petit dans Chromium (vraies tuiles
+// Terrarium et surface bruitée de type 0,40 m), mêmes altitudes. Les anciennes
+// tuiles restent valides (tout décodeur lit les deux) — MAP_CACHE_EPOCH inchangé.
+// 2026-10-06 slope-rle : la tuile de pente grise opaque (buildGrayPng) est
+// compressée par zlibDeflateRle (core/terrain-rgb.js : correspondances à
+// distance 1 + Huffman dynamique, le Z_RLE de zlib) au lieu du niveau 6 de
+// CompressionStream, dont la recherche de correspondances coûtait 20 à 33 ms par
+// tuile 512² dans Chromium pour la même taille ; la construction complète d'une
+// tuile de pente est passée de 24 à 11 ms. Mêmes pixels, octets PNG différents :
+// les tuiles en cache restent valides — MAP_CACHE_EPOCH inchangé.
+// 2026-10-04 video-final : les rasters WMS LiDAR HD sont envoyés sous un budget
+// d'octets en vol (ign-scheduler.js) au lieu de 64 à la fois — sur une ligne
+// d'environ 2 Mo/s ils dépassaient le délai de fetch de 15 s et les tuiles
+// retombaient sur des remplaçants (42 % du relief d'une vidéo de survol en
+// 0,40 m). Les requêtes de terrain de la vidéo de survol (`rv-src=video`) sautent
+// les remplaçants et réessaient une construction provisoire jusqu'à 30 s
+// (dem-handler/index.js). Octets des tuiles inchangés — MAP_CACHE_EPOCH inchangé.
+// 2026-10-03 altitude-stale : une requête /altitude-tiles dont la tuile DEM
+// n'était pas encore définitive (LiDAR en attente sous charge, construction
+// annulée, remplaçant) répondait une tuile transparente que Mapbox gardait pour
+// de bon — des trous dans l'overlay d'altitude à froid. Elle sert désormais le
+// DEM ancêtre en cache suréchantillonné, sans mise en cache, et la page recharge
+// la source sur ALTITUDE_TILES_STALE quand la vraie tuile arrive (suivi partagé
+// avec la pente : runtime/derived-tile-stale.js). Octets des tuiles inchangés —
+// MAP_CACHE_EPOCH inchangé.
+// 2026-10-03 module-split : sources/ign-fetcher.js, processing/build-tile.js et
+// runtime/lifecycle.js découpés en scripts plus petits (même code, nouvelle
+// liste d'importScripts). Octets des tuiles inchangés — MAP_CACHE_EPOCH inchangé.
+// 2026-10-02 gesture-cancel : un geste de caméra (rotation, inclinaison,
+// déplacement, zoom) ne vide / n'annule plus les fetchs LiDAR des tuiles de
+// terrain encore à l'écran — elles retombaient sur le MNS de corrélation / AWS à
+// 30 m et restaient ainsi en cache (relief qui « saute » à 30 m en tournant la
+// caméra). La page envoie les tuiles DEM qu'elle attend encore
+// (DEM_WANTED_TILES) : seul le travail des autres est abandonné. Un fetch annulé
+// est réessayé ou reçoit une 204 sans mise en cache, jamais enregistré comme
+// repli ; une surface MNS de l'ancien chemin est provisoire (cache court +
+// récupération WMS). MAP_CACHE_EPOCH modifié (purge).
+// 2026-10-02 vhr-ortho : overlay /vhr-tiles (fond satellite, z18–21, 512 px) —
+// PCRS 5 cm + THR 5–10 cm de l'IGN via WMS-R en EPSG:3857, conditionné par des
+// masques de couverture z14 par couche, transparent ailleurs pour laisser voir
+// Mapbox Satellite.
+// 2026-10-01 slope-terrain-aligned : l'overlay demande les tuiles DEM du terrain
+// 3D lui-même (z = floor(zoom − 1) au lieu de round(zoom + 1) : 16 à 64× moins de
+// constructions de DEM), pente Catmull-Rom 2× gris+alpha, taille de cellule par
+// ligne, voisines en cours attendues, tuiles provisoires reconstruites quand le
+// DEM manquant arrive, repli sur la pente du parent au lieu de trous, pas
+// d'annulation sur geste (passage direct pente et altitude), DEM de remplacement
+// plus figés par le résolveur.
+// 2026-10-01 mns-1x : le MNS 0,40 m (fond de carte 3D) est de nouveau demandé en
+// 1× — le 2× faisait dépasser le délai IGN de 15 s à des vues entières et la carte
+// ne se chargeait jamais. L'anticrénelage 2× ne reste que sur le WMS terrain à 1 m.
+// 2026-10-01 surface-standin : un échec passager du MNS (0,40 m) ne met plus en
+// cache du sol nu pour de bon — overzoom du parent en cache d'abord, chaque
+// remplaçant brièvement en cache, récupération du MNS en arrière-plan (les
+// bâtiments restaient plats au zoom avant).
+// 2026-10-01 slope-lidar-wms-v2 : WMS LiDAR HD demandé en 2× + moyenné par blocs
+// (plus de hachures en lignes / colonnes), terrain à 1 m sur le MNT LiDAR HD (RGE
+// ALTI ne fait que combler les trous), geopf 400 LayerNotDefined / 429 réessayés
+// + WMS gardé sous 40 req/s, plus de plateau à 0 m quand une tuile partielle n'a
+// pas de fond, LRU des DEM du worker indexé par contenu, tuiles de pente
+// provisoires gardées hors du niveau chaud et rechargées par la page
+// (SLOPE_TILES_STALE) — trous de remplaçants après un geste.
+// 2026-10-01 slope-hd-outside-lidar : test de frontière France par les arêtes du
+// polygone (plus de bbox FRANCE_BOUNDS → nord-ouest de l'Italie / BE / LU / DE
+// repassent sur AWS), pente HD hors emprises LiDAR = pente à 30 m (z>13
+// suréchantillonné depuis z13), raccord des voisines de même classe, fuite de
+// créneaux de fetch AWS corrigée, message CLAIM_CLIENTS.
+// 2026-10-01 security : liste d'hôtes autorisés pour le radar + plus de passage brut, les navigations contournent le SW.
+// 2026-10-01 tiles : PNG transparent 1x1 valide (CRC IDAT faux avant) + le routeur
+// rejette par une 204 les coordonnées de tuiles impossibles (z>22, x/y >= 2^z).
+// 2026-08 zone-gated overlays : les tuiles pente / altitude peuvent porter
+// ?zone=<hash> (masquées, clés de cache séparées) ; registre de zone d'analyse +
+// masque par pixel (v5 Uniform Fast LiDAR).
+// 2026-09-30 altitude-passthrough : /altitude-tiles (HD seulement) est un alias
+// en lecture du cache DEM du profil actif — aucune écriture de cache d'altitude,
+// aucune construction de DEM au-dessus de z14.
+// 2026-09-30 hd-perf-1 : garde-fou de santé en cache seulement (pas de
+// construction de parent ni d'aller-retour d'overzoom), LRU de décodage borné
+// amorcé par l'encodeur, ordonnancement WMS du centre vers les bords, routes
+// statiques (les requêtes hors tuiles contournent le SW). Octets des tuiles
+// inchangés — MAP_CACHE_EPOCH volontairement inchangé.
 // ---------------------------------------------------------------------------
 
 const swModuleEpoch = new URL(self.location.href).searchParams.get('rv-map-cache-epoch') || 'base';
@@ -149,20 +164,22 @@ importScripts(
   withEpoch('/sw-dem/spain/spain-coords.js'),
   withEpoch('/sw-dem/spain/spain-build.js'),
 
-  // ── SW orchestration (lifecycle + handlers) ───────────────────────────
-  // Order matters only for declaration-before-use of `const`/`let` at
-  // module evaluation time. All cross-references happen inside fetch
-  // events that fire AFTER the install phase, so functions can be
-  // defined in any order. We list the hot caches, build queues (global
-  // in-flight Maps + composite limiter) and lifecycle first, then helpers,
-  // then handlers, then the router (which only registers a listener).
+  // ── Orchestration du SW (cycle de vie + handlers) ─────────────────────
+  // L'ordre ne compte que pour la déclaration avant usage des `const` / `let`
+  // à l'évaluation du module. Toutes les références croisées ont lieu dans des
+  // événements fetch qui se déclenchent APRÈS la phase d'installation : les
+  // fonctions peuvent donc être définies dans n'importe quel ordre. On charge
+  // d'abord les caches chauds, les files de construction (Maps globales des
+  // requêtes en cours + limiteur de composition) et le cycle de vie, puis les
+  // fonctions d'appui, puis les handlers, puis le routeur (qui ne fait
+  // qu'enregistrer un écouteur).
   //
-  // slope-pool.js (the dedicated Worker pool manager) MUST load before
-  // slope-handler.js — handleSlopeRequest references computeSlopeViaPool
-  // at call time, and cancelSlopeWork() (in lifecycle.js) references
-  // cancelAllSlopePoolJobs. Both are plain function declarations, so the
-  // actual call sites run well after this importScripts block finishes,
-  // but keeping the order stable makes the dependency obvious.
+  // slope-pool.js (le gestionnaire du pool de Workers dédié) DOIT être chargé
+  // avant slope-handler.js — handleSlopeRequest référence computeSlopeViaPool à
+  // l'appel, et cancelSlopeWork() (dans lifecycle.js) référence
+  // cancelAllSlopePoolJobs. Ce sont de simples déclarations de fonctions, donc
+  // les appels réels ont lieu bien après la fin de ce bloc importScripts, mais
+  // garder l'ordre stable rend la dépendance évidente.
   withEpoch('/sw-dem/workers/slope-math.js'),
   withEpoch('/sw-dem/runtime/hot-caches.js'),
   withEpoch('/sw-dem/runtime/build-queues.js'),
@@ -170,8 +187,8 @@ importScripts(
   withEpoch('/sw-dem/runtime/dem-helpers.js'),
   withEpoch('/sw-dem/runtime/dem-health.js'),
   withEpoch('/sw-dem/runtime/upgrade-scheduler.js'),
-  // Before slope-handler.js / altitude-handler.js: both create their stale
-  // tracker at evaluation time.
+  // Avant slope-handler.js / altitude-handler.js : tous deux créent leur suivi
+  // des tuiles périmées à l'évaluation.
   withEpoch('/sw-dem/runtime/derived-tile-stale.js'),
   withEpoch('/sw-dem/runtime/dem-handler.js'),
   withEpoch('/sw-dem/runtime/slope-pool.js'),

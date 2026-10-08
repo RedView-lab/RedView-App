@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Spain — build a Mercator DEM tile from the IGN / IDEE INSPIRE MDT WCS
+// Espagne — construction d'une tuile DEM Mercator depuis le WCS MDT INSPIRE de l'IGN / IDEE
 // ---------------------------------------------------------------------------
 
 const SPAIN_PRUNED_SENTINEL = Object.freeze({ _spainPruned: true });
@@ -31,11 +31,12 @@ function spainScheduleFetch(fn) {
 
 function drainSpainQueue() {
   while (_spainActive < SPAIN_CONCURRENCY && _spainQueue.length > 0) {
-    // FIFO: take the OLDEST queued task. The previous LIFO `pop()` made the
-    // newest tile request always preempt older ones, so panning across the
-    // Pyrenees produced a head-of-line block where the first viewport tiles
-    // were perpetually pushed back and eventually pruned out as PRUNED_SENTINEL
-    // — surfacing as "loading bloque a 1%" on the slope/altitude pill.
+    // FIFO : on prend la tâche en file la plus ANCIENNE. L'ancien `pop()` LIFO
+    // faisait toujours passer la requête de tuile la plus récente avant les
+    // plus anciennes : traverser les Pyrénées créait un blocage en tête de file
+    // où les premières tuiles de la vue étaient sans cesse repoussées puis
+    // élaguées en PRUNED_SENTINEL — visible comme un « chargement bloqué à 1 % »
+    // sur la pastille pente / altitude.
     const { fn, resolve, reject } = _spainQueue.shift();
     _spainActive++;
     fn().then(resolve).catch(reject).finally(() => {
@@ -45,28 +46,30 @@ function drainSpainQueue() {
   }
 }
 
-// Reproject the WCS source raster (axis-aligned in the coverage's native UTM
-// CRS) onto the Mercator tile's pixel grid. Two regimes:
+// Reprojette le raster source du WCS (aligné sur les axes du CRS UTM natif de la
+// couverture) sur la grille de pixels de la tuile Mercator. Deux régimes :
 //
-//   (A) Source pitch ≤ destination pitch  → area-weighted BOX AVERAGE.
-//       For each Mercator output pixel we project the 4 corners to UTM,
-//       compute the source-pixel bbox of that footprint, and average every
-//       source pixel inside (with fractional weights on edge pixels). This
-//       is exact area resampling and is what suppresses the moiré / grid
-//       artefact that point-bilinear produces on slope/altitude overlays
-//       when source-grid pitch is comparable to destination pitch — same
-//       root cause as the May 03 France WMS fix where a 0.40 m surface
-//       requested at 1 m output produced regular horizontal stripes; the
-//       cure there was 2× supersample + box-average inside getTerrainWmsTile.
+//   (A) Pas source ≤ pas destination → MOYENNE PAR BLOCS pondérée par la surface.
+//       Pour chaque pixel Mercator de sortie, on projette les 4 coins en UTM, on
+//       calcule la bbox en pixels source de cette empreinte et on moyenne tous
+//       les pixels source qu'elle contient (poids fractionnaires sur les pixels
+//       de bord). C'est un rééchantillonnage exact par surface, et c'est ce qui
+//       supprime l'artefact de moiré / grille que produit le bilinéaire ponctuel
+//       sur les overlays de pente / altitude quand le pas de la grille source
+//       est comparable au pas de destination — même cause que le correctif du
+//       WMS France du 3 mai, où une surface à 0,40 m demandée en sortie à 1 m
+//       produisait des bandes horizontales régulières ; le remède y était un
+//       suréchantillonnage 2× + moyenne par blocs dans getTerrainWmsTile.
 //
-//   (B) Source pitch > destination pitch (zoomed in beyond source res) →
-//       fall back to coverage-weighted bilinear, which is the optimal
-//       interpolant when the source is the limiting band.
+//   (B) Pas source > pas destination (zoom au-delà de la résolution source) →
+//       repli sur le bilinéaire pondéré par la couverture, l'interpolant optimal
+//       quand la source est la bande limitante.
 //
-// Per-pixel reprojection (rather than blitting the UTM raster as if it were
-// Mercator-aligned) is also what closes the inter-tile seams: adjacent
-// Mercator tiles fetch DIFFERENT UTM bboxes, so the only way both tiles
-// agree along their shared edge is to sample at the same (lng, lat).
+// La reprojection par pixel (au lieu de copier le raster UTM comme s'il était
+// aligné sur Mercator) est aussi ce qui supprime les jointures entre tuiles :
+// des tuiles Mercator voisines récupèrent des bbox UTM DIFFÉRENTES, et la seule
+// façon pour deux tuiles de concorder le long de leur bord commun est
+// d'échantillonner aux mêmes (lng, lat).
 function _resampleSpainSourceToMercator(
   srcElev, srcCov, srcW, srcH, bounds, mercZ, mercX, mercY, utmZone,
 ) {
@@ -80,11 +83,11 @@ function _resampleSpainSourceToMercator(
   const invDE = 1 / dE;
   const invDN = 1 / dN;
 
-  // Precompute source-pixel coordinates for every CORNER of every output
-  // pixel (DEM_TILE_SIZE+1 corners per axis). This lets each pixel reuse
-  // the four corners stored as fX/fY (source-pixel space) instead of
-  // re-projecting four (lng, lat) → UTM points per output pixel — saves
-  // ~3× the projection work which dominates the cost of the resample.
+  // Précalcule les coordonnées en pixels source de chaque COIN de chaque pixel
+  // de sortie (DEM_TILE_SIZE+1 coins par axe). Chaque pixel réutilise ainsi les
+  // quatre coins stockés dans fX/fY (espace des pixels source) au lieu de
+  // reprojeter quatre points (lng, lat) → UTM par pixel de sortie — économise
+  // ~3× le travail de projection, qui domine le coût du rééchantillonnage.
   const C = DEM_TILE_SIZE + 1;
   const fX = new Float32Array(C * C);
   const fY = new Float32Array(C * C);
@@ -95,9 +98,9 @@ function _resampleSpainSourceToMercator(
       const xFrac = (mercX + cx / DEM_TILE_SIZE) / n;
       const lng = xFrac * 360 - 180;
       const p = wgs84ToSpainProjected(lng, lat, utmZone);
-      // Source pixel coords (TIFF row 0 = north) — note this is in source
-      // pixel CORNER space (not centre), which is what we need for box
-      // averaging: a value of 0 means "left edge of column 0".
+      // Coordonnées en pixels source (ligne TIFF 0 = nord) — attention, c'est
+      // l'espace des COINS de pixels source (pas des centres), celui qu'il faut
+      // pour la moyenne par blocs : 0 signifie « bord gauche de la colonne 0 ».
       fX[cy * C + cx] = (p.E - bounds.minE) * invDE * srcW;
       fY[cy * C + cx] = (bounds.maxN - p.N) * invDN * srcH;
     }
@@ -114,7 +117,7 @@ function _resampleSpainSourceToMercator(
       const x01 = fX[c01], y01 = fY[c01];
       const x11 = fX[c11], y11 = fY[c11];
 
-      // Source bbox of the destination pixel footprint.
+      // Bbox source de l'empreinte du pixel de destination.
       let sxMin = x00; if (x10 < sxMin) sxMin = x10; if (x01 < sxMin) sxMin = x01; if (x11 < sxMin) sxMin = x11;
       let sxMax = x00; if (x10 > sxMax) sxMax = x10; if (x01 > sxMax) sxMax = x01; if (x11 > sxMax) sxMax = x11;
       let syMin = y00; if (y10 < syMin) syMin = y10; if (y01 < syMin) syMin = y01; if (y11 < syMin) syMin = y11;
@@ -122,7 +125,7 @@ function _resampleSpainSourceToMercator(
 
       const dstIdx = py * DEM_TILE_SIZE + px;
 
-      // Clip to source raster.
+      // Découpe au raster source.
       if (sxMax <= 0 || syMax <= 0 || sxMin >= srcW || syMin >= srcH) continue;
       if (sxMin < 0) sxMin = 0;
       if (syMin < 0) syMin = 0;
@@ -132,10 +135,10 @@ function _resampleSpainSourceToMercator(
       const fwX = sxMax - sxMin;
       const fwY = syMax - syMin;
 
-      // Regime B — destination pixel covers less than one full source pixel
-      // (≈ < 1 in either axis): point-bilinear at the centroid of the four
-      // corners. Box-averaging a sub-pixel area would just collapse to a
-      // single source value and reintroduce nearest-neighbour stair-step.
+      // Régime B — le pixel de destination couvre moins d'un pixel source entier
+      // (≈ < 1 sur l'un des axes) : bilinéaire ponctuel au centroïde des quatre
+      // coins. Moyenner par blocs une surface inférieure au pixel reviendrait à
+      // une seule valeur source et réintroduirait l'escalier du plus proche voisin.
       if (fwX < 1 && fwY < 1) {
         const fx = ((x00 + x10 + x01 + x11) * 0.25) - 0.5;
         const fy = ((y00 + y10 + y01 + y11) * 0.25) - 0.5;
@@ -163,10 +166,10 @@ function _resampleSpainSourceToMercator(
         continue;
       }
 
-      // Regime A — area-weighted box average over the source footprint.
-      // Iterate every source pixel touched by [sxMin..sxMax] × [syMin..syMax]
-      // and weight each by the fractional area of its overlap with the
-      // destination pixel's source bbox.
+      // Régime A — moyenne par blocs pondérée par la surface sur l'empreinte
+      // source. On parcourt chaque pixel source touché par [sxMin..sxMax] ×
+      // [syMin..syMax] et on le pondère par la surface de son recouvrement avec
+      // la bbox source du pixel de destination.
       const ix0 = Math.floor(sxMin);
       const iy0 = Math.floor(syMin);
       const ix1 = Math.min(srcW - 1, Math.ceil(sxMax) - 1);
@@ -244,14 +247,15 @@ function fillSpainCoverage(elevations, coverage, size) {
   return coveredCount;
 }
 
-// Edge-preserving low-pass for the Int16-quantized MDT5 raster. MDT5 stores
-// elevations as integer metres, so smooth slopes (≤ ~15°) develop visible 1 m
-// "stair-step" contours when triangulated by Mapbox terrain — they read as
-// micro-ondulations parallel to the iso-level lines on the snow / pasture
-// surfaces in 3D. A 3×3 weighted mean (centre 4 / edges 2 / corners 1, gain 16)
-// applied only where the local 3×3 height span is < SPAIN_SMOOTH_VARIANCE_M
-// removes the steps without softening real cliffs / ridges (which all exceed
-// the threshold by definition).
+// Passe-bas préservant les arêtes pour le raster MDT5 quantifié en Int16. Le
+// MDT5 stocke les altitudes en mètres entiers : les pentes douces (≤ ~15°)
+// présentent des courbes en « escalier » de 1 m une fois triangulées par le
+// terrain Mapbox — elles se lisent comme des micro-ondulations parallèles aux
+// courbes de niveau sur les surfaces de neige / pâturage en 3D. Une moyenne
+// pondérée 3×3 (centre 4 / bords 2 / coins 1, gain 16), appliquée seulement là
+// où l'écart d'altitude local 3×3 est < SPAIN_SMOOTH_VARIANCE_M, supprime les
+// marches sans adoucir les vraies falaises / crêtes (qui dépassent toutes le
+// seuil par définition).
 function smoothSpainQuantization(elevations, coverage, width, height) {
   const W = width;
   const H = height || width;
@@ -296,19 +300,21 @@ function smoothSpainQuantization(elevations, coverage, width, height) {
 }
 
 function buildSpainWCSUrl(coverage, bounds, outW, outH) {
-  // scaleSize is CAPPED at the native MDT5 footprint (≈ extent_m / 5 m).
+  // scaleSize est PLAFONNÉ à l'emprise native du MDT5 (≈ étendue_m / 5 m).
   //
-  // Asking the server for MORE pixels than the native resolution makes it
-  // bilinearly UPSAMPLE its Int16 (1 m quantised) raster — adjacent rows
-  // end up with identical values, then Horn 3×3 in slope.js explodes the
-  // duplication into the regular horizontal stripes seen on z14+ tiles in
-  // Andalucía / Pyrenees. Capping at native = the 5 m grid stays a 5 m
-  // grid; our area-weighted client-side resampler then produces the only
-  // legitimate sub-source-pixel values from neighbour averaging instead of
-  // server-side row duplication.
+  // Demander au serveur PLUS de pixels que sa résolution native lui fait
+  // SURÉCHANTILLONNER en bilinéaire son raster Int16 (quantifié au mètre) — des
+  // lignes voisines se retrouvent avec des valeurs identiques, puis Horn 3×3
+  // dans slope.js transforme cette duplication en bandes horizontales
+  // régulières, visibles sur les tuiles z14+ d'Andalousie / des Pyrénées.
+  // Plafonner au natif garde la grille de 5 m une grille de 5 m ; notre
+  // rééchantillonneur client pondéré par la surface produit alors les seules
+  // valeurs sous-pixel légitimes, par moyenne des voisins, au lieu d'une
+  // duplication de lignes côté serveur.
   //
-  // Asking for FEWER pixels than native at low zoom is OK and bandwidth-
-  // friendly (the server's box average is fine for a strict downsample).
+  // Demander MOINS de pixels que le natif à faible zoom est correct et économe
+  // en bande passante (la moyenne par blocs du serveur convient à un
+  // sous-échantillonnage strict).
   return 'https://servicios.idee.es/wcs-inspire/mdt'
     + `?service=WCS`
     + `&version=${SPAIN_WCS_VERSION}`
@@ -431,10 +437,10 @@ async function fetchSpainCoverage(coverage, mercZ, mercX, mercY) {
   const bounds = projectMercatorTileToSpainCoverageBounds(mercZ, mercX, mercY, coverage);
   const nativeWidth = Math.max(1, Math.round((bounds.maxE - bounds.minE) / SPAIN_DEM_RESOLUTION_M));
   const nativeHeight = Math.max(1, Math.round((bounds.maxN - bounds.minN) / SPAIN_DEM_RESOLUTION_M));
-  // Cap the requested raster at the native MDT5 grid: anything finer would
-  // be a server-side bilinear UPSAMPLE of Int16 1 m elevations, the source
-  // of the horizontal striping the slope/altitude overlays exhibited at
-  // z14+. See buildSpainWCSUrl comment for the full explanation.
+  // Plafonne le raster demandé à la grille native du MDT5 : plus fin serait un
+  // SURÉCHANTILLONNAGE bilinéaire côté serveur d'altitudes Int16 au mètre, la
+  // source des bandes horizontales des overlays pente / altitude à z14+. Voir le
+  // commentaire de buildSpainWCSUrl pour l'explication complète.
   const outW = Math.max(1, Math.min(SPAIN_WCS_OUTPUT_PX, nativeWidth));
   const outH = Math.max(1, Math.min(SPAIN_WCS_OUTPUT_PX, nativeHeight));
   const url = buildSpainWCSUrl(coverage, bounds, outW, outH);
@@ -456,11 +462,11 @@ async function fetchSpainCoverage(coverage, mercZ, mercX, mercY) {
     };
   }
 
-  // Server occasionally returns a tiny placeholder TIFF (~500 B) for tiles
-  // that fall fully on ocean / outside coverage. parseSpainGeoTIFF throws
-  // 'TIFF buffer too short' in that case; catch it and surface as 'empty'
-  // so the dispatcher records a clean negative cache and falls through to
-  // the global path instead of bubbling an unhandled rejection.
+  // Le serveur renvoie parfois un minuscule TIFF de remplacement (~500 o) pour
+  // les tuiles entièrement en mer / hors couverture. parseSpainGeoTIFF lève alors
+  // 'TIFF buffer too short' ; on l'intercepte et on le remonte comme 'empty', pour
+  // que le dispatcher enregistre un cache négatif propre et passe au chemin
+  // mondial au lieu de laisser remonter un rejet non géré.
   let parsed;
   try {
     parsed = await parseSpainGeoTIFF(await response.arrayBuffer());
@@ -470,29 +476,29 @@ async function fetchSpainCoverage(coverage, mercZ, mercX, mercY) {
   }
   if (!parsed.coveredCount) return { status: 'empty' };
 
-  // Gap-fill on the SOURCE UTM raster (now SPAIN_WCS_OUTPUT_PX²) before
-  // reprojecting so the box-average sampler doesn't pull from holes near
-  // the coverage edge.
+  // Comblement des trous sur le raster UTM SOURCE (désormais
+  // SPAIN_WCS_OUTPUT_PX²) avant la reprojection, pour que l'échantillonneur par
+  // moyenne de blocs ne puise pas dans des trous près du bord de couverture.
   fillSpainCoverage(parsed.elevations, parsed.coverage, parsed.width);
 
-  // Edge-preserving low-pass on the SOURCE raster to dissolve the Int16
-  // 1 m quantization. MDT5 stores integer-metre elevations, so a smooth
-  // gentle slope (e.g. 4 % = 20 cm per 5 m pixel) materialises as
-  // alternating "0 m / +1 m" rows. Horn 3×3 in slope.js then explodes
-  // those into the regular striping seen on the Andalucía / Pyrenees
-  // overlays. Smoothing must run on the UTM raster (where the quantization
-  // physically lives) BEFORE reprojection, otherwise it cross-contaminates
-  // pixels along the rotated dest-grid axis. The 4-metre threshold leaves
-  // every real cliff / ridge untouched.
+  // Passe-bas préservant les arêtes sur le raster SOURCE pour dissoudre la
+  // quantification Int16 au mètre. Le MDT5 stocke des altitudes en mètres
+  // entiers : une pente douce (p. ex. 4 % = 20 cm par pixel de 5 m) se matérialise
+  // en lignes alternées « 0 m / +1 m ». Horn 3×3 dans slope.js en fait ensuite les
+  // bandes régulières visibles sur les overlays d'Andalousie / des Pyrénées. Le
+  // lissage doit s'exécuter sur le raster UTM (où vit physiquement la
+  // quantification) AVANT la reprojection, sinon il contamine les pixels le long
+  // de l'axe tourné de la grille de destination. Le seuil de 4 mètres laisse
+  // intactes toutes les vraies falaises / crêtes.
   smoothSpainQuantization(parsed.elevations, parsed.coverage, parsed.width, parsed.height);
 
-  // Reproject the source UTM raster onto the Mercator tile grid using the
-  // same per-pixel (lng, lat) convention the IGN/build-tile sampler uses.
-  // Without this the raw axis-aligned UTM raster was treated as if it were
-  // already Mercator-aligned, which produced sub-pixel offsets along every
-  // tile edge — visible as a few-metre vertical "wall" between adjacent
-  // Spanish tiles on steep terrain (Pyrénées, Picos de Europa, Sierra
-  // Nevada) in 3D mode.
+  // Reprojette le raster UTM source sur la grille de la tuile Mercator avec la
+  // même convention par pixel (lng, lat) que l'échantillonneur IGN/build-tile.
+  // Sans cela, le raster UTM brut aligné sur ses axes était traité comme s'il
+  // était déjà aligné sur Mercator, d'où des décalages sous-pixel le long de
+  // chaque bord de tuile — visibles en 3D comme un « mur » vertical de quelques
+  // mètres entre tuiles espagnoles voisines en terrain raide (Pyrénées, Picos de
+  // Europa, Sierra Nevada).
   const projected = _resampleSpainSourceToMercator(
     parsed.elevations,
     parsed.coverage,

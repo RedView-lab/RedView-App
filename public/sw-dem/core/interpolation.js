@@ -17,7 +17,7 @@ function sanitizeElevation(value) {
   return value;
 }
 
-// Check if a single BIL pixel is valid (not NaN, not NODATA, not out-of-range)
+// Vérifie qu'un pixel BIL est valide (ni NaN, ni NODATA, ni hors limites)
 function isRawValid(data, x, y) {
   const cx = Math.max(0, Math.min(x, IGN_SRC_TILE_SIZE - 1));
   const cy = Math.max(0, Math.min(y, IGN_SRC_TILE_SIZE - 1));
@@ -27,7 +27,7 @@ function isRawValid(data, x, y) {
     && val <= MAX_VALID_ELEVATION_M;
 }
 
-// Check if the raw elevation at nearest pixel is actually valid data
+// Vérifie que l'altitude brute du pixel le plus proche est une vraie donnée
 function hasValidRawElevation(data, fx, fy) {
   const ix = Math.max(0, Math.min(Math.round(fx), IGN_SRC_TILE_SIZE - 1));
   const iy = Math.max(0, Math.min(Math.round(fy), IGN_SRC_TILE_SIZE - 1));
@@ -38,7 +38,7 @@ function hasValidRawElevation(data, fx, fy) {
 }
 
 // ---------------------------------------------------------------------------
-// Catmull-Rom bicubic with bilinear/nearest fallback near NODATA
+// Bicubique Catmull-Rom avec repli bilinéaire / plus proche voisin près du NODATA
 // ---------------------------------------------------------------------------
 
 function cubicHermite(A, B, C, D, t) {
@@ -60,9 +60,9 @@ function bicubicSample(data, fx, fy) {
   const dx = fx - ix;
   const dy = fy - iy;
 
-  // Check all 16 kernel pixels for NODATA. If any is invalid,
-  // Catmull-Rom would mix real elevation with NODATA→0, causing
-  // extreme overshoot spikes. Fall back to safer interpolation.
+  // Vérifie les 16 pixels du noyau. Si l'un est invalide, Catmull-Rom
+  // mélangerait de vraies altitudes avec NODATA→0, d'où des pics de
+  // dépassement extrêmes. On retombe sur une interpolation plus sûre.
   let allValid = true;
   for (let j = -1; j <= 2 && allValid; j++) {
     for (let k = -1; k <= 2 && allValid; k++) {
@@ -71,7 +71,7 @@ function bicubicSample(data, fx, fy) {
   }
 
   if (allValid) {
-    // Full Catmull-Rom bicubic — safe, all 16 pixels are valid
+    // Bicubique Catmull-Rom complet — sûr, les 16 pixels sont valides
     const rows = [];
     for (let j = -1; j <= 2; j++) {
       const c0 = sampleAt(data, ix - 1, iy + j);
@@ -83,7 +83,7 @@ function bicubicSample(data, fx, fy) {
     return cubicHermite(rows[0], rows[1], rows[2], rows[3], dy);
   }
 
-  // Fallback: bilinear using only the 4 inner (nearest) pixels
+  // Repli : bilinéaire sur les 4 pixels intérieurs (les plus proches) seulement
   const p00v = isRawValid(data, ix, iy);
   const p10v = isRawValid(data, ix + 1, iy);
   const p01v = isRawValid(data, ix, iy + 1);
@@ -91,7 +91,7 @@ function bicubicSample(data, fx, fy) {
   const validCount = (p00v ? 1 : 0) + (p10v ? 1 : 0) + (p01v ? 1 : 0) + (p11v ? 1 : 0);
 
   if (validCount < 2) {
-    // Nearest-neighbor: return closest valid pixel
+    // Plus proche voisin : renvoie le pixel valide le plus proche
     if (p00v) return sampleAt(data, ix, iy);
     if (p10v) return sampleAt(data, ix + 1, iy);
     if (p01v) return sampleAt(data, ix, iy + 1);
@@ -99,7 +99,7 @@ function bicubicSample(data, fx, fy) {
     return NaN; // Propagate as NODATA — prevents 0m sea-level cliffs at borders
   }
 
-  // Weighted bilinear: substitute invalid pixels with average of valid ones
+  // Bilinéaire pondéré : remplace les pixels invalides par la moyenne des valides
   const p00 = p00v ? sampleAt(data, ix, iy) : 0;
   const p10 = p10v ? sampleAt(data, ix + 1, iy) : 0;
   const p01 = p01v ? sampleAt(data, ix, iy + 1) : 0;
@@ -117,13 +117,15 @@ function bicubicSample(data, fx, fy) {
 }
 
 // ---------------------------------------------------------------------------
-// Despike filter — 3×3 median, applied on the already-resampled tile.
-// Removes isolated single-pixel outliers (LiDAR hot pixels, scanner artifacts)
-// without erasing real terrain: real cliffs / ridgelines span multiple pixels,
-// so the neighborhood median agrees with the centre value and nothing changes.
-// Only pixels differing from the median by more than DESPIKE_THRESHOLD_M are
-// rewritten.
-// Fast-path: skips sorting when cardinal variance is well within bounds.
+// Filtre de despike — médiane 3×3, appliquée sur la tuile déjà rééchantillonnée.
+// Retire les valeurs aberrantes isolées d'un pixel (pixels chauds LiDAR,
+// artefacts du scanner) sans effacer le vrai terrain : une vraie falaise ou une
+// crête s'étend sur plusieurs pixels, la médiane du voisinage s'accorde alors
+// avec la valeur centrale et rien ne change.
+// Seuls les pixels qui s'écartent de la médiane de plus de DESPIKE_THRESHOLD_M
+// sont réécrits.
+// Chemin rapide : pas de tri quand la variance des voisins cardinaux reste
+// largement dans les bornes.
 // ---------------------------------------------------------------------------
 function despikeElevations(elevations, coverage, size) {
   const out = new Float32Array(elevations);
@@ -151,7 +153,7 @@ function despikeElevations(elevations, coverage, size) {
           let cMin = vN; if (vS < cMin) cMin = vS; if (vW < cMin) cMin = vW; if (vE < cMin) cMin = vE;
           let cMax = vN; if (vS > cMax) cMax = vS; if (vW > cMax) cMax = vW; if (vE > cMax) cMax = vE;
           if (cVal >= cMin - threshFast && cVal <= cMax + threshFast) {
-            continue; // >99% of pixels are smooth: skip neighborhood scan & sorting entirely
+            continue; // Plus de 99 % des pixels sont lisses : ni parcours du voisinage ni tri
           }
         }
       }
@@ -169,8 +171,8 @@ function despikeElevations(elevations, coverage, size) {
           neigh[n++] = elevations[nIdx];
         }
       }
-      if (n < 3) continue; // need at least 3 to compute a trustworthy median
-      // Partial selection sort — enough to find the median
+      if (n < 3) continue; // au moins 3 valeurs pour une médiane fiable
+      // Tri par sélection partiel — suffisant pour trouver la médiane
       for (let i = 0; i < n; i++) {
         let minJ = i;
         for (let j = i + 1; j < n; j++) if (neigh[j] < neigh[minJ]) minJ = j;
@@ -187,10 +189,11 @@ function despikeElevations(elevations, coverage, size) {
   elevations.set(out);
 }
 
-// Edge-preserving low-pass for resampled surface DEMs. Intended for France
-// MNS at mid zoom where canopy/building micro-relief can alias into a regular
-// wavy pattern in oblique terrain views. The filter only runs on locally
-// low-variance 3x3 neighborhoods, so real cliffs / ridgelines are preserved.
+// Passe-bas préservant les arêtes, pour les DEM de surface rééchantillonnés.
+// Destiné au MNS France aux zooms intermédiaires, où le micro-relief de canopée
+// et de bâtiments peut se replier en un motif ondulé régulier en vue oblique.
+// Le filtre ne s'applique qu'aux voisinages 3x3 de faible variance locale :
+// les vraies falaises et crêtes sont préservées.
 function smoothSurfaceMicroUndulations(elevations, coverage, size, varianceThresholdM) {
   if (!(varianceThresholdM > 0)) return;
   const out = new Float32Array(elevations);
@@ -262,7 +265,7 @@ function bilinearSample(data, fx, fy) {
   const p01v = !Number.isNaN(p01) && p01 >= MIN_VALID_ELEVATION_M && p01 <= MAX_VALID_ELEVATION_M;
   const p11v = !Number.isNaN(p11) && p11 >= MIN_VALID_ELEVATION_M && p11 <= MAX_VALID_ELEVATION_M;
 
-  // Ultra-fast path: all 4 corners valid (99.5% of cases)
+  // Chemin ultra-rapide : les 4 coins sont valides (99,5 % des cas)
   if (p00v && p10v && p01v && p11v) {
     const top = p00 + (p10 - p00) * dx;
     const bot = p01 + (p11 - p01) * dx;

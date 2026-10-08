@@ -1,10 +1,11 @@
 // ---------------------------------------------------------------------------
-// Build IGN Terrain-RGB tile (Mercator ← WGS84G resampling + border dilation)
-// Returns { blob, elevations, coverage, source } or null
-// Uses zoom-level fallback: if tile missing at demZ, tries lower zoom levels
+// Construction de la tuile Terrain-RGB IGN (rééchantillonnage Mercator ←
+// WGS84G + dilatation des bords). Renvoie { blob, elevations, coverage, source }
+// ou null. Utilise le repli de zoom : si la tuile manque à demZ, essaie les
+// zooms inférieurs.
 // ---------------------------------------------------------------------------
-// Helpers: build-tile-support.js. HIGHRES 5 m fallback: build-fallback-tile.js.
-// RGE ALTI terrain (WMS): build-terrain-tile.js.
+// Fonctions d'appui : build-tile-support.js. Repli HIGHRES à 5 m :
+// build-fallback-tile.js. Terrain RGE ALTI (WMS) : build-terrain-tile.js.
 
 // tile (see scheduleIGN in sources/ign-scheduler.js, isMapDemTileWanted in sources/ign-cancel.js).
 async function buildIGNTile(mercZ, mercX, mercY, tileClass, tilePurpose = null, mapTile = null) {
@@ -38,7 +39,7 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass, tilePurpose = null, 
         despikeElevations(elevations, coverage, DEM_TILE_SIZE);
         const source = 'ign-lidar-hd-wms';
 
-        // Full coverage: return immediately without low-pass blur to preserve true 0.40m LiDAR detail
+        // Couverture complète : renvoi immédiat, sans flou passe-bas, pour préserver le vrai détail LiDAR à 0,40 m
         if (coveredCount === totalPixels) {
           const dt = (performance.now() - t0).toFixed(1);
           if (typeof swLog !== 'undefined' && swLog.isDebug()) {
@@ -51,7 +52,7 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass, tilePurpose = null, 
           return { blob: null, elevations, coverage, source, pendingFetches: null };
         }
 
-        // Partial coverage (border tiles): fill uncovered border pixels with AWS/Mapbox
+        // Couverture partielle (tuiles de bord) : on remplit les pixels non couverts avec AWS/Mapbox
         try {
           let bgBlob = null;
           if (typeof fetchAWSTerrainTile === 'function') {
@@ -114,16 +115,17 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass, tilePurpose = null, 
     }
   }
 
-  // Only a WMS that answered "no LiDAR here" lets this build report a genuine
-  // coverage gap. A timed-out / aborted WMS request plus a legacy fallback
-  // that also fails is a transient miss: reporting it as allPermanent404 made
-  // the dispatcher negative-cache the area and commit bare earth for good.
+  // Seul un WMS qui a répondu « pas de LiDAR ici » permet à cette construction
+  // de signaler un vrai trou de couverture. Une requête WMS expirée ou annulée
+  // suivie d'un ancien repli qui échoue aussi est un échec passager : le
+  // signaler comme allPermanent404 faisait mettre la zone en cache négatif par
+  // le dispatcher, qui enregistrait le sol nu pour de bon.
   const mnsWmsConfirmedEmpty = typeof getMnsWmsTile !== 'function'
     || isMnsWmsConfirmedEmpty(mercZ, mercX, mercY);
 
-  // ── Legacy Multi-Subtile WMTS Fallback ──
-  // Zoom-aware MNS source bias (see ignMnsSourceZoomBias in config.js).
-  // Avoids the 63-sub-tile fan-out that wedged the SW thread at z14.
+  // ── Ancien repli WMTS à sous-tuiles multiples ──
+  // Biais de zoom source du MNS selon le zoom (voir ignMnsSourceZoomBias dans
+  // config.js). Évite l'éventail de 63 sous-tuiles qui bloquait le fil du SW à z14.
   const mnsBias = (typeof ignMnsSourceZoomBias === 'function')
     ? ignMnsSourceZoomBias(mercZ)
     : 2;
@@ -132,8 +134,9 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass, tilePurpose = null, 
     Math.min(mercZ + mnsBias, IGN_DEM_MAXZOOM),
   );
 
-  // Fast skip: if this area is known to have no MNS data, return immediately
-  // instead of enqueuing 6-9 sub-tile fetches that will all 404.
+  // Saut rapide : si la zone est connue pour n'avoir aucune donnée MNS, renvoi
+  // immédiat au lieu de mettre en file 6 à 9 fetchs de sous-tuiles qui
+  // répondront tous 404.
   if (mnsAreaNegGet(mercZ, mercX, mercY)) {
     return {
       blob: null, elevations: null, coverage: null,
@@ -147,8 +150,8 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass, tilePurpose = null, 
   let gridCols = br.col - tl.col + 1;
   let gridRows = br.row - tl.row + 1;
 
-  // Dynamic cap: if sub-tile fan-out exceeds 12, step demZ down by 1 so no
-  // single Mercator tile ever explodes into 20-40 HTTP fetches.
+  // Plafond dynamique : si l'éventail de sous-tuiles dépasse 12, on descend demZ
+  // d'un niveau, pour qu'aucune tuile Mercator n'explose jamais en 20 à 40 fetchs HTTP.
   if (gridCols * gridRows > 12 && demZ > IGN_DEM_MINZOOM) {
     demZ -= 1;
     tl = lngLatToWGS84GTile(bounds.west, bounds.north, demZ);
@@ -157,8 +160,9 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass, tilePurpose = null, 
     gridRows = br.row - tl.row + 1;
   }
 
-  // Log source zoom remapping — useful when diagnosing why surface detail is
-  // missing (too coarse demZ) or why a close view hits the max zoom clamp.
+  // Journalise le remappage du zoom source — utile pour comprendre pourquoi le
+  // détail de surface manque (demZ trop grossier) ou pourquoi une vue rapprochée
+  // atteint le plafond de zoom.
   if (demZ !== mercZ && typeof swLog !== 'undefined' && swLog.isDebug()) {
     swLog.debug(
       'build',
@@ -167,13 +171,13 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass, tilePurpose = null, 
     );
   }
 
-  // Fetch all needed IGN tiles — with zoom-level fallback.
-  // tileMap stores: { data, actualZ, actualCol, actualRow } or null.
-  // Each fetch writes its result into tileMap on completion; entries that
-  // haven't settled by the soft deadline remain `undefined` and are treated
-  // as null for the immediate build. The original promises are kept alive
-  // (`fetches`) so the caller can await them in background and trigger a
-  // cache-upgrade once the tail stragglers arrive.
+  // Récupère toutes les tuiles IGN nécessaires — avec repli de zoom.
+  // tileMap contient : { data, actualZ, actualCol, actualRow } ou null.
+  // Chaque fetch écrit son résultat dans tileMap à la fin ; les entrées non
+  // résolues à l'échéance souple restent `undefined` et valent null pour la
+  // construction immédiate. Les promesses d'origine sont gardées (`fetches`)
+  // pour que l'appelant puisse les attendre en arrière-plan et déclencher une
+  // mise à niveau du cache quand les derniers retardataires arrivent.
   const softDeadlineMs = typeof ignSoftDeadlineMs === 'function'
     ? ignSoftDeadlineMs(mercZ)
     : IGN_SUBTILE_SOFT_DEADLINE_MS;
@@ -182,7 +186,7 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass, tilePurpose = null, 
   const totalSubTiles = Math.max(0, gridCols * gridRows);
   const subTileGrid = new Array(totalSubTiles).fill(null);
 
-  // Center-first sub-tile order: fetch the central sub-tiles before the perimeter
+  // Sous-tuiles du centre d'abord : on récupère les sous-tuiles centrales avant le pourtour
   const midRow = (tl.row + br.row) / 2;
   const midCol = (tl.col + br.col) / 2;
   const subTileOrder = [];
@@ -277,7 +281,7 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass, tilePurpose = null, 
     );
   }
 
-  // Track whether any fallback zoom was used (for diagnostics)
+  // Note si un zoom de repli a servi (pour le diagnostic)
   let usedFallback = false;
   let minFallbackZ = demZ;
 
@@ -302,7 +306,7 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass, tilePurpose = null, 
       const xFrac = (mercX + (px + 0.5) / DEM_TILE_SIZE) / n;
       const lng = xFrac * 360 - 180;
 
-      // For border tiles, skip pixels outside France polygon
+      // Pour les tuiles de bord, on saute les pixels hors du polygone France
       if (isBorder && francePoly && !pointInFrance(lng, lat)) continue;
 
       if (!rowInGrid) continue;
@@ -312,7 +316,7 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass, tilePurpose = null, 
 
       const result = subTileGrid[rowOffset + relCol];
       if (result && result.data) {
-        // Compute fractional pixel coords in the ACTUAL tile's coordinate space
+        // Coordonnées fractionnaires du pixel dans le repère de la tuile RÉELLEMENT utilisée
         const aZ = result.actualZ;
         const aCol = result.actualCol;
         const aRow = result.actualRow;
@@ -339,11 +343,11 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass, tilePurpose = null, 
     }
   }
 
-  // Release IGN source tile references — no longer needed after resampling
+  // Libère les références aux tuiles sources IGN — inutiles après le rééchantillonnage
   subTileGrid.fill(null);
 
-  // Expose in-flight promises to the caller so it can schedule a background
-  // cache upgrade once slow stragglers eventually settle.
+  // Expose les promesses en cours à l'appelant pour qu'il puisse programmer une
+  // mise à niveau du cache en arrière-plan quand les retardataires aboutissent.
   const pendingFetches = hasPending ? fetches : null;
 
   if (coveredCount === 0) {
@@ -354,9 +358,9 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass, tilePurpose = null, 
     return {
       blob: null, elevations: null, coverage: null,
       source: 'ign-empty',
-      // Sub-tiles still in flight after the early abort are presumed empty
-      // like their settled siblings; a settled miss that is not a cached 404
-      // (timeout, abort, 5xx) makes the whole build transient.
+      // Les sous-tuiles encore en cours après l'abandon précoce sont supposées
+      // vides comme leurs sœurs résolues ; un échec résolu qui n'est pas une 404
+      // en cache (délai dépassé, annulation, 5xx) rend toute la construction passagère.
       allPermanent404: mnsWmsConfirmedEmpty
         && ignMissing404 > 0
         && ignMissing404 === ignMissing - pendingCount,
@@ -364,7 +368,7 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass, tilePurpose = null, 
     };
   }
 
-  // Determine source label for diagnostics
+  // Détermine le libellé de source, pour le diagnostic
   const source = usedFallback ? `ign-fallback-z${minFallbackZ}` : 'ign';
 
   if (coveredCount === totalPixels) {
@@ -394,7 +398,7 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass, tilePurpose = null, 
     return { blob: null, elevations, coverage, source, pendingFetches };
   }
 
-  // --- Pre-fill uncovered pixels with Mapbox elevation ---
+  // --- Préremplissage des pixels non couverts avec l'altitude Mapbox ---
   let prefilledMbElev = null;
   if (coveredCount < totalPixels && mercZ <= MAPBOX_DEM_MAXZOOM) {
     try {
@@ -423,7 +427,7 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass, tilePurpose = null, 
     } catch { /* best-effort */ }
   }
 
-  // --- Adaptive border pixel dilation (8-connected) with recycled ping-pong buffers ---
+  // --- Dilatation adaptative des pixels de bord (8-connexité) avec tampons ping-pong recyclés ---
   const coverageRatio = coveredCount / totalPixels;
   const dilationPasses = coverageRatio > 0.9 ? 2 : 4;
   const scratchElev = new Float32Array(totalPixels);

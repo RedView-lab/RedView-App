@@ -1,20 +1,23 @@
 // ---------------------------------------------------------------------------
-// Provisional derived tiles (slope, altitude) → page-side source reload
+// Tuiles dérivées provisoires (pente, altitude) → rechargement de la source côté page
 //
-// Mapbox treats any 200 image as final: an overlay tile answered while its
-// DEM was not there yet (stand-in, parent fallback, transparent placeholder)
-// stays on screen until the tile leaves the viewport. The SW cannot push a
-// tile, so it tells the page, which reloads that overlay's source once the
-// map settles (listeners.ts); complete tiles come straight back from the hot
-// tier, the stale ones are rebuilt.
+// Mapbox traite toute image en 200 comme définitive : une tuile d'overlay
+// servie quand son DEM n'était pas encore là (remplaçant, repli sur le parent,
+// remplaçant transparent) reste à l'écran jusqu'à ce que la tuile sorte de la
+// vue. Le SW ne peut pas pousser une tuile : il prévient donc la page, qui
+// recharge la source de cet overlay une fois la carte stabilisée
+// (listeners.ts) ; les tuiles complètes reviennent directement du niveau chaud,
+// les périmées sont reconstruites.
 //
-// Two triggers per tracker:
-//   - waitOnDem(): the tile is rebuilt when the DEM tiles it lacks become
-//     final — the terrain reaching them, the prefetch ring, a background
-//     upgrade. finalize() / the upgrade scheduler call
-//     notifyDerivedDemTileReady(). Never capped: each DEM tile lands once.
-//   - noteStale(): a blind retry (nothing specific to wait for), capped per
-//     tile so a tile that cannot improve does not keep the reload loop alive.
+// Deux déclencheurs par suivi :
+//   - waitOnDem() : la tuile est reconstruite quand les tuiles DEM qui lui
+//     manquent deviennent définitives — le terrain qui les atteint, l'anneau de
+//     préchargement, une mise à niveau en arrière-plan. finalize() /
+//     l'ordonnanceur de mises à niveau appellent notifyDerivedDemTileReady().
+//     Jamais plafonné : chaque tuile DEM n'arrive qu'une fois.
+//   - noteStale() : une nouvelle tentative à l'aveugle (rien de précis à
+//     attendre), plafonnée par tuile pour qu'une tuile qui ne peut pas
+//     s'améliorer n'entretienne pas la boucle de rechargement.
 // ---------------------------------------------------------------------------
 
 const DERIVED_STALE_NOTIFY_DEBOUNCE_MS = 700;
@@ -29,7 +32,7 @@ function derivedDemWaitKey(demProfile, z, x, y) {
   return `${demProfile || 'default'}:${z}/${x}/${y}`;
 }
 
-// `messageType` is the postMessage type the page listens to
+// `messageType` est le type de postMessage que la page écoute
 // (SLOPE_TILES_STALE, ALTITUDE_TILES_STALE).
 function createDerivedTileStaleTracker(messageType) {
   const retries = new Map(); // tile key → reloads already asked
@@ -105,7 +108,7 @@ function createDerivedTileStaleTracker(messageType) {
   return tracker;
 }
 
-// Called for every DEM tile committed as final (finalize, background upgrade).
+// Appelé pour chaque tuile DEM enregistrée comme définitive (finalize, mise à niveau en arrière-plan).
 function notifyDerivedDemTileReady(z, x, y, demProfile) {
   for (const tracker of DERIVED_TILE_STALE_TRACKERS) {
     tracker.demTileReady(z, x, y, demProfile);

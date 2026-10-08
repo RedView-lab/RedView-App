@@ -1,8 +1,9 @@
 // ---------------------------------------------------------------------------
-// DEM tile handler loader — stable root entry kept for service-worker load
-// order, cache friendliness and backwards-compatible import paths.
+// Chargeur du handler des tuiles DEM — point d'entrée racine stable, gardé pour
+// l'ordre de chargement du service worker, la stabilité des caches et la
+// compatibilité des chemins d'import.
 //
-// The implementation now lives under /runtime/dem-handler/.
+// L'implémentation vit désormais dans /runtime/dem-handler/.
 // ---------------------------------------------------------------------------
 
 importScripts(

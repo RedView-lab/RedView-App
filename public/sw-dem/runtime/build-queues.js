@@ -1,22 +1,25 @@
 // ---------------------------------------------------------------------------
-// Build concurrency: composite limiter (peak memory of IGN/Mapbox blends),
-// adaptive slope / altitude build queues with cancel generations, and the
-// per-tile in-flight maps that coalesce duplicate DEM / slope / altitude requests.
+// Concurrence des constructions : limiteur de composition (pic mémoire des
+// fondus IGN/Mapbox), files adaptatives de construction pente / altitude avec
+// générations d'annulation, et maps par tuile des requêtes en cours qui
+// fusionnent les demandes DEM / pente / altitude en double.
 // ---------------------------------------------------------------------------
 
-// Composite concurrency limiter — caps peak memory from simultaneous blends.
-// Raised from 2 → 6: compositeIGNMapbox uses ≤2 MB per call (2× Float32(256²)
-// + a 512² Mapbox elev array) so 6 concurrent ≈ 12 MB — trivial. With 2 we
-// bottlenecked every zoom-in: a 20-tile viewport queued 10 composite cycles
-// of 300–500 ms each = 5 s wall-clock of pipeline pressure, causing
-// soft-deadline overflow downstream.
+// Limiteur de concurrence de composition — plafonne le pic mémoire des fondus
+// simultanés. Passé de 2 à 6 : compositeIGNMapbox utilise ≤ 2 Mo par appel
+// (2× Float32(256²) + un tableau d'altitudes Mapbox de 512²), donc 6 en
+// parallèle ≈ 12 Mo — négligeable. À 2, chaque zoom avant était étranglé : une
+// vue de 20 tuiles mettait en file 10 cycles de composition de 300 à 500 ms
+// chacun = 5 s de pression sur le pipeline, d'où des dépassements du délai
+// souple en aval.
 //
-// May 19 perf pass: CPU-adaptive — on machines with hardwareConcurrency≥8
-// the composite stage is the next bottleneck after IGN sub-tile fetches
-// land in bursts. Each composite call peaks at ~12 MB; ~10 concurrent on
-// an 8-core box still keeps peak ≤120 MB while letting a 20-tile zoom-in
-// land in one composite wave instead of two. Floor stays at 6 for low-end
-// devices to preserve the original memory envelope.
+// Passe de performance du 19 mai : adaptée au CPU — sur les machines avec
+// hardwareConcurrency ≥ 8, l'étape de composition est le goulot suivant une
+// fois que les fetchs de sous-tuiles IGN arrivent en rafale. Chaque composition
+// culmine à ~12 Mo ; ~10 en parallèle sur 8 cœurs gardent le pic ≤ 120 Mo tout en
+// laissant un zoom avant de 20 tuiles passer en une vague de composition au
+// lieu de deux. Le plancher reste à 6 sur les petites machines pour préserver
+// l'enveloppe mémoire d'origine.
 const COMPOSITE_MAX_CONCURRENT = (() => {
   const hc = Number(globalThis.navigator?.hardwareConcurrency || 0);
   if (!Number.isFinite(hc) || hc <= 4) return 6;
@@ -31,34 +34,36 @@ const SLOPE_BUILD_BUSY_CONCURRENT = 2;
 const SLOPE_BUILD_WARM_CONCURRENT = 4;
 let _slopeBuildActive = 0;
 const _slopeBuildQueue = [];
-// Altitude build concurrency is adaptive (mirrors slope's
-// currentSlopeBuildConcurrency). This only caps the IN-PROCESS fallback
-// path; the worker pool is the primary build path and is bounded by the
-// pool size. A flat `2` starved the fallback on multi-core machines where
-// the pool is briefly unavailable.
+// La concurrence des constructions d'altitude est adaptative (sur le modèle de
+// currentSlopeBuildConcurrency des pentes). Elle ne plafonne que le chemin de
+// repli dans le processus courant ; le pool de workers est le chemin de
+// construction principal et il est borné par sa taille. Une valeur fixe de `2`
+// affamait le repli sur les machines multicœur quand le pool est brièvement
+// indisponible.
 const ALTITUDE_BUILD_BUSY_CONCURRENT = 2;
 const ALTITUDE_BUILD_WARM_CONCURRENT = 4;
 let _altitudeBuildActive = 0;
 const _altitudeBuildQueue = [];
 
-// In-flight slope tile dedup: key = `${profile}:${z}/${x}/${y}?${resFactor}` →
-// Promise<Response>. Lets concurrent requests for the same tile share
-// the single ongoing computation instead of duplicating the Horn pipeline.
+// Déduplication des tuiles de pente en cours : clé = `${profile}:${z}/${x}/${y}?${resFactor}` →
+// Promise<Response>. Les requêtes simultanées d'une même tuile partagent le
+// seul calcul en cours au lieu de dupliquer le pipeline de Horn.
 const SLOPE_INFLIGHT = new Map();
 const ALTITUDE_INFLIGHT = new Map();
 let slopeCancelGeneration = 0;
 let altitudeCancelGeneration = 0;
 
-// In-flight DEM tile dedup. Same idea as SLOPE_INFLIGHT but applies to the
-// raw `/dem-tiles/...` endpoint. Without this, every slope tile triggers
-// 4 neighbour DEM rebuilds (see slope-handler.js) — for a 90-tile viewport
-// that's ~450 concurrent handleDemRequest calls, many for the SAME tile.
-// Each one of those duplicates runs the whole IGN/Swiss/Mapbox dispatcher
-// (HTTP fetches, composite, health-guard) and then writes the same blob to
-// the cache. The duplicate work is a major reason the Pentes pill stalled
-// at ~85 % on cold viewport — the SW pipeline gets so saturated that some
-// slope responses miss the Mapbox tile-load deadline and never fire
-// `sourcedata`. Coalescing collapses the 5×-fan-out back to 1 per tile.
+// Déduplication des tuiles DEM en cours. Même idée que SLOPE_INFLIGHT, mais
+// pour le point d'accès brut `/dem-tiles/...`. Sans elle, chaque tuile de pente
+// déclenche 4 reconstructions de DEM voisins (voir slope-handler.js) — pour une
+// vue de 90 tuiles, ~450 appels handleDemRequest simultanés, dont beaucoup pour
+// la MÊME tuile. Chacun de ces doublons exécute tout le dispatcher IGN /
+// Suisse / Mapbox (fetchs HTTP, composition, garde-fou de santé) puis écrit le
+// même blob dans le cache. Ce travail en double expliquait en grande partie le
+// blocage de la pastille Pentes vers 85 % sur une vue à froid — le pipeline du
+// SW saturait au point que certaines réponses de pente manquaient l'échéance de
+// chargement de tuile de Mapbox et ne déclenchaient jamais `sourcedata`. La
+// fusion ramène l'éventail de 5× à 1 par tuile.
 const DEM_INFLIGHT = new Map();
 
 function detectSlopeBuildIdleConcurrency() {
@@ -76,10 +81,10 @@ function currentSlopeBuildConcurrency() {
   return SLOPE_BUILD_IDLE_CONCURRENT;
 }
 
-// Altitude in-process fallback concurrency. Same DEM-pressure heuristic as
-// slope: back off when the DEM pipeline is saturated, free-run when it's
-// idle. Mirrors currentSlopeBuildConcurrency so the fallback never starves
-// the basemap.
+// Concurrence du repli d'altitude dans le processus courant. Même heuristique
+// de pression DEM que pour la pente : on ralentit quand le pipeline DEM est
+// saturé, on va librement quand il est inactif. Calquée sur
+// currentSlopeBuildConcurrency, pour que le repli n'affame jamais le fond de carte.
 function currentAltitudeBuildConcurrency() {
   const demPressure = DEM_INFLIGHT.size;
   if (demPressure >= 24) return ALTITUDE_BUILD_BUSY_CONCURRENT;
@@ -101,7 +106,7 @@ function cancelSlopeWork() {
     }
   }
   _slopeBuildQueue.push(...remainingSlope);
-  // Drop every pending worker-pool job too (except uncancellable ones).
+  // Abandonne aussi toutes les tâches en attente du pool de workers (sauf les non annulables).
   let poolCancelled = 0;
   try {
     if (typeof cancelAllSlopePoolJobs === 'function') poolCancelled = cancelAllSlopePoolJobs();
@@ -118,9 +123,9 @@ function cancelAltitudeWork() {
     const queued = _altitudeBuildQueue.shift();
     try { queued?.resolve(null); } catch { /* ignore */ }
   }
-  // Drop every pending worker-pool job tagged kind:'altitude' too (see
-  // slope's CANCEL_SLOPE_WORK for rationale). Per-kind cancel ensures we
-  // never touch slope's in-flight jobs.
+  // Abandonne aussi toutes les tâches en attente du pool marquées kind:'altitude'
+  // (voir CANCEL_SLOPE_WORK côté pente pour la justification). L'annulation par
+  // type garantit qu'on ne touche jamais aux tâches de pente en cours.
   let poolCancelled = 0;
   try {
     if (typeof cancelAllAltitudePoolJobs === 'function') poolCancelled = cancelAllAltitudePoolJobs();

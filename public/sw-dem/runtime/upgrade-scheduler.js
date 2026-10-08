@@ -1,19 +1,20 @@
 // ---------------------------------------------------------------------------
-// finalize() + background IGN-upgrade scheduler.
+// finalize() + ordonnanceur des mises à niveau IGN en arrière-plan.
 //
-// finalize() — wraps the chosen elevation blob into a Response, writes it
-// to the positive cache, and (if any IGN sub-tiles were still in flight at
-// the soft deadline) kicks off a background re-cache to the higher-quality
-// IGN composite. Next time Mapbox re-requests the tile, it gets the better
-// blob with no user-visible churn.
+// finalize() — enveloppe le blob d'altitude retenu dans une Response, l'écrit
+// dans le cache positif et (si des sous-tuiles IGN étaient encore en cours à
+// l'échéance souple) lance en arrière-plan une remise en cache vers la
+// composition IGN de meilleure qualité. La prochaine fois que Mapbox redemande
+// la tuile, il reçoit le meilleur blob sans remous visible pour l'utilisateur.
 //
-// Split out of sw-dem.js (May 03).
+// Extrait de sw-dem.js (3 mai).
 // ---------------------------------------------------------------------------
 
 async function finalize(cache, cacheKey, t0, z, x, y, pngBlob, demSource, upgradePending, inLiDARRegion, upgradeSourceHint, forceShortCache = false, healthStatus = 'ok', demProfile = 'default') {
-  // Short cache (15 s) for AWS/overzoom fallback tiles inside any LiDAR
-  // region (France or Switzerland) at z≥13. These are transient stand-ins
-  // while the exact tile finishes building; longer caching masks the upgrade.
+  // Cache court (15 s) pour les tuiles de repli AWS / overzoom dans une région
+  // LiDAR (France ou Suisse) à z≥13. Ce sont des remplaçants passagers pendant
+  // que la tuile exacte finit de se construire ; un cache plus long masquerait
+  // la mise à niveau.
   const shortCache = forceShortCache || (inLiDARRegion
     && z >= 13
     && (demSource.startsWith('aws-terrarium')
@@ -22,14 +23,15 @@ async function finalize(cache, cacheKey, t0, z, x, y, pngBlob, demSource, upgrad
   const response = buildDemResponse(pngBlob, demSource, shortCache, healthStatus);
   cache.put(cacheKey, response.clone());
 
-  // Promote freshly built tile into the in-memory hot tier so the next
-  // request — typically a few hundred ms later, when Mapbox re-paints the
-  // same tile under a different camera angle, or when slope/altitude
-  // handlers fan out to the 4 neighbour DEMs — returns in <1 ms instead
-  // of paying for another CacheStorage round-trip. Short-cache tiles are
-  // intentionally skipped (they're throwaway placeholders waiting for
-  // the IGN upgrade to land, and we WANT the next request to hit
-  // CacheStorage so its TTL check can invalidate them on time).
+  // Promeut la tuile fraîchement construite dans le niveau chaud en mémoire,
+  // pour que la requête suivante — en général quelques centaines de ms plus
+  // tard, quand Mapbox repeint la même tuile sous un autre angle de caméra, ou
+  // quand les handlers de pente / d'altitude se déploient sur les 4 DEM voisins —
+  // réponde en < 1 ms au lieu de payer un nouvel aller-retour CacheStorage. Les
+  // tuiles à cache court sont volontairement sautées (ce sont des remplaçants
+  // jetables en attente de la mise à niveau IGN, et on VEUT que la requête
+  // suivante passe par CacheStorage pour que son contrôle de TTL les invalide à
+  // temps).
   if (!shortCache) {
     try {
       demHotPut(
@@ -38,17 +40,18 @@ async function finalize(cache, cacheKey, t0, z, x, y, pngBlob, demSource, upgrad
         Array.from(response.headers.entries()),
       );
     } catch { /* ignore */ }
-    // Provisional slope/altitude tiles that lacked this DEM tile can now be rebuilt.
+    // Les tuiles de pente / d'altitude provisoires auxquelles manquait cette tuile DEM peuvent maintenant être reconstruites.
     if (typeof notifyDerivedDemTileReady === 'function') notifyDerivedDemTileReady(z, x, y, demProfile);
   }
   if (DEBUG) {
     const dt = (performance.now() - t0).toFixed(0);
     console.log(`[sw-dem] ${demSource} ${z}/${x}/${y} ${dt}ms`);
   }
-  // Fire-and-forget: if IGN sub-tiles were still in flight at the soft
-  // deadline, let them finish in the background and replace the cached blob
-  // with a full-quality IGN build. Next time Mapbox requests this tile
-  // (natural tile-cache cycling while panning/zooming) it gets best quality.
+  // Lancé sans attendre : si des sous-tuiles IGN étaient encore en cours à
+  // l'échéance souple, on les laisse finir en arrière-plan et on remplace le
+  // blob en cache par une construction IGN de pleine qualité. La prochaine fois
+  // que Mapbox demande cette tuile (rotation naturelle de son cache pendant les
+  // déplacements / zooms), il obtient la meilleure qualité.
   if (upgradePending && upgradePending.length) {
     scheduleBackgroundUpgrade(cache, cacheKey, z, x, y, upgradePending, upgradeSourceHint || demSource, demProfile);
   }
@@ -72,7 +75,7 @@ function notifyDemTileCacheUpdated(z, x, y, source, profile) {
     });
 }
 
-// Coalesce concurrent upgrade jobs for the same tile.
+// Fusionne les tâches de mise à niveau simultanées d'une même tuile.
 const pendingUpgrades = new Set();
 
 async function materializeUpgradeResult(result, z, x, y, compositeSource, skipDatumBias = false) {
@@ -101,24 +104,26 @@ function scheduleBackgroundUpgrade(cache, cacheKey, z, x, y, fetches, preferredS
   (async () => {
     try {
       await Promise.allSettled(fetches);
-      // Skip if a concurrent request already upgraded this tile.
+      // On saute si une requête concurrente a déjà mis à niveau cette tuile.
       const existing = await cache.match(cacheKey);
       if (existing) {
         const src = existing.headers.get('X-DEM-Source') || '';
         if (src.endsWith('+upgrade') || src === 'ign' || src.startsWith('ign-fallback-z') || src.startsWith('ign-highres')) {
-          // Already full-quality — nothing to gain.
+          // Déjà en pleine qualité — rien à gagner.
           return;
         }
       }
-      // All sub-tiles are now in the IGN memory cache (either as data or as
-      // cached-null with TTL). Rebuild — second pass is near-free.
+      // Toutes les sous-tuiles sont maintenant dans le cache mémoire IGN (en
+      // donnée ou en nul en cache avec TTL). On reconstruit — la seconde passe
+      // ne coûte presque rien.
       const tileClass = tileOverlapsOverseasFrance(z, x, y)
         ? 'inside'
         : classifyDemTile(z, x, y);
       if (tileClass === 'outside') return;
-      // Interior tiles keep the raw, globally-consistent IGN datum (no
-      // per-tile Mapbox bias) so background-upgraded tiles stay LOD-aligned
-      // with their neighbours — same anti-"wall" rule as the live path.
+      // Les tuiles intérieures gardent le datum IGN brut, cohérent partout (pas
+      // de biais Mapbox par tuile), pour que les tuiles mises à niveau en
+      // arrière-plan restent alignées en LOD avec leurs voisines — même règle
+      // anti-« mur » que le chemin en direct.
       const skipDatumBias = tileClass === 'inside';
       const preferHighres = typeof preferredSource === 'string'
         && preferredSource.startsWith('ign-highres');
@@ -129,9 +134,10 @@ function scheduleBackgroundUpgrade(cache, cacheKey, z, x, y, fetches, preferredS
         .then((result) => materializeUpgradeResult(result, z, x, y, 'ign-rgealti-wms-composite', skipDatumBias));
       const highresRebuilder = () => buildIGNFallbackTile(z, x, y)
         .then((result) => materializeUpgradeResult(result, z, x, y, 'ign-highres-composite', skipDatumBias));
-      // A legacy correlation-MNS surface (LiDAR HD WMS still failing) is not
-      // an upgrade: stop there rather than commit it — or the bare-earth
-      // HIGHRES rebuilder after it — as the tile's permanent answer.
+      // Une surface MNS de corrélation de l'ancien chemin (WMS LiDAR HD toujours
+      // en échec) n'est pas une mise à niveau : on s'arrête là plutôt que de
+      // l'enregistrer — ou de laisser le reconstructeur HIGHRES sol nu qui suit —
+      // comme réponse définitive de la tuile.
       const mnsRebuilder = () => buildIGNTile(z, x, y, tileClass)
         .then((result) => (isProvisionalMnsBuild(result, z, x, y)
           ? { provisional: true }
@@ -169,10 +175,10 @@ function scheduleBackgroundUpgrade(cache, cacheKey, z, x, y, fetches, preferredS
 async function commitUpgradedDemTile(cache, cacheKey, z, x, y, upgraded, demProfile) {
   const response = buildDemResponse(upgraded.blob, upgraded.source + '+upgrade');
   await cache.put(cacheKey, response.clone());
-  // Refresh the hot tier so subsequent requests see the upgraded blob
-  // immediately without going through CacheStorage. Without this, the
-  // older (composite/aws/overzoom) blob would stay hot until evicted
-  // by LRU pressure, silently delaying the upgrade's visual effect.
+  // Rafraîchit le niveau chaud pour que les requêtes suivantes voient tout de
+  // suite le blob mis à niveau sans passer par CacheStorage. Sans cela, l'ancien
+  // blob (composition / aws / overzoom) resterait chaud jusqu'à son éviction par
+  // pression du LRU, retardant en silence l'effet visible de la mise à niveau.
   try {
     demHotPut(cacheKey.url, upgraded.blob, Array.from(response.headers.entries()));
   } catch { /* ignore */ }
@@ -180,15 +186,16 @@ async function commitUpgradedDemTile(cache, cacheKey, z, x, y, upgraded, demProf
   if (typeof notifyDerivedDemTileReady === 'function') notifyDerivedDemTileReady(z, x, y, demProfile);
 }
 
-// ── Surface (MNS) recovery ────────────────────────────────────────────
-// computeDemRequest() served a provisional stand-in (parent overzoom or bare
-// earth, short-cached) because the 0.40 m MNS build failed transiently. Retry
-// the MNS build only — scheduleBackgroundUpgrade's HIGHRES rebuilder is bare
-// earth and would make the missing buildings permanent. The first retry
-// covers a CANCEL_STALE_DEM abort (nothing negative-cached); the second waits
-// out the transient null entry a WMS timeout leaves for IGN_NULL_TTL_TRANSIENT.
-// Background purpose: low fetch priority, and the reduced background
-// concurrency keeps it from competing with the visible viewport.
+// ── Récupération de la surface (MNS) ──────────────────────────────────
+// computeDemRequest() a servi un remplaçant provisoire (overzoom du parent ou
+// sol nu, brièvement en cache) parce que la construction du MNS à 0,40 m a
+// échoué passagèrement. On ne réessaie que la construction MNS — le
+// reconstructeur HIGHRES de scheduleBackgroundUpgrade est du sol nu et rendrait
+// définitive l'absence des bâtiments. La première tentative couvre un abandon
+// CANCEL_STALE_DEM (rien en cache négatif) ; la seconde attend la fin de l'entrée
+// nulle passagère qu'un délai WMS dépassé laisse pour IGN_NULL_TTL_TRANSIENT.
+// Usage en arrière-plan : priorité de fetch basse, et la concurrence réduite de
+// l'arrière-plan l'empêche de concurrencer la vue visible.
 const SURFACE_RECOVERY_DELAYS_MS = [1_500, IGN_NULL_TTL_TRANSIENT + 1_000, 40_000];
 
 function scheduleSurfaceMnsRecovery(cache, cacheKey, z, x, y, tileClass, demProfile = 'default') {
@@ -201,16 +208,17 @@ function scheduleSurfaceMnsRecovery(cache, cacheKey, z, x, y, tileClass, demProf
     try {
       for (let attempt = 0; attempt < SURFACE_RECOVERY_DELAYS_MS.length; attempt++) {
         await new Promise((resolve) => setTimeout(resolve, SURFACE_RECOVERY_DELAYS_MS[attempt]));
-        // A long-lived entry means a fresh foreground build already produced
-        // the real tile; stand-ins always carry x-cache-ttl-ms.
+        // Une entrée de longue durée signifie qu'une construction fraîche de
+        // premier plan a déjà produit la vraie tuile ; les remplaçants portent
+        // toujours x-cache-ttl-ms.
         const existing = await cache.match(cacheKey);
         if (existing && !existing.headers.get('x-cache-ttl-ms')) return;
 
         const result = await buildIGNTile(z, x, y, tileClass, PURPOSE_DEM_PREFETCH);
         if (result?.allPermanent404) return;
-        // Only the WMS answer recovers the surface; the legacy correlation-MNS
-        // fallback is accepted on the last attempt only (still better than an
-        // AWS 30 m stand-in).
+        // Seule la réponse du WMS récupère la surface ; le repli MNS de
+        // corrélation de l'ancien chemin n'est accepté qu'à la dernière tentative
+        // (toujours mieux qu'un remplaçant AWS à 30 m).
         const lastAttempt = attempt === SURFACE_RECOVERY_DELAYS_MS.length - 1;
         if (result?.cancelled || (!lastAttempt && isProvisionalMnsBuild(result, z, x, y))) continue;
         const upgraded = await materializeUpgradeResult(

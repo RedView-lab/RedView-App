@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
-// IGN tile fetching with in-memory LRU cache + concurrency limiter
-// TTL-aware null caching + zoom-level fallback for missing tiles
+// Récupération des tuiles IGN avec cache LRU en mémoire + limiteur de concurrence
+// Cache des échecs avec TTL + repli sur les niveaux de zoom inférieurs
 // ---------------------------------------------------------------------------
 
 function buildDEMTileURL(z, col, row) {
@@ -13,24 +13,24 @@ function buildDEMTileURL(z, col, row) {
   );
 }
 
-// Cache a null result with TTL metadata
+// Met en cache un résultat nul avec ses métadonnées de TTL
 function cacheNull(key, errorType) {
   const ttl = errorType === 'permanent' ? IGN_NULL_TTL_PERMANENT : IGN_NULL_TTL_TRANSIENT;
   ignTileCache.set(key, { _null: true, ts: Date.now(), ttl, errorType });
 }
 
-// Check if a cached entry is valid data (Float32Array) or an expired/active null
+// Indique si une entrée en cache est une vraie donnée (Float32Array) ou un nul expiré / actif
 function getCached(key) {
   if (!ignTileCache.has(key)) return { hit: false };
   const entry = ignTileCache.get(key);
   // Valid tile data (Float32Array)
   if (entry instanceof Float32Array) return { hit: true, data: entry };
-  // Null entry with TTL
+  // Entrée nulle avec TTL
   if (entry && entry._null) {
     if (Date.now() - entry.ts < entry.ttl) {
-      return { hit: true, data: null }; // Still within TTL — honor the null
+      return { hit: true, data: null }; // Encore dans le TTL — on respecte le nul
     }
-    // Expired — evict and allow retry
+    // Expirée — on l'évince et on autorise une nouvelle tentative
     ignTileCache.delete(key);
     return { hit: false };
   }
@@ -47,22 +47,23 @@ async function getIGNTile(z, col, row, purpose) {
   const cached = getCached(key);
   if (cached.hit) return cached.data;
 
-  // Deduplicate: if this tile is already being fetched, reuse the in-flight promise
+  // Déduplication : si cette tuile est déjà en cours de récupération, on réutilise la promesse en cours
   if (ignInflight.has(key)) return ignInflight.get(key);
 
   const promise = scheduleIGN(async () => {
-    // Re-check after acquiring the concurrency slot
+    // Nouvelle vérification après obtention du créneau de concurrence
     const cached2 = getCached(key);
     if (cached2.hit) return cached2.data;
 
     const url = buildDEMTileURL(z, col, row);
     const { controller, cleanup, init } = ignFetchInit();
     try {
-      // priority:'high' is a HTTP/2 stream-priority hint (Chrome/Edge/Safari
-      // honour it natively, Firefox ignores). DEM tiles drive the visible
-      // mesh — they MUST land before lazy assets (analytics, prefetch link
-      // hints, etc.) on the shared geopf H2 connection. Free ~30–80 ms TTFB
-      // win when the connection has any background traffic.
+      // priority:'high' est une indication de priorité de flux HTTP/2
+      // (Chrome/Edge/Safari la respectent nativement, Firefox l'ignore). Les
+      // tuiles DEM portent le maillage visible — elles DOIVENT arriver avant les
+      // ressources secondaires (analytics, préchargements, etc.) sur la
+      // connexion H2 partagée avec geopf. Gain gratuit de ~30 à 80 ms de TTFB
+      // dès qu'il y a du trafic de fond sur la connexion.
       const res = await fetchIgnWithRetry(url, init);
       if (!res.ok) {
         const errorType = res.status === 404 ? 'permanent' : 'transient';
@@ -79,10 +80,10 @@ async function getIGNTile(z, col, row, purpose) {
       ignTileCache.set(key, data);
       return data;
     } catch {
-      // Skip neg-cache when WE aborted the fetch on a user gesture
-      // (CANCEL_STALE_DEM): the new viewport often re-requests overlapping
-      // tiles within ~50 ms and must hit the real network, not a transient
-      // null entry caused by our own cancellation.
+      // Pas de cache négatif quand C'EST NOUS qui avons annulé le fetch sur un
+      // geste (CANCEL_STALE_DEM) : la nouvelle vue redemande souvent des tuiles
+      // qui se recouvrent dans les ~50 ms et doit atteindre le vrai réseau, pas
+      // une entrée nulle passagère causée par notre propre annulation.
       if (isIGNUserCancel(controller)) return null;
       cacheNull(key, 'transient');
       return null;
@@ -90,7 +91,7 @@ async function getIGNTile(z, col, row, purpose) {
       cleanup();
     }
   }, purpose, { z, col, row }).then((result) => {
-    // If the request was pruned from the queue, do NOT cache — return null
+    // Si la requête a été élaguée de la file, NE PAS mettre en cache — renvoyer null
     if (result === PRUNED_SENTINEL) return null;
     return result;
   }).finally(() => {
@@ -102,10 +103,10 @@ async function getIGNTile(z, col, row, purpose) {
 }
 
 // ---------------------------------------------------------------------------
-// Zoom-level fallback: try lower zoom levels when tile is missing
-// Returns { data, actualZ, actualCol, actualRow } or null
+// Repli sur les niveaux de zoom : essaie les zooms inférieurs quand la tuile manque
+// Renvoie { data, actualZ, actualCol, actualRow } ou null
 // ---------------------------------------------------------------------------
-// Check if a cached null entry is a permanent 404 (tile genuinely missing)
+// Indique si une entrée nulle en cache est une 404 définitive (tuile vraiment absente)
 function isCachedPermanent404(key) {
   if (!ignTileCache.has(key)) return false;
   const entry = ignTileCache.get(key);
@@ -116,10 +117,11 @@ async function getIGNTileWithFallback(z, col, row, deadlineAt, purpose) {
   const data = await getIGNTile(z, col, row, purpose);
   if (data) return { data, actualZ: z, actualCol: col, actualRow: row };
 
-  // If the native zoom returned a confirmed 404, reduce fallback depth.
-  // MNS coverage is zoom-consistent: if z14 is permanently missing, z11-z13
-  // almost certainly are too. Skip the deep fallback to free queue slots for
-  // tiles that might actually exist.
+  // Si le zoom natif a renvoyé une 404 confirmée, on réduit la profondeur de
+  // repli. La couverture MNS est cohérente d'un zoom à l'autre : si z14 manque
+  // définitivement, z11-z13 manquent presque sûrement aussi. On saute le repli
+  // profond pour libérer des créneaux de file pour des tuiles qui existent
+  // peut-être.
   const key = `${z}/${col}/${row}`;
   const isPermanent = isCachedPermanent404(key);
   const maxDepth = isPermanent ? 1 : IGN_FALLBACK_MAX_DEPTH;
@@ -129,8 +131,8 @@ async function getIGNTileWithFallback(z, col, row, deadlineAt, purpose) {
   for (let fbZ = z - 1; fbZ >= minZ; fbZ--) {
     fbCol = fbCol >> 1;
     fbRow = fbRow >> 1;
-    // Per-build deadline check: when the caller (build-tile.js) is past
-    // its soft deadline, give up on the fallback chain.
+    // Contrôle de l'échéance par construction : quand l'appelant (build-tile.js)
+    // a dépassé son délai souple, on abandonne la chaîne de repli.
     if (typeof deadlineAt === 'number' && performance.now() >= deadlineAt) {
       const cached = getCached(`${fbZ}/${fbCol}/${fbRow}`);
       if (cached.hit && cached.data) {
@@ -142,7 +144,7 @@ async function getIGNTileWithFallback(z, col, row, deadlineAt, purpose) {
     if (fbData) {
       return { data: fbData, actualZ: fbZ, actualCol: fbCol, actualRow: fbRow };
     }
-    // Optimization: if native zoom and z-1 both returned 404, don't probe deeper on network!
+    // Optimisation : si le zoom natif et z-1 ont tous deux renvoyé 404, on ne sonde pas plus loin sur le réseau !
     if (fbZ === z - 1) {
       break;
     }

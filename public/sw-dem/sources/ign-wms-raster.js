@@ -1,32 +1,34 @@
 // ---------------------------------------------------------------------------
-// IGN WMS elevation rasters — request geometry (metre-square), supersampling,
-// GetMap fetch, de-duplication of nearest-neighbour rows and resampling to
-// DEM_TILE_SIZE².
+// Rasters d'altitude WMS de l'IGN — géométrie de la requête (carrée en mètres),
+// suréchantillonnage, fetch GetMap, suppression des lignes dupliquées par le
+// plus proche voisin et rééchantillonnage en DEM_TILE_SIZE².
 // ---------------------------------------------------------------------------
 
-// ── WMS anti-aliasing: 2× supersample + box average ───────────────────
-// The geopf WMS resamples its pyramid nearest-neighbour. Asked for exactly
-// the output grid, the samples alias against the 0.5 m LiDAR grid and Horn
-// turns that into regular row/column bands ("hachures") on the slope
-// overlay. Fetching 2× and box-averaging 2×2 is a proper area sample.
-// Measured on 5 French sites at z14-16 (row/col band energy of the slope
-// field, and mean |error| against a 4× reference):
-//   1×: bands 0.46-1.62, error 0.63-7.54°
-//   2×: bands 0.20-0.78, error 0.26-3.03°   (4× reference: 0.15-0.73)
-// 3× is worse than 2× (non-integer box partition); 2× in one axis only
-// leaves the bands of the other axis. Costs 4× the payload (≈1.5 MB per
-// tile, BIL32 is not compressed by geopf), hence only from z13 where the
-// overlay shows the LiDAR detail.
+// ── Anticrénelage WMS : suréchantillonnage 2× + moyenne par blocs ─────
+// Le WMS de geopf rééchantillonne sa pyramide au plus proche voisin. Si l'on
+// demande exactement la grille de sortie, les échantillons crénèlent contre la
+// grille LiDAR de 0,5 m et Horn en fait des bandes régulières de lignes et de
+// colonnes (« hachures ») sur l'overlay des pentes. Demander 2× puis moyenner
+// par blocs de 2×2 donne un vrai échantillonnage par surface.
+// Mesuré sur 5 sites français de z14 à z16 (énergie des bandes lignes/colonnes
+// du champ de pente, et |erreur| moyenne contre une référence à 4×) :
+//   1× : bandes 0,46-1,62, erreur 0,63-7,54°
+//   2× : bandes 0,20-0,78, erreur 0,26-3,03°   (référence 4× : 0,15-0,73)
+// 3× est pire que 2× (découpage en blocs non entier) ; 2× sur un seul axe
+// laisse les bandes de l'autre. Coûte 4× la charge utile (≈1,5 Mo par tuile,
+// le BIL32 n'est pas compressé par geopf), d'où seulement à partir de z13, où
+// l'overlay montre le détail LiDAR.
 function ignWmsSupersampleFactor(mercZ) {
   return mercZ >= 13 ? 2 : 1;
 }
 
-// The 0.40 m MNS stays at 1×: it is the 3D basemap mesh, requested for the
-// whole viewport on every load. At 2× (≈1.5 MB per tile) a 36-tile z14
-// viewport took 13-15 s and a 64-tile z15 one up to 19 s against geopf
-// (≈3.4 MB/s, measured 2026-10-01), past IGN_FETCH_TIMEOUT_MS: the aborted
-// builds cascaded into MNT/RGE ALTI fallbacks and surface recoveries, and the
-// map never finished loading. 1×: 4 s for the same viewports.
+// Le MNS 0,40 m reste à 1× : c'est le maillage 3D du fond de carte, demandé pour
+// toute la vue à chaque chargement. À 2× (≈1,5 Mo par tuile), une vue z14 de
+// 36 tuiles prenait 13 à 15 s et une vue z15 de 64 tuiles jusqu'à 19 s contre
+// geopf (≈3,4 Mo/s, mesuré le 2026-10-01), au-delà d'IGN_FETCH_TIMEOUT_MS : les
+// constructions abandonnées s'enchaînaient en replis MNT / RGE ALTI et en
+// récupérations de surface, et la carte ne finissait jamais de charger. 1× :
+// 4 s pour les mêmes vues.
 function mnsWmsSupersampleFactor() {
   return 1;
 }
@@ -47,35 +49,34 @@ function isValidWmsElevation(v) {
   return !Number.isNaN(v) && v >= MIN_VALID_ELEVATION_M && v <= MAX_VALID_ELEVATION_M;
 }
 
-// ── WMS request geometry: metre-square, never degree-square ───────────
+// ── Géométrie des requêtes WMS : carrée en mètres, jamais en degrés ───
 //
-// The IGN WMS resamples every product into the CRS/bbox it is asked for. The
-// products are stored on a METRE-square grid, which in EPSG:4326 is
-// 1/cos(lat) WIDER than tall. Asking for a degree-square raster
-// (WIDTH === HEIGHT) therefore forces the server to stretch the rows with a
-// nearest-neighbour kernel, which duplicates 1 - cos(lat) of them. Measured
-// against data.geopf.fr, the duplication ratio matches 1 - cos(lat) to within
-// 0.3 %:
-//   lat 42.8° -> predicted 26.6 %, measured 26.27 %
-//   lat 45.1° -> predicted 29.4 %, measured 29.41 %
-//   lat 48.3° -> predicted 33.5 %, measured 33.33 %
+// Le WMS de l'IGN rééchantillonne chaque produit dans le CRS et la bbox
+// demandés. Les produits sont stockés sur une grille CARRÉE EN MÈTRES, qui en
+// EPSG:4326 est 1/cos(lat) PLUS LARGE que haute. Demander un raster carré en
+// degrés (WIDTH === HEIGHT) force donc le serveur à étirer les lignes au plus
+// proche voisin, ce qui en duplique la proportion 1 - cos(lat). Mesuré sur
+// data.geopf.fr, le taux de duplication correspond à 1 - cos(lat) à 0,3 % près :
+//   lat 42,8° -> prévu 26,6 %, mesuré 26,27 %
+//   lat 45,1° -> prévu 29,4 %, mesuré 29,41 %
+//   lat 48,3° -> prévu 33,5 %, mesuré 33,33 %
 //
-// Duplicated rows are catastrophic for the slope overlay. Horn's kernel reads
-// ∂z/∂y across two adjacent rows, so the gradient alternates between 0 and
-// ~2× the true value on successive rows; the raster-colour ramp then paints
-// the terrain as horizontal dashes (the "peigne" artefact) instead of a smooth
-// slope field.
+// Les lignes dupliquées sont catastrophiques pour l'overlay des pentes. Le
+// noyau de Horn lit ∂z/∂y sur deux lignes adjacentes : le gradient alterne donc
+// entre 0 et ~2× la vraie valeur d'une ligne à l'autre, et la rampe de couleurs
+// peint le terrain en tirets horizontaux (l'artefact en « peigne ») au lieu
+// d'un champ de pente lisse.
 //
-// Fix: ask for a raster that is metre-square — 1/cos(lat) MORE columns than
-// rows — while keeping DEM_TILE_SIZE rows so no vertical detail is lost. On the
-// LiDAR-HD MNS layer this drops duplicated rows from 29.4 % to 0.00 % and the
-// even/odd row-gradient comb from 0.018 to 0.000 (verified at 42.8 / 45.1 /
-// 48.3°N). The surplus columns are box-averaged back to DEM_TILE_SIZE by
-// `mnsWmsResampleToTile`.
+// Correction : demander un raster carré en mètres — 1/cos(lat) colonnes de PLUS
+// que de lignes — en gardant DEM_TILE_SIZE lignes, pour ne perdre aucun détail
+// vertical. Sur la couche MNS LiDAR HD, les lignes dupliquées passent de 29,4 %
+// à 0,00 % et le peigne pair/impair du gradient de 0,018 à 0,000 (vérifié à
+// 42,8 / 45,1 / 48,3°N). Les colonnes en trop sont ramenées à DEM_TILE_SIZE par
+// moyenne par blocs dans `mnsWmsResampleToTile`.
 //
-// Note: EPSG:3857 is NOT a fix (measured 22.4 % duplicated rows and a comb of
-// 0.67 — the Mercator reprojection is worse), and the LiDAR-HD layer is not
-// published in EPSG:2154 at all (constant tile).
+// Remarque : l'EPSG:3857 n'est PAS une solution (mesuré : 22,4 % de lignes
+// dupliquées et un peigne à 0,67 — la reprojection Mercator est pire), et la
+// couche LiDAR HD n'est pas du tout publiée en EPSG:2154 (tuile constante).
 function mnsWmsRequestSize(mercZ, mercX, mercY, supersample = 1) {
   const bounds = mercatorTileBounds(mercZ, mercX, mercY);
   const midLat = (bounds.north + bounds.south) / 2;
@@ -85,8 +86,8 @@ function mnsWmsRequestSize(mercZ, mercX, mercY, supersample = 1) {
   return { width, height };
 }
 
-// Payload of one GetMap raster (BIL32, not compressed by geopf): its weight in
-// the scheduler's WMS byte budget (IGN_WMS_INFLIGHT_BYTES_MAX).
+// Charge utile d'un raster GetMap (BIL32, non compressé par geopf) : son poids
+// dans le budget d'octets WMS de l'ordonnanceur (IGN_WMS_INFLIGHT_BYTES_MAX).
 function wmsRasterBytes(mercZ, mercX, mercY, supersample = 1) {
   const { width, height } = mnsWmsRequestSize(mercZ, mercX, mercY, supersample);
   return width * height * 4;
@@ -104,20 +105,22 @@ function buildMnsWmsTileURL(mercZ, mercX, mercY, layer, width, height) {
   );
 }
 
-// ── Undo nearest-neighbour row duplication ────────────────────────────
-// A row that is bit-identical to the row above carries no extra information:
-// it is the residue of the server upsampling the rows of its own coarser grid.
-// Replace every run of identical rows by a linear ramp between the two distinct
-// rows that bracket it, so Horn's ∂z/∂y sees a continuous gradient instead of a
-// 0 / 2× alternation.
+// ── Annuler la duplication de lignes du plus proche voisin ────────────
+// Une ligne identique au bit près à celle du dessus n'apporte aucune
+// information : c'est le résidu du suréchantillonnage, par le serveur, des
+// lignes de sa propre grille plus grossière. On remplace chaque suite de lignes
+// identiques par une rampe linéaire entre les deux lignes distinctes qui
+// l'encadrent, pour que le ∂z/∂y de Horn voie un gradient continu au lieu d'une
+// alternance 0 / 2×.
 //
-// Safe on genuinely flat terrain: on a lake or a plateau the bracketing rows
-// hold the same elevation, so the interpolation is a no-op.
+// Sans danger sur un terrain vraiment plat : sur un lac ou un plateau, les
+// lignes qui encadrent ont la même altitude et l'interpolation ne change rien.
 function decombDuplicateRows(f, width, height) {
   if (width <= 0 || height <= 2) return 0;
   let repaired = 0;
-  // Two passes: the first cleans the long runs, the second catches runs that
-  // only became adjacent once the first pass broke a longer run apart.
+  // Deux passes : la première nettoie les longues suites, la seconde rattrape
+  // celles qui ne sont devenues adjacentes qu'une fois une suite plus longue
+  // découpée par la première passe.
   for (let pass = 0; pass < 2; pass++) {
     let run = 0;
     for (let y = 1; y <= height; y++) {
@@ -154,8 +157,9 @@ function decombDuplicateRows(f, width, height) {
   return repaired;
 }
 
-// Resample a WMS raster of arbitrary geometry down to DEM_TILE_SIZE².
-// NaN/NODATA-aware box average, so sentinel pixels never poison a cell.
+// Rééchantillonne un raster WMS de géométrie quelconque en DEM_TILE_SIZE².
+// Moyenne par blocs qui tient compte de NaN / NODATA : un pixel sentinelle
+// n'empoisonne jamais une cellule.
 function mnsWmsResampleToTile(raw, srcWidth, srcHeight) {
   if (srcWidth === DEM_TILE_SIZE && srcHeight === DEM_TILE_SIZE) {
     decombDuplicateRows(raw, DEM_TILE_SIZE, DEM_TILE_SIZE);
@@ -164,7 +168,7 @@ function mnsWmsResampleToTile(raw, srcWidth, srcHeight) {
   const out = new Float32Array(DEM_TILE_SIZE * DEM_TILE_SIZE);
   const sx = srcWidth / DEM_TILE_SIZE;
   const sy = srcHeight / DEM_TILE_SIZE;
-  // Column spans depend on x only — compute them once, not once per pixel.
+  // Les plages de colonnes ne dépendent que de x — calculées une fois, pas pour chaque pixel.
   const colStart = new Int32Array(DEM_TILE_SIZE);
   const colEnd = new Int32Array(DEM_TILE_SIZE);
   for (let x = 0; x < DEM_TILE_SIZE; x++) {

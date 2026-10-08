@@ -1,56 +1,60 @@
 // ---------------------------------------------------------------------------
-// Slope math — PURE functions shared by the in-process SW path (slope.js)
-// and the dedicated slope worker pool (slope-pool.worker.js).
+// Calcul des pentes — fonctions PURES partagées par le chemin du SW dans le
+// processus courant (slope.js) et le pool de workers dédié aux pentes
+// (slope-pool.worker.js).
 //
-// NOTHING in this file may reference SW-only globals (no SLOPE_INFLIGHT,
-// no demCache, no caches, no self.clients). It depends only on:
-//   - config constants  (DEM_TILE_SIZE, DEM_NODATA_THRESHOLD, …)
-//   - terrain-rgb.js    (buildGrayPng, buildGrayAlphaPng)
+// RIEN dans ce fichier ne doit référencer de global propre au SW (pas de
+// SLOPE_INFLIGHT, de demCache, de caches, de self.clients). Il ne dépend que de :
+//   - constantes de config (DEM_TILE_SIZE, DEM_NODATA_THRESHOLD, …)
+//   - terrain-rgb.js      (buildGrayPng, buildGrayAlphaPng)
 //
-// Both slope.js (in-process fallback) and the worker importScripts this
-// module so the Horn kernel, the upsample and the PNG encode live in exactly
-// ONE place: pool and in-process outputs are byte-identical.
+// slope.js (repli dans le processus courant) et le worker chargent tous deux ce
+// module par importScripts : le noyau de Horn, le suréchantillonnage et
+// l'encodage PNG vivent à UN seul endroit, et les sorties du pool et du
+// processus courant sont identiques à l'octet près.
 //
-// Pipeline (buildSlopePngFromElevations):
-//   1. own DEM tile + 3-cell border from the 4 cardinal neighbour tiles
-//   2. Horn 3×3 slope on the tile and 2 cells beyond each edge, ground cell
-//      size per row (Web Mercator is conformal: same spacing in x and y at a
-//      given latitude)
-//   3. sqrt-gamma encode: value = sqrt(deg / 90) · 255, kept continuous
-//   4. output: native resolution (zone tiles) or 2× Catmull-Rom upsample of
-//      the encoded field (terrain-aligned tiles, see slope-source.ts)
-//   5. gray PNG — gray + alpha only where a NoData / analysis-zone mask
-//      makes part of the tile transparent
+// Pipeline (buildSlopePngFromElevations) :
+//   1. tuile DEM propre + bordure de 3 cellules prise aux 4 tuiles voisines cardinales
+//   2. pente de Horn 3×3 sur la tuile et 2 cellules au-delà de chaque bord,
+//      taille de cellule au sol par ligne (le Web Mercator est conforme : même
+//      espacement en x et en y à une latitude donnée)
+//   3. encodage en gamma racine : valeur = sqrt(deg / 90) · 255, gardée continue
+//   4. sortie : résolution native (tuiles de zone) ou suréchantillonnage
+//      Catmull-Rom 2× du champ encodé (tuiles alignées sur le terrain, voir
+//      slope-source.ts)
+//   5. PNG gris — gris + alpha seulement là où un masque NoData / de zone
+//      d'analyse rend une partie de la tuile transparente
 //
-// Why upsample the SLOPE and never the DEM: Horn on an interpolated DEM turns
-// the spline's curvature into ripples at the source spacing. The slope field
-// itself is interpolated here exactly like the GPU would (but with a smooth
-// cubic instead of bilinear facets), and the 2-cell margin computed from the
-// neighbour DEMs makes two adjacent tiles interpolate the same values on
-// their shared edge — no seam.
+// Pourquoi suréchantillonner la PENTE et jamais le DEM : Horn sur un DEM
+// interpolé transforme la courbure de la spline en ondulations au pas de la
+// source. Le champ de pente lui-même est interpolé ici exactement comme le
+// ferait le GPU (mais avec une cubique lisse au lieu de facettes bilinéaires),
+// et la marge de 2 cellules calculée à partir des DEM voisins fait interpoler
+// les mêmes valeurs à deux tuiles adjacentes sur leur bord commun — pas de jointure.
 // ---------------------------------------------------------------------------
 
 const SLOPE_EARTH_CIRCUMFERENCE_M = 40075016.686;
 // encoded = sqrt(atan(g) / (π/2)) · 255 = sqrt(deg / 90) · 255
 const SLOPE_ENC_K = 255 / Math.sqrt(Math.PI / 2);
 
-// DEM cells borrowed from each neighbour: Horn needs 1, the Catmull-Rom
-// upsample needs the slope 2 cells beyond the edge, hence 3.
+// Cellules de DEM empruntées à chaque voisine : Horn en a besoin d'1, le
+// suréchantillonnage Catmull-Rom a besoin de la pente 2 cellules au-delà du
+// bord, d'où 3.
 const SLOPE_DEM_BORDER = 3;
 const SLOPE_FIELD_MARGIN = SLOPE_DEM_BORDER - 1;
 
-// Catmull-Rom weights for a 2× upsample sampled at pixel centres: output
-// pixel 2i sits at source i − 0.25 (taps i−2 … i+1), 2i+1 at i + 0.25
-// (taps i−1 … i+2).
+// Poids Catmull-Rom d'un suréchantillonnage 2× échantillonné aux centres des
+// pixels : le pixel de sortie 2i est à la position source i − 0,25 (échantillons
+// i−2 … i+1), 2i+1 à i + 0,25 (échantillons i−1 … i+2).
 const SLOPE_CR_EVEN = [-0.0234375, 0.2265625, 0.8671875, -0.0703125];
 const SLOPE_CR_ODD = [-0.0703125, 0.8671875, 0.2265625, -0.0234375];
 
-// ── Padded elevation buffer from PRE-DECODED neighbour elevations ──────
-// `neighbourElevations` is { north?, east?, south?, west? } with each value a
-// Float32Array(S*S). Missing neighbours are linearly extrapolated (only the
-// first border cell feeds a kept slope value — see replicateMissingSlopeMargins).
-// Corners have no diagonal neighbour: bilinear-plane extrapolation of the
-// two adjacent strips.
+// ── Tampon d'altitudes élargi à partir d'altitudes voisines DÉJÀ décodées ──
+// `neighbourElevations` vaut { north?, east?, south?, west? }, chaque valeur
+// étant un Float32Array(S*S). Les voisines manquantes sont extrapolées
+// linéairement (seule la première cellule de bordure alimente une valeur de
+// pente gardée — voir replicateMissingSlopeMargins). Les coins n'ont pas de
+// voisine diagonale : extrapolation par plan bilinéaire des deux bandes adjacentes.
 function buildPaddedElevationsFromArrays(ownElev, neighbourElevations) {
   const S = DEM_TILE_SIZE;
   const B = SLOPE_DEM_BORDER;
@@ -125,11 +129,12 @@ function buildPaddedElevationsFromArrays(ownElev, neighbourElevations) {
   return { pad, missingDirections };
 }
 
-// ── Horn slope field (encoded, continuous) ────────────────────────────
-// Covers the tile plus SLOPE_FIELD_MARGIN cells beyond each edge:
-// F = S + 2·M cells per side. The ground cell size follows each row's
-// latitude; one value per tile used to skew low-zoom tiles by several percent
-// between their top and bottom rows and left a step at every horizontal seam.
+// ── Champ de pente de Horn (encodé, continu) ──────────────────────────
+// Couvre la tuile plus SLOPE_FIELD_MARGIN cellules au-delà de chaque bord :
+// F = S + 2·M cellules par côté. La taille de cellule au sol suit la latitude de
+// chaque ligne ; une seule valeur par tuile faussait de plusieurs pour cent les
+// tuiles de faible zoom entre leur première et leur dernière ligne et laissait
+// une marche à chaque jointure horizontale.
 function computeSlopeField(pad, z, y) {
   const S = DEM_TILE_SIZE;
   const B = SLOPE_DEM_BORDER;
@@ -168,8 +173,8 @@ function computeSlopeField(pad, z, y) {
   return field;
 }
 
-// Beyond an edge without a neighbour tile the margin would come from
-// extrapolated elevations: replicate the edge slope instead.
+// Au-delà d'un bord sans tuile voisine, la marge viendrait d'altitudes
+// extrapolées : on réplique plutôt la pente du bord.
 function replicateMissingSlopeMargins(field, missingDirections) {
   if (!missingDirections.length) return;
   const S = DEM_TILE_SIZE;
@@ -202,7 +207,7 @@ function clampSlopeByte(v) {
   return (v + 0.5) | 0;
 }
 
-// Native resolution: the tile's own cells, quantised.
+// Résolution native : les cellules propres de la tuile, quantifiées.
 function slopeFieldInterior(field) {
   const S = DEM_TILE_SIZE;
   const M = SLOPE_FIELD_MARGIN;
@@ -216,7 +221,7 @@ function slopeFieldInterior(field) {
   return out;
 }
 
-// Separable 2× Catmull-Rom of the encoded field → (2S)² bytes.
+// Catmull-Rom 2× séparable du champ encodé → (2S)² octets.
 function upsampleSlopeField2x(field) {
   const S = DEM_TILE_SIZE;
   const M = SLOPE_FIELD_MARGIN;
@@ -254,8 +259,9 @@ function upsampleSlopeField2x(field) {
   return out;
 }
 
-// Nearest-neighbour fallback for the (theoretical) NoData case: a Catmull-Rom
-// tap on a NoData cell would bleed its garbage gradient into valid pixels.
+// Repli au plus proche voisin pour le cas (théorique) de NoData : un
+// échantillon Catmull-Rom sur une cellule NoData déverserait son gradient
+// aberrant sur les pixels valides.
 function upsampleBytesNearest(bytes, size, scale) {
   const O = size * scale;
   const out = new Uint8Array(O * O);
@@ -267,7 +273,7 @@ function upsampleBytesNearest(bytes, size, scale) {
   return out;
 }
 
-// Legacy `?res=N` mode: N×N block average of the native slope.
+// Ancien mode `?res=N` : moyenne par blocs N×N de la pente native.
 function blockAverageSlopeBytes(bytes, factor) {
   const S = DEM_TILE_SIZE;
   const out = new Uint8Array(S * S);
@@ -287,14 +293,16 @@ function blockAverageSlopeBytes(bytes, factor) {
   return out;
 }
 
-// ── Analysis-zone per-pixel mask ──────────────────────────────────────
-// PURE functions (geo.js's mercatorTileBounds only) shared by the SW scope
-// and the worker pool, so pool and in-process builds are byte-identical.
+// ── Masque par pixel de la zone d'analyse ─────────────────────────────
+// Fonctions PURES (seulement mercatorTileBounds de geo.js) partagées par le
+// scope du SW et le pool de workers, pour que les constructions du pool et du
+// processus courant soient identiques à l'octet près.
 //
-// rasterizeRingMask projects the polygon ring ([lng, lat] pairs) into tile
-// pixel space and fills it with a scanline algorithm at 2× supersampling;
-// the 2×2 box downsample gives a natural ~1 px feathered edge so the zone
-// boundary doesn't alias against the terrain mesh.
+// rasterizeRingMask projette l'anneau du polygone (paires [lng, lat]) dans
+// l'espace des pixels de la tuile et le remplit par balayage de lignes avec un
+// suréchantillonnage 2× ; le sous-échantillonnage par blocs 2×2 donne un bord
+// adouci naturel d'environ 1 px, pour que la limite de la zone ne crénèle pas
+// contre le maillage du terrain.
 
 function rasterizeRingMask(ring, z, x, y, size) {
   const n = ring.length;
@@ -305,7 +313,7 @@ function rasterizeRingMask(ring, z, x, y, size) {
   const sw = size * ss;
   const worldTiles = 1 << z;
 
-  // Project polygon vertices into Web Mercator pixel coordinates in [0, sw] space.
+  // Projette les sommets du polygone en coordonnées pixel Web Mercator dans l'espace [0, sw].
   const px = new Float64Array(n);
   const py = new Float64Array(n);
   for (let i = 0; i < n; i++) {
@@ -365,9 +373,9 @@ function rasterizeRingMask(ring, z, x, y, size) {
   return out;
 }
 
-// Multiplies the RGBA alpha channel by the mask (0 → fully transparent,
-// 255 → untouched). RGB is left as-is: GPU-side raster-color only reads
-// pixels with alpha > 0 (bilinear alpha blend handles the feather).
+// Multiplie le canal alpha RGBA par le masque (0 → entièrement transparent,
+// 255 → inchangé). Le RGB est laissé tel quel : le raster-color côté GPU ne lit
+// que les pixels d'alpha > 0 (le mélange alpha bilinéaire gère l'adoucissement).
 function applyRingMaskToRgba(rgba, mask) {
   const n = mask.length;
   for (let j = 0; j < n; j++) {
@@ -385,7 +393,7 @@ function applyRingMaskToRgba(rgba, mask) {
   }
 }
 
-// Same as applyRingMaskToRgba for a separate alpha plane.
+// Comme applyRingMaskToRgba, pour un plan alpha séparé.
 function applyRingMaskToAlpha(alpha, mask) {
   const n = mask.length;
   for (let j = 0; j < n; j++) {
@@ -394,16 +402,17 @@ function applyRingMaskToAlpha(alpha, mask) {
   }
 }
 
-// ── Orchestrator ──────────────────────────────────────────────────────
-// Own elevation + already-decoded neighbour elevations in, PNG out. This is
-// the single function the worker pool and the in-process fallback invoke.
+// ── Orchestrateur ─────────────────────────────────────────────────────
+// Altitudes propres + altitudes voisines déjà décodées en entrée, PNG en sortie.
+// C'est la seule fonction qu'appellent le pool de workers et le repli dans le
+// processus courant.
 //
-//   options.outputScale  1 = native DEM resolution (zone tiles),
-//                        2 = 2× Catmull-Rom (terrain-aligned tiles)
-//   options.resFactor    legacy `?res=N` block average (native output)
-//   options.zoneRing     optional [[lng, lat], …] analysis-zone ring
+//   options.outputScale  1 = résolution native du DEM (tuiles de zone),
+//                        2 = Catmull-Rom 2× (tuiles alignées sur le terrain)
+//   options.resFactor    ancienne moyenne par blocs `?res=N` (sortie native)
+//   options.zoneRing     anneau optionnel [[lng, lat], …] de la zone d'analyse
 //
-// Returns { blob: Blob (gray or gray + alpha PNG), missingDirections: string[] }.
+// Renvoie { blob: Blob (PNG gris ou gris + alpha), missingDirections: string[] }.
 async function buildSlopePngFromElevations(ownElev, neighbourElevations, z, x, y, options = {}) {
   const S = DEM_TILE_SIZE;
   const resFactor = Number(options.resFactor) > 1 ? Math.min(64, Number(options.resFactor) | 0) : 1;
@@ -434,7 +443,7 @@ async function buildSlopePngFromElevations(ownElev, neighbourElevations, z, x, y
 
   const size = S * outputScale;
   const zoneMask = options.zoneRing ? rasterizeRingMask(options.zoneRing, z, x, y, size) : null;
-  // The usual tile is fully opaque: gray-only PNG (half the bytes to deflate).
+  // La tuile habituelle est entièrement opaque : PNG gris seul (moitié moins d'octets à compresser).
   if (!noData && !zoneMask) {
     return { blob: await buildGrayPng(size, size, gray), missingDirections };
   }

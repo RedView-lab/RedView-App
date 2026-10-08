@@ -1,7 +1,8 @@
 // ---------------------------------------------------------------------------
-// Build HIGHRES (5 m) fallback tile — same resampling as buildIGNTile but
-// targeting ELEVATION.ELEVATIONGRIDCOVERAGE.HIGHRES (WGS84G_6_14, z6-14).
-// Called only when MNS returned 0 coverage for this tile.
+// Construction de la tuile de repli HIGHRES (5 m) — même rééchantillonnage que
+// buildIGNTile, mais sur ELEVATION.ELEVATIONGRIDCOVERAGE.HIGHRES (WGS84G_6_14,
+// z6-14). Appelée seulement quand le MNS a renvoyé une couverture nulle pour
+// cette tuile.
 // ---------------------------------------------------------------------------
 async function buildIGNFallbackTile(mercZ, mercX, mercY) {
   const t0 = performance.now();
@@ -31,7 +32,7 @@ async function buildIGNFallbackTile(mercZ, mercX, mercY) {
     }
   }
 
-  // Shorter deadline for HIGHRES
+  // Délai plus court pour HIGHRES
   const softDeadlineMs = Math.min(3000, typeof ignSoftDeadlineMs === 'function'
     ? ignSoftDeadlineMs(mercZ) : IGN_SUBTILE_SOFT_DEADLINE_MS);
   await Promise.race([
@@ -135,7 +136,7 @@ async function buildIGNFallbackTile(mercZ, mercX, mercY) {
     return { blob: null, elevations, coverage, source, pendingFetches };
   }
 
-  // Mapbox prefill for uncovered pixels (same as MNS path)
+  // Préremplissage Mapbox des pixels non couverts (comme pour le chemin MNS)
   if (coveredCount < totalPixels && mercZ <= MAPBOX_DEM_MAXZOOM) {
     try {
       const mbBlob = await fetchMapboxTile(mercZ, mercX, mercY);
@@ -162,7 +163,7 @@ async function buildIGNFallbackTile(mercZ, mercX, mercY) {
     } catch { /* best-effort */ }
   }
 
-  // Dilation with recycled ping-pong buffers
+  // Dilatation avec des tampons ping-pong recyclés
   const coverageRatio = coveredCount / totalPixels;
   const dilationPasses = coverageRatio > 0.9 ? 2 : 4;
   const scratchElev = new Float32Array(totalPixels);

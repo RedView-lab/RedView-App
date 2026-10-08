@@ -1,13 +1,14 @@
 // ---------------------------------------------------------------------------
-// Slope Tile Processing — HTTP Request Handler (/slope-tiles/{z}/{x}/{y})
+// Traitement des tuiles de pente — handler des requêtes HTTP (/slope-tiles/{z}/{x}/{y})
 //
-// Terrain-aligned tiles (no zone): the page requests exactly the tiles of the
-// 3D terrain's DEM pyramid (slope-source.ts), so slope tile z/x/y is Horn on
-// DEM tile z/x/y — the tile the terrain mesh shows — stitched to its four
-// neighbours and upsampled 2×. Requests are never cancelled by a gesture:
-// the work is bounded by the DEM the terrain needs anyway, and a cancelled
-// request used to answer a transparent placeholder that Mapbox kept as the
-// final tile (holes in the overlay until a reload).
+// Tuiles alignées sur le terrain (sans zone) : la page demande exactement les
+// tuiles de la pyramide DEM du terrain 3D (slope-source.ts), donc la tuile de
+// pente z/x/y est Horn sur la tuile DEM z/x/y — celle que montre le maillage du
+// terrain —, raccordée à ses quatre voisines et suréchantillonnée 2×. Les
+// requêtes ne sont jamais annulées par un geste : le travail est borné par le
+// DEM dont le terrain a besoin de toute façon, et une requête annulée répondait
+// un remplaçant transparent que Mapbox gardait comme tuile définitive (des
+// trous dans l'overlay jusqu'à un rechargement).
 // ---------------------------------------------------------------------------
 
 function provisionalSlopeResponse(blob, quality, demProfile) {
@@ -24,8 +25,8 @@ function provisionalSlopeResponse(blob, quality, demProfile) {
   });
 }
 
-// options.sourceDem          'hd' | 'fast-30m' (legacy '' = HD without coverage check)
-// options.noAncestorFallback internal: no parent-slope fallback (recursion guard)
+// options.sourceDem          'hd' | 'fast-30m' (ancien '' = HD sans contrôle de couverture)
+// options.noAncestorFallback interne : pas de repli sur la pente du parent (garde contre la récursion)
 async function handleSlopeRequest(z, x, y, resParam, demProfile = 'default', zoneHash = '', options = {}) {
   const resFactor = (() => {
     const n = parseInt(resParam, 10);
@@ -33,10 +34,10 @@ async function handleSlopeRequest(z, x, y, resParam, demProfile = 'default', zon
   })();
   const sourceDem = options?.sourceDem || (demProfile === 'fast-30m' ? 'fast-30m' : '');
 
-  // ── HD requested outside every high-resolution DEM footprint ─────────
-  // Italy, Germany, Belgium… only have the global AWS 30 m DEM. Serve
-  // exactly what the 30 m mode serves (shared cache entries), with z>13
-  // tiles upsampled from the native z13 slope.
+  // ── HD demandé hors de toute emprise de DEM haute résolution ─────────
+  // L'Italie, l'Allemagne, la Belgique… n'ont que le DEM mondial AWS à 30 m. On
+  // sert exactement ce que sert le mode 30 m (entrées de cache partagées), avec
+  // des tuiles z>13 suréchantillonnées depuis la pente native z13.
   if (sourceDem === 'hd' && !zoneHash && !(await slopeTileHasHdCoverage(z, x, y))) {
     return handleSlopeRequest(z, x, y, resParam, 'default', '', { ...options, sourceDem: 'fast-30m' });
   }
@@ -80,16 +81,18 @@ async function handleSlopeRequest(z, x, y, resParam, demProfile = 'default', zon
   const existing = SLOPE_INFLIGHT.get(inflightKey);
   if (existing) {
     try { return (await existing).clone(); }
-    catch { /* fall through and recompute */ }
+    catch { /* on continue et on recalcule */ }
   }
 
-  // Zone tiles keep the z14 pipeline's native resolution and its own reload
-  // messages; terrain-aligned tiles report every provisional answer.
+  // Les tuiles de zone gardent la résolution native du pipeline z14 et leurs
+  // propres messages de rechargement ; les tuiles alignées sur le terrain
+  // signalent chaque réponse provisoire.
   const outputScale = zoneHash ? 1 : SLOPE_OUTPUT_SCALE;
   const is30m = sourceDem === 'fast-30m' || sourceDem === '30m' || demProfile === 'fast-30m';
-  // A provisional tile is rebuilt when the DEM tiles it lacks land (HD), or
-  // by a capped blind retry (30 m: AWS neighbours are fetched inline, so a
-  // miss there is a network failure, not a tile still to come).
+  // Une tuile provisoire est reconstruite quand les tuiles DEM qui lui manquent
+  // arrivent (HD), ou par une nouvelle tentative à l'aveugle plafonnée (30 m : les
+  // voisines AWS sont récupérées directement, donc un échec y est une panne
+  // réseau, pas une tuile encore à venir).
   const reloadWhenReady = (pendingDemTiles) => {
     if (zoneHash) return;
     if (is30m || pendingDemTiles.length === 0) {
@@ -100,8 +103,8 @@ async function handleSlopeRequest(z, x, y, resParam, demProfile = 'default', zon
   };
 
   const work = (async () => {
-    // Native zoom caps (slope-source.ts resolveSlopeMaxZoom): 30 m stops at
-    // z13 (AWS z14 is server-upsampled), HD at z16.
+    // Plafonds de zoom natif (resolveSlopeMaxZoom de slope-source.ts) : le 30 m
+    // s'arrête à z13 (AWS z14 est suréchantillonné côté serveur), le HD à z16.
     const maxAllowedZ = is30m ? GLOBAL_SLOPE_NATIVE_MAX_Z : HD_SLOPE_MAX_Z;
     if (z > maxAllowedZ) {
       if (is30m && !zoneHash && z <= HD_SLOPE_MAX_Z) {
@@ -114,14 +117,16 @@ async function handleSlopeRequest(z, x, y, resParam, demProfile = 'default', zon
     const demResponse = await getExistingTerrainDemResponse(z, x, y, demProfile, demCache, sourceDem);
     const ownDemSource = (demResponse?.headers.get('X-DEM-Source') || '').toLowerCase();
 
-    // ── No DEM tile, or only a parent overzoom of one ─────────────────
-    // The terrain renders its parent mesh there: show the parent's slope
-    // (cropped + upsampled) rather than a hole, and never run Horn on a
-    // Catmull-Rom overzoomed DEM (ripples). Provisional until the real DEM.
+    // ── Pas de tuile DEM, ou seulement un overzoom de parent ──────────
+    // Le terrain y rend le maillage de son parent : on montre la pente du parent
+    // (recadrée + suréchantillonnée) plutôt qu'un trou, et on n'exécute jamais
+    // Horn sur un DEM suréchantillonné en Catmull-Rom (ondulations). Provisoire
+    // jusqu'au vrai DEM.
     if (!demResponse || demResponse.status !== 200 || ownDemSource.startsWith('overzoom')) {
       if (!zoneHash) {
-        // Capped blind retry (a 204 may be transient) + rebuild as soon as
-        // a background upgrade commits the real tile.
+        // Nouvelle tentative à l'aveugle plafonnée (une 204 peut être passagère)
+        // + reconstruction dès qu'une mise à niveau en arrière-plan enregistre la
+        // vraie tuile.
         noteSlopeTileStale(hotKey);
         if (!is30m) waitSlopeTileOnDem(hotKey, demProfile, z, [[x, y]]);
       }
@@ -134,11 +139,11 @@ async function handleSlopeRequest(z, x, y, resParam, demProfile = 'default', zon
       return transparentTileResponse();
     }
 
-    // Neighbours are only stitched when they come from the same DEM class
-    // as this tile (AWS 30 m vs high-resolution national DEM).
+    // Les voisines ne sont raccordées que si elles viennent de la même classe de
+    // DEM que cette tuile (AWS 30 m contre DEM national haute résolution).
     const ownSourceClass = slopeDemSourceClass(ownDemSource);
-    // Emergency / short-TTL DEM is a stand-in for a tile still being built:
-    // serve the slope, but never lock it into a cache tier.
+    // Un DEM de secours / à TTL court remplace une tuile encore en construction :
+    // on sert la pente, mais on ne la fige jamais dans un niveau de cache.
     const ownDemIsFinal = (demResponse.headers.get('X-DEM-Health') || 'ok').toLowerCase() === 'ok'
       && !demResponse.headers.get('x-cache-ttl-ms')
       && !/parent|overzoom|emergency/.test(ownDemSource);
@@ -169,8 +174,9 @@ async function handleSlopeRequest(z, x, y, resParam, demProfile = 'default', zon
         },
       });
 
-      // Only final tiles enter CacheStorage and the hot tier: a provisional
-      // hot entry would be served back instead of the rebuild.
+      // Seules les tuiles définitives entrent dans CacheStorage et le niveau
+      // chaud : une entrée chaude provisoire serait resservie au lieu de la
+      // reconstruction.
       if (isPersistable) {
         slopeCache.put(cacheKey, response.clone());
         try {

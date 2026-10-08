@@ -1,40 +1,43 @@
 // ---------------------------------------------------------------------------
-// Very-high-resolution orthophoto tiles (/vhr-tiles/{z}/{x}/{y}?r=1|2)
+// Tuiles d'orthophotos à très haute résolution (/vhr-tiles/{z}/{x}/{y}?r=1|2)
 //
-// Mapbox Satellite in France is the IGN 20 cm BD ORTHO up to z19. A few
-// cities (Rennes…) additionally get a 5 cm PCRS at z20 only — Mapbox's own
-// z21 there falls back to the 20 cm ortho upscaled 4×. The IGN Géoplateforme
-// publishes those very-high-resolution mosaics directly:
+// En France, Mapbox Satellite est la BD ORTHO 20 cm de l'IGN jusqu'à z19.
+// Quelques villes (Rennes…) ont en plus un PCRS à 5 cm, à z20 seulement — à z21,
+// Mapbox y retombe sur l'ortho 20 cm agrandie 4×. La Géoplateforme de l'IGN
+// publie directement ces mosaïques à très haute résolution :
 //   - PCRS.LAMB93                    5 cm  Plan Corps de Rue Simplifié
 //                                          (Rennes, Vannes, Saint-Malo, Niort,
 //                                          Poitiers, Toulouse…)
 //   - THR.ORTHOIMAGERY.ORTHOPHOTOS   5–10 cm (Paris, Marseille…)
-// This overlay draws them above Mapbox Satellite from z18 to z21 wherever
-// they exist and answers a transparent tile everywhere else, so the Mapbox
-// imagery (20 cm, or its own high-res patches such as Lyon) shows through.
+// Cet overlay les dessine au-dessus de Mapbox Satellite de z18 à z21 là où
+// elles existent, et répond une tuile transparente partout ailleurs, pour que
+// l'imagerie Mapbox (20 cm, ou ses propres zones haute résolution comme Lyon)
+// reste visible.
 //
-// WMS-R reprojects to EPSG:3857 server-side. Measured 2026-10-02:
-//   - ~0.2–0.5 s per tile;
-//   - no data is painted PURE WHITE: PNGs are always 8-bit RGB (TRANSPARENT
-//     and BGCOLOR are ignored), an empty JPEG is a uniform 1.6 KB white tile;
-//   - stacking two layers in one GetMap returns only the last one when that
-//     one is empty → one request per layer;
-//   - the coverage renders at every scale (64 px of a z14 tile = one pixel
-//     per z20 tile), which is what the coverage masks below rely on.
-// The WMS quota (40 req/s per IP, shared with the LiDAR slope pipeline) is
-// enforced by fetchIgnWithRetry (ign-network.js).
+// Le WMS-R reprojette en EPSG:3857 côté serveur. Mesuré le 2026-10-02 :
+//   - ~0,2 à 0,5 s par tuile ;
+//   - l'absence de donnée est peinte en BLANC PUR : les PNG sont toujours en
+//     RGB 8 bits (TRANSPARENT et BGCOLOR sont ignorés), un JPEG vide est une
+//     tuile blanche uniforme de 1,6 Ko ;
+//   - empiler deux couches dans un même GetMap ne renvoie que la dernière quand
+//     elle est vide → une requête par couche ;
+//   - la couverture se rend à toutes les échelles (64 px d'une tuile z14 = un
+//     pixel par tuile z20), ce sur quoi reposent les masques de couverture
+//     ci-dessous.
+// Le quota WMS (40 req/s par IP, partagé avec le pipeline de pente LiDAR) est
+// appliqué par fetchIgnWithRetry (ign-network.js).
 // ---------------------------------------------------------------------------
 
 const VHR_CACHE_NAME = `vhr-tiles-v1-${MAP_CACHE_EPOCH}`;
 const VHR_MIN_Z = 18;
 const VHR_MAX_Z = 21;
 const VHR_TILE_SIZE = 256;
-// Native resolution is 5 cm: a 512 px z21 tile (2.5 cm/px) would only be
-// upsampled server-side, so retina tiles stop at z20.
+// La résolution native est de 5 cm : une tuile z21 de 512 px (2,5 cm/px) ne
+// serait que suréchantillonnée côté serveur, donc les tuiles rétina s'arrêtent à z20.
 const VHR_RETINA_MAX_Z = 20;
 
-// Highest priority first. Bboxes from the WMS capabilities (west, south,
-// east, north) — no mask request is issued outside them.
+// Priorité la plus haute d'abord. Bbox issues des capacités WMS (ouest, sud,
+// est, nord) — aucune requête de masque n'est émise en dehors.
 const VHR_LAYERS = [
   { id: 'PCRS.LAMB93', bbox: [-5.5, 41.0, 10.0, 51.5] },
   { id: 'THR.ORTHOIMAGERY.ORTHOPHOTOS', bbox: [0.03, 43.15, 6.03, 49.7] },
@@ -42,8 +45,8 @@ const VHR_LAYERS = [
 
 const VHR_MASK_Z = 14;
 const VHR_MASK_SIZE = 64;
-// Coverage grows slowly (new PCRS deliveries); a fortnight keeps the masks
-// warm without pinning an outdated footprint for good.
+// La couverture grandit lentement (nouvelles livraisons PCRS) ; une quinzaine
+// garde les masques chauds sans figer pour de bon une emprise périmée.
 const VHR_MASK_MAX_AGE_MS = 14 * 24 * 3600_000;
 const VHR_MASK_MEMORY_MAX = 512;
 
@@ -51,7 +54,8 @@ const VHR_CONCURRENCY = 8;
 const VHR_QUEUE_MAX = 240;
 const VHR_FETCH_TIMEOUT_MS = 12_000;
 const VHR_HOT_CACHE_MAX = 160;
-// No-data white, with a margin for the resampling blend along coverage edges.
+// Blanc de l'absence de donnée, avec une marge pour le mélange du
+// rééchantillonnage le long des bords de couverture.
 const VHR_NODATA_MIN = 250;
 const VHR_FRINGE_MIN = 200;
 const VHR_FRINGE_PASSES = 2;
@@ -109,9 +113,9 @@ async function readVhrPixels(blob, size) {
   }
 }
 
-// Clears the no-data white reachable from the tile border (4-connected).
-// A white roof or car inside the covered area is not connected to the
-// outside through pure white and keeps its pixels.
+// Efface le blanc d'absence de donnée accessible depuis le bord de la tuile
+// (4-connexité). Un toit ou une voiture blancs à l'intérieur de la zone couverte
+// ne sont pas reliés à l'extérieur par du blanc pur et gardent leurs pixels.
 function knockOutVhrNoData(image) {
   const { width, height, data } = image;
   const seen = new Uint8Array(width * height);
@@ -137,8 +141,8 @@ function knockOutVhrNoData(image) {
     if (py < height - 1) push(px, py + 1);
   }
   if (cleared === 0) return 0;
-  // The resampling blends the coverage edge into a 1–2 px whitish fringe
-  // that stays under the pure-white threshold.
+  // Le rééchantillonnage fond le bord de couverture en une frange blanchâtre de
+  // 1 à 2 px qui reste sous le seuil du blanc pur.
   for (let pass = 0; pass < VHR_FRINGE_PASSES; pass++) {
     const fringe = [];
     for (let p = 0; p < width * height; p++) {
@@ -158,7 +162,7 @@ function knockOutVhrNoData(image) {
 }
 
 
-// ── Concurrency limiter (LIFO: the latest viewport is served first) ───────
+// ── Limiteur de concurrence (LIFO : la dernière vue est servie d'abord) ──────
 
 let vhrActive = 0;
 const vhrQueue = [];
@@ -194,7 +198,7 @@ async function fetchVhrImage(url) {
     try {
       const res = await fetchIgnWithRetry(url, { signal: controller.signal });
       if (!res.ok) return null;
-      // WMS exceptions can come back as 200 text/xml.
+      // Les exceptions WMS peuvent revenir en 200 text/xml.
       const type = (res.headers.get('Content-Type') || '').toLowerCase();
       if (!type.startsWith('image/')) return null;
       return await res.blob();
@@ -205,7 +209,7 @@ async function fetchVhrImage(url) {
   return result === PRUNED_SENTINEL ? null : result;
 }
 
-// ── Coverage masks (one 64 px alpha grid per layer and z14 tile) ──────────
+// ── Masques de couverture (une grille alpha de 64 px par couche et par tuile z14) ──
 
 // key → { alpha: Uint8Array | null } (null alpha = no coverage at all)
 const vhrMaskMemory = new Map();
@@ -219,9 +223,9 @@ function vhrMaskMemoryPut(key, entry) {
   }
 }
 
-// 255 = covered, 0 = no data (white). A mask pixel averages ~25 m of
-// imagery, so only a genuinely empty area reads white; a bright snowfield
-// mistaken for a hole only falls back to Mapbox.
+// 255 = couvert, 0 = pas de donnée (blanc). Un pixel de masque moyenne ~25 m
+// d'imagerie : seule une zone vraiment vide apparaît blanche ; un névé
+// lumineux pris pour un trou ne fait que retomber sur Mapbox.
 async function decodeVhrMask(blob) {
   const { image } = await readVhrPixels(blob, VHR_MASK_SIZE);
   const alpha = new Uint8Array(VHR_MASK_SIZE * VHR_MASK_SIZE);
@@ -234,8 +238,8 @@ async function decodeVhrMask(blob) {
   return any ? alpha : null;
 }
 
-// Resolves to { alpha } or undefined when the mask could not be fetched
-// (the caller then answers a transparent tile: Mapbox stays visible).
+// Se résout en { alpha }, ou undefined quand le masque n'a pas pu être récupéré
+// (l'appelant répond alors une tuile transparente : Mapbox reste visible).
 async function getVhrMask(layer, mx, my) {
   const key = `${layer.id}/${mx}/${my}`;
   const mem = vhrMaskMemory.get(key);
@@ -274,8 +278,9 @@ async function getVhrMask(layer, mx, my) {
   return inflight;
 }
 
-// 'none' | 'partial' | 'full' for tile (z, x, y) under one mask. A coverage
-// edge hidden inside a mask pixel is caught on the tile itself (buildVhrTile).
+// 'none' | 'partial' | 'full' pour la tuile (z, x, y) sous un masque. Un bord de
+// couverture caché dans un pixel de masque est rattrapé sur la tuile elle-même
+// (buildVhrTile).
 function classifyVhrCoverage(alpha, z, x, y) {
   if (!alpha) return 'none';
   const dz = z - VHR_MASK_Z;
@@ -297,8 +302,8 @@ function classifyVhrCoverage(alpha, z, x, y) {
   return covered === (x1 - x0) * (y1 - y0) ? 'full' : 'partial';
 }
 
-// Layers to draw for a tile, highest priority first, or null when a mask
-// could not be read.
+// Couches à dessiner pour une tuile, priorité la plus haute d'abord, ou null
+// quand un masque n'a pas pu être lu.
 async function planVhrTile(z, x, y) {
   const dz = z - VHR_MASK_Z;
   const mx = x >> dz;
@@ -311,7 +316,7 @@ async function planVhrTile(z, x, y) {
     const coverage = classifyVhrCoverage(mask.alpha, z, x, y);
     if (coverage === 'none') continue;
     plan.push({ layer, coverage });
-    // A fully covered higher-priority layer hides everything below it.
+    // Une couche de priorité supérieure entièrement couverte masque tout ce qui est dessous.
     if (coverage === 'full') break;
   }
   return plan;
@@ -326,17 +331,18 @@ async function buildVhrTile(z, x, y, px) {
   if (plan.length === 1 && plan[0].coverage === 'full') {
     const blob = await fetchVhrImage(buildVhrWmsUrl(plan[0].layer.id, z, x, y, px, 'jpeg'));
     if (!blob) return null;
-    // Checked on the tile itself: no-data white touching the border means a
-    // coverage edge the 25 m mask missed (or an empty answer).
+    // Vérifié sur la tuile elle-même : du blanc d'absence de donnée touchant le
+    // bord signale un bord de couverture que le masque à 25 m a manqué (ou une
+    // réponse vide).
     const cleared = knockOutVhrNoData((await readVhrPixels(blob, px)).image);
     if (cleared === 0) return { blob, type: 'image/jpeg' };
     if (cleared === px * px) return null;
     plan[0] = { layer: plan[0].layer, coverage: 'partial' };
   }
 
-  // Partial coverage: lossless PNGs whose border-connected no-data white is
-  // cleared, lowest priority painted first. A fully covered layer (always the
-  // last of the plan) comes as JPEG.
+  // Couverture partielle : PNG sans perte dont le blanc d'absence de donnée relié
+  // au bord est effacé, la priorité la plus basse peinte en premier. Une couche
+  // entièrement couverte (toujours la dernière du plan) arrive en JPEG.
   const blobs = await Promise.all(plan.map(({ layer, coverage }) => fetchVhrImage(
     buildVhrWmsUrl(layer.id, z, x, y, px, coverage === 'full' ? 'jpeg' : 'png'),
   )));
@@ -384,8 +390,8 @@ function vhrHotClear() {
 
 let vhrPutsSinceTrim = 0;
 
-// Keys come back in insertion order: the oldest tiles go first. Masks are
-// tiny and kept.
+// Les clés reviennent dans l'ordre d'insertion : les tuiles les plus anciennes
+// partent en premier. Les masques sont minuscules et gardés.
 async function maybeTrimVhrCache(cache) {
   if (++vhrPutsSinceTrim < VHR_DISK_TRIM_EVERY) return;
   vhrPutsSinceTrim = 0;

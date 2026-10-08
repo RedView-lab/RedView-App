@@ -1,74 +1,78 @@
 // ---------------------------------------------------------------------------
-// Slope + Altitude worker POOL — SW-side manager for the dedicated build
-// workers (a single shared pool serves BOTH overlays).
+// POOL de workers pente + altitude — gestionnaire côté SW des workers de
+// construction dédiés (un seul pool partagé sert LES DEUX overlays).
 //
-// Spawns `min(hardwareConcurrency-1, SLOPE_POOL_MAX_WORKERS)` dedicated
-// Workers (each runs slope-pool.worker.js). A SHARED pool (rather than one
-// pool per overlay) caps total worker count at the hardware budget — two
-// independent pools of up to 8 each would oversubscribe an 8-core box and
-// thrash when both overlays are active simultaneously. Each job is tagged
-// `kind: 'slope' | 'altitude'` so a cancel on one overlay never kills the
-// other's in-flight jobs.
+// Crée `min(hardwareConcurrency-1, SLOPE_POOL_MAX_WORKERS)` Workers dédiés
+// (chacun exécute slope-pool.worker.js). Un pool PARTAGÉ (plutôt qu'un pool par
+// overlay) plafonne le nombre total de workers au budget matériel — deux pools
+// indépendants de 8 chacun surchargeraient une machine à 8 cœurs et
+// s'emmêleraient quand les deux overlays sont actifs. Chaque tâche est marquée
+// `kind: 'slope' | 'altitude'`, pour qu'une annulation sur un overlay ne tue
+// jamais les tâches en cours de l'autre.
 //
-// Exposes two async entry points:
-//   * computeSlopeViaPool(...)  — own DEM + up to 4 neighbour DEMs → slope PNG
-//   * computeAltitudeViaPool(...) — own DEM only → altitude PNG
-// Both:
-//   1. take DEM blobs the caller already resolved (slope neighbours come from
-//      resolveSlopeNeighbourDems() in slope-lidar-dem.js),
-//   2. TRANSFER the raw PNG bytes to a free worker — the worker decodes
-//      them itself, so the heavy createImageBitmap + getImageData + Float32
-//      loop runs OFF the SW thread,
-//   3. await the transferable PNG ArrayBuffer,
-//   4. cancel pending jobs (per kind) when the matching cancelGeneration bumps.
+// Expose deux points d'entrée asynchrones :
+//   * computeSlopeViaPool(...)    — DEM propre + jusqu'à 4 DEM voisins → PNG de pente
+//   * computeAltitudeViaPool(...) — DEM propre seulement → PNG d'altitude
+// Les deux :
+//   1. prennent les blobs DEM déjà résolus par l'appelant (les voisins de pente
+//      viennent de resolveSlopeNeighbourDems() dans slope-lidar-dem.js),
+//   2. TRANSFÈRENT les octets PNG bruts à un worker libre — le worker les décode
+//      lui-même, donc la lourde boucle createImageBitmap + getImageData +
+//      Float32 tourne HORS du fil du SW,
+//   3. attendent l'ArrayBuffer PNG transférable,
+//   4. annulent les tâches en attente (par type) quand la cancelGeneration
+//      correspondante change.
 //
-// Returns `null` if the pool is unavailable or the job was cancelled —
-// callers (slope-handler.js / altitude-handler.js) fall back to the
-// in-process path.
+// Renvoie `null` si le pool est indisponible ou si la tâche a été annulée — les
+// appelants (slope-handler.js / altitude-handler.js) retombent alors sur le
+// chemin du processus courant.
 //
-// The pool is created lazily on first use and re-created on demand if any
-// worker errors out (workers are cheap, ~5 ms spawn). If the browser does
-// not support `Worker` from a ServiceWorker context (rare, Firefox <105),
-// every call transparently returns `null` and the in-process path runs.
+// Le pool est créé à la première utilisation et recréé à la demande si un
+// worker plante (les workers coûtent peu, ~5 ms à créer). Si le navigateur ne
+// permet pas de créer un `Worker` depuis un ServiceWorker (rare, Firefox < 105),
+// chaque appel renvoie `null` de façon transparente et le chemin du processus
+// courant s'exécute.
 //
-// SLOPE_POOL_MAX_WORKERS / SLOPE_POOL_MIN_WORKERS are defined in
-// /sw-dem/core/config.js (loaded earlier in sw-dem.js's importScripts
-// chain). We reference them by global name here rather than redeclaring.
+// SLOPE_POOL_MAX_WORKERS / SLOPE_POOL_MIN_WORKERS sont définis dans
+// /sw-dem/core/config.js (chargé plus tôt dans la chaîne d'importScripts de
+// sw-dem.js). On les référence ici par leur nom global au lieu de les redéclarer.
 // ---------------------------------------------------------------------------
 
-// Internal pool state. Lives in module scope so the SW reuses one pool
-// across all slope/altitude requests.
+// État interne du pool. Vit au niveau du module pour que le SW réutilise un seul
+// pool pour toutes les requêtes de pente / d'altitude.
 let _slopeWorkers = null;            // Worker[]
 let _slopeWorkerReady = null;        // boolean[] — worker accepted at least one job
 let _slopeWorkerMonotonic = 0;       // round-robin counter
-let _slopePoolDisabled = false;      // set true after a structural failure
-// id → { resolve, reject, kind, workerIdx } — `kind` lets cancel target one overlay only.
+let _slopePoolDisabled = false;      // passe à true après une défaillance structurelle
+// id → { resolve, reject, kind, workerIdx } — `kind` permet de n'annuler qu'un seul overlay.
 const _slopeJobCallbacks = new Map();
 const _workerActiveJobs = new Map(); // workerIdx → active count
 let _slopeJobMonotonic = 0;
 
-// ── Pre-work concurrency gate ─────────────────────────────────────────
-// Before a job reaches a worker it must do SW-thread work: decode the own
-// DEM + read/decode up to 4 neighbour DEMs from CacheStorage. Without a
-// gate, a 90-tile viewport fires 90 handleSlopeRequest() events at once,
-// each running its own decode burst in parallel — the SW event loop
-// saturates and the basemap DEM/ortho fetch pipeline stalls for the
-// first second+ of every zoom ("map freezes when slope is on"). Since
-// the worker pool only has `poolSize` cores anyway, anything beyond
-// `poolSize + 2` in-flight pre-work just queues in the decode cache
-// without reaching a worker sooner. This semaphore caps the concurrent
-// SW-side decode bursts so the SW thread stays responsive for basemap
-// fetches in between.
+// ── Porte de concurrence du travail préalable ─────────────────────────
+// Avant d'atteindre un worker, une tâche demande du travail sur le fil du SW :
+// décoder le DEM propre + lire / décoder jusqu'à 4 DEM voisins dans
+// CacheStorage. Sans porte, une vue de 90 tuiles déclenche 90 événements
+// handleSlopeRequest() d'un coup, chacun avec sa rafale de décodage en
+// parallèle — la boucle d'événements du SW sature et le pipeline de fetch DEM /
+// ortho du fond de carte se bloque pendant la première seconde et plus de chaque
+// zoom (« la carte gèle quand les pentes sont actives »). Comme le pool de
+// workers n'a de toute façon que `poolSize` cœurs, tout ce qui dépasse
+// `poolSize + 2` travaux préalables en cours ne fait que s'empiler dans le cache
+// de décodage sans atteindre un worker plus tôt. Ce sémaphore plafonne les
+// rafales de décodage simultanées côté SW, pour que le fil du SW reste réactif
+// pour les fetchs du fond de carte dans l'intervalle.
 let _slopePreWorkActive = 0;
 const _slopePreWorkQueue = [];
 
 function slopePreWorkConcurrency() {
-  // The SW-thread work per slot is now just CacheStorage matches + a
-  // postMessage (no DEM decode — that moved into the worker). That's
-  // mostly I/O-bound, so we can run more slots in parallel than we have
-  // workers without saturating the SW event loop. 2× the worker count
-  // keeps the workers fed while the SW pipelines the next batch of cache
-  // reads. Falls back to 6 when the pool isn't sized yet.
+  // Le travail sur le fil du SW par créneau se réduit désormais à des lectures
+  // CacheStorage + un postMessage (pas de décodage de DEM — il est passé dans le
+  // worker). C'est surtout lié aux E/S : on peut donc ouvrir plus de créneaux en
+  // parallèle qu'il n'y a de workers sans saturer la boucle d'événements du SW.
+  // 2× le nombre de workers garde les workers alimentés pendant que le SW
+  // enchaîne la série suivante de lectures de cache. Repli sur 6 quand le pool
+  // n'est pas encore dimensionné.
   if (_slopeWorkers && _slopeWorkers.length > 0) return _slopeWorkers.length * 2;
   return 6;
 }
@@ -92,7 +96,7 @@ function releaseSlopePreWork() {
 function detectSlopePoolSize() {
   const hc = Number(globalThis.navigator?.hardwareConcurrency || 0);
   if (!Number.isFinite(hc) || hc <= 0) return SLOPE_POOL_MIN_WORKERS;
-  // Reserve one core for the SW thread (network + cache + IGN scheduler).
+  // Réserve un cœur au fil du SW (réseau + cache + ordonnanceur IGN).
   const target = Math.max(SLOPE_POOL_MIN_WORKERS, Math.min(SLOPE_POOL_MAX_WORKERS, hc - 1));
   return target;
 }
@@ -119,7 +123,7 @@ function spawnSlopeWorker() {
       }
       if (msg.ok) {
         if (cb.kind === 'altitude') {
-          // Altitude jobs return a single PNG ArrayBuffer + no neighbours.
+          // Les tâches d'altitude renvoient un seul ArrayBuffer PNG, sans voisins.
           cb.resolve({ png: msg.png });
         } else {
           cb.resolve({ png: msg.png, missingDirections: msg.missingDirections || [] });
@@ -130,7 +134,7 @@ function spawnSlopeWorker() {
     };
     worker.onerror = (err) => {
       if (typeof DEBUG !== 'undefined' && DEBUG) console.warn('[slope-pool] worker error', err?.message || err);
-      // Fail all in-flight jobs on this worker — they cannot complete.
+      // Fait échouer toutes les tâches en cours sur ce worker — elles ne peuvent pas aboutir.
       for (const [id, cb] of _slopeJobCallbacks) {
         _slopeJobCallbacks.delete(id);
         cb.reject(new Error('slope-worker-died'));
@@ -175,7 +179,7 @@ function ensureSlopePool() {
 
 function pickSlopeWorker() {
   if (!_slopeWorkers || _slopeWorkers.length === 0) return -1;
-  // Least-busy dispatch: select the worker with the fewest active jobs
+  // Envoi au moins chargé : on choisit le worker qui a le moins de tâches actives
   let minIdx = 0;
   let minCount = _workerActiveJobs.get(0) || 0;
   for (let i = 1; i < _slopeWorkers.length; i++) {
@@ -201,14 +205,16 @@ function terminateSlopePool() {
   _slopeJobCallbacks.clear();
 }
 
-// ── Cancel handling (per-kind) ────────────────────────────────────────
-// Called from build-queues.js when slopeCancelGeneration / altitudeCancelGeneration
-// bumps. We cannot interrupt a worker mid-job, but we CAN drop every pending
-// callback tagged to that kind so the SW caller sees the cancellation and
-// returns a transparent tile. The worker finishes its current job in the
-// background; the result is simply ignored (its callback is gone). The OTHER
-// overlay's jobs are left untouched — a cancel must never cross overlays
-// (disabling slope must not kill altitude builds the user still wants).
+// ── Gestion des annulations (par type) ────────────────────────────────
+// Appelée depuis build-queues.js quand slopeCancelGeneration /
+// altitudeCancelGeneration change. On ne peut pas interrompre un worker en
+// pleine tâche, mais on PEUT abandonner tous les callbacks en attente de ce
+// type, pour que l'appelant côté SW voie l'annulation et renvoie une tuile
+// transparente. Le worker termine sa tâche en cours en arrière-plan ; le
+// résultat est simplement ignoré (son callback n'existe plus). Les tâches de
+// l'AUTRE overlay ne sont pas touchées — une annulation ne doit jamais passer
+// d'un overlay à l'autre (désactiver la pente ne doit pas tuer des
+// constructions d'altitude que l'utilisateur veut encore).
 function cancelPoolJobsByKind(kind) {
   let n = 0;
   for (const [id, cb] of _slopeJobCallbacks) {
@@ -233,22 +239,22 @@ function cancelAllAltitudePoolJobs() {
   return cancelPoolJobsByKind('altitude');
 }
 
-// ── Public entry: compute one slope tile via the pool ─────────────────
+// ── Entrée publique : calculer une tuile de pente via le pool ─────────
 //
-//   demBlob         own DEM tile blob
-//   neighbourBlobs  { north, east, south, west } DEM blobs already resolved
-//                   by resolveSlopeNeighbourDems() (null when absent)
-//   z, x, y         tile coords
-//   resFactor       1 = normal, >1 = legacy block-average
-//   generation      slopeCancelGeneration snapshot, or null (uncancellable)
-//   zoneRing        optional [[lng, lat], …] analysis-zone ring
-//   outputScale     1 = native DEM resolution, 2 = 2× Catmull-Rom
+//   demBlob         blob de la tuile DEM propre
+//   neighbourBlobs  blobs DEM { north, east, south, west } déjà résolus par
+//                   resolveSlopeNeighbourDems() (null quand absents)
+//   z, x, y         coordonnées de la tuile
+//   resFactor       1 = normal, > 1 = ancienne moyenne par blocs
+//   generation      instantané de slopeCancelGeneration, ou null (non annulable)
+//   zoneRing        anneau optionnel [[lng, lat], …] de la zone d'analyse
+//   outputScale     1 = résolution native du DEM, 2 = Catmull-Rom 2×
 //
-// Returns { blob, missingDirections } — or null when the pool is unavailable
-// or the job was cancelled; the caller then runs the in-process path.
+// Renvoie { blob, missingDirections } — ou null quand le pool est indisponible
+// ou la tâche annulée ; l'appelant exécute alors le chemin du processus courant.
 //
-// SW-thread work: one arrayBuffer() per blob + postMessage. Decode, Horn,
-// upsample and PNG encode all run in the worker.
+// Travail sur le fil du SW : un arrayBuffer() par blob + un postMessage. Le
+// décodage, Horn, le suréchantillonnage et l'encodage PNG tournent dans le worker.
 async function computeSlopeViaPool(demBlob, neighbourBlobs, z, x, y, resFactor, generation, zoneRing, outputScale = 1) {
   const workers = ensureSlopePool();
   if (!workers) return null;
@@ -257,8 +263,8 @@ async function computeSlopeViaPool(demBlob, neighbourBlobs, z, x, y, resFactor, 
   if (isCancelled()) return null;
 
   await acquireSlopePreWork();
-  // Released once, either right after the transfer or on an early exit (a
-  // second release used to hand out one extra slot per tile).
+  // Libéré une seule fois, juste après le transfert ou sur une sortie anticipée
+  // (une seconde libération distribuait un créneau de trop par tuile).
   let preWorkHeld = true;
   const releasePreWork = () => {
     if (!preWorkHeld) return;
@@ -268,7 +274,7 @@ async function computeSlopeViaPool(demBlob, neighbourBlobs, z, x, y, resFactor, 
   try {
     if (isCancelled()) return null;
 
-    // Own + neighbour bytes, all TRANSFERRED (zero copy) to the worker.
+    // Octets propres + voisins, tous TRANSFÉRÉS (sans copie) au worker.
     const directions = ['north', 'east', 'south', 'west'];
     let ownDemBuf;
     let neighbourBufs;
@@ -317,7 +323,7 @@ async function computeSlopeViaPool(demBlob, neighbourBlobs, z, x, y, resFactor, 
       transferList,
     );
 
-    // The buffers are gone: free the pre-work slot while the worker computes.
+    // Les tampons sont partis : on libère le créneau de travail préalable pendant que le worker calcule.
     releasePreWork();
 
     let result;
@@ -337,33 +343,34 @@ async function computeSlopeViaPool(demBlob, neighbourBlobs, z, x, y, resFactor, 
   }
 }
 
-// Expose hooks for build-queues.js to call on cancel / teardown.
-// (Plain function declarations — these files are importScripts'd into the
-// SW global scope, so they're already global; the references below just
-// make the intent explicit for readers.)
+// Points d'accroche exposés à build-queues.js pour l'annulation / l'arrêt.
+// (Simples déclarations de fonctions — ces fichiers sont chargés par
+// importScripts dans la portée globale du SW, ils sont donc déjà globaux ; les
+// références ci-dessous rendent juste l'intention explicite pour le lecteur.)
 
-// ── Altitude entry: compute one altitude tile via the pool ───────────────
+// ── Entrée altitude : calculer une tuile d'altitude via le pool ──────────
 //
-//   demBlob        own DEM tile blob (already fetched + cached)
-//   z, x, y        tile coords
-//   generation     altitudeCancelGeneration snapshot — job auto-cancels if it
-//                  no longer matches by the time the worker replies.
-//   zoneRing       optional [[lng, lat], …] analysis-zone ring (alpha mask)
+//   demBlob        blob de la tuile DEM propre (déjà récupéré et en cache)
+//   z, x, y        coordonnées de la tuile
+//   generation     instantané d'altitudeCancelGeneration — la tâche s'annule
+//                  d'elle-même s'il ne correspond plus quand le worker répond.
+//   zoneRing       anneau optionnel [[lng, lat], …] de la zone d'analyse (masque alpha)
 //
-// Returns:
-//   { blob: Blob } — altitude PNG ready to wrap into a Response
-//   null — cancelled (generation mismatch) or pool unavailable; caller
-//          MUST fall back to the in-process buildAltitudeTile() path.
+// Renvoie :
+//   { blob: Blob } — PNG d'altitude prêt à envelopper dans une Response
+//   null — annulée (génération différente) ou pool indisponible ; l'appelant
+//          DOIT retomber sur le chemin buildAltitudeTile() du processus courant.
 //
-// Altitude only needs its OWN DEM (no seam-padding neighbours), so the
-// SW-thread work per job is minimal: one arrayBuffer() + one postMessage.
-// We still gate it so a 90-tile viewport doesn't fire 90 arrayBuffer() calls
-// in a single tick and starve the basemap pipeline — but the gate is wider
-// than slope's (3× pool size) because each slot does ~1/5 the I/O of a
-// slope slot (1 DEM read vs 5).
+// L'altitude n'a besoin que de son PROPRE DEM (pas de voisins pour les
+// jointures) : le travail sur le fil du SW par tâche est minimal, un
+// arrayBuffer() + un postMessage. On passe quand même par une porte, pour
+// qu'une vue de 90 tuiles ne lance pas 90 arrayBuffer() dans le même tick et
+// n'affame pas le pipeline du fond de carte — mais la porte est plus large que
+// celle de la pente (3× la taille du pool), car chaque créneau fait ~1/5 des E/S
+// d'un créneau de pente (1 lecture de DEM contre 5).
 //
-// Pre-work concurrency for altitude. Falls back to 9 when the pool isn't
-// sized yet (3× the slope fallback of 6 ≈ same ratio).
+// Concurrence du travail préalable pour l'altitude. Repli sur 9 quand le pool
+// n'est pas encore dimensionné (3× le repli de 6 de la pente ≈ même rapport).
 function altitudePreWorkConcurrency() {
   if (_slopeWorkers && _slopeWorkers.length > 0) return _slopeWorkers.length * 3;
   return 9;
@@ -392,7 +399,7 @@ async function computeAltitudeViaPool(demBlob, z, x, y, generation, zoneRing) {
   const workers = ensureSlopePool();
   if (!workers) return null;
 
-  // Cancel check BEFORE expensive work.
+  // Vérification d'annulation AVANT le travail coûteux.
   if (typeof altitudeCancelGeneration !== 'undefined' && generation !== altitudeCancelGeneration) {
     return null;
   }
@@ -403,7 +410,7 @@ async function computeAltitudeViaPool(demBlob, z, x, y, generation, zoneRing) {
       return null;
     }
 
-    // Grab the own DEM bytes (transferable). We do NOT decode here.
+    // Récupère les octets du DEM propre (transférables). On ne décode PAS ici.
     let ownDemBuf;
     try {
       ownDemBuf = await demBlob.arrayBuffer();
@@ -442,7 +449,7 @@ async function computeAltitudeViaPool(demBlob, z, x, y, generation, zoneRing) {
       return null;
     }
 
-    // Wrap the returned ArrayBuffer into a PNG Blob.
+    // Enveloppe l'ArrayBuffer renvoyé dans un Blob PNG.
     const blob = new Blob([result.png], { type: 'image/png' });
     return { blob };
   } finally {
@@ -450,9 +457,9 @@ async function computeAltitudeViaPool(demBlob, z, x, y, generation, zoneRing) {
   }
 }
 
-// ── Multi-Core AWS Terrarium Converter (2026-08-29) ───────────────────
-// Dispatches raw Terrarium PNG ArrayBuffer to worker pool for parallel
-// decoding, Terrarium → Terrain-RGB conversion and Sub-filter PNG encoding.
+// ── Convertisseur AWS Terrarium multicœur (2026-08-29) ────────────────
+// Envoie l'ArrayBuffer PNG Terrarium brut au pool de workers pour un décodage
+// parallèle, la conversion Terrarium → Terrain-RGB et l'encodage PNG filtré en Sub.
 async function computeAwsTerrariumViaPool(arrayBuffer, z, x, y, fetchZ, fetchX, fetchY, clamped) {
   const workers = ensureSlopePool();
   if (!workers) return null;

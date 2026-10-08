@@ -1,40 +1,43 @@
 // ---------------------------------------------------------------------------
-// IGN request scheduling — shared by every geopf fetch (WMTS MNS, HIGHRES,
-// terrain/MNS WMS): in-memory tile cache + in-flight dedup, purpose tags,
-// tri-tier priority queues (basemap > slope-visible > slope-warm) with
-// centre-first ordering and a dynamic concurrency limiter.
+// Ordonnancement des requêtes IGN — partagé par tous les fetchs geopf (MNS
+// WMTS, HIGHRES, WMS terrain/MNS) : cache de tuiles en mémoire + déduplication
+// des requêtes en cours, étiquettes d'usage, files de priorité à trois niveaux
+// (fond de carte > slope-visible > slope-warm) servies du centre vers les bords,
+// et limiteur de concurrence dynamique.
 // ---------------------------------------------------------------------------
 
 const ignTileCache = new Map();
-const ignInflight = new Map(); // Deduplication: in-progress fetches by key
+const ignInflight = new Map(); // Déduplication : fetchs en cours par clé
 let activeIGN = 0;
 let activeIGNBackground = 0;
 let activeIGNSlopeVisible = 0;
-// ── Tri-tier scheduling (May 20 rewrite) ──────────────────────────────
-// Basemap (no purpose tag) > slope-visible > slope-warm.
+// ── Ordonnancement à trois niveaux (réécriture du 20 mai) ─────────────
+// Fond de carte (sans étiquette d'usage) > slope-visible > slope-warm.
 //
-// Before this rewrite, basemap and slope-visible shared the same
-// "foreground" queue with a soft sub-cap on slope-visible. In practice,
-// the LIFO pop semantics meant that once slope-visible saturated the
-// queue, the basemap getIGNTile/getHighresTile requests that came in
-// AFTER the slope burst would land at the tail and pop next — fine —
-// BUT all the slope-visible entries enqueued in the same idle cycle
-// would already be in flight occupying every IGN slot. Each basemap
-// request then queued behind 40+ concurrent slope sub-tile fetches.
+// Avant cette réécriture, le fond de carte et slope-visible partageaient la
+// même file « de premier plan », avec un sous-plafond souple pour
+// slope-visible. En pratique, avec un dépilement LIFO, une fois la file
+// saturée par slope-visible, les requêtes getIGNTile/getHighresTile du fond de
+// carte arrivées APRÈS la rafale de pente se retrouvaient en queue et étaient
+// dépilées ensuite — très bien — MAIS toutes les entrées slope-visible mises en
+// file pendant le même cycle d'inactivité occupaient déjà chaque créneau IGN.
+// Chaque requête du fond de carte attendait alors derrière plus de 40 fetchs
+// simultanés de sous-tuiles de pente.
 //
-// The fix is to give basemap its OWN queue and pop it before touching
-// the slope-visible queue. Slope-visible still uses LIFO + a dynamic
-// sub-cap; isolated slope loads (no basemap queued) get the full
-// budget so dedicated 1 m benchmarks are unaffected.
+// La correction donne au fond de carte SA PROPRE file, dépilée avant de toucher
+// à celle de slope-visible. Slope-visible garde le LIFO et un sous-plafond
+// dynamique ; un chargement de pente isolé (aucun fond de carte en file) a tout
+// le budget, donc les mesures dédiées à la pente à 1 m ne changent pas.
 const ignForegroundQueue = [];   // basemap (purpose === null/undefined)
 const ignSlopeVisibleQueue = []; // PURPOSE_SLOPE_VISIBLE
 const ignBackgroundQueue = [];   // PURPOSE_SLOPE_WARM
-let ignPrunedTotal = 0; // Lifetime counter for diagnostics
+let ignPrunedTotal = 0; // Compteur cumulé, pour le diagnostic
 
-// Purpose tagging — separates visible 1 m slope fetches from background
-// seam-heal / recache work so first-paint slope tiles do not wait behind
-// opportunistic warmups. Both tags remain slope-only, so cancellation can
-// abort them without touching basemap-driven IGN traffic.
+// Étiquettes d'usage — séparent les fetchs de pente à 1 m visibles du travail
+// de fond (réparation des jointures, remise en cache), pour que les premières
+// tuiles de pente affichées n'attendent pas derrière des préchauffages
+// opportunistes. Les deux étiquettes restent propres à la pente : l'annulation
+// peut les abandonner sans toucher au trafic IGN du fond de carte.
 const PURPOSE_SLOPE_VISIBLE = 'slope-visible';
 const PURPOSE_SLOPE_WARM = 'slope-warm';
 const PURPOSE_SLOPE_ZONE = 'slope-zone';
@@ -68,16 +71,17 @@ function isIGNSlopeZonePurpose(purpose) {
   return purpose === PURPOSE_SLOPE_ZONE;
 }
 
-// ── WMS elevation rasters: bytes in flight ────────────────────────────
-// A LiDAR HD GetMap raster weighs 370 KB (MNS, 1×) to 1.5 MB (MNT, 2×).
-// Dispatched up to IGN_CONCURRENCY (40-64) at once, they shared the client's
-// line until most of them crossed IGN_FETCH_TIMEOUT_MS. Measured 2026-10-04
-// on a ~2 MB/s line: 16 rasters in parallel took 2.4 s each, 40 took 7.4 s,
-// 64 took 12.6 s (median; 23 s max, plus 429s) — aborted downloads, bytes
-// wasted, and stand-in tiles: 42 % of the relief tiles of a 0.40 m flyover
-// video. The line's throughput is the same with a few MB in flight: each
-// raster lands in ~2 s, centre-first, while the others wait in the queue,
-// outside the fetch timeout (it starts with the job).
+// ── Rasters d'altitude WMS : octets en cours de transfert ─────────────
+// Un raster GetMap LiDAR HD pèse de 370 Ko (MNS, 1×) à 1,5 Mo (MNT, 2×). Lancés
+// jusqu'à IGN_CONCURRENCY (40 à 64) à la fois, ils se partageaient la ligne du
+// client jusqu'à ce que la plupart dépassent IGN_FETCH_TIMEOUT_MS. Mesuré le
+// 2026-10-04 sur une ligne d'environ 2 Mo/s : 16 rasters en parallèle prenaient
+// 2,4 s chacun, 40 en prenaient 7,4 s, 64 en prenaient 12,6 s (médiane ; 23 s au
+// maximum, plus des 429) — téléchargements abandonnés, octets gaspillés et
+// tuiles de remplacement : 42 % des tuiles de relief d'une vidéo de survol en
+// 0,40 m. Le débit de la ligne est le même avec quelques Mo en vol : chaque
+// raster arrive en ~2 s, du centre vers les bords, pendant que les autres
+// attendent en file, hors du délai de fetch (qui démarre avec la tâche).
 const IGN_WMS_INFLIGHT_BYTES_MAX = 4_500_000;
 let activeIGNWmsBytes = 0;
 
@@ -110,16 +114,16 @@ function currentIGNBackgroundConcurrency() {
   return IGN_CONCURRENCY;
 }
 
-// Dynamic sub-cap for visible-slope IGN concurrency.
+// Sous-plafond dynamique de la concurrence IGN pour slope-visible.
 //
-// - If basemap requests are queued, throttle slope-visible to ~30 % of
-//   the budget so basemap DEM/ortho/highres fetches always have at
-//   least ~70 % of the slots immediately. This is the user-visible
-//   regression we keep solving: with slope active, the 3D world
-//   freezes because every IGN slot is taken by slope sub-tile fan-out.
-// - If basemap is NOT queued (e.g. dedicated slope load test, or
-//   ambient prefetch idle window), let slope-visible consume the full
-//   budget so a pure-slope viewport still loads at peak speed.
+// - Si des requêtes du fond de carte sont en file, slope-visible est limité à
+//   ~30 % du budget pour que les fetchs DEM / ortho / highres du fond de carte
+//   aient toujours au moins ~70 % des créneaux tout de suite. C'est la
+//   régression visible qu'on ne cesse de corriger : pentes actives, le monde 3D
+//   gèle parce que chaque créneau IGN est pris par les sous-tuiles de pente.
+// - Si aucun fond de carte n'est en file (test de charge dédié aux pentes,
+//   fenêtre d'inactivité du préchargement), slope-visible peut consommer tout
+//   le budget, pour qu'une vue de pente seule se charge à pleine vitesse.
 function currentIGNSlopeVisibleCap() {
   if (ignForegroundQueue.length > 0) {
     return Math.max(4, Math.floor(IGN_CONCURRENCY * 0.3));
@@ -129,7 +133,7 @@ function currentIGNSlopeVisibleCap() {
 
 function pushIGNEntry(entry) {
   if (isIGNSlopeZonePurpose(entry.purpose)) {
-    // Zone requests have top priority — push directly into foreground queue
+    // Les requêtes de zone ont la priorité absolue — directement dans la file de premier plan
     ignForegroundQueue.push(entry);
     return;
   }
@@ -145,13 +149,13 @@ function pushIGNEntry(entry) {
 }
 
 function popNextIGNEntry() {
-  // 1. Basemap / Slope-Zone (foreground) — strict highest priority.
-  //    Select candidate closest to current viewport center so center of screen loads first!
-  //    Strict priority: while it holds entries, nothing else starts — not
-  //    even when its WMS rasters wait for bytes in flight to land.
+  // 1. Fond de carte / pente de zone (premier plan) — priorité absolue.
+  //    On choisit le candidat le plus proche du centre de la vue, pour que le centre de l'écran se charge d'abord !
+  //    Priorité stricte : tant qu'elle a des entrées, rien d'autre ne démarre —
+  //    même quand ses rasters WMS attendent que les octets en vol arrivent.
   if (ignForegroundQueue.length > 0) {
     if (ignForegroundQueue.length === 1 || !ignViewportCenter) {
-      // FIFO when center is unknown (Mapbox sends center tiles first)
+      // FIFO quand le centre est inconnu (Mapbox envoie d'abord les tuiles du centre)
       const idx = firstStartableIGNIndex(ignForegroundQueue);
       return idx < 0 ? null : { entry: ignForegroundQueue.splice(idx, 1)[0], background: false };
     }
@@ -173,9 +177,9 @@ function popNextIGNEntry() {
     if (bestIdx < 0) bestIdx = firstStartableIGNIndex(ignForegroundQueue);
     return bestIdx < 0 ? null : { entry: ignForegroundQueue.splice(bestIdx, 1)[0], background: false };
   }
-  // 2. Slope-visible — only when basemap queue is drained, and only up
-  //    to its dynamic cap so a single slope burst can never monopolise
-  //    every slot.
+  // 2. Slope-visible — seulement quand la file du fond de carte est vide, et
+  //    seulement jusqu'à son plafond dynamique, pour qu'une seule rafale de
+  //    pente ne puisse jamais monopoliser tous les créneaux.
   if (
     ignSlopeVisibleQueue.length > 0
     && activeIGNSlopeVisible < currentIGNSlopeVisibleCap()
@@ -183,8 +187,8 @@ function popNextIGNEntry() {
     const idx = lastStartableIGNIndex(ignSlopeVisibleQueue);
     if (idx >= 0) return { entry: ignSlopeVisibleQueue.splice(idx, 1)[0], background: false };
   }
-  // 3. Background (prefetch / slope-warm) — separate concurrency budget so warmups
-  //    cannot starve foreground basemap or slope-visible.
+  // 3. Arrière-plan (préchargement / slope-warm) — budget de concurrence séparé,
+  //    pour que les préchauffages ne puissent pas affamer le fond de carte ni slope-visible.
   if (ignBackgroundQueue.length === 0) return null;
   if (activeIGNBackground >= currentIGNBackgroundConcurrency()) return null;
   const idx = firstStartableIGNIndex(ignBackgroundQueue);
@@ -208,9 +212,9 @@ function pruneOldestIGNEntry() {
     }
   };
 
-  // Prune oldest background entries first (they're warmups), then
-  // slope-visible (cancellable), and finally basemap (most expensive
-  // to lose because Mapbox is actively waiting on them).
+  // On élague d'abord les entrées d'arrière-plan les plus anciennes (ce sont des
+  // préchauffages), puis slope-visible (annulable), et enfin le fond de carte
+  // (le plus coûteux à perdre, car Mapbox l'attend activement).
   considerQueue(ignBackgroundQueue);
   considerQueue(ignSlopeVisibleQueue);
   considerQueue(ignForegroundQueue);
@@ -228,10 +232,11 @@ function evict(cache, max) {
   }
 }
 
-// `mapTile` ({ key: 'z/x/y', requestedAt }) tags work done for a DEM tile the
-// map itself asked for, so pruneUnwantedMapDemWork() can drop it once the map
-// no longer waits on that tile. `options.wmsBytes`: size of the WMS raster the
-// job downloads (IGN_WMS_INFLIGHT_BYTES_MAX).
+// `mapTile` ({ key: 'z/x/y', requestedAt }) marque le travail fait pour une
+// tuile DEM demandée par la carte elle-même, pour que pruneUnwantedMapDemWork()
+// puisse l'abandonner dès que la carte n'attend plus cette tuile.
+// `options.wmsBytes` : taille du raster WMS que la tâche télécharge
+// (IGN_WMS_INFLIGHT_BYTES_MAX).
 function scheduleIGN(fn, purpose, coords, mapTile = null, options = {}) {
   return new Promise((resolve, reject) => {
     let lng = 0, lat = 0;
@@ -259,9 +264,9 @@ function scheduleIGN(fn, purpose, coords, mapTile = null, options = {}) {
       lat,
       hasCoords,
     });
-    // When the queue overflows, drop the OLDEST entries by enqueue timestamp
-    // (tiles requested during an earlier pan gesture) instead of the head.
-    // Ensures the current viewport survives rapid panning.
+    // Quand la file déborde, on abandonne les entrées les plus ANCIENNES par
+    // date d'entrée en file (tuiles demandées pendant un déplacement précédent)
+    // plutôt que la tête de file. La vue courante survit ainsi aux déplacements rapides.
     let pruned = 0;
     while (totalIGNQueueLength() > IGN_QUEUE_MAX) {
       const stale = pruneOldestIGNEntry();
@@ -302,24 +307,25 @@ function drainIGN() {
   }
 }
 
-// Drain the queued-but-not-yet-running speculative IGN entries (slope,
-// prefetch, warm-ups), resolving each with PRUNED_SENTINEL. Posted by the
-// browser on user gesture (`zoomstart` / `movestart`) via the
-// `CANCEL_STALE_DEM` SW message so the previous viewport's speculative
-// work does not hold the IGN slots.
+// Vide les entrées IGN spéculatives en file mais pas encore lancées (pente,
+// préchargement, préchauffages) en résolvant chacune en PRUNED_SENTINEL.
+// Envoyé par le navigateur à chaque geste de l'utilisateur (`zoomstart` /
+// `movestart`) par le message SW `CANCEL_STALE_DEM`, pour que le travail
+// spéculatif de la vue précédente ne garde pas les créneaux IGN.
 //
-// Basemap entries (no purpose) are kept: a gesture start says nothing about
-// which DEM tiles the map still needs — after a rotation or a pitch it is
-// nearly all of them. Flushing them made those very tiles fall back to the
-// correlation MNS / 30 m relief (the "3D drops to 30 m when I turn the
-// camera" bug). Stale basemap work is dropped per tile instead, once the
-// map stops waiting on it (pruneUnwantedMapDemWork / DEM_WANTED_TILES).
+// Les entrées du fond de carte (sans usage) sont gardées : le début d'un geste
+// ne dit rien des tuiles DEM dont la carte a encore besoin — après une rotation
+// ou une inclinaison, c'est presque toutes. Les vider faisait retomber
+// exactement ces tuiles sur le MNS de corrélation / le relief à 30 m (le bug
+// « la 3D tombe à 30 m quand je tourne la caméra »). Le travail périmé du fond
+// de carte est désormais abandonné tuile par tuile, dès que la carte ne
+// l'attend plus (pruneUnwantedMapDemWork / DEM_WANTED_TILES).
 //
-// Returns the number of pruned entries for diagnostics.
+// Renvoie le nombre d'entrées élaguées, pour le diagnostic.
 function flushIGNQueue() {
   const total = totalIGNQueueLength();
   if (total === 0) return 0;
-  // Keep basemap and PURPOSE_SLOPE_ZONE entries in the foreground queue.
+  // Garde dans la file de premier plan les entrées du fond de carte et PURPOSE_SLOPE_ZONE.
   const keptForeground = [];
   while (ignForegroundQueue.length > 0) {
     const entry = ignForegroundQueue.pop();

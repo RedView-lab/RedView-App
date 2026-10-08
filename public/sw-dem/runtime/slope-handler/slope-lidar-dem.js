@@ -1,13 +1,14 @@
 // ---------------------------------------------------------------------------
-// Slope Tile Processing — DEM resolver (reads the 3D terrain's DEM tiles)
+// Traitement des tuiles de pente — résolveur de DEM (lit les tuiles DEM du terrain 3D)
 //
-// The overlay requests exactly the tiles of the terrain's DEM pyramid
-// (slope-source.ts, TERRAIN_ALIGNED_RASTER_TILE_SIZE), so a slope tile is
-// computed from the DEM tile the terrain mesh already loaded: hot tier,
-// CacheStorage, or the terrain's own in-flight build. A slope tile builds a
-// DEM tile itself only on a genuine miss (explicit 0.40 m / 1 m choice that
-// differs from the 3D profile, pitched-view LOD band); neighbours are never
-// built. The 30 m path reads AWS Terrarium directly (free CDN, coalesced).
+// L'overlay demande exactement les tuiles de la pyramide DEM du terrain
+// (slope-source.ts, TERRAIN_ALIGNED_RASTER_TILE_SIZE) : une tuile de pente est
+// donc calculée à partir de la tuile DEM que le maillage du terrain a déjà
+// chargée — niveau chaud, CacheStorage, ou construction en cours du terrain
+// lui-même. Une tuile de pente ne construit elle-même une tuile DEM que sur un
+// vrai échec de cache (choix explicite 0,40 m / 1 m différent du profil 3D,
+// bande de LOD d'une vue inclinée) ; les voisines ne sont jamais construites.
+// Le chemin à 30 m lit directement AWS Terrarium (CDN gratuit, requêtes fusionnées).
 // ---------------------------------------------------------------------------
 
 const FAST30M_DEM_INFLIGHT = new Map();
@@ -23,8 +24,9 @@ function demHeaderValue(headers, name) {
   return null;
 }
 
-// IGN is the only source whose surface (MNS) and bare-earth (MNT) builds
-// differ; AWS, Swiss, Norway and Spain tiles are the same in both profiles.
+// L'IGN est la seule source dont les constructions surface (MNS) et sol nu
+// (MNT) diffèrent ; les tuiles AWS, suisses, norvégiennes et espagnoles sont
+// identiques dans les deux profils.
 function isDemProfileAgnosticSource(source) {
   return !/ign/i.test(source || '');
 }
@@ -41,8 +43,8 @@ async function fetchFast30mDemResponse(z, x, y, demCache) {
     }
   }
   if (typeof fetchAWSTerrainTile !== 'function') return null;
-  // Coalesced: a 30 m DEM tile is both an own tile and up to four
-  // neighbours of concurrently built slope tiles.
+  // Fusionnées : une tuile DEM à 30 m est à la fois une tuile propre et jusqu'à
+  // quatre voisines de tuiles de pente construites en même temps.
   const inflightKey = `${z}/${x}/${y}`;
   let pending = FAST30M_DEM_INFLIGHT.get(inflightKey);
   if (!pending) {
@@ -66,7 +68,7 @@ async function fetchFast30mDemResponse(z, x, y, demCache) {
   return built ? new Response(built.blob, { status: 200, headers: built.headers }) : null;
 }
 
-// The terrain's own build of this tile, when one is running.
+// La construction de cette tuile par le terrain lui-même, quand elle est en cours.
 async function awaitInflightTerrainDem(z, x, y, demProfile) {
   if (typeof DEM_INFLIGHT === 'undefined' || !DEM_INFLIGHT) return null;
   const inflight = DEM_INFLIGHT.get(`${demProfile}:${z}/${x}/${y}`);
@@ -79,26 +81,27 @@ async function awaitInflightTerrainDem(z, x, y, demProfile) {
   }
 }
 
-// opts.allowBuild (default true): when false, only already-available DEM
-// (hot tier / CacheStorage / in-flight terrain build) is returned — a miss
-// resolves to null (or to a short-cached stand-in) instead of starting a new
-// DEM build. The 30 m AWS branch ignores it (AWS tiles are cheap).
+// opts.allowBuild (true par défaut) : à false, seul le DEM déjà disponible
+// (niveau chaud / CacheStorage / construction en cours du terrain) est renvoyé —
+// un échec donne null (ou un remplaçant brièvement en cache) au lieu de lancer
+// une nouvelle construction de DEM. La branche AWS à 30 m l'ignore (les tuiles
+// AWS coûtent peu).
 async function getExistingTerrainDemResponse(z, x, y, demProfile, demCache, sourceDem = '', opts = {}) {
   const allowBuild = opts.allowBuild !== false;
   if (sourceDem === 'fast-30m' || demProfile === 'fast-30m') {
-    // Fast-30m strictly uses AWS Terrarium; never falls through to IGN.
+    // Fast-30m utilise strictement AWS Terrarium ; ne passe jamais à l'IGN.
     return fetchFast30mDemResponse(z, x, y, demCache);
   }
 
-  // 1. Hot tier — finalize() only promotes final tiles.
+  // 1. Niveau chaud — finalize() n'y promeut que des tuiles définitives.
   const key = buildDemCacheKey(z, x, y, demProfile);
   const hot = demHotGet(key.url);
   if (hot) return demHotResponse(hot);
 
-  // 2. CacheStorage. A short-cached stand-in (parent overzoom, AWS emergency)
-  // is NOT the answer: handleDemRequest() checks its TTL and rebuilds the
-  // real tile once it expires — returning it here used to pin the slope on
-  // the stand-in forever.
+  // 2. CacheStorage. Un remplaçant brièvement en cache (overzoom du parent,
+  // secours AWS) n'est PAS la réponse : handleDemRequest() vérifie son TTL et
+  // reconstruit la vraie tuile à son expiration — le renvoyer ici figeait la
+  // pente sur le remplaçant pour toujours.
   let standIn = null;
   if (demCache) {
     const cached = await demCache.match(key);
@@ -108,13 +111,13 @@ async function getExistingTerrainDemResponse(z, x, y, demProfile, demCache, sour
     }
   }
 
-  // 3. The terrain is building this very tile right now.
+  // 3. Le terrain construit cette même tuile en ce moment.
   const inflight = await awaitInflightTerrainDem(z, x, y, demProfile);
   if (inflight) return inflight;
 
-  // 4. The other profile's tile, only where both profiles are identical. The
-  // old unconditional fallback put buildings into the "1 m terrain" slope
-  // whenever the 3D ran on the 0.40 m surface.
+  // 4. La tuile de l'autre profil, seulement là où les deux profils sont
+  // identiques. L'ancien repli inconditionnel mettait des bâtiments dans la
+  // pente « terrain 1 m » chaque fois que la 3D tournait sur la surface 0,40 m.
   if (demProfile !== 'default') {
     const other = demHotGet(buildDemCacheKey(z, x, y, 'default').url);
     if (other && isDemProfileAgnosticSource(demHeaderValue(other.headers, 'X-DEM-Source'))) {
@@ -122,7 +125,7 @@ async function getExistingTerrainDemResponse(z, x, y, demProfile, demCache, sour
     }
   }
 
-  // 5. Build it — shared with the terrain through DEM_INFLIGHT.
+  // 5. On la construit — partagée avec le terrain via DEM_INFLIGHT.
   if (!allowBuild) return standIn;
   try {
     if (typeof handleDemRequest === 'function') {
@@ -149,11 +152,11 @@ function shouldUseSlopeNeighbourDem(resp, demProfile, sourceDem = '', ownSourceC
   if (health !== 'ok') return false;
   const source = (demHeaderValue(resp.headers, 'X-DEM-Source') || '').toLowerCase();
 
-  // Strict DEM source segregation: NEVER mix 30m AWS DEM with high-res LiDAR DEM!
+  // Séparation stricte des sources DEM : ne JAMAIS mélanger le DEM AWS à 30 m avec un DEM LiDAR haute résolution !
   if (sourceDem === 'fast-30m') {
     return source.startsWith('aws');
   }
-  // HD: stitch only against the same DEM class as the own tile.
+  // HD : raccord seulement avec la même classe de DEM que la tuile propre.
   const neighbourIsAws = source === 'aws-fast-30m' || source.startsWith('aws-terrarium');
   if (neighbourIsAws !== (ownSourceClass === 'aws')) return false;
   if (
@@ -167,16 +170,18 @@ function shouldUseSlopeNeighbourDem(resp, demProfile, sourceDem = '', ownSourceC
 }
 
 /**
- * The four cardinal neighbour DEMs of a slope tile, from what the terrain
- * already has: hot tier, CacheStorage, or its in-flight build — awaited,
- * since the viewport's tiles are built together and waiting is what makes a
- * tile seam-complete on first paint. A neighbour the terrain never asked for
- * (outside the viewport) is not built: the tile is served provisional and
- * rebuilt when that DEM lands (waitSlopeTileOnDem). The 30 m path fetches
- * the AWS neighbour instead.
+ * Les quatre DEM voisins cardinaux d'une tuile de pente, à partir de ce que le
+ * terrain a déjà : niveau chaud, CacheStorage, ou sa construction en cours —
+ * attendue, puisque les tuiles de la vue sont construites ensemble et que
+ * l'attente est ce qui rend une tuile complète aux jointures dès le premier
+ * affichage. Une voisine que le terrain n'a jamais demandée (hors de la vue)
+ * n'est pas construite : la tuile est servie provisoire et reconstruite quand
+ * ce DEM arrive (waitSlopeTileOnDem). Le chemin à 30 m récupère plutôt la
+ * voisine AWS.
  *
- * Returns { blobs: {north…west: Blob|null}, missing: [[x, y]], standIns: [[x, y]] }
- * — `standIns` are used but short-cached (the tile is not final yet).
+ * Renvoie { blobs: {north…west: Blob|null}, missing: [[x, y]], standIns: [[x, y]] }
+ * — les `standIns` sont utilisés mais brièvement en cache (la tuile n'est pas
+ * encore définitive).
  */
 async function resolveSlopeNeighbourDems(z, x, y, demProfile, demCache, sourceDem, ownSourceClass) {
   const n = 2 ** z;
@@ -185,8 +190,8 @@ async function resolveSlopeNeighbourDems(z, x, y, demProfile, demCache, sourceDe
   const standIns = [];
   await Promise.all(SLOPE_NEIGHBOUR_DIRECTIONS.map(async ([dir, dx, dy]) => {
     const ny = y + dy;
-    if (ny < 0 || ny >= n) return; // beyond the poles: nothing to wait for
-    const nx = (x + dx + n) % n; // the antimeridian wraps
+    if (ny < 0 || ny >= n) return; // au-delà des pôles : rien à attendre
+    const nx = (x + dx + n) % n; // l'antiméridien boucle
     try {
       const resp = sourceDem === 'fast-30m'
         ? await fetchFast30mDemResponse(z, nx, ny, demCache)

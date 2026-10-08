@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Norway — build a Mercator DEM tile from Kartverket NHM DTM WCS
+// Norvège — construction d'une tuile DEM Mercator depuis le WCS NHM DTM de Kartverket
 // ---------------------------------------------------------------------------
 
 const NORWAY_PRUNED_SENTINEL = Object.freeze({ _norwayPruned: true });
@@ -68,15 +68,17 @@ function _norwayDecodeTileBytes(compression, encoded) {
 function _resampleNorwaySourceToMercator(
   srcElev, srcCov, srcW, srcH, bounds, mercZ, mercX, mercY, zone,
 ) {
-  // Same area-weighted box-average reprojection used by the Spain pipeline
-  // (see spain-build.js for the full rationale). Two regimes:
-  //   (A) src pitch ≤ dst pitch → average all source pixels touching each
-  //       destination pixel's UTM footprint (anti-aliasing).
-  //   (B) src pitch > dst pitch → coverage-weighted bilinear at the centroid
-  //       (proper interpolation when source is the limiting band).
-  // Per-pixel reprojection also closes the inter-tile seam that the previous
-  // identity passthrough produced (adjacent Mercator tiles fetch DIFFERENT
-  // UTM bboxes — only sampling at common (lng, lat) keeps edges continuous).
+  // Même reprojection par moyenne par blocs pondérée par la surface que le
+  // pipeline espagnol (voir spain-build.js pour la justification complète).
+  // Deux régimes :
+  //   (A) pas source ≤ pas destination → moyenne de tous les pixels source qui
+  //       touchent l'empreinte UTM de chaque pixel de destination (anticrénelage).
+  //   (B) pas source > pas destination → bilinéaire pondéré par la couverture
+  //       au centroïde (vraie interpolation quand la source est la bande limitante).
+  // La reprojection par pixel supprime aussi la jointure entre tuiles que créait
+  // l'ancien passage tel quel (des tuiles Mercator voisines récupèrent des bbox
+  // UTM DIFFÉRENTES — seul un échantillonnage à des (lng, lat) communs garde des
+  // bords continus).
   const outElev = new Float32Array(DEM_TILE_SIZE * DEM_TILE_SIZE);
   const outCov = new Uint8Array(DEM_TILE_SIZE * DEM_TILE_SIZE);
   const n = 1 << mercZ;
@@ -290,10 +292,11 @@ function buildNorwayWCSUrl(zone, mercZ, mercX, mercY) {
     extent.maxN.toFixed(3),
   ].join(',');
 
-  // Request NORWAY_WCS_OUTPUT_PX² (512²) — 4× the destination pitch — so the
-  // local UTM→Mercator reprojection has enough source samples per output
-  // pixel to do area-weighted box averaging instead of point-bilinear. This
-  // is what eliminates the slope/altitude grid moiré on Norwegian terrain.
+  // On demande NORWAY_WCS_OUTPUT_PX² (512²) — 4× le pas de destination — pour que
+  // la reprojection locale UTM→Mercator ait assez d'échantillons source par
+  // pixel de sortie pour une moyenne par blocs pondérée par la surface plutôt
+  // qu'un bilinéaire ponctuel. C'est ce qui supprime le moiré en grille des
+  // pentes / altitudes sur le terrain norvégien.
   return `${cfg.base}`
     + `?service=WCS`
     + `&version=${NORWAY_WCS_VERSION}`
@@ -334,9 +337,10 @@ async function fetchNorwayCoverage(zone, mercZ, mercX, mercY) {
   }
   if (!parsed.coveredCount) return { status: 'empty' };
 
-  // Reproject UTM source raster onto Mercator with area-weighted box
-  // averaging — closes inter-tile seams AND removes the slope/altitude
-  // grid moiré that point-bilinear produces when src pitch ≈ dst pitch.
+  // Reprojette le raster source UTM sur la grille Mercator avec une moyenne par
+  // blocs pondérée par la surface — supprime les jointures entre tuiles ET le
+  // moiré en grille des pentes / altitudes que produit le bilinéaire ponctuel
+  // quand le pas source ≈ le pas destination.
   const extent = projectMercatorTileToNorwayUTMExtent(mercZ, mercX, mercY, zone);
   const projected = _resampleNorwaySourceToMercator(
     parsed.elevations,

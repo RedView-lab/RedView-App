@@ -1,27 +1,29 @@
 // ---------------------------------------------------------------------------
-// Analysis zone registry — the single user-drawn polygon that focuses the
-// slope / altitude tile pipelines on a bounded area.
+// Registre de la zone d'analyse — l'unique polygone tracé par l'utilisateur qui
+// concentre les pipelines de tuiles pente / altitude sur une zone bornée.
 //
-// The page posts SET_ANALYSIS_ZONE { hash, ring } whenever the zone is
-// (re)drawn (src/features/analysisZone/lib/swZoneBridge.ts) and the tile
-// handlers receive the SAME hash as `?zone=<hash>` in the tile URL. Two uses:
+// La page envoie SET_ANALYSIS_ZONE { hash, ring } à chaque (re)tracé de la zone
+// (src/features/analysisZone/lib/swZoneBridge.ts) et les handlers de tuiles
+// reçoivent le MÊME hash en `?zone=<hash>` dans l'URL de la tuile. Deux usages :
 //
-//   1. EARLY REJECTION — `tileIntersectsAnalysisZone()` is a pure bbox test
-//      (tile bbox vs zone bbox) that runs BEFORE any CacheStorage DEM read or
-//      IGN fetch. A tile fully outside the polygon returns a transparent
-//      response in <0.1 ms, so the cost of the overlay scales with the zone,
-//      not the viewport.
+//   1. REJET PRÉCOCE — `tileIntersectsAnalysisZone()` est un pur test de bbox
+//      (bbox de la tuile contre bbox de la zone) exécuté AVANT toute lecture de
+//      DEM dans CacheStorage ou tout fetch IGN. Une tuile entièrement hors du
+//      polygone renvoie une réponse transparente en < 0,1 ms : le coût de
+//      l'overlay suit la taille de la zone, pas celle de la vue.
 //
-//   2. PER-PIXEL MASK — partially covered tiles are built normally, then
-//      alpha-masked to the polygon by rasterizeRingMask()/applyRingMaskToRgba()
-//      in workers/slope-math.js (shared by the SW scope AND the worker pool).
+//   2. MASQUE PAR PIXEL — les tuiles partiellement couvertes sont construites
+//      normalement, puis leur alpha est masqué au polygone par
+//      rasterizeRingMask()/applyRingMaskToRgba() dans workers/slope-math.js
+//      (partagé par le scope du SW ET le pool de workers).
 //
-// The registry is intentionally tiny (LRU 8): a hash in the tile URL that the
-// SW does not know (SW restarted, race with source swap) degrades to an
-// UNMASKED build — a correct tile, never an error.
+// Le registre est volontairement minuscule (LRU 8) : un hash d'URL que le SW
+// ne connaît pas (SW redémarré, course avec un changement de source) retombe
+// sur une construction NON MASQUÉE — une tuile correcte, jamais une erreur.
 //
-// Lives in core/ (pure state + math on mercatorTileBounds from geo.js), no
-// SW-event access, importScripts'd from sw-dem.js before the handlers.
+// Vit dans core/ (état pur + calcul sur mercatorTileBounds de geo.js), sans
+// accès aux événements du SW, chargé par importScripts depuis sw-dem.js avant
+// les handlers.
 // ---------------------------------------------------------------------------
 
 const ANALYSIS_ZONE_REGISTRY_MAX = 8;
@@ -41,8 +43,8 @@ function analysisZoneBBoxFromRing(ring) {
 }
 
 /**
- * ring: flat [lng, lat, lng, lat, …] payload from the page (matches
- * analysisZoneRingPayload). ≥3 distinct points required.
+ * ring : tableau plat [lng, lat, lng, lat, …] envoyé par la page (même forme
+ * qu'analysisZoneRingPayload). Au moins 3 points distincts.
  */
 function registerAnalysisZone(hash, flatRing) {
   if (!hash || typeof hash !== 'string' || !Array.isArray(flatRing)) return null;
@@ -73,7 +75,7 @@ function clearAnalysisZones() {
 function getAnalysisZone(hash) {
   if (!hash) return null;
   const entry = analysisZoneRegistry.get(hash);
-  // LRU refresh so an active zone is never the eviction victim.
+  // Rafraîchissement LRU : une zone active n'est jamais celle qu'on évince.
   if (entry) {
     analysisZoneRegistry.delete(hash);
     analysisZoneRegistry.set(hash, entry);
@@ -82,10 +84,11 @@ function getAnalysisZone(hash) {
 }
 
 /**
- * Pure bbox overlap test between the tile at (z, x, y) and the registered
- * zone. Returns true when the tile MIGHT contain polygon pixels (a bbox hit
- * is necessary, not sufficient — the exact mask is applied per-pixel later).
- * A miss is definitive: the tile is guaranteed outside the polygon.
+ * Test pur de recouvrement de bbox entre la tuile (z, x, y) et la zone
+ * enregistrée. Renvoie true quand la tuile PEUT contenir des pixels du
+ * polygone (recouper la bbox est nécessaire, pas suffisant — le masque exact
+ * est appliqué pixel par pixel ensuite). Un échec est définitif : la tuile est
+ * forcément hors du polygone.
  */
 function tileIntersectsAnalysisZone(entry, z, x, y) {
   if (!entry) return false;
@@ -95,8 +98,8 @@ function tileIntersectsAnalysisZone(entry, z, x, y) {
 }
 
 /**
- * Resolves a `?zone=` hash into { entry, ring } for a tile build.
- * Unknown / missing hash → { entry: null, ring: null } → unmasked build.
+ * Résout un hash `?zone=` en { entry, ring } pour la construction d'une tuile.
+ * Hash inconnu ou absent → { entry: null, ring: null } → construction non masquée.
  */
 function resolveAnalysisZoneForTile(zoneHash) {
   if (!zoneHash) return { entry: null, ring: null };

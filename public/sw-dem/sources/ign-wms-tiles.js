@@ -1,7 +1,8 @@
 // ---------------------------------------------------------------------------
-// IGN WMS elevation tiles — 1 m terrain (LiDAR HD MNT) and 0.40 m MNS (LiDAR
-// HD MNS) per Mercator tile, with their own LRU caches, TTL null caching and
-// in-flight dedup. Raster geometry lives in ign-wms-raster.js.
+// Tuiles d'altitude WMS de l'IGN — terrain à 1 m (MNT LiDAR HD) et MNS 0,40 m
+// (MNS LiDAR HD) par tuile Mercator, avec leurs propres caches LRU, cache des
+// échecs avec TTL et déduplication des requêtes en cours. La géométrie des
+// rasters est dans ign-wms-raster.js.
 // ---------------------------------------------------------------------------
 
 const terrainWmsTileCache = new Map();
@@ -9,12 +10,12 @@ const terrainWmsInflight = new Map();
 const TERRAIN_WMS_CACHE_MAX = 300;
 const mnsWmsTileCache = new Map();
 const mnsWmsInflight = new Map();
-// Raw WMS grids only serve rebuilds of the same tile — the DEM hot tier and
-// CacheStorage answer every normal re-request — so keep this small
-// (96 × 256 KB ≈ 24 MB instead of ~77 MB of SW heap).
+// Les grilles WMS brutes ne servent qu'à reconstruire la même tuile — le niveau
+// chaud des DEM et CacheStorage répondent à toute nouvelle demande normale —
+// donc on garde ce cache petit (96 × 256 Ko ≈ 24 Mo au lieu de ~77 Mo de tas du SW).
 const MNS_WMS_CACHE_MAX = 96;
 
-// Centre of a Mercator tile, used to schedule WMS fetches centre-first.
+// Centre d'une tuile Mercator, pour servir les fetchs WMS du centre vers les bords.
 function mercatorTileCenterCoords(mercZ, mercX, mercY) {
   const b = mercatorTileBounds(mercZ, mercX, mercY);
   return { lng: (b.west + b.east) / 2, lat: (b.north + b.south) / 2 };
@@ -41,8 +42,8 @@ function cacheTerrainWmsNull(key, errorType) {
   terrainWmsTileCache.set(key, { _null: true, ts: Date.now(), ttl, errorType });
 }
 
-// Returns the resampled raster, null (no data / transient failure) or
-// IGN_FETCH_CANCELLED. `mapTile`: see scheduleIGN().
+// Renvoie le raster rééchantillonné, null (pas de donnée / échec passager) ou
+// IGN_FETCH_CANCELLED. `mapTile` : voir scheduleIGN().
 function terrainWmsCacheKey(mercZ, mercX, mercY) {
   return `wms-mnt/${mercZ}/${mercX}/${mercY}@${ignWmsSupersampleFactor(mercZ)}x`;
 }
@@ -62,9 +63,10 @@ async function getTerrainWmsTile(mercZ, mercX, mercY, purpose = PURPOSE_SLOPE_VI
     const { controller, cleanup, init } = ignFetchInit({ purpose, mapTile });
     try {
       const { width: srcW, height: srcH } = mnsWmsRequestSize(mercZ, mercX, mercY, supersample);
-      // 1. LiDAR HD MNT (0.5 m bare earth), 2. RGE ALTI for the pixels it
-      // does not cover. Both rasters share the exact request geometry, so
-      // the gap fill is a per-pixel merge before the resample.
+      // 1. MNT LiDAR HD (sol nu à 0,5 m), 2. RGE ALTI pour les pixels qu'il ne
+      // couvre pas. Les deux rasters ont exactement la même géométrie de
+      // requête : le comblement des trous est une fusion pixel par pixel avant
+      // le rééchantillonnage.
       let raw = await fetchWmsElevationRaster(IGN_LIDAR_MNT_LAYER, mercZ, mercX, mercY, supersample, init);
       let validCount = 0;
       if (raw) {
@@ -136,10 +138,10 @@ function mnsWmsCacheKey(mercZ, mercX, mercY) {
   return `mns/${mercZ}/${mercX}/${mercY}@${mnsWmsSupersampleFactor()}x`;
 }
 
-// Drops the transient failure (timeout, HTTP error) remembered for this
-// tile's LiDAR HD rasters, so that a retry (handleVideoDemRequest) asks geopf
-// again instead of reading the null back for IGN_NULL_TTL_TRANSIENT. A
-// confirmed coverage gap stays.
+// Oublie l'échec passager (délai dépassé, erreur HTTP) mémorisé pour les
+// rasters LiDAR HD de cette tuile, pour qu'une nouvelle tentative
+// (handleVideoDemRequest) interroge à nouveau geopf au lieu de relire le nul
+// pendant IGN_NULL_TTL_TRANSIENT. Un trou de couverture confirmé est gardé.
 function forgetTransientWmsFailures(mercZ, mercX, mercY) {
   const entries = [
     [mnsWmsTileCache, mnsWmsCacheKey(mercZ, mercX, mercY)],
@@ -151,17 +153,18 @@ function forgetTransientWmsFailures(mercZ, mercX, mercY) {
   }
 }
 
-// True only when the LiDAR HD WMS answered for this tile with no valid sample
-// (a genuine coverage gap) — never after a timeout, an abort or an HTTP error.
+// Vrai seulement quand le WMS LiDAR HD a répondu pour cette tuile sans aucun
+// échantillon valide (un vrai trou de couverture) — jamais après un délai
+// dépassé, une annulation ou une erreur HTTP.
 function isMnsWmsConfirmedEmpty(mercZ, mercX, mercY) {
   const key = mnsWmsCacheKey(mercZ, mercX, mercY);
-  // getCachedMnsWms first: it drops an expired null entry.
+  // getCachedMnsWms d'abord : il retire une entrée nulle expirée.
   const cached = getCachedMnsWms(key);
   return cached.hit && !cached.data && mnsWmsTileCache.get(key)?.errorType === 'permanent';
 }
 
-// Returns the resampled raster, null (no data / transient failure) or
-// IGN_FETCH_CANCELLED. `mapTile`: see scheduleIGN().
+// Renvoie le raster rééchantillonné, null (pas de donnée / échec passager) ou
+// IGN_FETCH_CANCELLED. `mapTile` : voir scheduleIGN().
 async function getMnsWmsTile(mercZ, mercX, mercY, purpose = null, mapTile = null) {
   const supersample = mnsWmsSupersampleFactor();
   const { width: srcW, height: srcH } = mnsWmsRequestSize(mercZ, mercX, mercY, supersample);
@@ -181,10 +184,11 @@ async function getMnsWmsTile(mercZ, mercX, mercY, purpose = null, mapTile = null
       let data = null;
       let answered = false;
       try {
-        // The request is deliberately NOT degree-square (see
-        // mnsWmsRequestSize): srcW > srcH, box-averaged down to
-        // DEM_TILE_SIZE² and de-combed in Y by mnsWmsResampleToTile, which is
-        // NaN/range-aware (cells with no valid sample stay NaN).
+        // La requête n'est volontairement PAS carrée en degrés (voir
+        // mnsWmsRequestSize) : srcW > srcH, ramené à DEM_TILE_SIZE² par moyenne
+        // par blocs et débarrassé du peigne en Y par mnsWmsResampleToTile, qui
+        // tient compte de NaN et des bornes (les cellules sans échantillon
+        // valide restent NaN).
         const raw = await fetchWmsElevationRaster(IGN_LIDAR_MNS_LAYER, mercZ, mercX, mercY, supersample, init);
         if (raw) {
           answered = true;
@@ -197,29 +201,30 @@ async function getMnsWmsTile(mercZ, mercX, mercY, purpose = null, mapTile = null
         if (isIGNUserCancel(controller)) return IGN_FETCH_CANCELLED;
       }
 
-      // No WMS fallback to the HIGHRES / HIGHRES.MNS correlation layers.
+      // Pas de repli WMS vers les couches de corrélation HIGHRES / HIGHRES.MNS.
       //
-      // Those products are only ever served 2x upsampled in Y through any WMS
-      // GetMap CRS: measured 128 distinct rows for a 256-row request, and the
-      // duplicated rows do not sit in aligned pairs (the row sequence bounces
-      // A,B,B,A over each 4-row block) so neither a larger request nor a 2x2
-      // box average recovers the missing samples. The even/odd row-gradient
-      // comb measured 0.70-1.23 — worse than the degree-square defect this file
-      // just fixed for LiDAR HD — so the fallback raster would re-introduce
-      // exactly the dash artefact on the slope overlay.
+      // Ces produits ne sont jamais servis que suréchantillonnés 2× en Y, quel
+      // que soit le CRS du GetMap WMS : mesuré 128 lignes distinctes pour une
+      // requête de 256 lignes, et les lignes dupliquées ne sont pas alignées par
+      // paires (la suite des lignes rebondit A,B,B,A sur chaque bloc de 4) : ni
+      // une requête plus grande ni une moyenne par blocs de 2x2 ne récupèrent
+      // les échantillons manquants. Le peigne pair/impair du gradient mesurait
+      // 0,70 à 1,23 — pire que le défaut des requêtes carrées en degrés que ce
+      // fichier vient de corriger pour le LiDAR HD —, donc le raster de repli
+      // réintroduirait exactement l'artefact en tirets sur l'overlay des pentes.
       //
-      // Returning null instead lets buildIGNTile fall through to the legacy
-      // WMTS path, which samples the product on its own WGS84G tile matrix and
-      // therefore never resamples rows.
+      // Renvoyer null laisse buildIGNTile passer par l'ancien chemin WMTS, qui
+      // échantillonne le produit sur sa propre matrice de tuiles WGS84G et ne
+      // rééchantillonne donc jamais les lignes.
       if (data) {
         evict(mnsWmsTileCache, MNS_WMS_CACHE_MAX);
         mnsWmsTileCache.set(key, data);
         return data;
       }
 
-      // A well-formed raster with no valid sample is a genuine LiDAR HD
-      // coverage gap: remember it for longer than a transport failure so the
-      // WMS request is not repeated every 10 s.
+      // Un raster bien formé sans aucun échantillon valide est un vrai trou de
+      // couverture LiDAR HD : on le mémorise plus longtemps qu'un échec de
+      // transport, pour ne pas répéter la requête WMS toutes les 10 s.
       cacheMnsWmsNull(key, answered ? 'permanent' : 'transient');
       return null;
     } catch {

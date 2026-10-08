@@ -1,8 +1,9 @@
 // ---------------------------------------------------------------------------
-// Build direct RGE ALTI terrain tile from the official WMS endpoint.
-// This is the verified bare-earth source used by slope calculations in
-// `demProfile=terrain` mode. It returns a 256x256 BIL32 raster for the exact
-// Mercator tile bbox, avoiding the WMTS z14 clamp of the legacy HIGHRES path.
+// Construction directe de la tuile terrain RGE ALTI depuis le WMS officiel.
+// C'est la source sol nu vérifiée qu'utilisent les calculs de pente en mode
+// `demProfile=terrain`. Elle renvoie un raster BIL32 de 256x256 pour la bbox
+// exacte de la tuile Mercator, sans le plafond z14 du WMTS de l'ancien chemin
+// HIGHRES.
 // ---------------------------------------------------------------------------
 async function buildIGNTerrainTile(mercZ, mercX, mercY, options) {
   const t0 = performance.now();

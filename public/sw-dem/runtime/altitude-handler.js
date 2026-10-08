@@ -1,50 +1,52 @@
 // ---------------------------------------------------------------------------
-// Altitude tile handler — /altitude-tiles/{z}/{x}/{y}[?rv-dem-profile=terrain][&zone=<hash>]
+// Handler des tuiles d'altitude — /altitude-tiles/{z}/{x}/{y}[?rv-dem-profile=terrain][&zone=<hash>]
 //
-// Only reached in HD 3D quality (fast-30m streams AWS Terrarium straight to
-// the GPU and never hits the SW — see features/altitude/lib/altitude-source.ts).
+// Atteint seulement en qualité 3D HD (fast-30m envoie AWS Terrarium directement
+// au GPU sans passer par le SW — voir features/altitude/lib/altitude-source.ts).
 //
-// No zone (the common case): a READ-THROUGH ALIAS of the DEM pipeline. The
-// Terrain-RGB DEM blob is served verbatim — Mapbox decodes it on the GPU via
-// raster-color-mix — so there is no decode/encode, and no altitude-specific
-// CacheStorage / hot tier (they only duplicated the DEM bytes). DEM hot cache
-// → CacheStorage → DEM_INFLIGHT coalescing answer almost every request because
-// the page caps the source at ALTITUDE_MAX_BUILD_ZOOM, i.e. the zooms the 3D
-// terrain loads itself. A genuine miss at those zooms joins the terrain's own
-// build (same DEM_INFLIGHT key); above the cap we never build.
+// Sans zone (le cas courant) : un ALIAS EN LECTURE du pipeline DEM. Le blob DEM
+// Terrain-RGB est servi tel quel — Mapbox le décode sur le GPU par
+// raster-color-mix —, donc ni décodage ni encodage, et ni CacheStorage ni
+// niveau chaud propres à l'altitude (ils ne faisaient que dupliquer les octets
+// du DEM). Cache chaud DEM → CacheStorage → fusion DEM_INFLIGHT répondent à
+// presque toutes les requêtes, car la page plafonne la source à
+// ALTITUDE_MAX_BUILD_ZOOM, c'est-à-dire les zooms que le terrain 3D charge
+// lui-même. Un vrai échec de cache à ces zooms rejoint la construction du
+// terrain (même clé DEM_INFLIGHT) ; au-dessus du plafond, on ne construit jamais.
 //
-// Zone-masked: polygon mask via worker pool / in-process builder, cached
-// under the `?zone=` key.
+// Avec zone : masque du polygone via le pool de workers / le constructeur du
+// processus courant, mis en cache sous la clé `?zone=`.
 //
-// No final DEM tile yet (LiDAR still pending under load, build cancelled,
-// transient failure, short-cached stand-in): Mapbox keeps any 200 image as
-// final, and the transparent tile served here used to stay as a hole in the
-// overlay for good. The tile is now provisional — the closest cached ancestor
-// DEM, overzoomed (what the terrain renders there too), never cached — and
-// the page reloads the altitude source on ALTITUDE_TILES_STALE once the real
-// DEM tile lands (derived-tile-stale.js).
+// Pas encore de tuile DEM définitive (LiDAR encore en attente sous charge,
+// construction annulée, échec passager, remplaçant brièvement en cache) : Mapbox
+// garde toute image en 200 comme définitive, et la tuile transparente servie
+// ici restait pour de bon comme un trou dans l'overlay. La tuile est désormais
+// provisoire — le DEM ancêtre en cache le plus proche, suréchantillonné (ce que
+// le terrain y rend aussi), jamais mis en cache — et la page recharge la source
+// d'altitude sur ALTITUDE_TILES_STALE dès que la vraie tuile DEM arrive
+// (derived-tile-stale.js).
 // ---------------------------------------------------------------------------
 
 const ALTITUDE_MAX_BUILD_ZOOM = 14;
 
 const ALTITUDE_STALE_TRACKER = createDerivedTileStaleTracker('ALTITUDE_TILES_STALE');
 
-// Stand-in DEM tiles: short-cached (parent overzoom, bare earth, AWS
-// emergency) or overzoomed from an ancestor.
+// Tuiles DEM de remplacement : brièvement en cache (overzoom du parent, sol nu,
+// secours AWS) ou suréchantillonnées depuis un ancêtre.
 function isProvisionalDemResponse(response) {
   if (response.headers.get('x-cache-ttl-ms')) return true;
   return (response.headers.get('X-DEM-Source') || '').toLowerCase().startsWith('overzoom');
 }
 
-// Capped blind retry (a 204 may be transient) + reload as soon as the real
-// DEM tile is committed.
+// Nouvelle tentative à l'aveugle plafonnée (une 204 peut être passagère) +
+// rechargement dès que la vraie tuile DEM est enregistrée.
 function noteAltitudeTileProvisional(tileKey, demProfile, z, x, y) {
   ALTITUDE_STALE_TRACKER.noteStale(tileKey);
   ALTITUDE_STALE_TRACKER.waitOnDem(tileKey, demProfile, z, [[x, y]]);
 }
 
-// The closest ancestor DEM already in the hot tier / CacheStorage,
-// overzoomed to this tile. Never builds anything.
+// Le DEM ancêtre le plus proche déjà dans le niveau chaud / CacheStorage,
+// suréchantillonné à cette tuile. Ne construit jamais rien.
 async function altitudeAncestorResponse(demCache, z, x, y, demProfile) {
   if (typeof tryParentOverzoom !== 'function') return null;
   const parent = await tryParentOverzoom(demCache, z, x, y, 0, demProfile, { cachedOnly: true });
@@ -68,10 +70,11 @@ function isAltitudeWorkCancelled(generation) {
 async function handleAltitudeRequest(z, x, y, zoneHash = '', demProfile = 'default') {
   if (!zoneHash) return handleAltitudePassthrough(z, x, y, demProfile);
 
-  // ── Analysis-zone cache key ──────────────────────────────────────────
-  // `?zone=<hash>` isolates masked from unmasked tiles in CacheStorage and
-  // the hot tier (same convention as the slope handler), so a zone edit can
-  // never serve a stale unmasked tile under the new key.
+  // ── Clé de cache de la zone d'analyse ─────────────────────────────────
+  // `?zone=<hash>` sépare les tuiles masquées des non masquées dans CacheStorage
+  // et le niveau chaud (même convention que le handler des pentes), pour qu'une
+  // modification de zone ne puisse jamais servir une tuile non masquée périmée
+  // sous la nouvelle clé.
   const hotKey = `/altitude-tiles/${z}/${x}/${y}${zoneHash ? `?zone=${zoneHash}` : ''}`;
   const hot = (typeof altitudeHotGet === 'function') ? altitudeHotGet(hotKey) : null;
   if (hot) return altitudeHotResponse(hot);
@@ -80,8 +83,9 @@ async function handleAltitudeRequest(z, x, y, zoneHash = '', demProfile = 'defau
   const cacheKey = new Request(hotKey);
   const cached = await altitudeCache.match(cacheKey);
   if (cached) {
-    // Promote a fresh CacheStorage hit to the hot tier so the next request
-    // skips CacheStorage entirely. Cheap (Blob is refcounted).
+    // Promeut un succès frais de CacheStorage dans le niveau chaud, pour que la
+    // requête suivante saute entièrement CacheStorage. Peu coûteux (le Blob est
+    // compté par références).
     try {
       if (typeof altitudeHotPut === 'function') {
         altitudeHotPut(hotKey, await cached.clone().blob(), Array.from(cached.headers.entries()));
@@ -102,14 +106,14 @@ async function handleAltitudeRequest(z, x, y, zoneHash = '', demProfile = 'defau
   const existing = ALTITUDE_INFLIGHT.get(inflightKey);
   if (existing) {
     try { return (await existing).clone(); }
-    catch { /* fall through and recompute */ }
+    catch { /* on continue et on recalcule */ }
   }
 
-  const generation = null; // zone builds are uncancellable (same as before)
+  const generation = null; // les constructions de zone ne sont pas annulables (comme avant)
   const work = (async () => {
     const demCache = await caches.open(CACHE_NAME);
 
-    // 1. Get existing DEM tile from the 3D terrain cache / in-flight requests (NEVER download DEM for altitude)
+    // 1. Récupère la tuile DEM existante dans le cache du terrain 3D / les requêtes en cours (JAMAIS de téléchargement de DEM pour l'altitude)
     const demResponse = (typeof getExistingTerrainDemResponse === 'function')
       ? await getExistingTerrainDemResponse(z, x, y, demProfile, demCache)
       : null;
@@ -142,7 +146,7 @@ async function handleAltitudeRequest(z, x, y, zoneHash = '', demProfile = 'defau
               usedPool = true;
             }
           } catch {
-            /* fall through to in-process */
+            /* on poursuit dans le processus courant */
           }
         }
 
@@ -172,12 +176,12 @@ async function handleAltitudeRequest(z, x, y, zoneHash = '', demProfile = 'defau
           'X-Tile-Type': 'altitude',
         },
       });
-      // A tile masked over a stand-in DEM is rebuilt when the real one lands.
+      // Une tuile masquée sur un DEM de remplacement est reconstruite quand le vrai arrive.
       if (!provisional && !isAltitudeWorkCancelled(generation)) {
         altitudeCache.put(cacheKey, response.clone());
-        // Promote the freshly built tile into the altitude hot tier so an
-        // immediate re-request (Mapbox repaint, toggle off/on a moment
-        // later) returns in <1 ms.
+        // Promeut la tuile fraîchement construite dans le niveau chaud
+        // d'altitude, pour qu'une nouvelle demande immédiate (repeinte de
+        // Mapbox, désactivation puis réactivation peu après) réponde en < 1 ms.
         try {
           if (typeof altitudeHotPut === 'function') {
             altitudeHotPut(hotKey, altitudeBlob, Array.from(response.headers.entries()));
@@ -202,9 +206,10 @@ async function handleAltitudeRequest(z, x, y, zoneHash = '', demProfile = 'defau
   }
 }
 
-// Not cancellable: the DEM read is the terrain's own tile (same pyramid, see
-// altitude-source.ts), and a cancelled request used to answer a transparent
-// tile that Mapbox kept as final — holes in the overlay after a pan.
+// Non annulable : la lecture du DEM est la tuile du terrain lui-même (même
+// pyramide, voir altitude-source.ts), et une requête annulée répondait une tuile
+// transparente que Mapbox gardait comme définitive — des trous dans l'overlay
+// après un déplacement.
 async function handleAltitudePassthrough(z, x, y, demProfile) {
   const tileKey = `/altitude-tiles/${demProfile}/${z}/${x}/${y}`;
   try {
@@ -224,8 +229,8 @@ async function handleAltitudePassthrough(z, x, y, demProfile) {
       headers.set('X-Tile-Type', 'altitude');
       return new Response(demResponse.body, { status: 200, headers });
     }
-    // No DEM tile for now: the terrain renders its parent mesh here, so does
-    // the overlay until the tile lands.
+    // Pas de tuile DEM pour l'instant : le terrain rend ici le maillage de son
+    // parent, l'overlay aussi jusqu'à l'arrivée de la tuile.
     noteAltitudeTileProvisional(tileKey, demProfile, z, x, y);
     const ancestor = await altitudeAncestorResponse(demCache, z, x, y, demProfile);
     if (ancestor) return ancestor;

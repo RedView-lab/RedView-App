@@ -27,7 +27,7 @@ const SW_BADGE_COLORS = Object.freeze({
   lifecycle: '#059669', // Emerald
 });
 
-let _currentSwLogLevel = SW_LOG_LEVELS.WARN; // Default to WARN (quiet in normal operation)
+let _currentSwLogLevel = SW_LOG_LEVELS.WARN; // WARN par défaut (silencieux en fonctionnement normal)
 
 function parseSwLogLevel(level) {
   if (typeof level === 'number') return Math.max(0, Math.min(4, level));

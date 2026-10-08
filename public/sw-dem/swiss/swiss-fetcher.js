@@ -1,19 +1,19 @@
 // ---------------------------------------------------------------------------
-// swissSURFACE3D fetcher — STAC catalogue + COG cache + range scheduler
+// Fetcher swissSURFACE3D — catalogue STAC + cache COG + ordonnanceur de plages
 // ---------------------------------------------------------------------------
-// Three layers of caching, with TTL-aware null handling:
+// Trois niveaux de cache, avec gestion des nuls tenant compte du TTL :
 //
-//   1. STAC cell cache  : (Ekm, Nkm) → { url, year } | null
-//        Resolves which COG file holds a given LV95 1-km cell.
-//   2. COG header cache : url → { width, tileOffsets, … } | null
-//        Parsed TIFF header; tells us how to range-fetch internal tiles.
-//   3. Internal tile cache : `${url}#${tileIndex}` → Float32Array | null
-//        Decompressed Float32 tile (typically 256×256 = 256 KB).
+//   1. Cache des cellules STAC  : (Ekm, Nkm) → { url, year } | null
+//        Indique quel fichier COG contient une cellule LV95 de 1 km.
+//   2. Cache des en-têtes COG   : url → { width, tileOffsets, … } | null
+//        En-tête TIFF analysé ; dit comment récupérer les tuiles internes par plage.
+//   3. Cache des tuiles internes : `${url}#${tileIndex}` → Float32Array | null
+//        Tuile Float32 décompressée (en général 256×256 = 256 Ko).
 //
-// Concurrency: every network fetch (STAC, COG header, COG range) goes through
-// `swissScheduleFetch()` so the pipeline never opens more than
-// SWISS_CONCURRENCY HTTP/2 streams at once. Same LIFO/oldest-prune semantics
-// as the IGN scheduler, with our own SWISS_PRUNED_SENTINEL.
+// Concurrence : chaque fetch réseau (STAC, en-tête COG, plage COG) passe par
+// `swissScheduleFetch()`, pour que le pipeline n'ouvre jamais plus de
+// SWISS_CONCURRENCY flux HTTP/2 à la fois. Même logique LIFO / élagage des plus
+// anciens que l'ordonnanceur IGN, avec notre propre SWISS_PRUNED_SENTINEL.
 // ---------------------------------------------------------------------------
 
 // ─── Concurrency limiter ────────────────────────────────────────────────────
@@ -53,10 +53,10 @@ function drainSwissQueue() {
   }
 }
 
-// Range-fetch helper used by the COG reader. Always returns ArrayBuffer | null.
-// Retries up to SWISS_COG_RANGE_RETRIES times on timeout / network error
-// (NOT on HTTP 4xx, which are permanent). Each retry takes a fresh slot so
-// it doesn't block the head of the queue.
+// Fonction d'appui de fetch par plage utilisée par le lecteur COG. Renvoie
+// toujours ArrayBuffer | null. Réessaie jusqu'à SWISS_COG_RANGE_RETRIES fois sur
+// délai dépassé / erreur réseau (PAS sur une 4xx HTTP, définitive). Chaque
+// nouvelle tentative prend un nouveau créneau, pour ne pas bloquer la tête de file.
 async function swissRangeFetch(url, offset, length) {
   for (let attempt = 1; attempt <= SWISS_COG_RANGE_RETRIES; attempt++) {
     const result = await swissScheduleFetch(async () => {
@@ -67,7 +67,7 @@ async function swissRangeFetch(url, offset, length) {
           priority: 'high',
         });
         if (!res.ok && res.status !== 206) {
-          // Permanent: 4xx → don't retry. 5xx → retry.
+          // Définitif : 4xx → pas de nouvelle tentative. 5xx → nouvelle tentative.
           if (res.status >= 400 && res.status < 500) {
             console.warn(`[swiss][range] HTTP ${res.status} ${url} bytes=${offset}-${offset + length - 1} (no retry)`);
             return { _permanent: true, value: null };
@@ -95,7 +95,7 @@ async function swissRangeFetch(url, offset, length) {
     if (result === SWISS_PRUNED_SENTINEL) return null;
     if (result && typeof result === 'object' && result._permanent) return result.value;
     if (attempt < SWISS_COG_RANGE_RETRIES) {
-      // Brief jittered back-off so we don't all retry in lockstep.
+      // Courte attente avec gigue, pour ne pas tous réessayer au même instant.
       await new Promise((r) => setTimeout(r, 200 + Math.random() * 400));
     }
   }
@@ -107,11 +107,12 @@ async function swissRangeFetch(url, offset, length) {
 const _stacCellCache = new Map();
 const _stacCellInflight = new Map();
 
-// Super-window inflight: keyed by the SWISS_STAC_GRID-aligned block
-// (`${EkmGrid}/${NkmGrid}`). Every cell in the block joins the same
-// promise so we never fire two overlapping STAC queries for the same
-// neighbourhood. Apr 24 logs showed 5+ near-identical bbox queries
-// timing out concurrently because dedup was per-cell only.
+// Requêtes en cours par super-fenêtre : indexées par le bloc aligné sur
+// SWISS_STAC_GRID (`${EkmGrid}/${NkmGrid}`). Chaque cellule du bloc rejoint la
+// même promesse : on ne lance jamais deux requêtes STAC qui se recoupent pour le
+// même voisinage. Les journaux du 24 avril montraient 5+ requêtes de bbox
+// presque identiques expirant en même temps, car la déduplication se faisait
+// par cellule seulement.
 const _stacWindowInflight = new Map();
 
 function evictMap(cache, max) {
@@ -140,29 +141,30 @@ function _stacCellSetNull(key, ttl) {
   evictMap(_stacCellCache, SWISS_STAC_CELL_CACHE_MAX);
 }
 
-// Issue a single STAC bbox query covering up to a 5×5 km super-window so
-// we resolve many adjacent cells in one round-trip. The returned items
-// are then exploded into the per-cell cache.
+// Lance une seule requête STAC par bbox couvrant jusqu'à une super-fenêtre de
+// 5×5 km, pour résoudre de nombreuses cellules voisines en un aller-retour. Les
+// items renvoyés sont ensuite répartis dans le cache par cellule.
 //
-// Returns:
-//   { ok: true,  cellBest }  — STAC succeeded (cellBest may be empty if
-//                              the bbox truly has no published data)
-//   { ok: false }            — transient network failure (timeout, 5xx,
-//                              prune). Caller MUST NOT mark cells as
-//                              permanent-null; the next render retries.
+// Renvoie :
+//   { ok: true,  cellBest }  — STAC a réussi (cellBest peut être vide si la
+//                              bbox n'a vraiment aucune donnée publiée)
+//   { ok: false }            — échec réseau passager (délai dépassé, 5xx,
+//                              élagage). L'appelant NE DOIT PAS marquer les
+//                              cellules comme nul définitif ; le rendu suivant
+//                              réessaie.
 //
-// Item ID grammar:  swisssurface3d-raster_{year}_{Ekm}-{Nkm}
-// Asset href is the canonical COG URL we want.
+// Grammaire de l'ID d'item :  swisssurface3d-raster_{année}_{Ekm}-{Nkm}
+// L'href de l'asset est l'URL canonique du COG voulu.
 async function _resolveSwissCellsViaStac(EkmMin, EkmMax, NkmMin, NkmMax) {
-  // STAC bbox is in WGS84. Convert the corners.
+  // La bbox STAC est en WGS84. On convertit les coins.
   const sw = lv95ToWGS84(EkmMin * 1000, NkmMin * 1000);
   const ne = lv95ToWGS84((EkmMax + 1) * 1000, (NkmMax + 1) * 1000);
 
-  // The swisstopo STAC API hard-caps `limit` at 100 features/page and
-  // paginates via an opaque `cursor` carried in the response's
-  // rel="next" link. We follow that cursor up to SWISS_STAC_MAX_PAGES so
-  // a large discovery window (14×14 km) is fully resolved instead of
-  // silently truncated at 100 features → missing cells → flat patches.
+  // L'API STAC de swisstopo plafonne `limit` à 100 entités par page et pagine via
+  // un `cursor` opaque porté par le lien rel="next" de la réponse. On suit ce
+  // curseur jusqu'à SWISS_STAC_MAX_PAGES, pour qu'une grande fenêtre de
+  // découverte (14×14 km) soit entièrement résolue au lieu d'être tronquée en
+  // silence à 100 entités → cellules manquantes → plaques plates.
   const firstUrl =
     `${SWISS_STAC_BASE}` +
     `?bbox=${sw.lng.toFixed(6)},${sw.lat.toFixed(6)},${ne.lng.toFixed(6)},${ne.lat.toFixed(6)}` +
@@ -191,16 +193,16 @@ async function _resolveSwissCellsViaStac(EkmMin, EkmMax, NkmMin, NkmMax) {
     }
   });
 
-  // Accumulate features across every cursor page. Any page that fails
-  // transiently aborts the whole window resolution (return {ok:false})
-  // so we never mark cells permanent-null on a partial read.
+  // Accumule les entités de toutes les pages du curseur. Toute page en échec
+  // passager abandonne la résolution de toute la fenêtre (return {ok:false}),
+  // pour ne jamais marquer de cellules en nul définitif sur une lecture partielle.
   const allFeatures = [];
   let nextUrl = firstUrl;
   let page = 0;
   while (nextUrl && page < SWISS_STAC_MAX_PAGES) {
     const json = await fetchPage(nextUrl);
-    // Pruned or transient network failure → tell caller to retry, do NOT
-    // mark cells as permanent-null.
+    // Élagage ou échec réseau passager → on dit à l'appelant de réessayer, on
+    // NE marque PAS les cellules comme nul définitif.
     if (!json || json === SWISS_PRUNED_SENTINEL) {
       console.warn(`[swiss][stac] transient failure (page ${page}) for bbox ${sw.lng.toFixed(3)},${sw.lat.toFixed(3)},${ne.lng.toFixed(3)},${ne.lat.toFixed(3)}`);
       return { ok: false };
@@ -212,8 +214,8 @@ async function _resolveSwissCellsViaStac(EkmMin, EkmMax, NkmMin, NkmMax) {
     }
     for (const feat of payload.features) allFeatures.push(feat);
     page++;
-    // Follow the rel="next" cursor link if present and the page was full
-    // (a short page means the catalogue is exhausted for this bbox).
+    // Suit le lien rel="next" s'il existe et que la page était pleine (une page
+    // incomplète signifie que le catalogue est épuisé pour cette bbox).
     nextUrl = null;
     if (payload.features.length >= SWISS_STAC_PAGE_LIMIT && Array.isArray(payload.links)) {
       const link = payload.links.find((l) => l && l.rel === 'next' && l.href);
@@ -229,7 +231,7 @@ async function _resolveSwissCellsViaStac(EkmMin, EkmMax, NkmMin, NkmMax) {
     );
   }
 
-  // Group features by (Ekm, Nkm) keeping the most recent year per cell.
+  // Regroupe les entités par (Ekm, Nkm) en gardant l'année la plus récente par cellule.
   const cellBest = new Map();
   for (const feat of allFeatures) {
     const id = feat.id || '';
@@ -240,7 +242,7 @@ async function _resolveSwissCellsViaStac(EkmMin, EkmMax, NkmMin, NkmMax) {
     const Nkm = parseInt(m[3], 10);
     const cellKey = `${Ekm}/${Nkm}`;
 
-    // Pick the COG asset (there may also be xyz.zip / etc.)
+    // Choisit l'asset COG (il peut aussi y avoir xyz.zip, etc.)
     let cogHref = null;
     if (feat.assets) {
       for (const [assetKey, asset] of Object.entries(feat.assets)) {
@@ -258,9 +260,9 @@ async function _resolveSwissCellsViaStac(EkmMin, EkmMax, NkmMin, NkmMax) {
     }
   }
 
-  // STAC succeeded. Write resolved cells to cache; unresolved cells in
-  // the queried window get a PERMANENT null (the catalogue has spoken:
-  // no published data for that km cell).
+  // STAC a réussi. On écrit les cellules résolues dans le cache ; les cellules
+  // non résolues de la fenêtre interrogée reçoivent un nul DÉFINITIF (le
+  // catalogue a parlé : aucune donnée publiée pour cette cellule kilométrique).
   for (let Ekm = EkmMin; Ekm <= EkmMax; Ekm++) {
     for (let Nkm = NkmMin; Nkm <= NkmMax; Nkm++) {
       const key = `${Ekm}/${Nkm}`;
@@ -276,10 +278,11 @@ async function _resolveSwissCellsViaStac(EkmMin, EkmMax, NkmMin, NkmMax) {
   return { ok: true, cellBest };
 }
 
-// Sentinel returned by getCOGUrlForCell() when STAC failed transiently
-// (network timeout, 5xx, queue prune). Distinguishes from `null`, which
-// means "STAC succeeded and there is no published data here". Callers
-// MUST treat this as "retry next render, do NOT poison area-neg cache".
+// Sentinelle renvoyée par getCOGUrlForCell() quand STAC a échoué passagèrement
+// (délai réseau dépassé, 5xx, élagage de file). Se distingue de `null`, qui
+// signifie « STAC a réussi et il n'y a aucune donnée publiée ici ». Les
+// appelants DOIVENT la traiter comme « réessayer au prochain rendu, NE PAS
+// empoisonner le cache négatif de zone ».
 const SWISS_STAC_TRANSIENT = Object.freeze({ _swissStacTransient: true });
 
 async function getCOGUrlForCell(Ekm, Nkm) {
@@ -287,10 +290,11 @@ async function getCOGUrlForCell(Ekm, Nkm) {
   const cached = _stacCellGet(key);
   if (cached.hit) return cached.url;
 
-  // Snap to a fixed grid so any cell in the same block deterministically
-  // resolves through the SAME STAC query (super-window dedup). Without
-  // this, sibling cells fire overlapping 5×5 queries and saturate the
-  // queue → timeouts (see Apr 24 logs).
+  // Alignement sur une grille fixe, pour que toute cellule du même bloc se
+  // résolve de façon déterministe par la MÊME requête STAC (déduplication par
+  // super-fenêtre). Sans cela, les cellules sœurs lancent des requêtes 5×5 qui
+  // se recoupent et saturent la file → délais dépassés (voir les journaux du
+  // 24 avril).
   const G = SWISS_STAC_GRID;
   const EkmGrid = Math.floor(Ekm / G) * G;
   const NkmGrid = Math.floor(Nkm / G) * G;
@@ -298,18 +302,18 @@ async function getCOGUrlForCell(Ekm, Nkm) {
 
   const readCellOrTransient = (windowOk) => {
     const after = _stacCellGet(key);
-    if (after.hit) return after.url; // resolved (URL or permanent null)
-    // STAC didn't reach a verdict for this cell. If the window query
-    // succeeded but the cell wasn't in its bbox somehow, treat as null.
-    // Otherwise it's transient — let caller retry.
+    if (after.hit) return after.url; // résolue (URL ou nul définitif)
+    // STAC n'a pas rendu de verdict pour cette cellule. Si la requête de fenêtre
+    // a réussi mais que la cellule n'était pas dans sa bbox, on la traite comme
+    // nulle. Sinon c'est passager — l'appelant réessaiera.
     return windowOk ? null : SWISS_STAC_TRANSIENT;
   };
 
   // Per-cell inflight (legacy path).
   if (_stacCellInflight.has(key)) return _stacCellInflight.get(key);
 
-  // Per-window inflight: another cell in the same block already kicked
-  // off the STAC query. Wait for it then read this cell from cache.
+  // Requête en cours par fenêtre : une autre cellule du même bloc a déjà lancé
+  // la requête STAC. On l'attend, puis on lit cette cellule dans le cache.
   const existingWindow = _stacWindowInflight.get(windowKey);
   if (existingWindow) {
     return existingWindow.then((res) => readCellOrTransient(res?.ok === true));
@@ -342,7 +346,7 @@ async function getCOGUrlForCell(Ekm, Nkm) {
 const _cogHeaderCache = new Map();
 const _cogHeaderInflight = new Map();
 
-const SWISS_HEADER_INITIAL_BYTES = 32_768; // 32 KB — GDAL writes IFD0 + every overview IFD into the front "ghost" header (<4 KB total); the openSwissCOG refetch loop covers the rare outlier
+const SWISS_HEADER_INITIAL_BYTES = 32_768; // 32 Ko — GDAL écrit IFD0 et toutes les IFD d'aperçu dans l'en-tête « fantôme » de début (< 4 Ko en tout) ; la boucle de nouveau fetch d'openSwissCOG couvre le rare cas hors norme
 const SWISS_HEADER_MAX_BYTES = 524_288;
 
 function _headerGet(url) {
@@ -369,11 +373,12 @@ async function openSwissCOG(url) {
   const promise = (async () => {
     let bytesNeeded = SWISS_HEADER_INITIAL_BYTES;
     let cog = null;
-    // Two-axis attempt loop:
-    //   networkAttempt: 1..SWISS_COG_HEADER_RETRIES (retry on timeout/5xx)
-    //   sizeAttempt:    0..1 (re-fetch with larger range if header doesn't fit)
-    // We don't poison the negative cache on a single timeout — short TTL +
-    // retry keeps the user able to keep panning without a 60 s blackout.
+    // Boucle de tentatives sur deux axes :
+    //   networkAttempt : 1..SWISS_COG_HEADER_RETRIES (nouvelle tentative sur délai dépassé / 5xx)
+    //   sizeAttempt :    0..1 (nouveau fetch d'une plage plus grande si l'en-tête ne tient pas)
+    // On n'empoisonne pas le cache négatif sur un seul délai dépassé — un TTL
+    // court + une nouvelle tentative laissent l'utilisateur continuer à se
+    // déplacer sans 60 s de noir.
     let networkAttempt = 0;
     let sizeAttempt = 0;
     let permanentParseFail = false;
@@ -407,10 +412,10 @@ async function openSwissCOG(url) {
         }
       });
       if (buf === SWISS_PRUNED_SENTINEL) {
-        // Queue pruned mid-flight. Don't poison cache, let next pan retry.
+        // File élaguée en cours de route. On n'empoisonne pas le cache, le prochain déplacement réessaiera.
         return null;
       }
-      // Permanent network outcome (4xx, error, or success)
+      // Résultat réseau définitif (4xx, erreur ou succès)
       if (buf && typeof buf === 'object' && buf._permanent) {
         if (!buf.value) {
           _headerSetNull(url, SWISS_NULL_TTL_PERMANENT);
@@ -425,7 +430,7 @@ async function openSwissCOG(url) {
               break;
             }
             sizeAttempt++;
-            networkAttempt = 0; // reset network retries for the bigger fetch
+            networkAttempt = 0; // remise à zéro des tentatives réseau pour le fetch plus grand
             continue;
           }
           cog = parsed;
@@ -443,8 +448,9 @@ async function openSwissCOG(url) {
       }
     }
     if (!cog) {
-      // Permanent parse failure → long TTL. Transient (all retries timed out)
-      // → very short TTL so the next pan can retry instead of blacking out.
+      // Échec d'analyse définitif → TTL long. Passager (toutes les tentatives
+      // ont expiré) → TTL très court, pour que le prochain déplacement réessaie
+      // au lieu de tout noircir.
       _headerSetNull(url, permanentParseFail ? SWISS_NULL_TTL_PERMANENT : SWISS_NULL_TTL_TRANSIENT);
       return null;
     }
@@ -512,31 +518,31 @@ async function getCOGInternalTile(cog, levelIdx, tileIndex) {
   return promise;
 }
 
-// Synchronous cache reader — returns the decoded Float32Array if it is already
-// resident, else null. Used by the sync bilinear sampler after a prefetch has
-// guaranteed the needed tiles are in cache.
+// Lecteur de cache synchrone — renvoie le Float32Array décodé s'il est déjà
+// résident, sinon null. Utilisé par l'échantillonneur bilinéaire synchrone
+// après un préchargement qui a garanti la présence des tuiles nécessaires.
 function getCOGInternalTileCached(cog, levelIdx, tileIndex) {
   const e = _tileCache.get(`${cog.url}#L${levelIdx}#${tileIndex}`);
   if (!e || e._null) return null;
   return e;
 }
 
-// ─── Coalesced multi-tile prefetch ──────────────────────────────────────────
-// Groups the requested internal tiles of one COG level into contiguous
-// byte-range runs and issues ONE Range request per run. swisstopo writes a
-// level's tiles contiguously in file order, so a cell that needs several
-// adjacent tiles (native / high zoom) collapses from N HTTP requests to ~1.
-// Each tile is still decoded individually (every tile is compressed on its
-// own) and cached under its own key, so getCOGInternalTile() and the sync
-// sampler both find it afterwards.
-const SWISS_RANGE_MERGE_GAP = 16 * 1024;      // merge tiles ≤16 KB apart in the file
+// ─── Préchargement multi-tuiles regroupé ────────────────────────────────────
+// Regroupe les tuiles internes demandées d'un niveau de COG en suites de plages
+// d'octets contiguës et émet UNE requête Range par suite. swisstopo écrit les
+// tuiles d'un niveau de façon contiguë dans l'ordre du fichier : une cellule qui
+// a besoin de plusieurs tuiles voisines (zoom natif / élevé) passe de N requêtes
+// HTTP à ~1. Chaque tuile est quand même décodée individuellement (chacune est
+// compressée à part) et mise en cache sous sa propre clé, pour que
+// getCOGInternalTile() et l'échantillonneur synchrone la retrouvent ensuite.
+const SWISS_RANGE_MERGE_GAP = 16 * 1024;      // fusionne les tuiles distantes de ≤ 16 Ko dans le fichier
 const SWISS_RANGE_MAX_SPAN = 6 * 1024 * 1024; // cap a single coalesced fetch at 6 MB
 
 async function prefetchCOGTilesCoalesced(cog, levelIdx, tileIndices) {
   const level = cog.levels[levelIdx];
   if (!level) return;
 
-  // Dedup + drop tiles already cached or in-flight; collect their byte ranges.
+  // Déduplication + retrait des tuiles déjà en cache ou en cours ; collecte de leurs plages d'octets.
   const seen = new Set();
   const need = [];
   for (const ti of tileIndices) {
@@ -573,14 +579,15 @@ async function prefetchCOGTilesCoalesced(cog, levelIdx, tileIndices) {
 
   await Promise.all(runs.map(async (run) => {
     if (run.tiles.length === 1) {
-      // Singleton — defer to the normal cached/inflight path (no merge gain).
+      // Isolée — on passe par le chemin normal cache / en cours (aucun gain de fusion).
       await getCOGInternalTile(cog, levelIdx, run.tiles[0].ti);
       return;
     }
     const span = run.end - run.start;
     const fetchPromise = swissRangeFetch(cog.url, run.start, span);
-    // Register a per-tile inflight promise derived from the shared fetch so a
-    // concurrent build for any of these tiles dedups onto this request.
+    // Enregistre une promesse en cours par tuile dérivée du fetch partagé, pour
+    // qu'une construction concurrente de n'importe laquelle de ces tuiles se
+    // déduplique sur cette requête.
     const tilePromises = run.tiles.map((t) => {
       const p = fetchPromise
         .then(async (buf) => {

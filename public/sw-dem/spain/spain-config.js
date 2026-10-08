@@ -1,22 +1,22 @@
 // ---------------------------------------------------------------------------
-// Spain — national MDT via IGN / IDEE INSPIRE WCS
+// Espagne — MDT national via le WCS INSPIRE de l'IGN / IDEE
 // ---------------------------------------------------------------------------
-// Official endpoints validated during integration:
-//   * WCS: https://servicios.idee.es/wcs-inspire/mdt?service=WCS&request=GetCapabilities
-//   * WMS ortho reference: https://www.ign.es/wms-inspire/pnoa-ma?service=WMS&request=GetCapabilities
+// Points d'accès officiels validés pendant l'intégration :
+//   * WCS : https://servicios.idee.es/wcs-inspire/mdt?service=WCS&request=GetCapabilities
+//   * Référence WMS ortho : https://www.ign.es/wms-inspire/pnoa-ma?service=WMS&request=GetCapabilities
 //
-// Findings:
-//   * National DEM service exposes 1000 / 500 / 200 / 25 / 5 m products.
-//   * Best nationwide terrain raster available through the official WCS is 5 m.
-//   * Mainland / Balearic native coverage is Elevacion25830_5 (EPSG:25830).
-//   * Canary native coverage is Elevacion4083_5 (EPSG:4083 / REGCAN95 UTM28).
-//   * GetCoverage with `scaleSize=x(256),y(256)` makes the server downsample
-//     server-side and serve a fixed 256x256 16-bit TIFF (~131 KB) with a
-//     1-year CloudFront cache. Without this, a single z12 tile transfers
-//     ~8 MB (10 km × 10 km / 5 m → 2000² native pixels) which saturated the
-//     SW fetch queue, stranded the slope/altitude pill at 1 % and produced
-//     intermittent flat tiles when the request timed out before the body
-//     finished downloading.
+// Constats :
+//   * Le service DEM national expose des produits à 1000 / 500 / 200 / 25 / 5 m.
+//   * Le meilleur raster de terrain national disponible via le WCS officiel est à 5 m.
+//   * La couverture native continent / Baléares est Elevacion25830_5 (EPSG:25830).
+//   * La couverture native des Canaries est Elevacion4083_5 (EPSG:4083 / REGCAN95 UTM28).
+//   * Un GetCoverage avec `scaleSize=x(256),y(256)` fait sous-échantillonner le
+//     serveur, qui sert un TIFF 16 bits fixe de 256x256 (~131 Ko) avec un cache
+//     CloudFront d'un an. Sans cela, une seule tuile z12 transfère ~8 Mo
+//     (10 km × 10 km / 5 m → 2000² pixels natifs), ce qui saturait la file de
+//     fetch du SW, bloquait la pastille pente / altitude à 1 % et donnait des
+//     tuiles plates par intermittence quand la requête expirait avant la fin du
+//     téléchargement du corps.
 // ---------------------------------------------------------------------------
 
 const SPAIN_BOUNDS = [-19.5, 27.0, 5.5, 44.5];
@@ -25,38 +25,41 @@ const SPAIN_CANARY_BOUNDS = [-19.5, 27.0, -12.0, 30.5];
 const SPAIN_DEM_RESOLUTION_M = 5;
 const SPAIN_DEM_MINZOOM = 11;
 const SPAIN_ENGAGE_MPP = 60;
-// IDEE backend can be slow on cold misses (server-side raster generation
-// for the requested bbox). 15 s was occasionally too tight on first visits
-// to a fresh region — the abort fired, work was wasted and tiles were
-// re-queued, snowballing perceived "an eternity to load" on first paint.
+// Le backend IDEE peut être lent sur les échecs de cache à froid (génération du
+// raster côté serveur pour la bbox demandée). 15 s étaient parfois trop courtes
+// lors des premières visites d'une nouvelle région — l'abandon se déclenchait,
+// le travail était perdu et les tuiles remises en file, ce qui faisait boule de
+// neige jusqu'à une impression de « chargement interminable » au premier rendu.
 const SPAIN_FETCH_TIMEOUT_MS = 30_000;
-// Each request returns a fixed 16-bit TIFF served by a CloudFront edge with
-// year-long max-age. 256² (~131 KB) was the original choice; bumped to 512²
-// (~520 KB) so the source raster matches the MDT5 native 5 m grid at z14-15
-// (a z14 Spanish tile is ~2.5 km wide → 500² native pixels, so 512² captures
-// essentially every native pixel without server-side downsampling and its
-// associated low-pass artefacts that produced the visible "wavy contour"
-// lines on smooth slopes). 4× more bytes per tile, but on fibre that's
-// imperceptible compared to backend cold-miss latency, and CloudFront still
-// year-caches everything.
-// Concurrency raised 16→24 (May 06 perf pass): IDEE responses are now
-// CloudFront-edge cached year-long thanks to scaleSize=512 capping, so the
-// real cost per request is dominated by RTT, not backend compute. HTTP/2 on
-// servicios.idee.es comfortably multiplexes 24+ streams; previously 16 hit
-// pruning during fast pans across the Pyrenees viewport (which can require
-// 30+ Spanish tiles in a single burst once mainland + canary hops merge).
-// Queue 400→600 keeps the head from being pruned out from under the active
-// viewport when the pan stalls briefly on a dezoom.
+// Chaque requête renvoie un TIFF 16 bits fixe servi par un nœud CloudFront avec
+// un max-age d'un an. 256² (~131 Ko) était le choix d'origine ; passé à 512²
+// (~520 Ko) pour que le raster source corresponde à la grille native de 5 m du
+// MDT5 à z14-15 (une tuile espagnole z14 fait ~2,5 km de large → 500² pixels
+// natifs : 512² capte pratiquement chaque pixel natif sans sous-échantillonnage
+// côté serveur ni les artefacts de passe-bas associés, qui produisaient les
+// lignes de « contours ondulés » visibles sur les pentes lisses). 4× plus
+// d'octets par tuile, mais sur fibre c'est imperceptible face à la latence d'un
+// échec de cache à froid du backend, et CloudFront garde tout en cache un an.
+// Concurrence portée de 16 à 24 (passe de performance du 6 mai) : les réponses
+// IDEE sont désormais en cache d'un an sur les nœuds CloudFront grâce au
+// plafond scaleSize=512, donc le coût réel d'une requête est dominé par l'aller-
+// retour, pas par le calcul du backend. HTTP/2 sur servicios.idee.es multiplexe
+// sans peine 24+ flux ; 16 provoquait des élagages pendant les déplacements
+// rapides sur la vue des Pyrénées (qui peut demander 30+ tuiles espagnoles en
+// une rafale quand continent et Canaries se cumulent). La file passée de 400 à
+// 600 évite que la tête soit élaguée sous la vue active quand le déplacement
+// marque une pause pendant un dézoom.
 const SPAIN_CONCURRENCY = 24;
 const SPAIN_QUEUE_MAX = 600;
 const SPAIN_WCS_OUTPUT_PX = 512;
 const SPAIN_WCS_VERSION = '2.0.1';
 const SPAIN_WCS_FORMAT = 'image/tiff';
-// MDT5 stores elevations as Int16 in metres → 1 m vertical quantization. On
-// pentes douces (≤ ~15°) this surfaces as 1 m horizontal "stair" contours
-// in the 3D mesh ("micro-ondulations"). A light 3×3 low-pass applied only
-// where the local 3×3 height span is below this threshold smooths the
-// quantization without softening real cliffs / ridges.
+// Le MDT5 stocke les altitudes en Int16 en mètres → quantification verticale de
+// 1 m. Sur pentes douces (≤ ~15°), cela apparaît sous forme de courbes en
+// « escalier » horizontales de 1 m dans le maillage 3D (« micro-ondulations »).
+// Un léger passe-bas 3×3, appliqué seulement là où l'écart d'altitude local 3×3
+// est sous ce seuil, lisse la quantification sans adoucir les vraies falaises /
+// crêtes.
 const SPAIN_SMOOTH_VARIANCE_M = 4;
 
 const SPAIN_WCS_COVERAGES = {

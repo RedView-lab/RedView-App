@@ -1,20 +1,24 @@
 // ---------------------------------------------------------------------------
-// Minimal Cloud-Optimised GeoTIFF (COG) reader for swissSURFACE3D Raster
+// Lecteur minimal de Cloud-Optimised GeoTIFF (COG) pour swissSURFACE3D Raster
 // ---------------------------------------------------------------------------
-// Why a custom reader instead of geotiff.js?
-//   * The SW is a *classic* Worker (importScripts) — geotiff.js v2 ships ESM
-//     and adding a build step to bundle it adds friction we don't need.
-//   * swisstopo COGs are remarkably uniform: single Float32 band, internal
-//     tiling, DEFLATE compression, GeoKey-described EPSG:2056 georeferencing.
-//   * We only need a tiny subset of TIFF: enough tags to map (LV95 metres) →
-//     (image px) → (internal-tile index) → (range request) → (Float32 sample).
+// Pourquoi un lecteur maison plutôt que geotiff.js ?
+//   * Le SW est un Worker *classique* (importScripts) — geotiff.js v2 est livré
+//     en ESM, et ajouter une étape de build pour l'empaqueter crée une friction
+//     inutile.
+//   * Les COG swisstopo sont remarquablement uniformes : une seule bande
+//     Float32, tuilage interne, compression DEFLATE, géoréférencement EPSG:2056
+//     décrit par GeoKey.
+//   * Il ne faut qu'un tout petit sous-ensemble du TIFF : assez de tags pour
+//     passer de (mètres LV95) → (px image) → (index de tuile interne) →
+//     (requête de plage) → (échantillon Float32).
 //
-// Implementation contract:
+// Contrat d'implémentation :
 //   const cog = await openSwissCOG(url);
-//   const elev = await cog.sampleLV95(E, N);   // metres or NaN
+//   const elev = await cog.sampleLV95(E, N);   // mètres ou NaN
 //
-// All Range fetches go through `swissScheduleFetch()` (in swiss-fetcher.js)
-// to share one concurrency limiter for the whole Swiss pipeline.
+// Tous les fetchs de plages passent par `swissScheduleFetch()` (dans
+// swiss-fetcher.js) pour partager un seul limiteur de concurrence dans tout le
+// pipeline suisse.
 // ---------------------------------------------------------------------------
 
 // ─── TIFF tag IDs we care about ─────────────────────────────────────────────
@@ -50,9 +54,9 @@ const TIFF_TYPE_SIZE = {
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-// Decompress DEFLATE (RFC 1951 + zlib wrapper). swisstopo COGs use
-// Compression=8 which is the zlib-wrapped form; native DecompressionStream
-// supports both 'deflate' (zlib) and 'deflate-raw'. We try zlib first.
+// Décompression DEFLATE (RFC 1951 + enveloppe zlib). Les COG swisstopo
+// utilisent Compression=8, la forme enveloppée zlib ; DecompressionStream gère
+// nativement 'deflate' (zlib) et 'deflate-raw'. On essaie d'abord zlib.
 async function inflateDeflate(buffer) {
   // buffer: Uint8Array
   const tryDecompress = async (format) => {
@@ -64,28 +68,30 @@ async function inflateDeflate(buffer) {
   catch { return await tryDecompress('deflate-raw'); }
 }
 
-// ─── TIFF LZW decoder (Compression = 5) ─────────────────────────────────────
-// swisstopo swissSURFACE3D Raster COGs are LZW-compressed (verified by
-// header probing — Tag 259 = 5). DecompressionStream has no LZW backend,
-// so we ship a minimal pure-JS decoder.
+// ─── Décodeur LZW TIFF (Compression = 5) ────────────────────────────────────
+// Les COG swissSURFACE3D Raster de swisstopo sont compressés en LZW (vérifié en
+// sondant l'en-tête — tag 259 = 5). DecompressionStream n'a pas de moteur LZW :
+// on embarque un décodeur minimal en JS pur.
 //
-// TIFF 6.0 §13 LZW specifics (vs. textbook LZW / GIF):
-//   * Bit packing is **MSB-first** (GIF is LSB-first).
-//   * Code width starts at 9 bits, grows when the dictionary index reaches
-//     the "early change" thresholds 510, 1022, 2046 (one less than
-//     2^width − 1, per the TIFF errata of 2002).
-//   * CLEAR = 256 resets the dictionary and code width to 9 bits.
-//   * EOI = 257 terminates the stream.
-//   * Dictionary entries 258+ are { firstCode, suffixByte } pairs; output
-//     length is unbounded so we accumulate into chunks, then concat once.
+// Particularités du LZW TIFF 6.0 §13 (par rapport au LZW classique / GIF) :
+//   * L'empaquetage des bits se fait **MSB d'abord** (GIF : LSB d'abord).
+//   * La largeur de code démarre à 9 bits et grandit quand l'index du
+//     dictionnaire atteint les seuils de « changement anticipé » 510, 1022, 2046
+//     (un de moins que 2^largeur − 1, selon l'errata TIFF de 2002).
+//   * CLEAR = 256 réinitialise le dictionnaire et la largeur de code à 9 bits.
+//   * EOI = 257 termine le flux.
+//   * Les entrées 258+ du dictionnaire sont des paires { firstCode, suffixByte } ;
+//     la longueur de sortie n'est pas bornée, donc on accumule par blocs puis on
+//     concatène une fois.
 function decodeTIFFLZW(input) {
   const CLEAR = 256;
   const EOI = 257;
-  const MAX_CODE = 4093; // 2^12 − 3 (entries 4094 and 4095 are reserved/forbidden)
+  const MAX_CODE = 4093; // 2^12 − 3 (les entrées 4094 et 4095 sont réservées / interdites)
 
   const inLen = input.length;
-  // Pre-allocate output guess (LZW typically expands ~2-3×; we'll grow).
-  // Tile is tileW*tileH*4 bytes (e.g. 512*512*4 = 1 MiB) so start there.
+  // Taille de sortie préallouée estimée (le LZW développe en général ~2-3× ; on
+  // agrandira). Une tuile fait tileW*tileH*4 octets (p. ex. 512*512*4 = 1 Mio) :
+  // on part de là.
   let out = new Uint8Array(Math.max(inLen * 3, 1 << 16));
   let outPos = 0;
   const ensureOut = (need) => {
@@ -97,7 +103,7 @@ function decodeTIFFLZW(input) {
     out = next;
   };
 
-  // Bit reader (MSB-first across the input byte stream).
+  // Lecteur de bits (MSB d'abord sur le flux d'octets d'entrée).
   let bitBuf = 0;
   let bitCnt = 0;
   let bytePos = 0;
@@ -111,8 +117,8 @@ function decodeTIFFLZW(input) {
     return (bitBuf >>> bitCnt) & ((1 << width) - 1);
   };
 
-  // Dictionary as parallel arrays (prefixCode, suffixByte). Resolving an
-  // entry walks back through prefix chain into a small scratch buffer.
+  // Dictionnaire en tableaux parallèles (prefixCode, suffixByte). Résoudre une
+  // entrée remonte la chaîne des préfixes dans un petit tampon de travail.
   const prefix = new Int16Array(4096);
   const suffix = new Uint8Array(4096);
   const scratch = new Uint8Array(4096);
@@ -126,9 +132,9 @@ function decodeTIFFLZW(input) {
       c = prefix[c];
     }
     ensureOut(len);
-    // scratch is in reverse order — emit backwards.
+    // le tampon de travail est à l'envers — on émet à rebours.
     for (let i = len - 1; i >= 0; i--) out[outPos++] = scratch[i];
-    return scratch[len - 1]; // first byte of the entry
+    return scratch[len - 1]; // premier octet de l'entrée
   };
 
   let codeWidth = 9;
@@ -147,7 +153,7 @@ function decodeTIFFLZW(input) {
 
     let firstByte;
     if (code < nextCode) {
-      // Known code — emit and (if we have a previous) add prev+firstByte to dict.
+      // Code connu — on l'émet et (s'il y a un précédent) on ajoute prev+firstByte au dictionnaire.
       firstByte = writeEntry(code);
       if (prevCode !== -1 && nextCode <= MAX_CODE) {
         prefix[nextCode] = prevCode;
@@ -155,8 +161,9 @@ function decodeTIFFLZW(input) {
         nextCode++;
       }
     } else if (code === nextCode && prevCode !== -1) {
-      // KwKwK case: new code = prev + firstByte(prev). Add to dict, then emit.
-      // First derive firstByte of prev WITHOUT emitting it (walk chain).
+      // Cas KwKwK : nouveau code = prev + firstByte(prev). On l'ajoute au
+      // dictionnaire, puis on l'émet. On obtient d'abord le firstByte de prev
+      // SANS l'émettre (parcours de la chaîne).
       let c = prevCode;
       while (c >= 256) c = prefix[c];
       firstByte = c;
@@ -173,8 +180,9 @@ function decodeTIFFLZW(input) {
 
     prevCode = code;
 
-    // TIFF "early change": grow width one code BEFORE the dictionary fills,
-    // so that the encoder and decoder agree on the width of the next code.
+    // « Changement anticipé » TIFF : la largeur grandit un code AVANT que le
+    // dictionnaire ne soit plein, pour que l'encodeur et le décodeur
+    // s'accordent sur la largeur du code suivant.
     if (codeWidth < 12 && nextCode === ((1 << codeWidth) - 1)) {
       codeWidth++;
     }
@@ -186,8 +194,9 @@ function decodeTIFFLZW(input) {
 function readTagValue(view, entryOffset, type, count, littleEndian, bytesView) {
   const typeSize = TIFF_TYPE_SIZE[type] || 0;
   const totalBytes = typeSize * count;
-  // For inline values (≤4 bytes) the value sits in the value/offset slot
-  // (entryOffset+8). For larger payloads it's an offset into the file.
+  // Pour les valeurs en ligne (≤ 4 octets), la valeur est dans l'emplacement
+  // valeur/décalage (entryOffset+8). Pour les plus grandes, c'est un décalage
+  // dans le fichier.
   const isInline = totalBytes <= 4;
   let dataOffset, data;
   if (isInline) {
@@ -217,23 +226,24 @@ function readTagValue(view, entryOffset, type, count, littleEndian, bytesView) {
   return out;
 }
 
-// ─── COG header parser ──────────────────────────────────────────────────────
-// Reads the TIFF header AND walks the IFD chain so we expose the full
-// pyramid (full-res IFD0 + 2× / 4× / 8× ... overview IFDs). Returns a
-// descriptor whose `levels[]` array carries one entry per resolution level.
-// Callers pick the appropriate level for the requested output mpp via
-// pickSwissCOGLevel() so we don't always pay for the 0.5 m native data.
+// ─── Analyseur d'en-tête COG ────────────────────────────────────────────────
+// Lit l'en-tête TIFF ET parcourt la chaîne des IFD pour exposer toute la
+// pyramide (IFD0 pleine résolution + IFD d'aperçu 2× / 4× / 8× ...). Renvoie
+// un descripteur dont le tableau `levels[]` a une entrée par niveau de
+// résolution. Les appelants choisissent le niveau adapté au m/px de sortie
+// demandé via pickSwissCOGLevel(), pour ne pas toujours payer les données
+// natives à 0,5 m.
 //
-// swissSURFACE3D Raster COGs are 2000×2000 px with internal tiling and
-// usually carry 4-5 overview levels (1000², 500², 250², 125²). The
-// per-IFD payload is small (<1 KB each) so a 128 KB initial header fetch
-// covers IFD0 + every overview without a second round-trip.
+// Les COG swissSURFACE3D Raster font 2000×2000 px avec tuilage interne et
+// portent en général 4 à 5 niveaux d'aperçu (1000², 500², 250², 125²). La charge
+// par IFD est petite (< 1 Ko chacune) : un premier fetch d'en-tête de 128 Ko
+// couvre IFD0 et tous les aperçus sans second aller-retour.
 //
-// Helper: parse one IFD starting at `ifdOffset`. Returns either a
+// Fonction d'appui : analyse une IFD qui commence à `ifdOffset`. Renvoie soit
 //   { level, nextIFDOffset, _largestNeeded }
-// or a { _needMoreBytes } refetch request. `inheritedTiepoint` /
-// `inheritedNoData` propagate when an overview IFD omits them (some GDAL
-// writers strip those tags from the pyramid levels).
+// soit une demande de nouveau fetch { _needMoreBytes }. `inheritedTiepoint` /
+// `inheritedNoData` se propagent quand une IFD d'aperçu les omet (certains
+// écrivains GDAL retirent ces tags des niveaux de pyramide).
 function _parseIFD(ifdOffset, view, headerBytes, LE, inheritedTiepoint, inheritedNoData) {
   if (ifdOffset + 2 > headerBytes.byteLength) {
     return { _needMoreBytes: ifdOffset + 4096 };
@@ -309,12 +319,12 @@ function _parseIFD(ifdOffset, view, headerBytes, LE, inheritedTiepoint, inherite
     if (Number.isFinite(n)) nodata = n;
   }
 
-  // pixelScale / tiepoint: overview IFDs frequently omit them; derive from
-  // dimension ratio against IFD0 in caller if missing.
+  // pixelScale / tiepoint : les IFD d'aperçu les omettent souvent ; l'appelant
+  // les déduit du rapport de dimensions avec IFD0 s'ils manquent.
   const tilesAcross = Math.ceil(width / tileW);
   const tilesDown   = Math.ceil(height / tileH);
 
-  // Read NextIFDOffset (last 4 bytes of the directory).
+  // Lit NextIFDOffset (les 4 derniers octets du répertoire).
   const nextIFDOffset = view.getUint32(entriesStart + numEntries * 12, LE);
 
   const level = {
@@ -324,8 +334,8 @@ function _parseIFD(ifdOffset, view, headerBytes, LE, inheritedTiepoint, inherite
     compression,
     tileOffsets,
     tileByteCounts,
-    pixelScale,    // null if absent — caller will derive
-    tiepoint,      // 6-element array or null
+    pixelScale,    // null si absent — l'appelant le déduira
+    tiepoint,      // tableau de 6 éléments ou null
     nodata,
   };
   return { level, nextIFDOffset, _largestNeeded: largestNeeded };
@@ -354,8 +364,9 @@ async function parseSwissCOGHeader(url, headerBytes) {
   while (nextOffset !== 0 && safety < 16) {
     const r = _parseIFD(nextOffset, view, headerBytes, LE, inheritedTiepoint, inheritedNoData);
     if (r._needMoreBytes) {
-      // Surface refetch request. Use the larger of this IFD's need and any
-      // earlier-discovered overrun so we don't ping-pong refetches.
+      // Remonte une demande de nouveau fetch. On prend le plus grand entre le
+      // besoin de cette IFD et tout dépassement découvert plus tôt, pour éviter
+      // des allers-retours de fetchs.
       return { _needMoreBytes: Math.max(r._needMoreBytes, largestNeededOverall) };
     }
     rawLevels.push(r.level);
@@ -367,7 +378,7 @@ async function parseSwissCOGHeader(url, headerBytes) {
   }
   if (rawLevels.length === 0) throw new Error('no IFDs found');
 
-  // IFD0 must have georeferencing.
+  // IFD0 doit porter le géoréférencement.
   const lvl0 = rawLevels[0];
   if (!lvl0.pixelScale || !lvl0.tiepoint || lvl0.tiepoint.length < 6) {
     throw new Error('missing georeferencing tags on IFD0');
@@ -377,8 +388,8 @@ async function parseSwissCOGHeader(url, headerBytes) {
   const originE = X0 - I0 * sx0;
   const originN = Y0 + J0 * sy0;
 
-  // Build levels[]. For overview IFDs without explicit pixelScale, derive
-  // from the dimension ratio against IFD0 (standard COG convention).
+  // Construit levels[]. Pour les IFD d'aperçu sans pixelScale explicite, on le
+  // déduit du rapport de dimensions avec IFD0 (convention COG standard).
   const levels = rawLevels.map((lv, idx) => {
     let pixelScaleX, pixelScaleY;
     if (lv.pixelScale) {
@@ -404,8 +415,8 @@ async function parseSwissCOGHeader(url, headerBytes) {
     };
   });
 
-  // Sort levels by ascending pixelScale (level 0 = finest). swisstopo COGs
-  // already write them in this order but enforce defensively.
+  // Tri des niveaux par pixelScale croissant (niveau 0 = le plus fin). Les COG
+  // swisstopo les écrivent déjà dans cet ordre, mais on l'impose par précaution.
   levels.sort((a, b) => a.pixelScaleX - b.pixelScaleX);
   for (let i = 0; i < levels.length; i++) levels[i].idx = i;
 
@@ -417,7 +428,7 @@ async function parseSwissCOGHeader(url, headerBytes) {
     levels,
     originE, originN,
     nodata,
-    // Bounding box (LV95) from level 0
+    // Emprise (LV95) d'après le niveau 0
     Emin: originE,
     Emax: originE + levels[0].width * levels[0].pixelScaleX,
     Nmax: originN,
@@ -425,10 +436,10 @@ async function parseSwissCOGHeader(url, headerBytes) {
   };
 }
 
-// Pick the coarsest level whose pixelScale is still ≤ desired output mpp.
-// If the requested mpp is finer than the COG's native resolution, return
-// level 0. Caller should clamp mppOut to a sane lower bound (e.g. native
-// 0.5 m) — we don't oversample.
+// Choisit le niveau le plus grossier dont le pixelScale reste ≤ au m/px de
+// sortie voulu. Si le m/px demandé est plus fin que la résolution native du
+// COG, renvoie le niveau 0. L'appelant doit borner mppOut à une valeur basse
+// raisonnable (p. ex. 0,5 m natif) — on ne suréchantillonne pas.
 function pickSwissCOGLevel(cog, mppOut) {
   const levels = cog.levels;
   let best = 0;
@@ -441,10 +452,10 @@ function pickSwissCOGLevel(cog, mppOut) {
 
 // ─── Internal-tile fetch + decode ───────────────────────────────────────────
 
-// Decode an already-fetched internal-tile byte range into a Float32Array.
-// Split out from fetchAndDecodeTile() so the coalesced range scheduler in
-// swiss-fetcher.js can fetch several tiles in one HTTP request and then decode
-// each slice independently (each tile is compressed on its own).
+// Décode en Float32Array une plage d'octets de tuile interne déjà récupérée.
+// Séparé de fetchAndDecodeTile() pour que l'ordonnanceur de plages regroupées
+// de swiss-fetcher.js puisse récupérer plusieurs tuiles en une requête HTTP puis
+// décoder chaque tranche indépendamment (chaque tuile est compressée à part).
 async function decodeSwissTileBytes(level, levelIdx, tileIndex, buf) {
   if (!buf) return null;
 
@@ -487,17 +498,18 @@ async function fetchAndDecodeTile(cog, levelIdx, tileIndex, fetcher) {
   return decodeSwissTileBytes(level, levelIdx, tileIndex, buf);
 }
 
-// Convert LV95 (E, N) → image (px, py) in *pixel-centre* coordinates for
-// the chosen pyramid level.
+// Convertit LV95 (E, N) → image (px, py) en coordonnées de *centre de pixel*
+// pour le niveau de pyramide choisi.
 function cogLV95ToPixel(cog, level, E, N) {
   const px = (E - cog.originE) / level.pixelScaleX;
   const py = (cog.originN - N) / level.pixelScaleY;
   return { px, py };
 }
 
-// Bilinear-sample a single LV95 point at the given pyramid level. Returns
-// NaN if outside bounds or no data. The COG object must expose a
-// `getInternalTile(levelIdx, tileIndex)` async helper (memoised by caller).
+// Échantillonnage bilinéaire d'un point LV95 au niveau de pyramide donné.
+// Renvoie NaN hors des bornes ou sans donnée. L'objet COG doit exposer une
+// fonction asynchrone `getInternalTile(levelIdx, tileIndex)` (mémoïsée par
+// l'appelant).
 async function sampleSwissCOG(cog, levelIdx, E, N, getInternalTile) {
   if (E < cog.Emin || E > cog.Emax || N < cog.Nmin || N > cog.Nmax) return NaN;
   const level = cog.levels[levelIdx];
@@ -530,7 +542,7 @@ async function sampleSwissCOG(cog, levelIdx, E, N, getInternalTile) {
   const v01 = await sampleAt(x0, y1);
   const v11 = await sampleAt(x1, y1);
 
-  // If any neighbour is NaN, fall back to nearest-valid average.
+  // Si un voisin vaut NaN, repli sur la moyenne des plus proches valides.
   let sum = 0, count = 0;
   if (!Number.isNaN(v00)) { sum += v00 * (1 - fx) * (1 - fy); count++; }
   if (!Number.isNaN(v10)) { sum += v10 * fx * (1 - fy); count++; }
@@ -538,7 +550,7 @@ async function sampleSwissCOG(cog, levelIdx, E, N, getInternalTile) {
   if (!Number.isNaN(v11)) { sum += v11 * fx * fy; count++; }
   if (count === 0) return NaN;
   if (count === 4) return sum;
-  // Partial coverage — re-weight by valid bilinear weights only.
+  // Couverture partielle — on renormalise par les seuls poids bilinéaires valides.
   let wSum = 0;
   if (!Number.isNaN(v00)) wSum += (1 - fx) * (1 - fy);
   if (!Number.isNaN(v10)) wSum += fx * (1 - fy);
@@ -547,12 +559,12 @@ async function sampleSwissCOG(cog, levelIdx, E, N, getInternalTile) {
   return wSum > 0 ? sum / wSum : NaN;
 }
 
-// Synchronous bilinear sampler. Identical maths to sampleSwissCOG() but reads
-// decoded internal tiles from a *synchronous* getter (`getTileSync(cog,
-// levelIdx, tileIndex) → Float32Array | null`). Callers MUST have prefetched
-// every internal tile the point touches before calling this. Removing the
-// per-pixel `await` (4 cache lookups × 65 536 px ≈ 260 k microtasks per tile)
-// is the single biggest CPU win in the Swiss build path.
+// Échantillonneur bilinéaire synchrone. Même calcul que sampleSwissCOG(), mais
+// lit les tuiles internes décodées par un accesseur *synchrone*
+// (`getTileSync(cog, levelIdx, tileIndex) → Float32Array | null`). Les appelants
+// DOIVENT avoir préchargé toutes les tuiles internes que touche le point avant
+// l'appel. Retirer l'`await` par pixel (4 lectures de cache × 65 536 px ≈ 260 k
+// microtâches par tuile) est le plus gros gain CPU du chemin de construction suisse.
 function sampleSwissCOGSync(cog, levelIdx, E, N, getTileSync) {
   if (E < cog.Emin || E > cog.Emax || N < cog.Nmin || N > cog.Nmax) return NaN;
   const level = cog.levels[levelIdx];

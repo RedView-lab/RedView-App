@@ -1,20 +1,22 @@
 // ---------------------------------------------------------------------------
-// Altitude overlay tiles derived from DEM elevations.
+// Tuiles de l'overlay d'altitude dérivées des altitudes du DEM.
 //
-// Output: Terrain-RGB-compatible PNG with transparent NoData pixels.
-//   - RGB encodes altitude in meters using standard Terrain-RGB formula
-//   - A   = 0 on NoData, 255 otherwise
+// Sortie : PNG compatible Terrain-RGB avec pixels NoData transparents.
+//   - RGB encode l'altitude en mètres selon la formule Terrain-RGB standard
+//   - A   = 0 sur NoData, 255 sinon
 //
-// Colorisation, hide-bands and gradient/step mode are applied GPU-side via
-// Mapbox `raster-color` + `raster-color-mix`, exactly like the slope overlay.
-// This keeps the SW cache keyed only by (z, x, y, resFactor).
+// La colorisation, les bandes masquées et le mode dégradé/paliers sont
+// appliqués côté GPU par `raster-color` + `raster-color-mix` de Mapbox,
+// exactement comme l'overlay des pentes. Le cache du SW n'est ainsi indexé que
+// par (z, x, y, resFactor).
 // ---------------------------------------------------------------------------
 
-// DEM PNG decode is the dominant CPU cost of the altitude overlay. A visible
-// viewport, its speculative prefetch ring and any post-upgrade refetch can all
-// request the same tile in quick succession. Keep a small decoded DEM LRU so
-// repeated altitude builds reuse the Float32 elevations instead of re-running
-// `createImageBitmap` + `getImageData` for the same tile.
+// Le décodage du PNG DEM est le principal coût CPU de l'overlay d'altitude. Une
+// vue visible, son anneau de préchargement spéculatif et un rechargement après
+// mise à niveau peuvent tous demander la même tuile coup sur coup. Un petit LRU
+// de DEM décodés permet aux constructions d'altitude répétées de réutiliser les
+// altitudes Float32 au lieu de relancer `createImageBitmap` + `getImageData`
+// pour la même tuile.
 const ALTITUDE_DECODED_DEM_CACHE_MAX = 96;
 const altitudeDecodedDemCache = new Map();
 const altitudeDecodedDemInflight = new Map();
@@ -68,18 +70,20 @@ function invalidateAltitudeProcessingTile(z, x, y) {
   altitudeDecodedDemInflight.delete(key);
 }
 
-// ── Altitude-only RGBA PNG ─────────────────────────────────────────────────
-// We reuse Terrain-RGB encoding for the RGB channels so GPU-side decoding can
-// reconstruct meters with a single raster-color-mix. Unlike the DEM terrain
-// mesh tiles, NoData pixels stay transparent so the orthophoto remains visible
-// where the DEM pipeline has no altitude sample.
+// ── PNG RGBA d'altitude seule ─────────────────────────────────────────────
+// On réutilise l'encodage Terrain-RGB pour les canaux RGB, pour que le GPU
+// reconstitue les mètres avec un seul raster-color-mix. Contrairement aux tuiles
+// du maillage de terrain DEM, les pixels NoData restent transparents, pour que
+// l'orthophoto reste visible là où le pipeline DEM n'a pas d'échantillon
+// d'altitude.
 //
-// `buildAltitudeRgba` is the pure RGBA encode loop (no I/O). It's split out so
-// the altitude worker pool (workers/slope-pool.worker.js > kind:'altitude')
-// can run it off-thread without depending on Blob/CompressionStream state —
-// the worker then calls buildRawPng itself. The in-process path below wraps
-// the same RGBA buffer in buildRawPng, so pool and in-process outputs are
-// byte-identical.
+// `buildAltitudeRgba` est la boucle pure d'encodage RGBA (sans E/S). Elle est
+// séparée pour que le pool de workers d'altitude
+// (workers/slope-pool.worker.js > kind:'altitude') puisse l'exécuter hors du fil
+// principal sans dépendre de l'état Blob/CompressionStream — le worker appelle
+// ensuite lui-même buildRawPng. Le chemin dans le processus courant ci-dessous
+// enveloppe le même tampon RGBA dans buildRawPng : les sorties du pool et du
+// processus courant sont identiques à l'octet près.
 function buildAltitudeRgba(elevations) {
   const size = DEM_TILE_SIZE;
   const rgba = new Uint8Array(size * size * 4);
@@ -107,9 +111,9 @@ function buildAltitudeRgba(elevations) {
 async function encodeAltitudePng(elevations, zoneMask) {
   const size = DEM_TILE_SIZE;
   const rgba = buildAltitudeRgba(elevations);
-  // Analysis-zone mask (core/analysis-zone.js) — alpha outside the polygon
-  // drops to 0; Terrain-RGB RGB channels are left untouched so the GPU-side
-  // raster-color decode stays valid on surviving pixels.
+  // Masque de zone d'analyse (core/analysis-zone.js) — l'alpha tombe à 0 hors
+  // du polygone ; les canaux RGB Terrain-RGB restent intacts, pour que le
+  // décodage raster-color côté GPU reste valide sur les pixels conservés.
   if (zoneMask) applyRingMaskToRgba(rgba, zoneMask);
   return (typeof buildRawPngSlope === 'function')
     ? buildRawPngSlope(size, size, rgba)

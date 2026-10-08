@@ -1,9 +1,10 @@
 // ---------------------------------------------------------------------------
-// DEM tile health-guard — rejects nodata-like or anomalously offset tiles
-// before they are committed to the positive cache. When rejected, attempts
-// a single parent-overzoom recovery. See sw-dem.js header for context.
+// Garde-fou de santé des tuiles DEM — rejette les tuiles qui ressemblent à du
+// nodata ou anormalement décalées avant leur enregistrement dans le cache
+// positif. En cas de rejet, tente une seule récupération par overzoom du
+// parent. Voir l'en-tête de sw-dem.js pour le contexte.
 //
-// Split out of sw-dem.js (May 03).
+// Extrait de sw-dem.js (3 mai).
 // ---------------------------------------------------------------------------
 
 const DEM_HEALTH_MIN_PARENT_RANGE_M = 40;
@@ -11,15 +12,16 @@ const DEM_HEALTH_MIN_COLLAPSED_RANGE_M = 4;
 const DEM_HEALTH_MAX_MEAN_DELTA_M = 180;
 const DEM_HEALTH_VERTICAL_OFFSET_M = 180;
 const DEM_HEALTH_NODATA_MEAN_M = -8000;
-// Inland (France/CH/Norway/Spain) tiles whose elevation raster is essentially the
-// constant zero plane (range < 0.5 m AND |mean| < 1 m) are corruption
-// artefacts — typically a parent overzoom of an empty Mapbox/AWS tile or
-// a decoded-as-zero placeholder. Real flat valleys at high zoom always
-// sit at ≥ 50 m (Loire ~50 m, Saône ~170 m, Rhône ~100 m, lowest CH point
-// 193 m, lowland south-east Norway well above sea level), so this filter
-// cannot reject genuine high-res data. Without it the
-// renderer paints a perfectly flat slab of terrain inside an otherwise 3D
-// landscape (see screenshot, May 3 2026).
+// Les tuiles intérieures (France / Suisse / Norvège / Espagne) dont le raster
+// d'altitude est pour l'essentiel le plan constant zéro (écart < 0,5 m ET
+// |moyenne| < 1 m) sont des artefacts de corruption — typiquement un overzoom
+// de parent d'une tuile Mapbox / AWS vide, ou un remplaçant décodé à zéro. Les
+// vraies vallées plates à fort zoom sont toujours à ≥ 50 m (Loire ~50 m, Saône
+// ~170 m, Rhône ~100 m, point le plus bas de Suisse 193 m, basses terres du
+// sud-est de la Norvège bien au-dessus du niveau de la mer) : ce filtre ne peut
+// donc pas rejeter de vraies données haute résolution. Sans lui, le rendu peint
+// une dalle de terrain parfaitement plate au milieu d'un paysage en 3D (voir la
+// capture du 3 mai 2026).
 const DEM_HEALTH_FLAT_INLAND_RANGE_M = 0.5;
 const DEM_HEALTH_FLAT_INLAND_MEAN_ABS_M = 1.0;
 
@@ -108,10 +110,11 @@ async function guardDemTileHealth(cache, pngBlob, z, x, y, demSource, demProfile
     return { blob: null, demSource, shortCache: true, healthStatus: 'suspect', reason: 'nodata-like' };
   }
 
-  // Flat-inland defence — see DEM_HEALTH_FLAT_INLAND_RANGE_M comment above.
-  // A range≈0 raster over France or Switzerland at z≥12 means the tile
-  // would render as a perfectly flat slab. Refuse it: try a parent
-  // overzoom; only accept the recovery if it actually carries relief.
+  // Défense contre les intérieurs plats — voir le commentaire de
+  // DEM_HEALTH_FLAT_INLAND_RANGE_M plus haut. Un raster d'écart ≈ 0 sur la France
+  // ou la Suisse à z≥12 donnerait une dalle parfaitement plate. On le refuse :
+  // on tente un overzoom du parent et on n'accepte la récupération que si elle
+  // porte vraiment du relief.
   if (isFlatlinedInlandStats(current, z, x, y)) {
     const recovered = await tryParentOverzoom(cache, z, x, y, 0, demProfile);
     if (recovered?.blob) {
@@ -119,7 +122,7 @@ async function guardDemTileHealth(cache, pngBlob, z, x, y, demSource, demProfile
       try {
         const recoveredElev = await decodeTerrainRGBBlob(recovered.blob);
         recoveredStats = summarizeDemElevations(recoveredElev);
-      } catch { /* fall through and reject */ }
+      } catch { /* on continue et on rejette */ }
       if (recoveredStats.valid && !isFlatlinedInlandStats(recoveredStats, z, x, y)) {
         console.warn(
           `[sw-dem][health] rejecting flat-inland tile ${z}/${x}/${y} src=${demSource} mean=${current.mean.toFixed(2)} range=${current.range.toFixed(2)} -> ${recovered.source}`,
@@ -138,13 +141,14 @@ async function guardDemTileHealth(cache, pngBlob, z, x, y, demSource, demProfile
     return { blob: null, demSource, shortCache: true, healthStatus: 'suspect', reason: 'flat-inland' };
   }
 
-  // Ancestor consistency check — against an ALREADY-AVAILABLE parent only.
-  // This used to run tryParentOverzoom() for every healthy tile: a bicubic
-  // overzoom + PNG encode + decode (~40-60 ms of SW CPU per tile), and, when
-  // no parent was cached, a full recursive parent BUILD (WMS fetch, bypassing
-  // DEM_INFLIGHT) serialised before the child could be served. The stats of
-  // the parent's sub-rectangle answer the same question at ~1 ms; the
-  // expensive overzoom now only runs on the rare anomalous tile below.
+  // Contrôle de cohérence avec l'ancêtre — seulement contre un parent DÉJÀ
+  // disponible. Avant, tryParentOverzoom() tournait pour chaque tuile saine : un
+  // overzoom bicubique + encodage + décodage PNG (~40 à 60 ms de CPU du SW par
+  // tuile) et, quand aucun parent n'était en cache, une CONSTRUCTION récursive
+  // complète du parent (fetch WMS, en contournant DEM_INFLIGHT) sérialisée avant
+  // de pouvoir servir l'enfant. Les statistiques du sous-rectangle du parent
+  // répondent à la même question en ~1 ms ; l'overzoom coûteux ne tourne plus
+  // que pour la rare tuile anormale ci-dessous.
   const parentInfo = await findCachedParentStats(cache, z, x, y, demProfile);
   if (!parentInfo) {
     return { blob: pngBlob, demSource, shortCache: false, healthStatus: 'ok' };
@@ -160,7 +164,7 @@ async function guardDemTileHealth(cache, pngBlob, z, x, y, demSource, demProfile
 
   if (verticalDrop || verticalRise || (collapsedRelief && hugeOffset)) {
     const parentFallback = await tryParentOverzoom(cache, z, x, y, 0, demProfile);
-    // Same outcome as before when no recovery blob can be produced: keep the tile.
+    // Même résultat qu'avant quand aucun blob de récupération ne peut être produit : on garde la tuile.
     if (!parentFallback?.blob) {
       return { blob: pngBlob, demSource, shortCache: false, healthStatus: 'ok' };
     }

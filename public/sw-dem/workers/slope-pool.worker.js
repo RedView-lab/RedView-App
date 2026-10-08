@@ -1,44 +1,45 @@
 // ---------------------------------------------------------------------------
-// Slope build WORKER — one instance per logical core (managed by the SW via
-// runtime/slope-pool.js). Receives RAW DEM BLOBS (own + up to 4 cardinal
-// neighbours), decodes them, runs the Horn + sqrt-gamma encode pipeline
-// OFF the SW thread, and returns a transferable PNG ArrayBuffer.
+// WORKER de construction des pentes — une instance par cœur logique (gérée par
+// le SW via runtime/slope-pool.js). Reçoit des BLOBS DEM BRUTS (propre + jusqu'à
+// 4 voisines cardinales), les décode, exécute le pipeline Horn + encodage en
+// gamma racine HORS du fil du SW, et renvoie un ArrayBuffer PNG transférable.
 //
-// Why a dedicated Worker (not a SharedWorker / SharedArrayBuffer):
-//   * Dedicated Workers can be spawned FROM a Service Worker.
-//   * No COOP/COEP headers needed — we use transferable ArrayBuffers
-//     (zero copy) instead of SAB, so vercel.json's header set stays as-is.
-//   * Each worker has its own JS heap + JIT — V8 can SIMD-optimise the
-//     inner Horn loop independently of the SW's compile unit.
+// Pourquoi un Worker dédié (et pas un SharedWorker / SharedArrayBuffer) :
+//   * Les Workers dédiés peuvent être créés DEPUIS un Service Worker.
+//   * Pas besoin d'en-têtes COOP/COEP — on utilise des ArrayBuffer transférables
+//     (sans copie) au lieu d'un SAB, donc le jeu d'en-têtes de vercel.json reste tel quel.
+//   * Chaque worker a son propre tas JS et son JIT — V8 peut optimiser en SIMD
+//     la boucle interne de Horn indépendamment de l'unité de compilation du SW.
 //
-// Message protocol:
-//   in : { id, z, x, y, resFactor, outputScale, zoneRing,
-//          ownDem: ArrayBuffer,            // raw Terrain-RGB PNG bytes
-//          neighbours: {
-//            north?: ArrayBuffer,
-//            east?:  ArrayBuffer,
-//            south?: ArrayBuffer,
-//            west?:  ArrayBuffer } }
-//   out: { id, ok: true, png: ArrayBuffer, missingDirections: string[] }
-//        | { id, ok: false, error: string }
+// Protocole de messages :
+//   entrée : { id, z, x, y, resFactor, outputScale, zoneRing,
+//              ownDem: ArrayBuffer,            // octets PNG Terrain-RGB bruts
+//              neighbours: {
+//                north?: ArrayBuffer,
+//                east?:  ArrayBuffer,
+//                south?: ArrayBuffer,
+//                west?:  ArrayBuffer } }
+//   sortie : { id, ok: true, png: ArrayBuffer, missingDirections: string[] }
+//            | { id, ok: false, error: string }
 //
-// All DEM buffers are TRANSFERRED (zero copy) — the SW loses ownership on
-// post. The worker decodes them via decodeTerrainRGBBlob (the same path
-// the SW used), so the heavy createImageBitmap + getImageData + Float32
-// loop runs OFF the SW thread. This was the biggest residual bottleneck:
-// on a 90-tile viewport the SW was doing ~450 decodes (90 own + 4
-// neighbours each) of 8-20 ms = 3-9 s of CPU that blocked the basemap
-// pipeline. Moving it into the workers means the SW only pays the
-// CacheStorage match (5-25 ms) per tile + the transfer.
+// Tous les tampons DEM sont TRANSFÉRÉS (sans copie) — le SW en perd la propriété
+// à l'envoi. Le worker les décode par decodeTerrainRGBBlob (le même chemin que
+// celui du SW), donc la lourde boucle createImageBitmap + getImageData + Float32
+// tourne HORS du fil du SW. C'était le plus gros goulot restant : sur une vue de
+// 90 tuiles, le SW faisait ~450 décodages (90 propres + 4 voisines chacune) de
+// 8 à 20 ms = 3 à 9 s de CPU qui bloquaient le pipeline du fond de carte. En le
+// déplaçant dans les workers, le SW ne paie plus que la lecture CacheStorage
+// (5 à 25 ms) par tuile et le transfert.
 //
-// Each worker keeps a small LRU of decoded elevations keyed by tile coord
-// so a neighbour blob decoded by worker N for tile A is reused when tile B
-// (adjacent) sends the same blob.
+// Chaque worker garde un petit LRU d'altitudes décodées indexé par coordonnées
+// de tuile, pour qu'un blob voisin décodé par le worker N pour la tuile A soit
+// réutilisé quand la tuile B (adjacente) envoie le même blob.
 // ---------------------------------------------------------------------------
 
-// Match the SW's epoch-busting convention so cache purges on epoch bump
-// also flush the worker's submodule cache. The epoch arrives as a query
-// param on the worker's own URL (set by slope-pool.js > slopePoolWorkerURL).
+// Même convention d'invalidation par époque que le SW, pour qu'une purge de
+// cache au changement d'époque vide aussi le cache des sous-modules du worker.
+// L'époque arrive en paramètre de l'URL du worker lui-même (posé par
+// slope-pool.js > slopePoolWorkerURL).
 const _workerEpoch =
   new URL(self.location.href).searchParams.get('rv-map-cache-epoch') || 'base';
 const _withEpoch = (p) => `${p}?rv-map-cache-epoch=${encodeURIComponent(_workerEpoch)}`;
@@ -52,14 +53,13 @@ importScripts(
   _withEpoch('../../sw-dem/workers/slope-math.js'),
 );
 
-// ── Worker-local decoded-DEM LRU ──────────────────────────────────────
-// A worker processes tiles round-robin from the SW, so adjacent tiles
-// (which share neighbour DEMs) often land on DIFFERENT workers. A
-// per-worker LRU therefore has limited cross-tile hit rate, BUT it still
-// catches the common case where the SAME blob is decoded twice within one
-// worker's queue (e.g. when the SW re-sends a neighbour that was evicted
-// from the SW-side LRU but is still in flight here). Small budget —
-// workers have tighter memory than the SW.
+// ── LRU local au worker des DEM décodés ───────────────────────────────
+// Un worker traite les tuiles du SW à tour de rôle : les tuiles adjacentes (qui
+// partagent des DEM voisins) tombent souvent sur des workers DIFFÉRENTS. Un LRU
+// par worker a donc un taux de succès entre tuiles limité, MAIS il attrape
+// quand même le cas courant où le MÊME blob est décodé deux fois dans la file
+// d'un worker (p. ex. quand le SW renvoie une voisine évincée du LRU côté SW mais
+// encore en cours ici). Petit budget — les workers ont moins de mémoire que le SW.
 const WORKER_DEM_LRU_MAX = 128;
 const _workerDemLru = new Map(); // key "z/x/y" → Float32Array
 
@@ -82,12 +82,13 @@ function workerDemPut(key, elev) {
   return elev;
 }
 
-// FNV-1a over the PNG bytes. The LRU used to be keyed by "z/x/y" alone, so a
-// tile decoded once from a stand-in DEM (AWS emergency parent, overzoom, the
-// 30 m or the 1 m terrain profile, a pre-upgrade build) kept being served
-// for the real LiDAR tile of the same coords: smooth or mismatched slope
-// tiles and seams that never healed. Keying by content makes a new DEM a
-// new entry; ~0.2 ms for a 150 KB tile.
+// FNV-1a sur les octets du PNG. Le LRU était indexé par « z/x/y » seul : une
+// tuile décodée une fois depuis un DEM de remplacement (parent de secours AWS,
+// overzoom, profil terrain à 30 m ou à 1 m, construction d'avant mise à niveau)
+// continuait d'être servie pour la vraie tuile LiDAR des mêmes coordonnées :
+// tuiles de pente lisses ou incohérentes et jointures qui ne se réparaient
+// jamais. Indexer par contenu fait d'un nouveau DEM une nouvelle entrée ;
+// ~0,2 ms pour une tuile de 150 Ko.
 function demContentHash(buf) {
   const bytes = new Uint8Array(buf);
   let h = 0x811c9dc5;
@@ -102,9 +103,10 @@ async function workerDecodeDem(buf, z, x, y) {
   const key = `${z}/${x}/${y}:${buf.byteLength}:${demContentHash(buf)}`;
   const cached = workerDemGet(key);
   if (cached) return cached;
-  // Wrap the transferred ArrayBuffer in a Blob for decodeTerrainRGBBlob.
-  // (decodeTerrainRGBBlob is memoised by Blob identity via WeakMap, but we
-  // also keep our own coord-keyed LRU for cross-job reuse.)
+  // Enveloppe l'ArrayBuffer transféré dans un Blob pour decodeTerrainRGBBlob.
+  // (decodeTerrainRGBBlob est mémoïsé par identité de Blob via une WeakMap, mais
+  // on garde aussi notre propre LRU indexé par coordonnées pour la réutilisation
+  // entre tâches.)
   const blob = new Blob([buf], { type: 'image/png' });
   const elev = await decodeTerrainRGBBlob(blob);
   return workerDemPut(key, elev);
@@ -115,12 +117,13 @@ self.onmessage = async (event) => {
   if (!msg || typeof msg !== 'object') return;
   const id = msg.id;
 
-  // ── Altitude build branch (2026-06-29 altitude-decode-in-worker) ──────────
-  // Altitude only needs its OWN DEM decoded (no seam-padding neighbours like
-  // slope), then the altitude RGBA encode + PNG wrap. Reuses the same worker
-  // + per-worker DEM LRU as slope, so when both overlays are active on the
-  // same tile the second one hits the decoded-elevation cache (cross-overlay
-  // hit). Returns a TRANSFERABLE PNG ArrayBuffer — zero copy back to the SW.
+  // ── Branche de construction d'altitude (altitude-decode-in-worker du 2026-06-29) ──
+  // L'altitude n'a besoin que de son PROPRE DEM décodé (pas de voisines pour les
+  // jointures comme la pente), puis de l'encodage RGBA d'altitude et de
+  // l'enveloppe PNG. Réutilise le même worker et le même LRU de DEM par worker
+  // que la pente : quand les deux overlays sont actifs sur la même tuile, le
+  // second trouve les altitudes déjà décodées (succès entre overlays). Renvoie un
+  // ArrayBuffer PNG TRANSFÉRABLE — retour au SW sans copie.
   if (msg.kind === 'altitude') {
     try {
       if (!msg.ownDem || !msg.ownDem.byteLength) {
@@ -135,9 +138,9 @@ self.onmessage = async (event) => {
 
       const size = DEM_TILE_SIZE;
       const rgba = buildAltitudeRgba(elevations);
-      // Analysis-zone mask — rasterizeRingMask/applyRingMaskToRgba come from
-      // slope-math.js (importScripts above), keeping pool and in-process
-      // outputs byte-identical.
+      // Masque de zone d'analyse — rasterizeRingMask / applyRingMaskToRgba
+      // viennent de slope-math.js (importScripts plus haut), ce qui garde
+      // identiques à l'octet près les sorties du pool et du processus courant.
       if (msg.zoneRing) {
         const zoneMask = rasterizeRingMask(msg.zoneRing, msg.z, msg.x, msg.y, size);
         if (zoneMask) applyRingMaskToRgba(rgba, zoneMask);
@@ -147,7 +150,7 @@ self.onmessage = async (event) => {
         : await buildRawPng(size, size, rgba);
       const pngBuf = await pngBlob.arrayBuffer();
 
-      // Transfer the PNG buffer back — zero copy.
+      // Renvoie le tampon PNG — sans copie.
       self.postMessage({ id, ok: true, png: pngBuf }, [pngBuf]);
     } catch (err) {
       self.postMessage({ id, ok: false, error: String((err && err.message) || err) });
@@ -155,9 +158,10 @@ self.onmessage = async (event) => {
     return;
   }
 
-  // ── AWS Terrarium → Terrain-RGB multi-core branch (2026-08-29) ─────────
-  // Decodes raw Terrarium PNG, converts to Terrain-RGB RGBA in a tight typed
-  // array loop, and encodes PNG with fast Sub-filter off the main SW thread.
+  // ── Branche multicœur AWS Terrarium → Terrain-RGB (2026-08-29) ────────
+  // Décode le PNG Terrarium brut, le convertit en RGBA Terrain-RGB dans une
+  // boucle serrée sur tableaux typés, et encode le PNG avec le filtre Sub rapide,
+  // hors du fil principal du SW.
   if (msg.kind === 'aws-terrarium') {
     try {
       if (!msg.terrariumBuf || !msg.terrariumBuf.byteLength) {
@@ -229,7 +233,7 @@ self.onmessage = async (event) => {
   }
 
   try {
-    // Decode the own DEM blob in-worker.
+    // Décode le blob DEM propre dans le worker.
     if (!msg.ownDem || !msg.ownDem.byteLength) {
       self.postMessage({ id, ok: false, error: 'missing-own-dem' });
       return;
@@ -240,7 +244,7 @@ self.onmessage = async (event) => {
       return;
     }
 
-    // Decode each neighbour DEM blob in-worker (where present).
+    // Décode chaque blob DEM voisin dans le worker (quand il existe).
     const neighbours = {};
     const missingDirections = [];
     if (msg.neighbours) {
@@ -250,8 +254,8 @@ self.onmessage = async (event) => {
         ['south', msg.z, msg.x, msg.y + 1],
         ['west',  msg.z, msg.x - 1, msg.y],
       ];
-      // Decode in parallel — they're independent and each does its own
-      // createImageBitmap which is itself async/I/O bound.
+      // Décodage en parallèle — ils sont indépendants et chacun fait son propre
+      // createImageBitmap, lui-même asynchrone et lié aux E/S.
       await Promise.all(dirs.map(async ([dir, nz, nx, ny]) => {
         const buf = msg.neighbours[dir];
         if (!buf || !buf.byteLength) { missingDirections.push(dir); return; }
@@ -271,12 +275,12 @@ self.onmessage = async (event) => {
       zoneRing: msg.zoneRing || null,
     });
 
-    // Merge any worker-side missing directions into the result.
+    // Fusionne dans le résultat les directions manquantes détectées côté worker.
     for (const d of missingDirections) {
       if (!result.missingDirections.includes(d)) result.missingDirections.push(d);
     }
 
-    // Transfer the PNG buffer back — zero copy.
+    // Renvoie le tampon PNG — sans copie.
     const pngArrayBuffer = await result.blob.arrayBuffer();
     self.postMessage(
       { id, ok: true, png: pngArrayBuffer, missingDirections: result.missingDirections },

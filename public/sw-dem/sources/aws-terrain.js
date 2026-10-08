@@ -1,34 +1,33 @@
 // ---------------------------------------------------------------------------
-// AWS Open Data — Terrarium DEM tile fetcher (drop-in for fetchMapboxTile)
+// AWS Open Data — récupération des tuiles DEM Terrarium (remplace fetchMapboxTile)
 //
-// Endpoint: https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png
+// Point d'accès : https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png
 //
-// Why: the previous commercial raster-DEM fallback was billed against the
-// Raster Tiles API SKU. The AWS Open Data Terrain Tiles dataset
-// (legacy Mapzen, hosted free by AWS) covers the entire globe at ~30 m
-// resolution and is free / unlimited. We swap it in everywhere the SW used
-// to call Mapbox for global DEM, drastically cutting the Raster Tiles bill
-// without any visible quality regression at the zoom levels concerned
-// (z ≤ 14 globally, z ≤ ~11 over France/Switzerland where IGN/swissALTI
-// take over for the high-resolution path).
+// Pourquoi : l'ancien repli raster-DEM commercial était facturé sur le SKU
+// Raster Tiles API. Le jeu de données AWS Open Data Terrain Tiles (ex-Mapzen,
+// hébergé gratuitement par AWS) couvre tout le globe à ~30 m de résolution,
+// gratuit et sans limite. Il remplace Mapbox partout où le SW appelait Mapbox
+// pour le DEM mondial, ce qui réduit fortement la facture Raster Tiles sans
+// régression visible aux zooms concernés (z ≤ 14 dans le monde, z ≤ ~11 sur la
+// France et la Suisse, où IGN / swissALTI prennent le relais en haute résolution).
 //
-// Encoding conversion:
-//   Terrarium  : height = (R*256 + G + B/256) − 32768
-//   Terrain-RGB: height = -10000 + (R*65536 + G*256 + B) * 0.1
-// We decode terrarium → Float32 → re-encode as Terrain-RGB so the rest of
-// the SW pipeline (composite, slope, altitude, overzoom) stays unchanged.
+// Conversion d'encodage :
+//   Terrarium  : altitude = (R*256 + G + B/256) − 32768
+//   Terrain-RGB: altitude = -10000 + (R*65536 + G*256 + B) * 0.1
+// On décode le Terrarium → Float32 → on réencode en Terrain-RGB, pour que le
+// reste du pipeline du SW (composition, pente, altitude, overzoom) ne change pas.
 // ---------------------------------------------------------------------------
 
-// Native max zoom of AWS Terrarium tiles. Beyond this, requests 404.
-// Matches Mapbox terrain-DEM v1 (z14 native), so the existing clamp logic
-// in callers keeps working unchanged.
+// Zoom maximal natif des tuiles AWS Terrarium. Au-delà, les requêtes renvoient 404.
+// Identique à Mapbox terrain-DEM v1 (z14 natif) : la logique de plafonnement
+// existante chez les appelants fonctionne sans changement.
 const AWS_TERRAIN_MAXZOOM = 14;
 
-// Public, unauthenticated endpoint. No CORS issues — bucket has
-// Access-Control-Allow-Origin: * configured.
+// Point d'accès public, sans authentification. Pas de souci CORS — le bucket
+// est configuré avec Access-Control-Allow-Origin: *.
 const AWS_TERRAIN_BASE = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium';
 
-// Network fetch concurrency limiter — prevents socket starvation when 400+ tiles burst
+// Limiteur de concurrence réseau — évite l'épuisement des sockets quand 400+ tuiles arrivent en rafale
 const AWS_FETCH_MAX_CONCURRENT = 32;
 let _awsFetchActive = 0;
 const _awsFetchQueue = [];
@@ -50,8 +49,8 @@ function releaseAwsFetchSlot() {
 }
 
 async function fetchAWSTerrainTile(z, x, y) {
-  // Clamp to native max zoom — above z14 AWS returns 404. Mapbox GL's GPU
-  // handles overzooming from the parent tile.
+  // Plafonné au zoom natif — au-delà de z14, AWS renvoie 404. Le GPU de
+  // Mapbox GL suréchantillonne à partir de la tuile parente.
   const fetchZ = Math.min(z, AWS_TERRAIN_MAXZOOM);
   const fetchX = fetchZ < z ? x >> (z - fetchZ) : x;
   const fetchY = fetchZ < z ? y >> (z - fetchZ) : y;
@@ -59,9 +58,9 @@ async function fetchAWSTerrainTile(z, x, y) {
 
   const url = `${AWS_TERRAIN_BASE}/${fetchZ}/${fetchX}/${fetchY}.png`;
   await acquireAwsFetchSlot();
-  // The slot must be released exactly once on every path: a missed release
-  // on HTTP errors used to leak slots until all 32 were gone and every AWS
-  // fetch (global DEM + 30 m slope) queued forever.
+  // Le créneau doit être libéré exactement une fois sur chaque chemin : un
+  // oubli sur les erreurs HTTP faisait fuir les créneaux jusqu'à épuisement des
+  // 32, et tous les fetchs AWS (DEM mondial + pente à 30 m) attendaient sans fin.
   let slotHeld = true;
   const releaseSlot = () => {
     if (!slotHeld) return;
@@ -87,16 +86,16 @@ async function fetchAWSTerrainTile(z, x, y) {
     const arrayBuffer = await res.arrayBuffer();
     releaseSlot();
 
-    // ── Multi-Core Worker Pool Fast-Path (2026-08-29) ──────────────────────
-    // Offloads decoding, Terrarium → Terrain-RGB conversion and Sub-filter
-    // PNG encoding to the worker pool across all CPU cores.
+    // ── Chemin rapide par le pool de workers multicœur (2026-08-29) ────────
+    // Délègue le décodage, la conversion Terrarium → Terrain-RGB et
+    // l'encodage PNG filtré en Sub au pool de workers, sur tous les cœurs.
     if (typeof computeAwsTerrariumViaPool === 'function') {
       try {
         const poolBlob = await computeAwsTerrariumViaPool(
           arrayBuffer.slice(0), z, x, y, fetchZ, fetchX, fetchY, clamped,
         );
         if (poolBlob) return poolBlob;
-      } catch { /* fall through to in-process */ }
+      } catch { /* on poursuit dans le processus courant */ }
     }
 
     // ── In-Process Fallback ────────────────────────────────────────────────

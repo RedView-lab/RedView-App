@@ -103,7 +103,7 @@ async function startZoneSlopeMultiFetch(tiles, profile, zoneHash) {
   const total = validTiles.length;
   if (total === 0) return;
 
-  // Check if all zone tiles are ALREADY cached in HD
+  // Vérifie si toutes les tuiles de la zone sont DÉJÀ en cache en HD
   const slopeCache = await caches.open(SLOPE_CACHE_NAME);
   let allCachedHd = true;
   for (const t of validTiles) {
@@ -151,7 +151,7 @@ async function startZoneSlopeMultiFetch(tiles, profile, zoneHash) {
     await Promise.all(workers);
   };
 
-  // Direct HD LiDAR computation from existing terrain DEM tiles (concurrency = 8, silent)
+  // Calcul LiDAR HD direct à partir des tuiles DEM existantes du terrain (concurrence = 8, silencieux)
   let hdDone = 0;
   await runConcurrent(validTiles, 8, async (t) => {
     if (currentPipeline.cancelled) return;
@@ -166,7 +166,7 @@ async function startZoneSlopeMultiFetch(tiles, profile, zoneHash) {
 
   if (currentPipeline.cancelled) return;
 
-  // Complete for 100% of zone tiles
+  // Terminé pour 100 % des tuiles de la zone
   zoneStateMap.set(zone, { phase: 'done', demProfile });
   zonePreviewMap.clear();
   await invalidateParentDownsampledSlopeTiles(14, 0, 0, zone);

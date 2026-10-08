@@ -1,47 +1,48 @@
 // ---------------------------------------------------------------------------
-// Fetch intercept — routes /dem-tiles, /ortho-tiles, /vhr-tiles, /slope-tiles,
-// /altitude-tiles to the corresponding handler module. Legacy
-// /shadow-tiles is hard-410'd (handler retired Apr 29).
+// Interception des fetchs — aiguille /dem-tiles, /ortho-tiles, /vhr-tiles,
+// /slope-tiles, /altitude-tiles vers le module de handler correspondant.
+// L'ancien /shadow-tiles répond 410 d'office (handler retiré le 29 avril).
 //
-// Split out of sw-dem.js (May 03).
+// Extrait de sw-dem.js (3 mai).
 // ---------------------------------------------------------------------------
 
-// Speculative-prefetch shedding. Requests carrying `?pf=1` are issued by
-// `viewportPrefetch.ts` for tiles the user has not yet looked at. They are
-// expendable: the next real Mapbox request for the same tile will run the
-// pipeline normally. When the DEM dispatcher is already saturated (a real
-// foreground burst is mid-flight), we drop incoming pf=1 ortho/slope/
-// altitude requests at the router so they never reach the per-handler
-// queue. This is the SW-side complement of the browser-side prewarm-abort
-// on user gesture: if a stale prewarm slips past gesture cancellation,
-// it cannot starve the foreground burst once the pipeline is already busy.
+// Délestage du préchargement spéculatif. Les requêtes portant `?pf=1` sont
+// émises par `viewportPrefetch.ts` pour des tuiles que l'utilisateur n'a pas
+// encore regardées. Elles sont sacrifiables : la prochaine vraie requête Mapbox
+// pour la même tuile exécutera le pipeline normalement. Quand le dispatcher DEM
+// est déjà saturé (une vraie rafale de premier plan est en cours), on abandonne
+// au routeur les requêtes pf=1 ortho / pente / altitude entrantes, pour
+// qu'elles n'atteignent jamais la file de chaque handler. C'est le pendant côté
+// SW de l'annulation du préchauffage côté navigateur sur geste : si un
+// préchauffage périmé échappe à l'annulation sur geste, il ne peut pas affamer
+// la rafale de premier plan une fois le pipeline occupé.
 //
-// Threshold uses DEM_INFLIGHT.size as a proxy for "system under load".
-// All four families (DEM/ortho/slope/altitude) ultimately drive DEM
-// pipeline pressure (slope/altitude pre-warm 4 neighbour DEMs, ortho
-// shares the same geopf HTTP/2 connection pool).
+// Le seuil utilise DEM_INFLIGHT.size comme indicateur de « système en charge ».
+// Les quatre familles (DEM / ortho / pente / altitude) finissent toutes par
+// peser sur le pipeline DEM (pente / altitude préchauffent 4 DEM voisins,
+// l'ortho partage le même pool de connexions HTTP/2 vers geopf).
 const PREFETCH_SHED_THRESHOLD = 24;
 
 function isPrefetchRequest(url) {
   return url.searchParams.get('pf') === '1';
 }
 
-// ── DEM ↔ Ortho pairing ──────────────────────────────────────────────
-// Mapbox's source pipeline issues DEM (terrain) tile requests BEFORE
-// raster ortho requests for the same screen footprint: the terrain
-// source is required for vertex positions, so it gets queued first.
-// On a cold start the user sees the mesh sharpen with grey/low-res
-// texture, then ortho fills in 200-800 ms later — the classic "DEM
-// d'abord puis ortho" perception. With this pairing flag enabled
-// (set by listeners.ts when the satellite basemap is active), the
-// instant the SW sees a real (non-prefetch) /dem-tiles request, it
-// immediately fires the matching /ortho-tiles request in background
-// at high priority. Both pipelines start in lock-step; the H2
-// multiplexer on data.geopf.fr serves them in parallel. By the time
-// Mapbox's own ortho fetch arrives a few hundred ms later, the SW
-// either has the response already in CacheStorage (instant) or the
-// in-flight dedup map (`orthoInflight`) returns the same Promise.
-// Cost when disabled: zero (the flag short-circuits the branch).
+// ── Appariement DEM ↔ Ortho ──────────────────────────────────────────
+// Le pipeline des sources de Mapbox émet les requêtes de tuiles DEM (terrain)
+// AVANT les requêtes ortho raster de la même emprise à l'écran : la source de
+// terrain est nécessaire aux positions des sommets, elle passe donc en premier.
+// À froid, l'utilisateur voit le maillage se préciser avec une texture grise /
+// basse résolution, puis l'ortho arrive 200 à 800 ms plus tard — la perception
+// classique « DEM d'abord puis ortho ». Avec cet appariement actif (positionné
+// par listeners.ts quand le fond satellite est actif), dès que le SW voit une
+// vraie requête /dem-tiles (hors préchargement), il lance tout de suite en
+// arrière-plan la requête /ortho-tiles correspondante, en priorité haute. Les
+// deux pipelines démarrent en même temps ; le multiplexeur H2 de data.geopf.fr
+// les sert en parallèle. Quand le fetch ortho de Mapbox arrive quelques
+// centaines de ms plus tard, le SW a soit déjà la réponse dans CacheStorage
+// (instantané), soit la map de déduplication en cours (`orthoInflight`)
+// renvoie la même Promise.
+// Coût quand c'est désactivé : nul (l'indicateur court-circuite la branche).
 let pairOrthoWithDem = false;
 
 function setPairOrthoWithDem(enabled) {
@@ -50,11 +51,11 @@ function setPairOrthoWithDem(enabled) {
 
 function maybeKickOrtho(url, z, x, y) {
   if (!pairOrthoWithDem) return;
-  if (isPrefetchRequest(url)) return; // pf=1 is already speculative — don't double
+  if (isPrefetchRequest(url)) return; // pf=1 est déjà spéculatif — pas de doublon
   if (typeof handleOrthoRequest !== 'function') return;
-  // Fire-and-forget. Result lands in ORTHO_CACHE_NAME so Mapbox's
-  // subsequent natural fetch is a straight cache hit. Errors swallowed:
-  // negative caching is already wired inside handleOrthoRequest.
+  // Lancé sans attendre. Le résultat arrive dans ORTHO_CACHE_NAME, si bien que
+  // le fetch naturel suivant de Mapbox est un succès de cache direct. Erreurs
+  // ignorées : le cache négatif est déjà câblé dans handleOrthoRequest.
   try { handleOrthoRequest(z, x, y).catch(() => {}); } catch { /* ignore */ }
 }
 
@@ -65,10 +66,11 @@ function noTileResponseRouter(reason) {
   });
 }
 
-// Same rule as parseTileCoords() in server/lib/http-security.mjs (radar
-// validation): integer z in [0, 22], integer x/y in [0, 2^z). Anything else
-// is answered 204 before reaching a handler, so impossible coordinates never
-// trigger upstream fetches nor land in the (negative) caches.
+// Même règle que parseTileCoords() dans server/lib/http-security.mjs
+// (validation radar) : z entier dans [0, 22], x/y entiers dans [0, 2^z). Tout le
+// reste reçoit une 204 avant d'atteindre un handler : des coordonnées
+// impossibles ne déclenchent jamais de fetch amont ni n'entrent dans les caches
+// (négatifs).
 const ROUTER_MAX_TILE_ZOOM = 22;
 
 function parseRouterTileCoords(match) {
@@ -81,9 +83,10 @@ function parseRouterTileCoords(match) {
   return { z, x, y };
 }
 
-// Zone hashes are 8-char hex strings generated by the page (FNV-1a over the
-// quantised ring — see analysisZone/lib/geometry.ts). Anything else is
-// treated as "no zone" so a malformed param can never poison the cache key.
+// Les hash de zone sont des chaînes hexadécimales de 8 caractères générées par
+// la page (FNV-1a sur l'anneau quantifié — voir analysisZone/lib/geometry.ts).
+// Tout le reste est traité comme « pas de zone », pour qu'un paramètre mal
+// formé ne puisse jamais empoisonner la clé de cache.
 function sanitizeZoneHash(value) {
   return typeof value === 'string' && /^[0-9a-f]{1,16}$/i.test(value) ? value : '';
 }
@@ -138,8 +141,8 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Very-high-resolution ortho overlay (satellite basemap). `r=2` asks for
-  // 512 px tiles on high-DPI screens.
+  // Overlay d'ortho à très haute résolution (fond satellite). `r=2` demande des
+  // tuiles de 512 px sur les écrans à haute densité.
   const vhrMatch = url.pathname.match(/^\/vhr-tiles\/(\d+)\/(\d+)\/(\d+)$/);
   if (vhrMatch) {
     event.respondWith(handleVhrRequest(
@@ -159,8 +162,8 @@ self.addEventListener('fetch', (event) => {
     const slopeDemProfile = resolveDemProfile(url);
     const rawSourceDem = url.searchParams.get('source-dem') || url.searchParams.get('quality') || '';
     const slopeSourceDem = (rawSourceDem === '30m' || rawSourceDem === 'fast-30m') ? 'fast-30m' : rawSourceDem;
-    // Zone-scoped slope: `?zone=<hash>` references the polygon registered via
-    // SET_ANALYSIS_ZONE — tiles outside it are rejected before any DEM fetch.
+    // Pente limitée à une zone : `?zone=<hash>` désigne le polygone enregistré par
+    // SET_ANALYSIS_ZONE — les tuiles hors de celui-ci sont rejetées avant tout fetch DEM.
     const slopeZone = sanitizeZoneHash(url.searchParams.get('zone'));
     event.respondWith(handleSlopeRequest(
       parseInt(slopeMatch[1], 10),

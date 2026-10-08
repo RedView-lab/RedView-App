@@ -1,33 +1,36 @@
 // ---------------------------------------------------------------------------
-// In-memory hot tiers (Map-as-LRU) in front of CacheStorage for the DEM,
-// slope, altitude and ortho endpoints: cached tiles answer in < 1 ms.
+// Niveaux chauds en mémoire (Map utilisée en LRU) devant CacheStorage pour les
+// points d'accès DEM, pente, altitude et ortho : les tuiles en cache répondent
+// en < 1 ms.
 // ---------------------------------------------------------------------------
 
 // ──────────────────────────────────────────────────────────────────────────
-// DEM_HOT_CACHE — in-memory LRU of recently served DEM tile blobs.
+// DEM_HOT_CACHE — LRU en mémoire des blobs de tuiles DEM servis récemment.
 //
-// Motivation: every cache hit currently pays for `caches.open(CACHE_NAME)`
-// (~1-5 ms) + `cache.match(key)` (~5-25 ms on disk-backed CacheStorage).
-// On a single zoom-out a 60° pitched viewport at z14 needs ~25-50 tiles,
-// and a satellite/topo style switch re-asks for ~150 tiles within a few
-// hundred ms. Even when every tile is already cached on disk, the
-// cumulative CacheStorage round-trip latency stacks into 0.5–2.5 s of
-// pure I/O overhead on the SW thread — exactly the kind of stall that
-// makes the user perceive "the map is dragging".
+// Motivation : chaque succès de cache paie aujourd'hui `caches.open(CACHE_NAME)`
+// (~1 à 5 ms) + `cache.match(key)` (~5 à 25 ms sur un CacheStorage sur disque).
+// Un seul dézoom d'une vue inclinée à 60° en z14 demande ~25 à 50 tuiles, et un
+// changement de style satellite/topo redemande ~150 tuiles en quelques
+// centaines de ms. Même quand toutes les tuiles sont déjà en cache sur disque,
+// les allers-retours CacheStorage cumulés atteignent 0,5 à 2,5 s de pure E/S sur
+// le fil du SW — exactement le genre de blocage qui donne l'impression que « la
+// carte rame ».
 //
-// This hot tier sits in FRONT of CacheStorage and returns a fresh Response
-// (clone of the blob) in <1 ms. Hit ratios above 80 % are routine on a
-// session where the user is zooming/panning inside the same region.
+// Ce niveau chaud se place DEVANT CacheStorage et renvoie une Response neuve
+// (clone du blob) en < 1 ms. Des taux de succès au-delà de 80 % sont courants
+// pendant une session où l'utilisateur zoome / se déplace dans la même région.
 //
-// Size budget: 192 entries × ~120 KB average terrain-RGB PNG ≈ 23 MB peak
-// — trivial vs the 1 GB+ working set Mapbox itself keeps in WebGL textures.
+// Budget : 192 entrées × ~120 Ko de PNG terrain-RGB en moyenne ≈ 23 Mo au pic —
+// négligeable face au jeu de travail de plus d'1 Go que Mapbox garde lui-même en
+// textures WebGL.
 //
-// Eviction: classic Map-as-LRU. We re-insert on every get so the iteration
-// order matches recency, then drop the oldest keys when the size cap is
-// exceeded. No expiry — entries are invalidated by epoch bump (cache name
-// changes → activate purges everything → hot cache survives but is just
-// stale references that never get queried again because the cacheKey URL
-// embeds the epoch via demProfile and PURGE messages call demHotClear).
+// Éviction : Map classique utilisée en LRU. On réinsère à chaque lecture pour
+// que l'ordre d'itération suive la récence, puis on retire les clés les plus
+// anciennes au-delà du plafond. Pas d'expiration — les entrées sont invalidées
+// par changement d'époque (le nom du cache change → l'activation purge tout → le
+// cache chaud survit mais ne contient que des références périmées jamais
+// relues, car l'URL de cacheKey intègre l'époque via demProfile et les
+// messages PURGE appellent demHotClear).
 // ──────────────────────────────────────────────────────────────────────────
 const DEM_HOT_CACHE_DEFAULT_MAX = 512;
 let DEM_HOT_CACHE_MAX = DEM_HOT_CACHE_DEFAULT_MAX;
@@ -61,14 +64,15 @@ function demHotClear() {
   DEM_HOT_CACHE.clear();
 }
 
-// Reconstruct a fresh Response from a hot-cache entry. Each call gets its
-// own Response wrapper (cheap) backed by the SAME Blob (zero-copy on
-// most engines — the renderer just bumps an internal ref count).
+// Reconstruit une Response neuve à partir d'une entrée du cache chaud. Chaque
+// appel reçoit sa propre enveloppe Response (peu coûteuse) adossée au MÊME Blob
+// (sans copie sur la plupart des moteurs — le rendu incrémente juste un compteur
+// de références interne).
 function demHotResponse(entry) {
   return new Response(entry.blob, { status: 200, headers: entry.headers });
 }
 
-// Resize the DEM hot tier at runtime. Called when slope or altitude is enabled.
+// Redimensionne à chaud le niveau chaud des DEM. Appelé quand la pente ou l'altitude est activée.
 let _slopeActive = false;
 let _altitudeActive = false;
 
@@ -99,18 +103,19 @@ function setDemHotCacheCapacity(newMax) {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// SLOPE_HOT_CACHE — in-memory LRU of recently served slope PNG blobs.
+// SLOPE_HOT_CACHE — LRU en mémoire des PNG de pente servis récemment.
 //
-// Mirrors DEM_HOT_CACHE in front of CacheStorage for the /slope-tiles
-// endpoint. Every slope cache hit currently pays 5-25 ms on the SW thread
-// for caches.open() + cache.match(). On a resolution switch (0.40m ↔ 1m)
-// or a pan-back, the same viewport re-asks for ~25-50 slope tiles within a
-// few hundred ms; even when every one is cached on disk the cumulative
-// CacheStorage latency stacks into 0.5-2 s of pure I/O — exactly the
-// "switch isn't instant" symptom. This tier returns a fresh Response in
-// <1 ms, so cached slope tiles paint immediately.
+// Pendant de DEM_HOT_CACHE devant CacheStorage pour le point d'accès
+// /slope-tiles. Chaque succès de cache de pente paie aujourd'hui 5 à 25 ms sur le
+// fil du SW pour caches.open() + cache.match(). Lors d'un changement de
+// résolution (0,40 m ↔ 1 m) ou d'un retour en arrière, la même vue redemande
+// ~25 à 50 tuiles de pente en quelques centaines de ms ; même toutes en cache sur
+// disque, la latence CacheStorage cumulée atteint 0,5 à 2 s de pure E/S —
+// exactement le symptôme « le changement n'est pas instantané ». Ce niveau
+// renvoie une Response neuve en < 1 ms : les tuiles de pente en cache
+// s'affichent immédiatement.
 //
-// Size budget: 192 × ~8 KB average slope PNG ≈ 1.5 MB peak — trivial.
+// Budget : 192 × ~8 Ko de PNG de pente en moyenne ≈ 1,5 Mo au pic — négligeable.
 // ──────────────────────────────────────────────────────────────────────────
 const SLOPE_HOT_CACHE = new Map();
 
@@ -155,8 +160,9 @@ function slopeHotClear() {
   SLOPE_HOT_CACHE.clear();
 }
 
-// Drops every hot entry of one slope tile, whatever its profile / source /
-// query (keys look like `${sourceDem}:${profile}:/slope-tiles/z/x/y?…`).
+// Retire toutes les entrées chaudes d'une tuile de pente, quels que soient son
+// profil / sa source / sa requête (les clés ont la forme
+// `${sourceDem}:${profile}:/slope-tiles/z/x/y?…`).
 function slopeHotDeleteTile(z, x, y) {
   const path = `/slope-tiles/${z}/${x}/${y}`;
   for (const key of Array.from(SLOPE_HOT_CACHE.keys())) {
@@ -172,18 +178,19 @@ function slopeHotResponse(entry) {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// ALTITUDE_HOT_CACHE — in-memory LRU of recently served altitude PNG blobs.
+// ALTITUDE_HOT_CACHE — LRU en mémoire des PNG d'altitude servis récemment.
 //
-// Mirrors SLOPE_HOT_CACHE in front of CacheStorage for the /altitude-tiles
-// endpoint. Every altitude cache hit currently pays 5-25 ms on the SW thread
-// for caches.open() + cache.match(). On a toggle off/on, a Mapbox repaint
-// or a pan-back, the same viewport re-asks for ~25-50 altitude tiles within
-// a few hundred ms; even when every one is cached on disk the cumulative
-// CacheStorage latency stacks into ~0.5-2 s of pure I/O — exactly the
-// "altitude overlay is sluggish" symptom. This tier returns a fresh Response
-// in <1 ms, so cached altitude tiles paint immediately.
+// Pendant de SLOPE_HOT_CACHE devant CacheStorage pour le point d'accès
+// /altitude-tiles. Chaque succès de cache d'altitude paie aujourd'hui 5 à 25 ms
+// sur le fil du SW pour caches.open() + cache.match(). Lors d'une désactivation
+// puis réactivation, d'une repeinte de Mapbox ou d'un retour en arrière, la même
+// vue redemande ~25 à 50 tuiles d'altitude en quelques centaines de ms ; même
+// toutes en cache sur disque, la latence CacheStorage cumulée atteint ~0,5 à 2 s
+// de pure E/S — exactement le symptôme « l'overlay d'altitude est lent ». Ce
+// niveau renvoie une Response neuve en < 1 ms : les tuiles d'altitude en cache
+// s'affichent immédiatement.
 //
-// Size budget: 192 × ~4 KB average altitude PNG ≈ 0.8 MB peak — trivial.
+// Budget : 192 × ~4 Ko de PNG d'altitude en moyenne ≈ 0,8 Mo au pic — négligeable.
 // ──────────────────────────────────────────────────────────────────────────
 const ALTITUDE_HOT_CACHE = new Map();
 
@@ -219,11 +226,12 @@ function altitudeHotResponse(entry) {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// ORTHO_HOT_CACHE — in-memory LRU of recently served orthophoto image blobs.
+// ORTHO_HOT_CACHE — LRU en mémoire des images d'orthophotos servies récemment.
 //
-// Eliminates CacheStorage disk round-trips for the /ortho-tiles endpoint.
-// Returns a fresh Response in <1 ms so cached orthophoto tiles paint instantly.
-// Size budget: 192 × ~25 KB average JPEG ≈ 4.8 MB peak.
+// Supprime les allers-retours disque de CacheStorage pour le point d'accès
+// /ortho-tiles. Renvoie une Response neuve en < 1 ms : les tuiles
+// d'orthophotos en cache s'affichent instantanément.
+// Budget : 192 × ~25 Ko de JPEG en moyenne ≈ 4,8 Mo au pic.
 // ──────────────────────────────────────────────────────────────────────────
 const ORTHO_HOT_CACHE_MAX = 192;
 const ORTHO_HOT_CACHE = new Map();

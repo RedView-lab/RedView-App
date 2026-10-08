@@ -1,30 +1,32 @@
 // ---------------------------------------------------------------------------
-// IGN network layer — AbortController registry (per purpose), fetch init,
-// WMS rate limiting (40 req/s quota) and retry of the flaky geopf backends.
+// Couche réseau IGN — registre des AbortController (par usage), init des
+// fetchs, limitation du débit WMS (quota de 40 req/s) et nouvelles tentatives
+// sur les backends geopf instables.
 // ---------------------------------------------------------------------------
 
-// In-flight AbortController registry. Every IGN sub-tile fetch (MNS,
-// HIGHRES, terrain WMS) registers its controller here for the duration
-// of the network request. `cancelInFlightIGN()` aborts them all with
-// USER_CANCEL_REASON; the per-fetch catch handlers then check the
-// signal reason and skip negative-cache writes (otherwise tiles we
-// just killed would be blacklisted for IGN_NULL_TTL_TRANSIENT and the
-// re-request issued ~50 ms later for the new viewport would return
-// null without ever hitting the network).
+// Registre des AbortController en cours. Chaque fetch de sous-tuile IGN (MNS,
+// HIGHRES, WMS terrain) y enregistre son contrôleur pendant la requête réseau.
+// `cancelInFlightIGN()` les annule tous avec USER_CANCEL_REASON ; les
+// gestionnaires d'erreur de chaque fetch testent alors la raison du signal et
+// sautent l'écriture en cache négatif (sinon les tuiles qu'on vient de tuer
+// seraient mises sur liste noire pour IGN_NULL_TTL_TRANSIENT, et la nouvelle
+// demande émise ~50 ms plus tard pour la nouvelle vue renverrait null sans
+// jamais toucher le réseau).
 const ignActiveControllers = new Set();
-// Per-purpose controller registry — populated alongside ignActiveControllers
-// when ignFetchInit is called with { purpose }. Only used by
-// cancelInFlightIGNByPurpose, which aborts a narrow tag without touching the
-// global set (basemap fetches keep running).
+// Registre des contrôleurs par usage — rempli en parallèle d'ignActiveControllers
+// quand ignFetchInit est appelé avec { purpose }. Utilisé seulement par
+// cancelInFlightIGNByPurpose, qui annule un usage précis sans toucher à
+// l'ensemble global (les fetchs du fond de carte continuent).
 const ignActiveControllersByPurpose = new Map();
 
 function ignFetchInit(extra) {
   const purpose = extra && typeof extra === 'object' ? extra.purpose || null : null;
   const mapTile = extra && typeof extra === 'object' ? extra.mapTile || null : null;
   const priority = isIGNBackgroundPurpose(purpose) ? 'low' : 'high';
-  // Strip the SW-internal `purpose` / `mapTile` fields before forwarding to
-  // fetch init — they aren't valid RequestInit options and would be ignored,
-  // but keeping them out of the spread avoids future linter/typing surprises.
+  // Retire les champs internes au SW `purpose` / `mapTile` avant de les passer
+  // à l'init du fetch — ce ne sont pas des options RequestInit valides et elles
+  // seraient ignorées, mais les garder hors de l'étalement évite de futures
+  // surprises de linter ou de typage.
   const fetchExtra = (extra && typeof extra === 'object')
     ? Object.fromEntries(Object.entries(extra).filter(([k]) => k !== 'purpose' && k !== 'mapTile'))
     : (extra || {});
@@ -56,28 +58,28 @@ function ignFetchInit(extra) {
   };
 }
 
-// ── Flaky Géoplateforme backends ──────────────────────────────────────
-// Measured against data.geopf.fr (2026-10-01):
-//   - 13-35 % of LiDAR HD GetMap requests fail with HTTP 400 ServiceException
-//     "LayerNotDefined": some nodes behind the load balancer do not know the
-//     layer. The very same URL succeeds on the next attempt (40/40 tiles
-//     recovered within 3 attempts).
-//   - WMS-Raster is rate-limited to 40 requests/s per IP; above it geopf
-//     answers 429 and blocks the WMS (only) for 5 s. WMTS has no limit
+// ── Backends instables de la Géoplateforme ────────────────────────────
+// Mesuré sur data.geopf.fr (2026-10-01) :
+//   - 13 à 35 % des requêtes GetMap LiDAR HD échouent en HTTP 400
+//     ServiceException « LayerNotDefined » : certains nœuds derrière le
+//     répartiteur de charge ne connaissent pas la couche. La même URL réussit
+//     à la tentative suivante (40/40 tuiles récupérées en 3 tentatives au plus).
+//   - Le WMS-Raster est limité à 40 requêtes/s par IP ; au-delà, geopf répond
+//     429 et bloque le WMS (seulement lui) pendant 5 s. Le WMTS n'a pas de limite
 //     (https://geoservices.ign.fr/documentation/services/limite-d-usage).
-// Both used to be cached as a transient miss, so the tile fell back to the
-// correlation MNS / AWS 30 m (blank, smooth or flat-looking slope tiles in
-// the middle of LiDAR ones). They are retried here instead; any other error
-// is returned as-is to the caller's existing handling.
+// Les deux étaient mis en cache comme un échec passager, et la tuile retombait
+// sur le MNS de corrélation / AWS à 30 m (tuiles de pente vides, lisses ou
+// plates au milieu des tuiles LiDAR). Elles sont désormais réessayées ici ;
+// toute autre erreur est renvoyée telle quelle à la gestion existante de l'appelant.
 const IGN_RETRY_MAX_ATTEMPTS = 3;
 const IGN_RETRY_BACKOFF_MS = 600;
 const IGN_WMS_RATE_LIMIT_BLOCK_MS = 5000;
-// Stay under the 40 req/s WMS quota (retries included) instead of finding
-// it with a 5 s block.
+// Rester sous le quota WMS de 40 req/s (nouvelles tentatives comprises) plutôt
+// que de le découvrir par un blocage de 5 s.
 const IGN_WMS_MAX_PER_SECOND = 32;
 const ignWmsRecentStarts = [];
-// Shared cool-down after a 429 so the other queued WMS requests do not keep
-// hammering the quota while it resets.
+// Pause partagée après une 429, pour que les autres requêtes WMS en file ne
+// continuent pas à frapper le quota pendant sa remise à zéro.
 let ignWmsRateLimitedUntil = 0;
 
 function isIgnWmsUrl(url) {
@@ -137,17 +139,17 @@ async function fetchIgnWithRetry(url, init) {
     if (res.ok) return res;
     const lastAttempt = attempt + 1 >= IGN_RETRY_MAX_ATTEMPTS;
     if (res.status === 400) {
-      // Small XML body: tells a flaky backend from a genuinely bad request.
+      // Petit corps XML : distingue un backend instable d'une requête vraiment invalide.
       let body = '';
-      try { body = await res.clone().text(); } catch { /* keep res */ }
+      try { body = await res.clone().text(); } catch { /* on garde res */ }
       if (!body.includes('LayerNotDefined')) return res;
       continue;
     }
     if (res.status === 429) {
       const block = parseRetryAfterMs(res.headers.get('Retry-After')) ?? IGN_WMS_RATE_LIMIT_BLOCK_MS;
       if (isWms) {
-        // The WMS slot acquisition of every request (this retry included)
-        // waits the block out.
+        // L'obtention du créneau WMS de chaque requête (y compris cette
+        // nouvelle tentative) attend la fin du blocage.
         ignWmsRateLimitedUntil = Math.max(ignWmsRateLimitedUntil, Date.now() + block + Math.random() * 300);
       } else if (!lastAttempt) {
         await ignAbortableDelay(block, init?.signal);

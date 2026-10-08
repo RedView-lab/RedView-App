@@ -1,20 +1,21 @@
 // ---------------------------------------------------------------------------
-// WGS84 ↔ LV95 (CH1903+ / EPSG:2056) coordinate conversion
+// Conversion de coordonnées WGS84 ↔ LV95 (CH1903+ / EPSG:2056)
 // ---------------------------------------------------------------------------
-// Reference: swisstopo "Approximate solution" — accurate to ~1 m, more than
-// enough for sampling a 0.5 m grid through bilinear interpolation.
+// Référence : « solution approchée » de swisstopo — précise à ~1 m, largement
+// assez pour échantillonner une grille de 0,5 m par interpolation bilinéaire.
 //   https://www.swisstopo.admin.ch/content/swisstopo-internet/en/online/
 //   calculation-services/_jcr_content/contentPar/tabs/items/documents_publi
 //   cation/tabPar/downloadlist/downloadItems/19_1467104436749.download/
 //   ch1903wgs84_e.pdf
 //
-// We deliberately avoid pulling proj4 into the service worker: the SW is a
-// classic worker (importScripts) and proj4 ships as ESM in the project.
-// The closed-form polynomials below are <80 FLOPs and have no dependency.
+// On évite volontairement d'importer proj4 dans le service worker : le SW est
+// un worker classique (importScripts) et proj4 est livré en ESM dans le projet.
+// Les polynômes explicites ci-dessous font moins de 80 opérations et n'ont
+// aucune dépendance.
 // ---------------------------------------------------------------------------
 
 function wgs84ToLV95(lng, lat) {
-  // Convert decimal degrees to "swisstopo arc-seconds, scaled" form
+  // Convertit des degrés décimaux en « secondes d'arc swisstopo mises à l'échelle »
   const phi = (lat * 3600 - 169028.66) / 10000;
   const lam = (lng * 3600 - 26782.5) / 10000;
 
@@ -51,24 +52,25 @@ function lv95ToWGS84(E, N) {
     - 0.0447   * y * y * x
     - 0.0140   * x * x * x;
 
-  // swisstopo polynomials yield "10 000 grad" — convert to decimal degrees
+  // Les polynômes swisstopo donnent des « 10 000 grades » — conversion en degrés décimaux
   return { lng: lam * 100 / 36, lat: phi * 100 / 36 };
 }
 
 // ---------------------------------------------------------------------------
-// Switzerland tile-overlap classification — bbox-only (no high-precision
-// border polygon). The LV95 native bounds reject neatly: a Mercator tile
-// that converts to entirely-outside [Emin..Emax]×[Nmin..Nmax] is guaranteed
-// to fall outside published swissSURFACE3D coverage. We do not attempt
-// fine-grained "inside vs border" because the COG fetcher already handles
-// "no item for this LV95 km cell" gracefully (caches a permanent null).
+// Classement du recouvrement des tuiles avec la Suisse — par bbox seulement
+// (pas de polygone de frontière précis). Les bornes natives LV95 rejettent
+// proprement : une tuile Mercator dont la conversion tombe entièrement hors de
+// [Emin..Emax]×[Nmin..Nmax] est forcément hors de la couverture swissSURFACE3D
+// publiée. On ne tente pas un classement fin « intérieur ou bord », car le
+// fetcher de COG gère déjà proprement « aucun item pour cette cellule
+// kilométrique LV95 » (il met en cache un nul définitif).
 // ---------------------------------------------------------------------------
 
 function tileOverlapsSwitzerland(z, x, y) {
   const b = mercatorTileBounds(z, x, y);
   const [w, s, e, n] = SWITZERLAND_BOUNDS;
   if (b.east < w || b.west > e || b.south > n || b.north < s) return false;
-  // Project the four corners to LV95 and reject if all are outside.
+  // Projette les quatre coins en LV95 et rejette si tous sont dehors.
   const corners = [
     wgs84ToLV95(b.west, b.south),
     wgs84ToLV95(b.east, b.south),
@@ -83,16 +85,17 @@ function tileOverlapsSwitzerland(z, x, y) {
     ) { allOut = false; break; }
   }
   if (allOut) {
-    // The tile may still cross the LV95 footprint diagonally — be lenient
-    // and accept any tile with a corner inside the WGS84 bounds. The COG
-    // fetcher will return null for cells that have no published data.
+    // La tuile peut encore traverser l'emprise LV95 en diagonale — on est
+    // tolérant et on accepte toute tuile dont un coin est dans les bornes WGS84.
+    // Le fetcher de COG renverra null pour les cellules sans donnée publiée.
     return true;
   }
   return true;
 }
 
-// Map a Mercator tile to the (Ekm, Nkm) range of LV95 1-km cells it covers.
-// Returns inclusive cell ranges so the caller can iterate the grid.
+// Associe une tuile Mercator à la plage (Ekm, Nkm) des cellules LV95 de 1 km
+// qu'elle couvre. Renvoie des plages de cellules inclusives, pour que
+// l'appelant parcoure la grille.
 function mercTileToLV95KmCells(z, x, y) {
   const b = mercatorTileBounds(z, x, y);
   const corners = [
@@ -108,7 +111,7 @@ function mercTileToLV95KmCells(z, x, y) {
     if (c.N < Nmin) Nmin = c.N;
     if (c.N > Nmax) Nmax = c.N;
   }
-  // Clamp to published footprint
+  // Bornage à l'emprise publiée
   Emin = Math.max(Emin, SWISS_LV95_BOUNDS.Emin);
   Emax = Math.min(Emax, SWISS_LV95_BOUNDS.Emax);
   Nmin = Math.max(Nmin, SWISS_LV95_BOUNDS.Nmin);

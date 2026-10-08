@@ -1,21 +1,23 @@
 // ---------------------------------------------------------------------------
-// Shared helpers of the IGN DEM tile builds (build-tile.js, build-fallback-tile.js,
-// build-terrain-tile.js): MNS area negative cache, France MNS post-processing,
-// cancel-aware raster fetches and the provisional / cancelled build results.
+// Fonctions partagées des constructions de tuiles DEM IGN (build-tile.js,
+// build-fallback-tile.js, build-terrain-tile.js) : cache négatif des zones MNS,
+// post-traitement du MNS France, fetchs de raster tenant compte des annulations,
+// et résultats de construction provisoires / annulés.
 // ---------------------------------------------------------------------------
 
-// Area-level MNS negative cache — remembers Mercator tile regions where MNS
-// returned 0 coverage with all permanent 404s. Adjacent tiles share the same
-// IGN sub-tiles, so skipping MNS for known-empty areas saves 4-8 s per tile.
-// TTL: 30 min. Map key: "z/x/y" at the demZ level (clamped zoom), which
-// groups nearby Mercator tiles that map to the same IGN sub-tile grid.
+// Cache négatif des zones MNS — retient les régions de tuiles Mercator où le
+// MNS n'a renvoyé aucune couverture, uniquement des 404 définitives. Des tuiles
+// voisines partagent les mêmes sous-tuiles IGN : sauter le MNS sur les zones
+// connues vides économise 4 à 8 s par tuile. TTL : 30 min. Clé : « z/x/y » au
+// niveau demZ (zoom plafonné), ce qui regroupe les tuiles Mercator proches qui
+// tombent sur la même grille de sous-tuiles IGN.
 const mnsAreaNegCache = new Map();
 const MNS_AREA_NEG_TTL = 30 * 60_000; // 30 min
 
 function mnsAreaNegKey(z, x, y) {
-  // Group at z14 granularity (IGN_DEM_MAXZOOM clamp point) so adjacent
-  // Mercator tiles at z15-17 that map to the same z14 IGN sub-tiles share
-  // one negative cache entry.
+  // Regroupement à la granularité z14 (plafond IGN_DEM_MAXZOOM), pour que les
+  // tuiles Mercator z15-17 voisines qui tombent sur les mêmes sous-tuiles IGN z14
+  // partagent une seule entrée de cache négatif.
   const groupZ = Math.min(z, IGN_DEM_MAXZOOM);
   const shift = z - groupZ;
   return `${groupZ}/${x >> shift}/${y >> shift}`;
@@ -33,7 +35,7 @@ function mnsAreaNegGet(z, x, y) {
 function mnsAreaNegSet(z, x, y) {
   const key = mnsAreaNegKey(z, x, y);
   mnsAreaNegCache.set(key, { ts: Date.now() });
-  // Evict if too large
+  // Éviction si trop gros
   if (mnsAreaNegCache.size > 500) {
     const iter = mnsAreaNegCache.keys();
     for (let i = 0; i < 200; i++) {
@@ -55,19 +57,19 @@ function postProcessFranceMnsTile(elevations, coverage, mercZ) {
   }
 }
 
-// A cancelled IGN raster fetch (IGN_FETCH_CANCELLED) says nothing about the
-// tile: it is either fetched again — the tile is still wanted — or the build
-// gives up with a `cancelled` result that the callers never commit. Falling
-// through to the next source instead (correlation MNS, RGE ALTI, AWS 30 m)
-// cached a degraded tile for good whenever a gesture or a queue flush hit a
-// tile still on screen.
+// Un fetch de raster IGN annulé (IGN_FETCH_CANCELLED) ne dit rien de la tuile :
+// soit elle est redemandée — elle est encore voulue —, soit la construction
+// abandonne avec un résultat `cancelled` que les appelants n'enregistrent
+// jamais. Passer plutôt à la source suivante (MNS de corrélation, RGE ALTI, AWS
+// à 30 m) mettait en cache une tuile dégradée pour de bon chaque fois qu'un
+// geste ou un vidage de file touchait une tuile encore à l'écran.
 const IGN_CANCEL_RETRY_MAX_MAP = 6;
 const IGN_CANCEL_RETRY_MAX_OTHER = 2;
 
 async function fetchIgnRasterThroughCancels(fetchOnce, purpose, mapTile) {
   let result = await fetchOnce();
   for (let attempt = 0; result === IGN_FETCH_CANCELLED; attempt++) {
-    // Speculative work (prefetch, warm-ups) is not worth a second request.
+    // Le travail spéculatif (préchargement, préchauffages) ne vaut pas une seconde requête.
     if (isIGNBackgroundPurpose(purpose)) break;
     if (mapTile) {
       if (attempt >= IGN_CANCEL_RETRY_MAX_MAP || !isMapDemTileWanted(mapTile)) break;
@@ -79,9 +81,10 @@ async function fetchIgnRasterThroughCancels(fetchOnce, purpose, mapTile) {
   return result;
 }
 
-// A buildIGNTile() surface that is not the LiDAR HD WMS answer although the
-// WMS never confirmed a coverage gap: the legacy correlation-MNS path ran
-// because the WMS failed transiently. Provisional, never a final tile.
+// Une surface de buildIGNTile() qui n'est pas la réponse du WMS LiDAR HD alors
+// que le WMS n'a jamais confirmé de trou de couverture : l'ancien chemin MNS de
+// corrélation a tourné parce que le WMS a échoué passagèrement. Provisoire,
+// jamais une tuile définitive.
 function isProvisionalMnsBuild(result, mercZ, mercX, mercY) {
   return Boolean(result?.elevations)
     && result.source !== 'ign-lidar-hd-wms'
@@ -96,4 +99,4 @@ function cancelledIgnBuild() {
   };
 }
 
-// `mapTile` ({ key, requestedAt }): set when the map itself requested this
+// `mapTile` ({ key, requestedAt }) : renseigné quand la carte elle-même a demandé cette

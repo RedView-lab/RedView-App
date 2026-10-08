@@ -33,10 +33,10 @@ function tileOverlapsFrance(z, x, y) {
   return !(b.east < w || b.west > e || b.south > n || b.north < s);
 }
 
-// True when the tile bbox overlaps any French overseas territory bbox
-// (REU / GLP / MTQ / MYT / GUF). Used by the DEM dispatcher to engage the
-// IGN HD pipeline outside metropolitan France — same WMTS endpoint, same
-// global WGS84G TileMatrixSet, just a different bbox gate.
+// Vrai quand la bbox de la tuile recoupe la bbox d'un territoire français
+// d'outre-mer (REU / GLP / MTQ / MYT / GUF). Sert au dispatcher DEM pour engager
+// le pipeline IGN HD hors de la métropole — même point d'accès WMTS, même
+// TileMatrixSet mondial WGS84G, seule la bbox d'entrée change.
 function tileOverlapsOverseasFrance(z, x, y) {
   const b = mercatorTileBounds(z, x, y);
   for (const [w, s, e, n] of OVERSEAS_FRANCE_BOUNDS) {
@@ -45,19 +45,19 @@ function tileOverlapsOverseasFrance(z, x, y) {
   return false;
 }
 
-// Polygon-based DEM tile classification (requires ensureFrancePoly() loaded)
-// Returns 'inside' | 'border' | 'outside'
+// Classement des tuiles DEM par polygone (exige que ensureFrancePoly() ait chargé)
+// Renvoie 'inside' | 'border' | 'outside'
 //
-// IGN-first bias at high zoom: at z≥12 any tile crossed by a France border
-// edge is classified as at least 'border' — i.e. IGN is attempted even when
-// the 6×6 polygon sampling finds 0 inside points.
-// This fixes the Mont Blanc / Pyrénées / Corsican-coast summit bug where
-// a z15-17 tile (~20-80 m wide) at a ridgeline can have every sample fall
-// outside the France polygon while the LiDAR HD grid still covers part
-// of the tile. Without this promotion we'd skip IGN entirely and fall
-// back to Mapbox 30 m — exactly the symptom the user reported.
+// Priorité IGN aux zooms élevés : à z≥12, toute tuile traversée par un bord de
+// la France est classée au moins 'border' — l'IGN est donc tenté même quand
+// l'échantillonnage 6×6 du polygone ne trouve aucun point intérieur.
+// Corrige le bug des sommets du Mont Blanc / des Pyrénées / de la côte corse,
+// où une tuile z15-17 (~20 à 80 m de large) sur une crête peut avoir tous ses
+// échantillons hors du polygone France alors que la grille LiDAR HD couvre une
+// partie de la tuile. Sans cette promotion, on sautait l'IGN et on retombait
+// sur Mapbox à 30 m — exactement le symptôme signalé par l'utilisateur.
 function classifyDemTile(z, x, y) {
-  if (!francePoly) return 'inside'; // fallback if polygon not loaded
+  if (!francePoly) return 'inside'; // repli si le polygone n'est pas chargé
   const b = mercatorTileBounds(z, x, y);
   let insideCount = 0;
   const N = 6;
@@ -72,12 +72,13 @@ function classifyDemTile(z, x, y) {
   if (insideCount > 0 && insideCount < total) return 'border';
   if (hasPolyVertexInTile(b)) return 'border';
   if (insideCount === total) return 'inside';
-  // 0 inside points + no polygon vertex: normally 'outside', but at high
-  // zoom we give IGN a chance when a France border edge actually crosses
-  // the tile (plus a 10 % margin) — summit/ridge tiles where the sampling
-  // misses the French sliver. The old FRANCE_BOUNDS bbox test claimed NW
-  // Italy, Belgium, Luxembourg and SW Germany as 'border': IGN failed there,
-  // the AWS fallback was skipped and DEM/slope went blank.
+  // 0 point intérieur et aucun sommet du polygone : normalement 'outside', mais
+  // aux zooms élevés on laisse sa chance à l'IGN quand un bord de la France
+  // traverse vraiment la tuile (plus une marge de 10 %) — tuiles de sommet ou de
+  // crête où l'échantillonnage rate la frange française. L'ancien test de bbox
+  // FRANCE_BOUNDS classait le nord-ouest de l'Italie, la Belgique, le Luxembourg
+  // et le sud-ouest de l'Allemagne en 'border' : l'IGN y échouait, le repli AWS
+  // était sauté et le DEM / les pentes restaient vides.
   if (z >= 12) {
     const marginLng = (b.east - b.west) * 0.1;
     const marginLat = (b.north - b.south) * 0.1;

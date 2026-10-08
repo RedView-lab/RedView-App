@@ -1,8 +1,9 @@
 // ---------------------------------------------------------------------------
-// Slope tile handler loader — stable root entry kept for service-worker load
-// order, cache friendliness and backwards-compatible import paths.
+// Chargeur du handler des tuiles de pente — point d'entrée racine stable, gardé
+// pour l'ordre de chargement du service worker, la stabilité des caches et la
+// compatibilité des chemins d'import.
 //
-// The implementation now lives under /runtime/slope-handler/.
+// L'implémentation vit désormais dans /runtime/slope-handler/.
 // ---------------------------------------------------------------------------
 
 importScripts(

@@ -1,26 +1,26 @@
 // ---------------------------------------------------------------------------
-// Compatibility adapter for the global DEM fallback.
+// Adaptateur de compatibilité pour le repli DEM mondial.
 //
-// Existing callers still invoke `fetchMapboxTile(...)`, but that name is now
-// historical only: the live implementation uses AWS Open Data Terrarium and
-// never calls Mapbox terrain-DEM v1 anymore.
+// Les appelants existants invoquent toujours `fetchMapboxTile(...)`, mais ce nom
+// n'est plus qu'historique : l'implémentation réelle utilise AWS Open Data
+// Terrarium et n'appelle plus jamais Mapbox terrain-DEM v1.
 // ---------------------------------------------------------------------------
 
-// AWS-fill engagement ceiling for the global DEM fallback path.
+// Plafond d'engagement du remplissage AWS pour le chemin de repli DEM mondial.
 //
-// This is intentionally LOWER than `DEM_SOURCE_MAXZOOM` (= 17 in
-// ign.config.ts). It is NOT the source maxzoom — it is the threshold
-// above which the SW must NOT mix global 30 m AWS data into IGN tiles.
-// At mercZ > 15 in France we serve pure IGN MNS LiDAR HD (or bicubic-
-// overzoomed parent IGN); contaminating those tiles with AWS would
-// recreate the "30 m smear" the user reported on building/tree
-// surfaces.
+// Il est volontairement PLUS BAS que `DEM_SOURCE_MAXZOOM` (= 17 dans
+// ign.config.ts). Ce n'est PAS le zoom maximal de la source — c'est le seuil
+// au-delà duquel le SW ne doit PAS mélanger des données AWS mondiales à 30 m
+// dans les tuiles IGN. Au-delà de mercZ 15 en France, on sert du MNS LiDAR HD
+// de l'IGN pur (ou une tuile IGN parente suréchantillonnée en bicubique) ;
+// contaminer ces tuiles avec AWS recréerait le « flou à 30 m » signalé par
+// l'utilisateur sur les surfaces de bâtiments et d'arbres.
 //
-// AWS Terrarium is itself native only to z14; at z15 the SW
-// bicubic-overzooms the z14 parent which preserves enough relief for
-// the source contract. Beyond z15, both inside and outside France, the
-// rendering pipeline relies on either real IGN MNS (France) or
-// Mapbox GL's own GPU overzoom of the last successfully built tile.
+// AWS Terrarium n'est natif que jusqu'à z14 ; à z15 le SW suréchantillonne en
+// bicubique le parent z14, ce qui préserve assez de relief pour le contrat de
+// la source. Au-delà de z15, en France comme ailleurs, le rendu repose soit
+// sur le vrai MNS IGN (France), soit sur le suréchantillonnage GPU de Mapbox
+// GL à partir de la dernière tuile construite avec succès.
 const MAPBOX_DEM_MAXZOOM = 15;
 
 async function fetchMapboxTile(z, x, y) {

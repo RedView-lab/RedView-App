@@ -1,13 +1,15 @@
 // ---------------------------------------------------------------------------
-// SW Lifecycle
+// Cycle de vie du SW
 //
-// Split out of sw-dem.js (May 03) to keep the entry point a thin loader and
-// give each pipeline concern its own debuggable file. This file owns:
-//   - managed map cache names (purge on activate / PURGE messages)
-//   - static routing (fetch-event only for the tile families)
-//   - install/activate/message (skipWaiting, claim, manual cache busting)
-// Hot caches live in hot-caches.js; the composite limiter, build queues and
-// SLOPE_INFLIGHT / ALTITUDE_INFLIGHT / DEM_INFLIGHT in build-queues.js.
+// Extrait de sw-dem.js (3 mai) pour garder le point d'entrée comme simple
+// chargeur et donner à chaque partie du pipeline son propre fichier
+// débogable. Ce fichier gère :
+//   - les noms des caches de carte gérés (purge à l'activation / messages PURGE)
+//   - le routage statique (événement fetch seulement pour les familles de tuiles)
+//   - install / activate / message (skipWaiting, claim, invalidation manuelle des caches)
+// Les caches chauds sont dans hot-caches.js ; le limiteur de composition, les
+// files de construction et SLOPE_INFLIGHT / ALTITUDE_INFLIGHT / DEM_INFLIGHT dans
+// build-queues.js.
 // ---------------------------------------------------------------------------
 
 const MAP_CACHE_PREFIXES = [
@@ -44,16 +46,17 @@ function purgeManagedMapCaches({ includeCurrent = false } = {}) {
   ));
 }
 
-// ── Static routing (Service Worker Static Routing API, Chrome/Edge 123+) ──
-// router.js only answers the six tile families below; every other request
-// (Mapbox satellite/vector tiles, sprites, glyphs, API calls, app assets)
-// falls through to the network. Without routes the browser still dispatches
-// each of those to the SW thread first — so while the SW is busy building a
-// 0.40 m DEM tile, or is being restarted after idle termination (~45
-// importScripts), satellite imagery waits behind it. Declaring the same
-// split as static routes lets the browser send them straight to the network.
-// Same behaviour as today; browsers without the API (Safari, Firefox) ignore
-// it. Must never fail the install (see comment below).
+// ── Routage statique (Static Routing API du Service Worker, Chrome/Edge 123+) ──
+// router.js ne répond qu'aux six familles de tuiles ci-dessous ; toute autre
+// requête (tuiles satellite / vectorielles Mapbox, sprites, glyphes, appels
+// d'API, ressources de l'app) part au réseau. Sans routes, le navigateur
+// envoie quand même chacune d'elles d'abord au fil du SW — si bien que, pendant
+// que le SW construit une tuile DEM à 0,40 m ou redémarre après un arrêt pour
+// inactivité (~45 importScripts), l'imagerie satellite attend derrière. Déclarer
+// le même partage en routes statiques laisse le navigateur les envoyer
+// directement au réseau. Même comportement qu'aujourd'hui ; les navigateurs
+// sans cette API (Safari, Firefox) l'ignorent. Ne doit jamais faire échouer
+// l'installation (voir le commentaire plus bas).
 const SW_FETCH_EVENT_PATHS = [
   '/dem-tiles/*',
   '/ortho-tiles/*',
@@ -84,14 +87,15 @@ function registerStaticRoutes(e) {
 
 self.addEventListener('install', (e) => {
   const staticRoutes = registerStaticRoutes(e);
-  // CRITICAL: install must NEVER hinge on a network fetch. `cache.add()`
-  // rejects on any transient hiccup (offline, 5xx, slow proxy) or non-ok
-  // response for /france-border.json. If install rejects, the SW becomes
-  // redundant → activate/clients.claim() never run → no controller for the
-  // whole session → DEM, slope AND altitude overlays silently stall (they
-  // all depend on the SW serving their tile endpoints). The France polygon
-  // is only needed for ortho clipping and is loaded lazily by
-  // ensureFrancePoly() on demand anyway, so prefetch failure is non-fatal.
+  // CRITIQUE : l'installation ne doit JAMAIS dépendre d'un fetch réseau.
+  // `cache.add()` rejette au moindre hoquet passager (hors ligne, 5xx, proxy
+  // lent) ou sur une réponse non ok pour /france-border.json. Si l'installation
+  // échoue, le SW devient redondant → activate / clients.claim() ne s'exécutent
+  // jamais → aucun contrôleur de toute la session → les overlays DEM, pente ET
+  // altitude se bloquent en silence (ils dépendent tous du SW pour servir leurs
+  // tuiles). Le polygone de la France ne sert qu'au découpage de l'ortho et est
+  // de toute façon chargé à la demande par ensureFrancePoly() : un échec du
+  // préchargement n'est pas fatal.
   e.waitUntil(
     staticRoutes
       .then(() => caches.open(STATIC_CACHE_NAME))
@@ -105,10 +109,10 @@ self.addEventListener('install', (e) => {
 });
 
 self.addEventListener('activate', (e) => {
-  // clients.claim() is what fires `controllerchange` on the page and lets the
-  // DEM/slope/altitude pipeline come alive. It must run even if the cache
-  // purge fails, otherwise a CacheStorage error would strand the page with no
-  // controller (same failure mode as a rejecting install).
+  // clients.claim() est ce qui déclenche `controllerchange` sur la page et
+  // réveille le pipeline DEM / pente / altitude. Il doit s'exécuter même si la
+  // purge des caches échoue, sinon une erreur de CacheStorage laisserait la page
+  // sans contrôleur (même mécanisme d'échec qu'une installation rejetée).
   e.waitUntil(
     purgeManagedMapCaches()
       .catch((err) => {
@@ -119,10 +123,10 @@ self.addEventListener('activate', (e) => {
 });
 
 self.addEventListener('message', (e) => {
-  // A force-reloaded page (Ctrl+Shift+R) is never controlled, even though
-  // this worker is already active — activate (and its clients.claim()) will
-  // not run again. The page asks explicitly instead of staying on the 30 m
-  // fallback (and hitting the server for every tile) until a reinstall.
+  // Une page rechargée de force (Ctrl+Maj+R) n'est jamais contrôlée, même si ce
+  // worker est déjà actif — activate (et son clients.claim()) ne se relancent
+  // pas. La page le demande explicitement au lieu de rester sur le repli à 30 m
+  // (et d'interroger le serveur pour chaque tuile) jusqu'à une réinstallation.
   if (e.data?.type === 'CLAIM_CLIENTS') {
     e.waitUntil(self.clients.claim());
     return;
@@ -135,9 +139,9 @@ self.addEventListener('message', (e) => {
     } catch { /* ignore */ }
     return;
   }
-  // DEM ↔ Ortho pairing toggle. Set by listeners.ts when the satellite
-  // basemap is mounted / removed. See router.js > maybeKickOrtho for
-  // the rationale. Idempotent.
+  // Bascule d'appariement DEM ↔ Ortho. Positionnée par listeners.ts quand le
+  // fond satellite est monté / retiré. Voir router.js > maybeKickOrtho pour la
+  // justification. Idempotente.
   if (e.data?.type === 'SET_PAIR_ORTHO_WITH_DEM') {
     try {
       if (typeof setPairOrthoWithDem === 'function') {
@@ -173,10 +177,11 @@ self.addEventListener('message', (e) => {
     caches.delete(SLOPE_CACHE_NAME);
     return;
   }
-  // Slope / Altitude active state change — expands/shrinks the DEM hot tier so panning
-  // with slope or altitude on (which reads more DEM tiles than the basemap) does not
-  // evict basemap DEM tiles the user will re-ask for next frame. Sent by
-  // useSlope / useAltitude on enable/disable. Idempotent.
+  // Changement d'état actif pente / altitude — agrandit / réduit le niveau chaud
+  // des DEM, pour qu'un déplacement avec pente ou altitude actives (qui lit plus
+  // de tuiles DEM que le fond de carte) n'évince pas des tuiles DEM du fond de
+  // carte que l'utilisateur redemandera à l'image suivante. Envoyé par useSlope /
+  // useAltitude à l'activation / la désactivation. Idempotent.
   if (e.data?.type === 'SLOPE_ACTIVE_STATE') {
     try {
       _slopeActive = Boolean(e.data.active);
@@ -247,8 +252,8 @@ self.addEventListener('message', (e) => {
     return;
   }
   if (e.data?.type === 'CLEAR_SHADOW_CACHE') {
-    // Retired endpoint — kept for compatibility with any in-flight client
-    // build that still posts the message.
+    // Point d'accès retiré — gardé pour la compatibilité avec un build client
+    // encore en circulation qui enverrait le message.
     caches.delete('shadow-tiles-v1');
     return;
   }
@@ -256,18 +261,20 @@ self.addEventListener('message', (e) => {
     caches.delete(NEGATIVE_CACHE_NAME);
     return;
   }
-  // Drain queued speculative IGN fetches + Ortho fetches AND abort their
-  // in-flight HTTP requests on user gesture (zoomstart/movestart), so the
-  // new viewport's burst does not wait for the previous viewport's
-  // speculative work to free the IGN slots. The abortable controllers carry
-  // USER_CANCEL_REASON so the per-fetch catch handlers skip negative
-  // caching for tiles WE just killed.
+  // Vide les fetchs IGN spéculatifs et les fetchs ortho en file ET annule leurs
+  // requêtes HTTP en cours à chaque geste de l'utilisateur (zoomstart /
+  // movestart), pour que la rafale de la nouvelle vue n'attende pas que le
+  // travail spéculatif de la vue précédente libère les créneaux IGN. Les
+  // contrôleurs annulables portent USER_CANCEL_REASON, pour que les
+  // gestionnaires d'erreur de chaque fetch sautent le cache négatif des tuiles
+  // que NOUS venons de tuer.
   //
-  // The basemap DEM work is left alone (see flushIGNQueue): a gesture start
-  // does not tell which terrain tiles the map still needs, and killing those
-  // turned the tiles on screen into 30 m / correlation-MNS fallbacks. The
-  // stale ones are dropped by DEM_WANTED_TILES below. DEM_INFLIGHT is kept
-  // too: the builds in flight are now the real tiles, worth coalescing onto.
+  // Le travail DEM du fond de carte n'est pas touché (voir flushIGNQueue) : le
+  // début d'un geste ne dit pas de quelles tuiles de terrain la carte a encore
+  // besoin, et les tuer transformait les tuiles à l'écran en replis à 30 m / MNS
+  // de corrélation. Les périmées sont abandonnées par DEM_WANTED_TILES plus bas.
+  // DEM_INFLIGHT est gardé aussi : les constructions en cours sont désormais les
+  // vraies tuiles, et valent la peine qu'on s'y greffe.
   if (e.data?.type === 'CANCEL_STALE_DEM') {
     let ignQ = 0, ignF = 0, orthoQ = 0, orthoF = 0;
     try { ignQ = typeof flushIGNQueue === 'function' ? flushIGNQueue() : 0; } catch { /* ignore */ }
@@ -281,10 +288,11 @@ self.addEventListener('message', (e) => {
     }
     return;
   }
-  // DEM tiles the map's terrain source is still waiting on, posted while the
-  // camera moves (features/map3d/hooks/useMap/controller/demWantedTiles.ts).
-  // Work for the map's other tiles is stale: drop it, and forget its builds
-  // so a later request for one of those tiles starts afresh.
+  // Tuiles DEM que la source de terrain de la carte attend encore, envoyées
+  // pendant que la caméra bouge
+  // (features/map3d/hooks/useMap/controller/demWantedTiles.ts). Le travail pour
+  // les autres tuiles de la carte est périmé : on l'abandonne, et on oublie ses
+  // constructions pour qu'une demande ultérieure d'une de ces tuiles reparte de zéro.
   if (e.data?.type === 'DEM_WANTED_TILES') {
     const keys = Array.isArray(e.data.keys)
       ? e.data.keys.filter((key) => typeof key === 'string')
@@ -300,12 +308,13 @@ self.addEventListener('message', (e) => {
     } catch { /* ignore */ }
     return;
   }
-  // Per-tile invalidation of slope+altitude derived caches. Sent by the
-  // map controller after the DEM service worker upgrades a DEM tile to
-  // higher quality (e.g. France HIGHRES kicks in mid-session). Without
-  // this the slope/altitude PNGs cached in the SW still encode the old
-  // low-quality DEM, so the user sees stale slope/altitude even after
-  // the DEM tile itself is upgraded — the "delais" the user reports.
+  // Invalidation par tuile des caches dérivés pente + altitude. Envoyé par le
+  // contrôleur de carte après que le service worker DEM a mis à niveau une tuile
+  // DEM vers une meilleure qualité (p. ex. HIGHRES France qui arrive en cours de
+  // session). Sans cela, les PNG de pente / altitude en cache dans le SW encodent
+  // encore l'ancien DEM de faible qualité, et l'utilisateur voit des pentes /
+  // altitudes périmées même après la mise à niveau de la tuile DEM — les
+  // « délais » qu'il signale.
   if (e.data?.type === 'INVALIDATE_DERIVED_TILE') {
     const z = e.data.z | 0;
     const x = e.data.x | 0;
@@ -321,8 +330,8 @@ self.addEventListener('message', (e) => {
       [x, y + 1],
       [x - 1, y],
     ].filter(([tx, ty]) => tx >= 0 && ty >= 0 && tx <= max && ty <= max);
-    // The hot tier sits in front of CacheStorage: without this the reload
-    // that follows (listeners.ts) got the pre-upgrade slope tile back.
+    // Le niveau chaud est devant CacheStorage : sans cela, le rechargement qui
+    // suit (listeners.ts) récupérait la tuile de pente d'avant la mise à niveau.
     for (const [tx, ty] of slopeTiles) slopeHotDeleteTile(z, tx, ty);
     const altitudeTilePath = `/altitude-tiles/${z}/${x}/${y}`;
     Promise.all([
@@ -348,16 +357,16 @@ self.addEventListener('message', (e) => {
     ]).catch(() => { /* best-effort */ });
     return;
   }
-  // ── Cross-profile / viewport slope prewarm (2026-06-20 multicore) ────
-  // The page posts this when (a) the user switches resolution (0.40m ↔
-  // 1m) so the OTHER profile's slope tiles are built in the background
-  // while the user is still looking at the current one, and (b) on idle
-  // to opportunistically warm the visible slope ring. The work runs at
-  // slope-warm priority (already isolated from basemap IGN traffic) and
-  // is cancelled by the next CANCEL_SLOPE_WORK if the viewport moves.
+  // ── Préchauffage des pentes entre profils / sur la vue (multicœur 2026-06-20) ──
+  // La page envoie ce message (a) quand l'utilisateur change de résolution
+  // (0,40 m ↔ 1 m), pour que les tuiles de pente de l'AUTRE profil soient
+  // construites en arrière-plan pendant qu'il regarde encore l'actuel, et (b) en
+  // période d'inactivité, pour préchauffer au passage l'anneau de pente visible.
+  // Le travail tourne en priorité slope-warm (déjà isolée du trafic IGN du fond
+  // de carte) et est annulé par le CANCEL_SLOPE_WORK suivant si la vue bouge.
   //
-  // `profile`: 'default' | 'terrain' — which demProfile to build against.
-  // `tiles`: [{z,x,y}, ...] — viewport tiles to warm.
+  // `profile` : 'default' | 'terrain' — le demProfile sur lequel construire.
+  // `tiles` : [{z,x,y}, ...] — tuiles de la vue à préchauffer.
   if (e.data?.type === 'PREWARM_SLOPE') {
     const tiles = Array.isArray(e.data.tiles) ? e.data.tiles : [];
     const profile = e.data.profile === 'terrain' ? 'terrain' : 'default';
@@ -368,11 +377,12 @@ self.addEventListener('message', (e) => {
     } catch { /* best-effort */ }
     return;
   }
-  // ── Analysis zone (zone-gated terrain overlays) ─────────────────────
-  // The page registers the polygon behind `?zone=<hash>` tile requests.
-  // Re-sent on controllerchange (the registry dies with the SW instance).
-  // An unknown hash in a tile URL degrades to an unmasked build — never an
-  // error — so a restart race only costs trim fidelity, not tiles.
+  // ── Zone d'analyse (overlays de terrain limités à une zone) ─────────
+  // La page enregistre le polygone derrière les requêtes de tuiles `?zone=<hash>`.
+  // Renvoyé à chaque controllerchange (le registre meurt avec l'instance du SW).
+  // Un hash inconnu dans une URL de tuile retombe sur une construction non
+  // masquée — jamais une erreur —, donc une course au redémarrage ne coûte que
+  // la précision du découpage, pas des tuiles.
   if (e.data?.type === 'SET_ANALYSIS_ZONE') {
     try {
       const registered = registerAnalysisZone(e.data.hash, e.data.ring);

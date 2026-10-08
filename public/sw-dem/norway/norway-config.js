@@ -1,37 +1,41 @@
 // ---------------------------------------------------------------------------
-// Norway — national 1 m DTM via Kartverket / Geonorge WCS
+// Norvège — MNT national à 1 m via le WCS de Kartverket / Geonorge
 // ---------------------------------------------------------------------------
-// Official sources confirmed during integration:
-//   * NHM DTM WCS endpoints in EUREF89 / UTM 32, 33 and 35
-//   * National coverage, open data, 1 m resolution or coarser by request scale
-//   * ImageServer WCS 1.0.0/1.1.x/2.0.1 — we use 1.0.0 because width/height
-//     driven GetCoverage is the simplest stable contract for Mercator tiles.
+// Sources officielles confirmées pendant l'intégration :
+//   * points d'accès WCS NHM DTM en EUREF89 / UTM 32, 33 et 35
+//   * couverture nationale, données ouvertes, résolution de 1 m ou plus
+//     grossière selon l'échelle demandée
+//   * ImageServer WCS 1.0.0/1.1.x/2.0.1 — on utilise 1.0.0, car un GetCoverage
+//     piloté par width/height est le contrat stable le plus simple pour des
+//     tuiles Mercator.
 // ---------------------------------------------------------------------------
 
 const NORWAY_BOUNDS = [2.0, 57.0, 33.4, 72.2];
 const NORWAY_DEM_MINZOOM = 10;
 const NORWAY_ENGAGE_MPP = 75;
 const NORWAY_WCS_VERSION = '1.0.0';
-// Cold backend (`hoydedata.no`) can take 15-25 s to render a fresh tile;
-// 30 s prevents abort-and-retry storms when panning to a new region.
+// Le backend à froid (`hoydedata.no`) peut mettre 15 à 25 s à rendre une tuile
+// neuve ; 30 s évitent des tempêtes d'abandons et de nouvelles tentatives quand
+// on se déplace vers une nouvelle région.
 const NORWAY_FETCH_TIMEOUT_MS = 30_000;
-// Concurrency raised 12→20 (May 06 perf pass): hoydedata.no ArcGIS
-// ImageServer comfortably multiplexes 20+ HTTP/2 streams per origin and
-// 12 was throttling the burst when entering Norway from satellite zoom-out
-// (~25 tiles in a 600 ms pan). Queue 240→400 prevents head-of-line
-// pruning of the original viewport once the pan settles.
+// Concurrence portée de 12 à 20 (passe de performance du 6 mai) : l'ImageServer
+// ArcGIS de hoydedata.no multiplexe sans peine 20+ flux HTTP/2 par origine, et 12
+// étranglait la rafale à l'entrée en Norvège depuis un dézoom satellite (~25
+// tuiles en un déplacement de 600 ms). La file passée de 240 à 400 évite
+// l'élagage en tête de la vue d'origine une fois le déplacement terminé.
 const NORWAY_CONCURRENCY = 20;
 const NORWAY_QUEUE_MAX = 400;
 const NORWAY_WCS_FORMAT = 'GeoTIFF';
-// Server-side raster size — request a 2× supersample of the output tile
-// pitch so the local UTM→Mercator reprojection can do area-weighted box
-// averaging (≈4 source pixels per destination pixel) instead of point-
-// bilinear. Point sampling on a UTM raster requested at the same pitch
-// as the Mercator output produced regular grid/moiré artefacts on the
-// slope overlay (visible as oblique stripes on smooth terrain) — same
-// failure mode as the May 03 France WMS 0.40 m → 1 m issue. 4× bandwidth
-// (~520 KB → 4× = ~2 MB per Norway tile of float32 GeoTIFF, but Norway is
-// already opt-in for high-zoom and on-fibre is imperceptible.
+// Taille du raster côté serveur — on demande un suréchantillonnage 2× du pas de
+// la tuile de sortie, pour que la reprojection locale UTM→Mercator puisse faire
+// une moyenne par blocs pondérée par la surface (≈ 4 pixels source par pixel de
+// destination) plutôt qu'un bilinéaire ponctuel. L'échantillonnage ponctuel d'un
+// raster UTM demandé au même pas que la sortie Mercator produisait des
+// artefacts réguliers de grille / moiré sur l'overlay des pentes (bandes
+// obliques visibles sur un terrain lisse) — même mécanisme d'échec que le
+// problème du WMS France 0,40 m → 1 m du 3 mai. 4× la bande passante (~520 Ko →
+// 4× = ~2 Mo par tuile norvégienne de GeoTIFF float32), mais la Norvège est
+// déjà réservée aux zooms élevés et, sur fibre, c'est imperceptible.
 const NORWAY_WCS_OUTPUT_PX = 512;
 
 const NORWAY_WCS_ZONES = {

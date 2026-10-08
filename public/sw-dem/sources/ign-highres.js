@@ -1,8 +1,9 @@
 // ---------------------------------------------------------------------------
-// HIGHRES (5 m DEM) fallback fetcher — same pattern as MNS but targeting
-// ELEVATION.ELEVATIONGRIDCOVERAGE.HIGHRES on TileMatrixSet WGS84G_6_14.
-// Shares the IGN concurrency limiter (same geopf server) but uses a separate
-// in-memory tile cache so MNS and HIGHRES entries don't evict each other.
+// Récupération de repli HIGHRES (DEM à 5 m) — même schéma que le MNS, mais
+// sur ELEVATION.ELEVATIONGRIDCOVERAGE.HIGHRES et le TileMatrixSet WGS84G_6_14.
+// Partage le limiteur de concurrence IGN (même serveur geopf) mais utilise un
+// cache de tuiles en mémoire distinct, pour que les entrées MNS et HIGHRES ne
+// s'évincent pas mutuellement.
 // ---------------------------------------------------------------------------
 const highresTileCache = new Map();
 const highresInflight = new Map();
@@ -82,7 +83,7 @@ async function getHighresTile(z, col, row) {
   return promise;
 }
 
-// HIGHRES fallback with zoom fallback (same pattern, max 2 levels)
+// Repli HIGHRES avec repli de zoom (même schéma, 2 niveaux au plus)
 async function getHighresTileWithFallback(z, col, row) {
   const data = await getHighresTile(z, col, row);
   if (data) return { data, actualZ: z, actualCol: col, actualRow: row };

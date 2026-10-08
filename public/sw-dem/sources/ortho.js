@@ -1,8 +1,8 @@
 // ---------------------------------------------------------------------------
-// Orthophoto tiles — IGN ortho clipped to France border polygon
+// Tuiles d'orthophotos — ortho IGN découpée sur le polygone de la frontière française
 // ---------------------------------------------------------------------------
 
-// France border polygon (loaded lazily from /france-border.json)
+// Polygone de la frontière française (chargé à la demande depuis /france-border.json)
 let francePoly = null;
 let francePolyBBoxes = null;
 let francePolyLoading = null;
@@ -105,7 +105,7 @@ function classifyOrthoTile(z, x, y) {
 function hasPolyVertexInTile(b) {
   if (!francePoly) return false;
   if (francePolyEdgeGrid) {
-    // Every vertex is the start point of an indexed edge.
+    // Chaque sommet est le point de départ d'une arête indexée.
     return forEachGridEdge(b, (x1, y1) => (
       x1 >= b.west && x1 <= b.east && y1 >= b.south && y1 <= b.north
     ));
@@ -123,13 +123,15 @@ function hasPolyVertexInTile(b) {
 }
 
 // ---------------------------------------------------------------------------
-// Border-edge spatial index
+// Index spatial des arêtes de la frontière
 // ---------------------------------------------------------------------------
-// The metropolitan polygon has tens of thousands of vertices and its bbox
-// overlaps every tile of the region, so scanning it per tile is expensive and
-// a bbox test is far too generous (it claimed NW Italy, Belgium, Luxembourg
-// and SW Germany as "border"). Edges are bucketed into a fixed lng/lat grid
-// once at load time; a tile query only visits the few cells it covers.
+// Le polygone métropolitain compte des dizaines de milliers de sommets et sa
+// bbox recouvre toutes les tuiles de la région : le parcourir pour chaque tuile
+// coûte cher, et un test de bbox est bien trop généreux (il classait le
+// nord-ouest de l'Italie, la Belgique, le Luxembourg et le sud-ouest de
+// l'Allemagne en « border »). Les arêtes sont réparties une fois pour toutes,
+// au chargement, dans une grille lng/lat fixe ; une requête de tuile ne visite
+// que les quelques cellules qu'elle couvre.
 
 const FRANCE_EDGE_GRID_CELL_DEG = 0.05;
 const FRANCE_EDGE_GRID_ROWS = Math.ceil(180 / FRANCE_EDGE_GRID_CELL_DEG) + 1;
@@ -173,9 +175,10 @@ function buildFrancePolyEdgeGrid(polygons) {
   return grid;
 }
 
-// Calls `test(x1, y1, x2, y2)` for every indexed edge in the cells covering
-// `b`; returns true as soon as one call does. Edges spanning several cells
-// may be visited more than once — harmless for a predicate.
+// Appelle `test(x1, y1, x2, y2)` pour chaque arête indexée dans les cellules
+// couvrant `b` ; renvoie true dès qu'un appel renvoie true. Une arête qui
+// s'étend sur plusieurs cellules peut être visitée plusieurs fois — sans effet
+// pour un prédicat.
 function forEachGridEdge(b, test) {
   const c0 = franceEdgeGridCol(b.west);
   const c1 = franceEdgeGridCol(b.east);
@@ -193,12 +196,13 @@ function forEachGridEdge(b, test) {
   return false;
 }
 
-// Even-odd ray cast towards +lng, restricted to the grid row holding `lat`.
-// Same crossing rule as pointInRing(); all rings of all polygons are counted
-// together, which handles holes and disjoint islands (the Spanish enclave of
-// Llívia is stored as a polygon overlapping the mainland one: even-odd
-// correctly reports it as outside France). An edge indexed in
-// several cells is counted only in the cell containing its crossing point.
+// Lancer de rayon pair-impair vers +lng, limité à la ligne de la grille qui
+// contient `lat`. Même règle de croisement que pointInRing() ; tous les anneaux
+// de tous les polygones sont comptés ensemble, ce qui gère les trous et les îles
+// disjointes (l'enclave espagnole de Llívia est stockée comme un polygone qui
+// recouvre celui du continent : le pair-impair la classe bien hors de France).
+// Une arête indexée dans plusieurs cellules n'est comptée que dans la cellule
+// qui contient son point de croisement.
 function pointInFranceGrid(lng, lat) {
   const row = franceEdgeGridRow(lat);
   let inside = false;
@@ -211,7 +215,7 @@ function pointInFranceGrid(lng, lat) {
       const xi = bucket[i], yi = bucket[i + 1];
       const xj = bucket[i + 2], yj = bucket[i + 3];
       if ((yi > lat) === (yj > lat)) continue;
-      // Clamped so rounding can never push it into a cell the edge is not indexed in.
+      // Borné pour qu'un arrondi ne puisse jamais l'envoyer dans une cellule où l'arête n'est pas indexée.
       const xCross = Math.min(Math.max((xj - xi) * (lat - yi) / (yj - yi) + xi, Math.min(xi, xj)), Math.max(xi, xj));
       if (xCross <= lng) continue;
       if (franceEdgeGridCol(xCross) !== c) continue;
@@ -221,7 +225,7 @@ function pointInFranceGrid(lng, lat) {
   return inside;
 }
 
-// Liang–Barsky: does segment (x1,y1)→(x2,y2) touch the rectangle?
+// Liang–Barsky : le segment (x1,y1)→(x2,y2) touche-t-il le rectangle ?
 function segmentIntersectsRect(x1, y1, x2, y2, w, s, e, n) {
   const dx = x2 - x1;
   const dy = y2 - y1;
@@ -247,10 +251,11 @@ function segmentIntersectsRect(x1, y1, x2, y2, w, s, e, n) {
 }
 
 /**
- * True when a France border edge crosses the tile bounds `b` expanded by
- * `marginLng` / `marginLat` degrees. Catches the summit / ridge tiles whose
- * French sliver is too thin for the 6×6 point sampling, without claiming
- * foreign tiles that merely sit inside the France bbox.
+ * Vrai quand une arête de la frontière française traverse les bornes `b` de la
+ * tuile élargies de `marginLng` / `marginLat` degrés. Rattrape les tuiles de
+ * sommet ou de crête dont la frange française est trop fine pour
+ * l'échantillonnage 6×6, sans revendiquer des tuiles étrangères simplement
+ * situées dans la bbox de la France.
  */
 function franceBorderNearBBox(b, marginLng, marginLat) {
   if (!francePoly || !francePolyEdgeGrid) return false;
@@ -265,7 +270,7 @@ function franceBorderNearBBox(b, marginLng, marginLat) {
 }
 
 // ---------------------------------------------------------------------------
-// Canvas masking — clip IGN tile to France border
+// Masquage par canvas — découpe la tuile IGN sur la frontière française
 // ---------------------------------------------------------------------------
 
 function lngToTilePx(lng, z, tileX, size) {
@@ -329,7 +334,7 @@ async function maskOrthoTile(imgBlob, z, tileX, tileY) {
     const blob = await _sharedOrthoMaskCanvas.convertToBlob({ type: 'image/png' });
     return blob;
   } finally {
-    img.close(); // Release GPU texture memory even if convertToBlob fails
+    img.close(); // Libère la mémoire de texture GPU même si convertToBlob échoue
   }
 }
 
@@ -346,9 +351,10 @@ function buildOrthoTileURL(z, x, y) {
   );
 }
 
-// Same checked 1×1 transparent PNG as runtime/dem-helpers.js (TRANSPARENT_PNG,
-// a global of the classic-script chain): no OffscreenCanvas encode, so a
-// missing ortho tile can never turn into a rejected fetch (audit d-sw-router).
+// Même PNG transparent 1×1 vérifié que runtime/dem-helpers.js (TRANSPARENT_PNG,
+// global de la chaîne de scripts classiques) : pas d'encodage OffscreenCanvas,
+// donc une tuile ortho manquante ne peut jamais devenir un fetch rejeté
+// (audit d-sw-router).
 let _transparentBlob = null;
 async function getTransparentBlob() {
   _transparentBlob ??= new Blob([TRANSPARENT_PNG], { type: 'image/png' });
@@ -364,10 +370,10 @@ async function transparentResponse() {
 }
 
 // ---------------------------------------------------------------------------
-// Ortho request handler — uses SEPARATE concurrency limiter from DEM
+// Handler des requêtes ortho — limiteur de concurrence DISTINCT de celui du DEM
 // ---------------------------------------------------------------------------
 
-// Separate concurrency limiter for ortho tiles (prevents ortho from starving DEM)
+// Limiteur de concurrence propre aux tuiles ortho (l'ortho n'affame pas le DEM)
 let activeOrtho = 0;
 const orthoQueue = [];
 let orthoPrunedTotal = 0;
@@ -375,8 +381,9 @@ let orthoPrunedTotal = 0;
 function scheduleOrtho(fn) {
   return new Promise((resolve, reject) => {
     orthoQueue.push({ fn, resolve, reject, ts: performance.now() });
-    // Drop oldest-by-timestamp entries on overflow so the current viewport
-    // survives rapid pans (same strategy as the IGN queue).
+    // En cas de débordement, abandonne les entrées les plus anciennes par date,
+    // pour que la vue courante survive aux déplacements rapides (même stratégie
+    // que la file IGN).
     let pruned = 0;
     while (orthoQueue.length > ORTHO_QUEUE_MAX) {
       let oldestIdx = 0;
@@ -412,11 +419,11 @@ function drainOrtho() {
   }
 }
 
-// Drain queued-but-not-yet-running ortho entries on viewport change.
-// Mirror of `flushIGNQueue()` in ign-scheduler.js — see that function for
-// the rationale. Paired with `cancelInFlightOrtho()` so the new viewport
-// gets all 16 ortho concurrency slots immediately instead of waiting
-// up to 8 s for the previous viewport's HTTP responses to land.
+// Vide les entrées ortho en file mais pas encore lancées quand la vue change.
+// Pendant de `flushIGNQueue()` dans ign-scheduler.js — voir cette fonction pour
+// la justification. Associé à `cancelInFlightOrtho()`, pour que la nouvelle vue
+// dispose tout de suite des 16 créneaux ortho au lieu d'attendre jusqu'à 8 s
+// les réponses HTTP de la vue précédente.
 function flushOrthoQueue() {
   if (orthoQueue.length === 0) return 0;
   const pruned = orthoQueue.length;
@@ -429,11 +436,11 @@ function flushOrthoQueue() {
   return pruned;
 }
 
-// In-flight AbortController registry — see ign-network.js for the
-// detailed rationale (same pattern). USER_CANCEL_REASON is the abort
-// reason used by `cancelInFlightOrtho()`; when the catch handler sees
-// it, it skips `orthoNegSet()` so a re-request for the new viewport
-// (likely overlapping) actually hits the network.
+// Registre des AbortController en cours — voir ign-network.js pour la
+// justification détaillée (même schéma). USER_CANCEL_REASON est la raison
+// d'annulation utilisée par `cancelInFlightOrtho()` ; quand le gestionnaire
+// d'erreur la voit, il saute `orthoNegSet()`, pour qu'une nouvelle demande de
+// la nouvelle vue (qui recoupe probablement l'ancienne) atteigne bien le réseau.
 const orthoActiveControllers = new Set();
 
 function orthoFetchInit() {
@@ -468,19 +475,20 @@ function cancelInFlightOrtho() {
   return n;
 }
 
-// In-flight deduplication for ortho tiles (same pattern as ignInflight in ign-scheduler.js)
+// Déduplication des requêtes ortho en cours (même schéma qu'ignInflight dans ign-scheduler.js)
 const orthoInflight = new Map();
 
-// In-memory negative cache for failed ortho tiles { key → { ts, ttl } }
+// Cache négatif en mémoire des tuiles ortho en échec { clé → { ts, ttl } }
 const orthoNegCache = new Map();
-// Shorter transient TTL than before (was 30 s, then 8 s): a single
-// timeout used to freeze a tile through an entire gesture, leaving the
-// map blurry too long. At 8 s the screen-edge tiles that race against
-// Mapbox's per-tile load order (centre-out) frequently got pruned during
-// fast pan and then sat negative-cached past the user's "did it ever
-// load?" patience threshold. 3 s lets Mapbox's `raster-fade-duration`
-// (default 300 ms) absorb the gap cleanly: a tile that failed once and
-// is needed for the next paint is re-fetched almost immediately.
+// TTL passager plus court qu'avant (30 s, puis 8 s) : un seul délai dépassé
+// figeait une tuile pendant tout un geste et laissait la carte floue trop
+// longtemps. À 8 s, les tuiles du bord de l'écran, en concurrence avec l'ordre
+// de chargement de Mapbox (du centre vers les bords), étaient souvent élaguées
+// pendant un déplacement rapide puis restaient en cache négatif au-delà du
+// seuil de patience de l'utilisateur (« elle va se charger un jour ? »). 3 s
+// laissent le `raster-fade-duration` de Mapbox (300 ms par défaut) absorber
+// proprement le trou : une tuile qui a échoué une fois et qui est nécessaire
+// au prochain rendu est redemandée presque tout de suite.
 const ORTHO_NEG_TTL_TRANSIENT = 3_000;   // 3s  — timeout, 5xx, network
 const ORTHO_NEG_TTL_PERMANENT = 3600_000; // 1h — 404
 
@@ -495,7 +503,7 @@ function orthoNegGet(key) {
 function orthoNegSet(key, errorType) {
   const ttl = errorType === 'permanent' ? ORTHO_NEG_TTL_PERMANENT : ORTHO_NEG_TTL_TRANSIENT;
   orthoNegCache.set(key, { ts: Date.now(), ttl });
-  // Evict if too large
+  // Éviction si trop gros
   if (orthoNegCache.size > 2000) {
     const iter = orthoNegCache.keys();
     for (let i = 0; i < 500; i++) {
@@ -505,14 +513,15 @@ function orthoNegSet(key, errorType) {
   }
 }
 
-// Maximum zoom levels to walk up looking for a cached parent ortho tile
+// Nombre maximal de niveaux de zoom à remonter pour trouver une tuile ortho parente en cache
 const ORTHO_OVERZOOM_MAX_DEPTH = 3;
 
-// Extract the sub-rectangle of a cached parent tile that corresponds to
-// (z, x, y) and upscale it (nearest-neighbor — imagery tolerates it, and
-// bilinear doesn't matter visually once Mapbox GL itself resamples).
-// Returns a Response or null. Caches the crop under the child key so the
-// next identical request is a straight cache hit.
+// Extrait le sous-rectangle d'une tuile parente en cache qui correspond à
+// (z, x, y) et l'agrandit (plus proche voisin — l'imagerie le supporte, et le
+// bilinéaire ne change rien visuellement une fois que Mapbox GL rééchantillonne
+// lui-même). Renvoie une Response ou null. Met le recadrage en cache sous la
+// clé de l'enfant, pour que la prochaine requête identique soit servie
+// directement depuis le cache.
 async function tryParentOrthoOverzoom(cache, z, x, y) {
   for (let dz = 1; dz <= ORTHO_OVERZOOM_MAX_DEPTH; dz++) {
     const pZ = z - dz;
@@ -544,14 +553,14 @@ async function tryParentOrthoOverzoom(cache, z, x, y) {
           status: 200,
           headers: {
             'Content-Type': 'image/png',
-            // Short TTL so a real tile can replace this crop quickly
+            // TTL court, pour qu'une vraie tuile puisse vite remplacer ce recadrage
             'Cache-Control': 'public, max-age=60',
             'X-Ortho-Source': `overzoom-z${pZ}`,
           },
         });
-        // Do NOT cache the crop under the child key — we want a real fetch
-        // to overwrite it next time instead of a positive-cache hit masking
-        // genuine ortho data for the full TTL.
+        // NE PAS mettre le recadrage en cache sous la clé de l'enfant — on veut
+        // qu'un vrai fetch l'écrase la prochaine fois, plutôt qu'un succès en
+        // cache masque les vraies données ortho pendant tout le TTL.
         return response;
       } finally {
         img.close();
@@ -567,7 +576,7 @@ async function handleOrthoRequest(z, x, y) {
   const tileKey = `${z}/${x}/${y}`;
   const hotKey = `/ortho-tiles/${tileKey}`;
 
-  // 0. Fast in-memory hit from ORTHO_HOT_CACHE (<1 ms, zero disk I/O)
+  // 0. Succès rapide en mémoire depuis ORTHO_HOT_CACHE (< 1 ms, aucune E/S disque)
   if (typeof orthoHotGet === 'function') {
     const hot = orthoHotGet(hotKey);
     if (hot) return orthoHotResponse(hot);
@@ -585,16 +594,17 @@ async function handleOrthoRequest(z, x, y) {
     return cached;
   }
 
-  // Negative cache — skip tiles that recently failed. Try the cropped-parent
-  // overzoom before giving up: a recently-timed-out tile is exactly the case
-  // where a blurry ancestor tile is better than a transparent hole.
+  // Cache négatif — on saute les tuiles qui ont échoué récemment. On tente
+  // l'overzoom du parent recadré avant d'abandonner : une tuile qui vient de
+  // dépasser son délai est exactement le cas où une tuile ancêtre floue vaut
+  // mieux qu'un trou transparent.
   if (orthoNegGet(tileKey)) {
     const fb = await tryParentOrthoOverzoom(cache, z, x, y);
     if (fb) return fb;
     return await transparentResponse();
   }
 
-  // Get (or start) the in-flight primary fetch for this tile.
+  // Récupère (ou lance) le fetch principal en cours pour cette tuile.
   let inflight = orthoInflight.get(tileKey);
   if (!inflight) {
     inflight = (async () => {
@@ -602,7 +612,7 @@ async function handleOrthoRequest(z, x, y) {
         const polyLoaded = await ensureFrancePoly();
 
         if (!polyLoaded) {
-          // Fallback: fetch without clipping, through ortho concurrency limiter
+          // Repli : fetch sans découpe, via le limiteur de concurrence ortho
           const response = await scheduleOrtho(async () => {
             const url = buildOrthoTileURL(z, x, y);
             const { cleanup, init } = orthoFetchInit();
@@ -624,16 +634,17 @@ async function handleOrthoRequest(z, x, y) {
 
         if (!tileOverlapsFrance(z, x, y)) return null;
 
-        // Always run the real 5×5 point-in-polygon classifier. The former
-        // `z <= 10 → 'border'` short-circuit forced canvas-mask clipping on
-        // every low-zoom tile, saturating the OffscreenCanvas pool during fast
-        // dezoom (root cause of the "patchwork of missing tiles" artifact).
-        // With minzoom=9 on the layer there are now ≤16 ortho tiles at z9 for
-        // the full French bbox, so the classifier cost is negligible.
+        // On lance toujours le vrai classificateur point-dans-polygone 5×5.
+        // L'ancien raccourci `z <= 10 → 'border'` imposait la découpe par
+        // masque canvas à chaque tuile de faible zoom et saturait le pool
+        // d'OffscreenCanvas pendant un dézoom rapide (cause de l'artefact
+        // « patchwork de tuiles manquantes »). Avec minzoom=9 sur la couche, il
+        // n'y a plus que ≤ 16 tuiles ortho à z9 pour toute la bbox française :
+        // le coût du classificateur est négligeable.
         const classification = classifyOrthoTile(z, x, y);
         if (classification === 'outside') return null;
 
-        // Fetch IGN tile through the ortho concurrency limiter
+        // Récupère la tuile IGN via le limiteur de concurrence ortho
         const fetchResult = await scheduleOrtho(async () => {
           const url = buildOrthoTileURL(z, x, y);
           const { controller, cleanup, init } = orthoFetchInit();
@@ -651,20 +662,21 @@ async function handleOrthoRequest(z, x, y) {
             }
             return await res.blob();
           } catch (err) {
-            // User-cancel from CANCEL_STALE_DEM: do NOT negative-cache —
-            // a re-request for the (likely overlapping) new viewport must
-            // hit the network. Return null so the outer pipeline treats
-            // it as "no tile this round" without poisoning future fetches.
+            // Annulation utilisateur venant de CANCEL_STALE_DEM : PAS de cache
+            // négatif — une nouvelle demande pour la nouvelle vue (qui recoupe
+            // probablement l'ancienne) doit atteindre le réseau. On renvoie null
+            // pour que le pipeline extérieur traite le cas comme « pas de tuile
+            // ce tour-ci » sans empoisonner les fetchs suivants.
             if (isOrthoUserCancel(controller)) return null;
-            // Real timeout / network error: let outer catch handle it
-            // (it will orthoNegSet with 'transient').
+            // Vrai délai dépassé / erreur réseau : laisser le catch extérieur s'en
+            // charger (il appellera orthoNegSet avec 'transient').
             throw err;
           } finally {
             cleanup();
           }
         });
 
-        // scheduleOrtho may return PRUNED_SENTINEL if the request was pruned from the queue
+        // scheduleOrtho peut renvoyer PRUNED_SENTINEL si la requête a été élaguée de la file
         if (!fetchResult || fetchResult === PRUNED_SENTINEL) {
           return null;
         }
@@ -706,21 +718,22 @@ async function handleOrthoRequest(z, x, y) {
     orthoInflight.set(tileKey, inflight);
   }
 
-  // Wait for the primary fetch. We intentionally do NOT race against a
-  // timeout-based parent-overzoom promotion here: Mapbox already shows its
-  // own ancestor tile (already in GPU cache) during loading, and gracefully
-  // swaps it for the z=N tile when our 200 arrives (raster-fade-duration).
+  // On attend le fetch principal. On ne le met volontairement PAS en
+  // concurrence avec une promotion du parent suréchantillonné déclenchée par un
+  // délai : Mapbox affiche déjà sa propre tuile ancêtre (déjà en cache GPU)
+  // pendant le chargement, puis la remplace en douceur par la tuile z=N quand
+  // notre 200 arrive (raster-fade-duration).
   //
-  // If the SW were to return a cropped parent for a "slow" request, Mapbox
-  // would cache that ultra-blurry response in its GPU texture atlas and
-  // NEVER re-request the tile — producing the permanent sharp/blurry
-  // patchwork the user reported. Parent overzoom is therefore only used on
-  // definitive failures below (404, timeout, negative cache): cases where
-  // Mapbox would otherwise receive nothing and leave a transparent hole.
+  // Si le SW renvoyait un parent recadré pour une requête « lente », Mapbox
+  // garderait cette réponse ultra-floue dans son atlas de textures GPU et NE
+  // redemanderait JAMAIS la tuile — d'où le patchwork permanent net/flou signalé
+  // par l'utilisateur. L'overzoom du parent ne sert donc qu'aux échecs
+  // définitifs ci-dessous (404, délai dépassé, cache négatif) : les cas où
+  // Mapbox ne recevrait rien et laisserait un trou transparent.
   const result = await inflight;
   if (result) return result.clone();
-  // Primary returned null → definitive failure. Try parent overzoom so the
-  // user sees blurry imagery instead of a transparent hole.
+  // Le fetch principal a renvoyé null → échec définitif. On tente l'overzoom du
+  // parent pour que l'utilisateur voie une imagerie floue plutôt qu'un trou transparent.
   const fb = await tryParentOrthoOverzoom(cache, z, x, y);
   if (fb) return fb;
   return await transparentResponse();

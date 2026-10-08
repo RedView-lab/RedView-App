@@ -1,18 +1,18 @@
 // ---------------------------------------------------------------------------
-// Slope tile — in-process fallback (worker pool unavailable).
+// Tuile de pente — repli dans le processus courant (pool de workers indisponible).
 //
-// The math (Horn on a padded buffer, sqrt-gamma encode, 2× Catmull-Rom,
-// gray + alpha PNG) lives in workers/slope-math.js and is shared with the
-// worker pool, so both paths produce byte-identical tiles. This file only
-// decodes the DEM blobs on the SW thread, with a small LRU so a DEM tile
-// read as the own tile of one slope tile and as the neighbour of four others
-// is decoded once.
+// Le calcul (Horn sur un tampon élargi, encodage en gamma racine, Catmull-Rom 2×,
+// PNG gris + alpha) vit dans workers/slope-math.js et est partagé avec le pool
+// de workers : les deux chemins produisent des tuiles identiques à l'octet près.
+// Ce fichier ne fait que décoder les blobs DEM sur le fil du SW, avec un petit
+// LRU pour qu'une tuile DEM lue comme tuile propre d'une tuile de pente et comme
+// voisine de quatre autres ne soit décodée qu'une fois.
 //
-// Encoding (see slope-math.js / slope-source.ts):
-//   gray  = round(sqrt(deg / 90) · 255)   — decoded GPU-side by raster-color-mix
-//   alpha = 0 on NoData / outside the analysis zone, 255 otherwise
-// Colours, hidden bands and the gradient/step mode are GPU paint properties:
-// they never invalidate a tile.
+// Encodage (voir slope-math.js / slope-source.ts) :
+//   gris  = round(sqrt(deg / 90) · 255)   — décodé côté GPU par raster-color-mix
+//   alpha = 0 sur NoData / hors de la zone d'analyse, 255 sinon
+// Les couleurs, les bandes masquées et le mode dégradé/paliers sont des
+// propriétés de peinture GPU : elles n'invalident jamais une tuile.
 // ---------------------------------------------------------------------------
 
 const SLOPE_DECODED_DEM_CACHE_MAX = 384;
@@ -38,8 +38,9 @@ function rememberSlopeDecodedDem(key, elevations, generation) {
 }
 
 async function decodeSlopeDemBlob(demBlob, z, x, y, demProfile) {
-  // The blob size tells two DEM versions of the same coords apart (stand-in
-  // vs final build, 30 m vs LiDAR — both use the 'default' profile key).
+  // La taille du blob distingue deux versions DEM des mêmes coordonnées
+  // (remplaçant ou construction finale, 30 m ou LiDAR — toutes deux sous la clé
+  // de profil 'default').
   const key = `${slopeDemDecodeKey(z, x, y, demProfile)}:${demBlob?.size || 0}`;
   if (slopeDecodedDemCache.has(key)) {
     const cached = slopeDecodedDemCache.get(key);
@@ -76,9 +77,9 @@ function invalidateSlopeProcessingTile(z, x, y) {
   }
 }
 
-// `neighbourBlobs`: { north, east, south, west } DEM blobs already resolved
-// by resolveSlopeNeighbourDems() (null when absent).
-// Returns { blob, missingDirections } like the worker pool.
+// `neighbourBlobs` : blobs DEM { north, east, south, west } déjà résolus par
+// resolveSlopeNeighbourDems() (null quand absents).
+// Renvoie { blob, missingDirections } comme le pool de workers.
 async function buildSlopeTile(demBlob, neighbourBlobs, z, x, y, resFactor, demProfile, zoneRing, outputScale) {
   const n = 2 ** z;
   const coords = {

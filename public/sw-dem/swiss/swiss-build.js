@@ -1,24 +1,26 @@
 // ---------------------------------------------------------------------------
-// Build a Mercator DEM tile from swissSURFACE3D Raster (COG-backed)
+// Construction d'une tuile DEM Mercator à partir de swissSURFACE3D Raster (COG)
 // ---------------------------------------------------------------------------
-// Mirrors buildIGNTile() so handleDemRequest can dispatch France vs CH using
-// the same downstream contract:
+// Calquée sur buildIGNTile() pour que handleDemRequest puisse aiguiller France
+// ou Suisse avec le même contrat en aval :
 //   { blob, elevations, coverage, source, allPermanentMissing, pendingFetches }
 //
-// Strategy:
-//   1. Resolve the LV95 km-cells overlapping this Mercator tile (a few cells).
-//   2. For each cell, resolve its STAC item → COG URL (cached).
-//   3. For each output pixel, project to LV95 → sample COG (bilinear).
-//   4. Despike + return (composite.js will handle MNS↔MNT seam alignment vs
-//      Mapbox Terrain-RGB the same way it does for IGN).
+// Stratégie :
+//   1. Trouver les cellules kilométriques LV95 qui recoupent la tuile Mercator
+//      (quelques cellules).
+//   2. Pour chaque cellule, résoudre son item STAC → URL du COG (en cache).
+//   3. Pour chaque pixel de sortie, projeter en LV95 → échantillonner le COG
+//      (bilinéaire).
+//   4. Despike + renvoi (composite.js gère l'alignement de jointure MNS↔MNT
+//      contre le Terrain-RGB Mapbox comme pour l'IGN).
 //
-// All COG header parses + tile range fetches are cached, so the second
-// Mercator tile in the same area reuses everything.
+// Toutes les lectures d'en-têtes COG et les fetchs de plages de tuiles sont en
+// cache : la deuxième tuile Mercator de la même zone réutilise tout.
 // ---------------------------------------------------------------------------
 
-// Area-level negative cache — when every km-cell in a Mercator tile maps to
-// "no published COG", every adjacent tile in the same area will yield the
-// same outcome. Skip the per-pixel work.
+// Cache négatif par zone — quand chaque cellule kilométrique d'une tuile
+// Mercator correspond à « aucun COG publié », toutes les tuiles voisines de la
+// même zone donneront le même résultat. On saute le travail par pixel.
 const swissAreaNegCache = new Map();
 const SWISS_AREA_NEG_TTL = 30 * 60_000; // 30 min
 
@@ -54,7 +56,7 @@ async function buildSwissTile(mercZ, mercX, mercY) {
     };
   }
 
-  // Step 1 — discover which COGs cover this tile
+  // Étape 1 — trouver les COG qui couvrent cette tuile
   const cells = mercTileToLV95KmCells(mercZ, mercX, mercY);
   if (!cells) {
     return {
@@ -63,13 +65,13 @@ async function buildSwissTile(mercZ, mercX, mercY) {
     };
   }
 
-  // Resolve all overlapping cells in parallel — one STAC query covers
-  // many cells thanks to the windowed bbox lookup in getCOGUrlForCell().
-  // Pipeline: kick off the COG header fetch as soon as a URL resolves,
-  // instead of waiting for the slowest STAC query before any header
-  // request is issued. Saves ~1 RTT per Mercator tile in the cold case.
+  // Résout en parallèle toutes les cellules qui se recoupent — une requête STAC
+  // couvre de nombreuses cellules grâce à la recherche par bbox fenêtrée de
+  // getCOGUrlForCell(). En pipeline : le fetch de l'en-tête COG part dès qu'une
+  // URL est résolue, au lieu d'attendre la requête STAC la plus lente avant
+  // toute demande d'en-tête. Économise ~1 aller-retour par tuile Mercator à froid.
   const cellEntries = []; // { Ekm, Nkm, url, cog, stacTransient }
-  const cellReady = []; // promises that resolve once {url, cog?} are filled
+  const cellReady = []; // promesses résolues une fois {url, cog?} renseignés
   for (let Ekm = cells.EkmMin; Ekm <= cells.EkmMax; Ekm++) {
     for (let Nkm = cells.NkmMin; Nkm <= cells.NkmMax; Nkm++) {
       const entry = { Ekm, Nkm, url: null, cog: null, stacTransient: false };
@@ -101,11 +103,11 @@ async function buildSwissTile(mercZ, mercX, mercY) {
     );
   }
   if (usableCells.length === 0) {
-    // Critical: only mark area-neg when STAC SUCCEEDED with zero data
-    // (catalogue truly says no published COG here). When STAC failed
-    // transiently we'd otherwise blackout a 2×2 Mercator block for 30
-    // min from a single timeout → visible as flat tiles next to raised
-    // Swiss LiDAR neighbours.
+    // Essentiel : ne marquer la zone en négatif que si STAC a RÉUSSI sans
+    // donnée (le catalogue dit vraiment qu'aucun COG n'est publié ici). Quand
+    // STAC a échoué passagèrement, on noircirait sinon un bloc Mercator de 2×2
+    // pendant 30 min à cause d'un seul délai dépassé → tuiles plates visibles à
+    // côté de voisines LiDAR suisses en relief.
     if (resolvedUrlCount === 0 && !stacHadTransientFailure) {
       swissAreaNegSet(mercZ, mercX, mercY);
       if (typeof swLog !== 'undefined' && swLog.isDebug()) {
@@ -129,32 +131,33 @@ async function buildSwissTile(mercZ, mercX, mercY) {
     };
   }
 
-  // Build a quick LV95-bounds index so we pick the right COG per pixel
-  // without a linear scan.
-  // Cells are 1 km × 1 km aligned on integer km — the lookup is trivial.
+  // Construit un index rapide des bornes LV95 pour choisir le bon COG par pixel
+  // sans parcours linéaire.
+  // Les cellules font 1 km × 1 km, alignées sur des km entiers — la recherche est triviale.
   const cellByKey = new Map();
   for (const c of usableCells) cellByKey.set(`${c.Ekm}/${c.Nkm}`, c);
-  // url → cog index so the prefetch grouping / snapshot avoids O(cells) finds.
+  // Index url → cog, pour que le regroupement de préchargement / l'instantané
+  // évitent des recherches en O(cellules).
   const cogByUrl = new Map();
   for (const c of usableCells) cogByUrl.set(c.cog.url, c.cog);
 
   const n = 1 << mercZ;
 
-  // ── LOD pick: choose the coarsest pyramid level whose pixelScale still
-  // matches the output resolution. Mirrors what we already do in France
-  // with shouldUseIGN(): don't spend bandwidth pulling 0.5 m native data
-  // when the rendered Mercator pixel is e.g. 8 m wide. swisstopo COGs ship
-  // 4-5 overview IFDs (1 m, 2 m, 4 m, 8 m, 16 m) so most dezooms can be
-  // served by a single overview tile per cell instead of dozens of native
-  // tiles. The chosen level is consistent across all cells of a Mercator
-  // tile (they share latitude → same mpp).
+  // ── Choix du LOD : le niveau de pyramide le plus grossier dont le pixelScale
+  // correspond encore à la résolution de sortie. Comme ce que fait déjà
+  // shouldUseIGN() en France : inutile de dépenser de la bande passante sur des
+  // données natives à 0,5 m quand le pixel Mercator rendu fait par exemple 8 m.
+  // Les COG swisstopo embarquent 4 à 5 IFD d'aperçu (1 m, 2 m, 4 m, 8 m, 16 m) :
+  // la plupart des dézooms se servent avec une seule tuile d'aperçu par cellule
+  // au lieu de dizaines de tuiles natives. Le niveau choisi est le même pour
+  // toutes les cellules d'une tuile Mercator (même latitude → même m/px).
   const tileCenterLat = mercatorYToLat((mercY + 0.5) / n);
   const mppOut = (40075016.686 * Math.cos((tileCenterLat * Math.PI) / 180)) / (256 * n);
-  // Aim for a source pixel ~half the output pixel so bilinear keeps detail.
-  // Clamp to native (0.5 m) on the low end.
+  // Vise un pixel source d'environ la moitié du pixel de sortie, pour que le
+  // bilinéaire garde le détail. Plafonné en bas à la résolution native (0,5 m).
   const mppTarget = Math.max(0.5, mppOut * 0.6);
-  // pickSwissCOGLevel is defined in swiss-cog.js; all cells share the same
-  // pyramid layout (swisstopo COGs are uniform).
+  // pickSwissCOGLevel est défini dans swiss-cog.js ; toutes les cellules
+  // partagent la même structure de pyramide (les COG swisstopo sont uniformes).
   const pickedLevels = new Map(); // cellKey → level descriptor
   for (const c of usableCells) {
     const lvlIdx = pickSwissCOGLevel(c.cog, mppTarget);
@@ -166,13 +169,14 @@ async function buildSwissTile(mercZ, mercX, mercY) {
   const elevations = new Float32Array(totalPixels);
   const coverage = new Uint8Array(totalPixels);
 
-  // ── Single 256×256 pre-pass. For every output pixel: reproject to LV95,
-  // assign it to its COG cell + chosen pyramid level, bucket it by primary
-  // internal tile (so the sampler iterates locally), AND accumulate the exact
-  // set of internal tiles the bilinear sampler will read — all in one sweep.
-  // The previous code ran TWO full-resolution loops (one to bucket, one to
-  // recompute the bilinear corner tiles); merging them halves the per-pixel
-  // CPU and avoids a redundant reprojection-free recompute.
+  // ── Pré-passe unique en 256×256. Pour chaque pixel de sortie : reprojection en
+  // LV95, affectation à sa cellule COG et au niveau de pyramide choisi,
+  // regroupement par tuile interne principale (pour que l'échantillonneur
+  // itère localement), ET accumulation de l'ensemble exact des tuiles internes
+  // que lira l'échantillonneur bilinéaire — le tout en un seul balayage.
+  // L'ancien code faisait DEUX boucles en pleine résolution (une pour
+  // regrouper, une pour recalculer les tuiles des coins bilinéaires) ; les
+  // fusionner divise par deux le CPU par pixel et évite un recalcul redondant.
   //
   // pixelsByTile: Map<groupKey, { cog, levelIdx, pts:[{outIdx,E,N}] }>
   // tilePrefetchSet: Set<`${url}|${levelIdx}|${tileIndex}`>
@@ -203,7 +207,7 @@ async function buildSwissTile(mercZ, mercX, mercY) {
       const widthM1 = level.width - 1;
       const heightM1 = level.height - 1;
 
-      // Bilinear footprint of this pixel at the chosen pyramid level.
+      // Empreinte bilinéaire de ce pixel au niveau de pyramide choisi.
       const ipx = (E - cog.originE) / level.pixelScaleX;
       const ipy = (cog.originN - N) / level.pixelScaleY;
       const x0 = Math.max(0, Math.min(Math.floor(ipx), widthM1));
@@ -224,8 +228,9 @@ async function buildSwissTile(mercZ, mercX, mercY) {
       }
       bucket.pts.push({ outIdx: py * DEM_TILE_SIZE + px, E, N });
 
-      // Exact internal tiles the bilinear sampler reads: (x0,y0)(x1,y0)
-      // (x0,y1)(x1,y1). Most interior pixels resolve to a single tile.
+      // Tuiles internes exactes que lit l'échantillonneur bilinéaire :
+      // (x0,y0)(x1,y0)(x0,y1)(x1,y1). La plupart des pixels intérieurs n'en
+      // touchent qu'une.
       const url = cog.url;
       tilePrefetchSet.add(`${url}|${lvl}|${primaryTile}`);
       if (tx1 !== tx0) tilePrefetchSet.add(`${url}|${lvl}|${ty0 * across + tx1}`);
@@ -235,8 +240,8 @@ async function buildSwissTile(mercZ, mercX, mercY) {
   }
 
   if (pixelsByTile.size === 0) {
-    // Same logic as above: if STAC was transient we may have missed the
-    // cells covering this tile — don't poison.
+    // Même logique que plus haut : si STAC a été passager, on a pu manquer les
+    // cellules qui couvrent cette tuile — on n'empoisonne pas le cache.
     if (!stacHadTransientFailure) swissAreaNegSet(mercZ, mercX, mercY);
     return {
       blob: null, elevations: null, coverage: null,
@@ -246,11 +251,12 @@ async function buildSwissTile(mercZ, mercX, mercY) {
     };
   }
 
-  // Step 2b — coalesced range prefetch. Group the needed internal tiles per
-  // (COG, level) and let swiss-fetcher merge contiguous byte ranges into a
-  // single HTTP request each (swisstopo stores a level's tiles contiguously,
-  // so most multi-tile cells collapse to ONE fetch instead of N). All fetches
-  // share the SWISS_CONCURRENCY limiter so this never floods the queue.
+  // Étape 2b — préchargement de plages regroupées. On groupe les tuiles internes
+  // nécessaires par (COG, niveau) et swiss-fetcher fusionne les plages d'octets
+  // contiguës en une seule requête HTTP chacune (swisstopo range les tuiles d'un
+  // niveau de façon contiguë : la plupart des cellules à plusieurs tuiles se
+  // réduisent à UN fetch au lieu de N). Tous les fetchs partagent le limiteur
+  // SWISS_CONCURRENCY : la file n'est jamais inondée.
   const prefetchByCog = new Map(); // `${url}|${lvl}` → { cog, levelIdx, tiles:[] }
   for (const k of tilePrefetchSet) {
     const bar1 = k.indexOf('|');
@@ -275,9 +281,10 @@ async function buildSwissTile(mercZ, mercX, mercY) {
     ),
   );
 
-  // Snapshot the decoded tiles into a local map (strong references) so that
-  // LRU eviction triggered by concurrent Mercator-tile builds cannot drop a
-  // tile out from under the synchronous sampler mid-pass.
+  // Copie des tuiles décodées dans une map locale (références fortes), pour
+  // qu'une éviction LRU déclenchée par des constructions Mercator concurrentes
+  // ne puisse pas retirer une tuile sous les pieds de l'échantillonneur
+  // synchrone en pleine passe.
   const tileMap = new Map(); // `${url}#L${lvl}#${tileIndex}` → Float32Array
   for (const k of tilePrefetchSet) {
     const bar1 = k.indexOf('|');
@@ -293,9 +300,10 @@ async function buildSwissTile(mercZ, mercX, mercY) {
   const getTileSync = (cog, levelIdx, tileIndex) =>
     tileMap.get(`${cog.url}#L${levelIdx}#${tileIndex}`) || null;
 
-  // Step 3 — sample every pixel SYNCHRONOUSLY from the decoded tiles. The old
-  // path awaited 4 cache lookups per pixel (~260 k microtasks per tile); this
-  // reads straight from the Float32Arrays and is an order of magnitude faster.
+  // Étape 3 — échantillonne chaque pixel de façon SYNCHRONE depuis les tuiles
+  // décodées. L'ancien chemin attendait 4 lectures de cache par pixel (~260 k
+  // microtâches par tuile) ; celui-ci lit directement les Float32Array et est
+  // d'un ordre de grandeur plus rapide.
   let coveredCount = 0;
   for (const { cog, levelIdx, pts } of pixelsByTile.values()) {
     for (const { outIdx, E, N } of pts) {
@@ -309,9 +317,9 @@ async function buildSwissTile(mercZ, mercX, mercY) {
   }
 
   if (coveredCount === 0) {
-    // 0 covered pixels can also be a symptom of range-fetch timeouts
-    // (no decoded internal tiles → sampleSwissCOG returns NaN). Don't
-    // permanently poison a 2×2 block from a transient AWS hiccup.
+    // 0 pixel couvert peut aussi être le symptôme de fetchs de plages expirés
+    // (aucune tuile interne décodée → sampleSwissCOG renvoie NaN). On
+    // n'empoisonne pas pour de bon un bloc 2×2 pour un hoquet passager d'AWS.
     const rangeLikelyTransient = prefetchCount > 0; // we tried but got nothing
     if (!stacHadTransientFailure && !rangeLikelyTransient) {
       swissAreaNegSet(mercZ, mercX, mercY);
@@ -333,7 +341,7 @@ async function buildSwissTile(mercZ, mercX, mercY) {
   if (typeof swLog !== 'undefined' && swLog.isDebug()) {
     const dt = (performance.now() - t0).toFixed(0);
     const covPct = (coveredCount / totalPixels * 100).toFixed(1);
-    // Summarise picked levels for diagnostics
+    // Résumé des niveaux choisis, pour le diagnostic
     const lvlSet = new Set();
     for (const v of pickedLevels.values()) lvlSet.add(v.idx);
     const lvlSummary = Array.from(lvlSet).sort().map((i) => `L${i}@${usableCells[0].cog.levels[i].pixelScaleX.toFixed(1)}m`).join(',');
@@ -344,10 +352,10 @@ async function buildSwissTile(mercZ, mercX, mercY) {
     );
   }
 
-  // Source label encodes the dominant year for diagnostics. We don't
-  // attempt to do partial-coverage Mapbox prefill here — composite.js
-  // already handles the MNS↔Mapbox blend via the shared partial-coverage
-  // path used by IGN. coverage[] tells it which pixels are real.
+  // Le libellé de source indique l'année dominante, pour le diagnostic. On ne
+  // tente pas ici de préremplissage Mapbox en couverture partielle —
+  // composite.js gère déjà le fondu MNS↔Mapbox par le chemin de couverture
+  // partielle commun utilisé pour l'IGN. coverage[] lui dit quels pixels sont réels.
   return {
     blob: null,
     elevations,

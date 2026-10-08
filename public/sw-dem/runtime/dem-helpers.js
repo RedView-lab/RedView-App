@@ -1,8 +1,8 @@
 // ---------------------------------------------------------------------------
-// Shared response helpers and the safe parent-overzoom fallback used by
-// both handleDemRequest and the health guard.
+// Fonctions de réponse partagées et repli sûr par overzoom du parent, utilisés
+// par handleDemRequest et par le garde-fou de santé.
 //
-// Split out of sw-dem.js (May 03).
+// Extrait de sw-dem.js (3 mai).
 // ---------------------------------------------------------------------------
 
 function buildDemResponse(pngBlob, demSource, shortCache, healthStatus = 'ok') {
@@ -12,10 +12,11 @@ function buildDemResponse(pngBlob, demSource, shortCache, healthStatus = 'ok') {
     status: 200,
     headers: {
       'Content-Type': 'image/png',
-      // 30-day TTL on positive DEM tiles. Both AWS Terrarium and IGN/swiss
-      // LiDAR DEM datasets are static reference data — keeping the SW cache
-      // warm across sessions eliminates re-billing for previously visited
-      // areas and is the single biggest lever on the Raster Tiles SKU.
+      // TTL de 30 jours sur les tuiles DEM positives. Les DEM AWS Terrarium
+      // comme les DEM LiDAR IGN / suisses sont des données de référence
+      // statiques — garder le cache du SW chaud d'une session à l'autre évite de
+      // repayer les zones déjà visitées, et c'est le plus gros levier sur le SKU
+      // Raster Tiles.
       'Cache-Control': shortCache
         ? `public, max-age=${Math.max(1, Math.ceil(shortTtlMs / 1000))}`
         : 'public, max-age=2592000',
@@ -27,10 +28,11 @@ function buildDemResponse(pngBlob, demSource, shortCache, healthStatus = 'ok') {
   });
 }
 
-// 204 No Content: canonical "no tile here" signal for the terrain renderer.
-// The renderer reuses the parent tile mesh instead of rendering a hole.
-// 204 reason of a build whose IGN work was cancelled (see computeDemRequest):
-// a request coalesced onto it rebuilds instead of keeping that empty answer.
+// 204 No Content : signal canonique « pas de tuile ici » pour le rendu du
+// terrain, qui réutilise le maillage de la tuile parente au lieu d'afficher un trou.
+// Raison 204 d'une construction dont le travail IGN a été annulé (voir
+// computeDemRequest) : une requête fusionnée dessus reconstruit au lieu de
+// garder cette réponse vide.
 const DEM_CANCELLED_REASON = 'cancelled';
 
 function noTileResponse(reason) {
@@ -40,9 +42,9 @@ function noTileResponse(reason) {
   });
 }
 
-// Minimal 1×1 transparent PNG used as a safe fallback when DEM data is absent.
-// Generated with node:zlib (deflate + CRC32) and checked chunk by chunk: the
-// previous literal had a bad IDAT CRC / Adler-32, so browsers rejected it.
+// PNG transparent minimal de 1×1, repli sûr quand la donnée DEM est absente.
+// Généré avec node:zlib (deflate + CRC32) et vérifié bloc par bloc : l'ancien
+// littéral avait un CRC IDAT / Adler-32 faux, et les navigateurs le rejetaient.
 const TRANSPARENT_PNG = Uint8Array.from(atob(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNgAAIAAAUA' +
   'Aen63NgAAAAASUVORK5CYII='
@@ -93,10 +95,11 @@ function resolveDemRequestPurposeFromRequest(request) {
   }
 }
 
-// The map's own terrain tiles carry `rv-src=map` (buildDemTilesTemplate in
-// features/map3d/hooks/useMap/demTiles.ts). Other /dem-tiles readers (sun
-// shadows, slope, prefetch, parent overzoom) never do: only the map's
-// requests are judged by the DEM_WANTED_TILES snapshots it posts.
+// Les tuiles de terrain de la carte elle-même portent `rv-src=map`
+// (buildDemTilesTemplate dans features/map3d/hooks/useMap/demTiles.ts). Les
+// autres lecteurs de /dem-tiles (ombres solaires, pente, préchargement,
+// overzoom du parent) ne le font jamais : seules les requêtes de la carte sont
+// jugées par les instantanés DEM_WANTED_TILES qu'elle envoie.
 function isMapDemTileRequest(request) {
   try {
     return new URL(request.url, self.location.origin).searchParams.get('rv-src') === 'map';
@@ -105,9 +108,9 @@ function isMapDemTileRequest(request) {
   }
 }
 
-// The flyover video export's offscreen map (cloneLiveStyle in
-// features/centerPanel/flyover/video/videoMap.ts) tags its terrain tiles
-// `rv-src=video`: see handleVideoDemRequest().
+// La carte hors écran de l'export vidéo du survol (cloneLiveStyle dans
+// features/centerPanel/flyover/video/videoMap.ts) marque ses tuiles de terrain
+// `rv-src=video` : voir handleVideoDemRequest().
 function isVideoDemTileRequest(request) {
   try {
     return new URL(request.url, self.location.origin).searchParams.get('rv-src') === 'video';
@@ -145,15 +148,16 @@ function shouldAllowParentOverzoomFallback(z, x, y) {
   return isExpertFallbackRiskTile(z, x, y);
 }
 
-// Elevation stats (min/max/mean) of the part of the nearest ALREADY-AVAILABLE
-// parent tile that covers (z, x, y). Used by the health guard to compare a
-// freshly built tile against its ancestor.
+// Statistiques d'altitude (min/max/moyenne) de la partie de la tuile parente
+// DÉJÀ disponible la plus proche qui couvre (z, x, y). Utilisées par le
+// garde-fou de santé pour comparer une tuile fraîchement construite à son ancêtre.
 //
-// Unlike tryParentOverzoom this never builds anything: hot tier and
-// CacheStorage only (no handleDemRequest → no WMS fetch, no recursive parent
-// chain), and no Catmull-Rom overzoom + PNG encode + decode round-trip — the
-// stats are read straight from the parent's sub-rectangle. Returns
-// { stats, source, parentZ } or null when no usable parent is cached.
+// Contrairement à tryParentOverzoom, ne construit jamais rien : niveau chaud et
+// CacheStorage seulement (pas de handleDemRequest → pas de fetch WMS, pas de
+// chaîne récursive de parents), et pas d'aller-retour overzoom Catmull-Rom +
+// encodage + décodage PNG — les statistiques sont lues directement dans le
+// sous-rectangle du parent. Renvoie { stats, source, parentZ }, ou null quand
+// aucun parent utilisable n'est en cache.
 async function findCachedParentStats(cache, z, x, y, demProfile = 'default') {
   if (!shouldAllowParentOverzoomFallback(z, x, y)) return null;
   const minParentZ = Math.max(0, z - DEM_OVERZOOM_MAX_DEPTH);
@@ -161,8 +165,8 @@ async function findCachedParentStats(cache, z, x, y, demProfile = 'default') {
   for (let pZ = z - 1; pZ >= minParentZ; pZ--) levels.push(pZ);
   if (levels.length === 0) return null;
 
-  // Hot tier first (same Blob identity → decode-cache hit), then a single
-  // parallel round of CacheStorage lookups for the levels that missed.
+  // Niveau chaud d'abord (même identité de Blob → succès du cache de décodage),
+  // puis une seule passe parallèle de lectures CacheStorage pour les niveaux manqués.
   const candidates = levels.map((pZ) => {
     const key = buildDemCacheKey(pZ, x >> (z - pZ), y >> (z - pZ), demProfile);
     const hot = (typeof demHotGet === 'function') ? demHotGet(key.url) : null;
@@ -218,14 +222,14 @@ async function findCachedParentStats(cache, z, x, y, demProfile = 'default') {
         parentZ: pZ,
       };
     } catch {
-      /* try the next ancestor */
+      /* on essaie l'ancêtre suivant */
     }
   }
   return null;
 }
 
-// `options.cachedOnly`: only overzoom an ancestor that is already in the hot
-// tier / CacheStorage — never start a recursive parent build (WMS fetch).
+// `options.cachedOnly` : ne suréchantillonne qu'un ancêtre déjà dans le niveau
+// chaud / CacheStorage — ne lance jamais de construction récursive de parent (fetch WMS).
 async function tryParentOverzoom(cache, z, x, y, depth, demProfile = 'default', options = {}) {
   if (depth > 0) return null;
   if (!shouldAllowParentOverzoomFallback(z, x, y)) return null;
@@ -236,11 +240,12 @@ async function tryParentOverzoom(cache, z, x, y, depth, demProfile = 'default', 
     const pY = y >> (z - pZ);
     const parentKey = buildDemCacheKey(pZ, pX, pY, demProfile);
 
-    // Fast path: in-memory hot tier (see DEM_HOT_CACHE in hot-caches.js).
-    // Overzoom is in the hot path for every miss inside FR/CH/ES/NO at
-    // z>14 and on every short-TTL refresh; skipping CacheStorage here
-    // for already-warm parents removes another 5-25 ms × parent-depth
-    // (up to 4) from the slow path of each held viewport tile.
+    // Chemin rapide : niveau chaud en mémoire (voir DEM_HOT_CACHE dans
+    // hot-caches.js). L'overzoom est sur le chemin critique de chaque échec de
+    // cache en FR/CH/ES/NO à z>14 et de chaque rafraîchissement à TTL court ;
+    // sauter ici CacheStorage pour les parents déjà chauds retire encore 5 à
+    // 25 ms × profondeur de parents (jusqu'à 4) du chemin lent de chaque tuile
+    // de la vue en attente.
     let parentResp = null;
     const parentHotKey = parentKey.url;
     const parentHot = (typeof demHotGet === 'function') ? demHotGet(parentHotKey) : null;
@@ -269,11 +274,11 @@ async function tryParentOverzoom(cache, z, x, y, depth, demProfile = 'default', 
       const parentBlob = await parentResp.clone().blob();
       const overzoomed = await overzoomDemTile(parentBlob, pZ, pX, pY, z, x, y);
       if (overzoomed) {
-        // Reject parent overzooms that collapse to a flat zero raster over
-        // France/CH. A z14 cached tile that decoded as all-0 (Mapbox/AWS
-        // tile over a no-data pocket, decoded-as-zero placeholder) would
-        // otherwise propagate as a perfectly flat slab to every child
-        // tile that falls back to it. Continue to the next parent zoom.
+        // Rejette les overzooms de parent qui s'effondrent en un raster plat à
+        // zéro sur la France / la Suisse. Une tuile z14 en cache décodée tout à 0
+        // (tuile Mapbox / AWS sur une poche sans donnée, remplaçant décodé à
+        // zéro) se propagerait sinon comme une dalle parfaitement plate à chaque
+        // tuile enfant qui y retombe. On passe au zoom parent suivant.
         if (isExpertFallbackRiskTile(z, x, y)) {
           try {
             const overzoomedElev = await decodeTerrainRGBBlob(overzoomed);
@@ -284,7 +289,7 @@ async function tryParentOverzoom(cache, z, x, y, depth, demProfile = 'default', 
               );
               continue;
             }
-          } catch { /* if decode fails, accept as before */ }
+          } catch { /* si le décodage échoue, on accepte comme avant */ }
         }
         return { blob: overzoomed, source: `overzoom-z${pZ}:${parentSource}` };
       }

@@ -1,42 +1,44 @@
 // ---------------------------------------------------------------------------
-// DEM tile handler entry point — top-level dispatcher for
+// Point d'entrée du handler des tuiles DEM — dispatcher de premier niveau pour
 // /dem-tiles/{z}/{x}/{y}.
 //
-// Split out of runtime/dem-handler.js into runtime/dem-handler/ (May 15).
-// `computeDemRequest()` now lives in ./compute-request.js; this file keeps the
-// stable global `handleDemRequest()` surface consumed by router.js,
-// slope-handler.js, altitude-handler.js and dem-helpers.js.
+// Extrait de runtime/dem-handler.js vers runtime/dem-handler/ (15 mai).
+// `computeDemRequest()` vit désormais dans ./compute-request.js ; ce fichier garde
+// la surface globale stable `handleDemRequest()` utilisée par router.js,
+// slope-handler.js, altitude-handler.js et dem-helpers.js.
 // ---------------------------------------------------------------------------
 
 async function handleDemRequest(_request, z, x, y, _depth, demProfile) {
   if (_depth === undefined) _depth = 0;
   if (!demProfile) demProfile = resolveDemProfileFromRequest(_request);
 
-  // World-zoom short-circuit: no visible terrain relief below z4, and at that
-  // zoom Mapbox tiles are tiny fractions of the globe. Returning 204 instantly
-  // lets Mapbox GL reuse parent/empty meshes and prevents the SW from ever
-  // blocking the Standard-Satellite base-map fetches on origin contention
-  // during fast pinch-zoom-out (root cause of the "white earth" symptom).
+  // Court-circuit à l'échelle du monde : aucun relief de terrain visible sous
+  // z4, et à ce zoom les tuiles Mapbox sont de minuscules fractions du globe.
+  // Renvoyer 204 tout de suite laisse Mapbox GL réutiliser les maillages
+  // parents / vides et empêche le SW de bloquer les fetchs du fond
+  // Standard-Satellite par contention sur l'origine pendant un dézoom rapide au
+  // pincement (cause du symptôme « Terre blanche »).
   if (z < 4) return noTileResponse('world-zoom');
 
-  // ── Speculative-prefetch shedding under load ─────────────────────────
+  // ── Délestage du préchargement spéculatif sous charge ────────────────
   //
-  // Prefetch requests carry `?pf=1` (set by viewportPrefetch.ts). They are
-  // SPECULATIVE — failing them silently is harmless: the next real Mapbox
-  // request for the same tile will run the full pipeline normally.
+  // Les requêtes de préchargement portent `?pf=1` (posé par
+  // viewportPrefetch.ts). Elles sont SPÉCULATIVES — les faire échouer en
+  // silence est sans conséquence : la prochaine vraie requête Mapbox pour la
+  // même tuile exécutera normalement tout le pipeline.
   //
-  // When the dispatcher is already saturated (DEM_INFLIGHT.size above the
-  // soft cap), we drop incoming pf=1 immediately rather than enqueueing
-  // them behind ~50 IGN sub-tile fetches. This is the SW-side defence
-  // matching the browser-side prewarm-abort on user gesture: even if a
-  // prewarm batch slips past gesture cancellation, it cannot starve the
-  // foreground burst once the pipeline is already busy.
+  // Quand le dispatcher est déjà saturé (DEM_INFLIGHT.size au-dessus du plafond
+  // souple), on abandonne tout de suite les pf=1 entrants au lieu de les mettre
+  // en file derrière ~50 fetchs de sous-tuiles IGN. C'est la défense côté SW
+  // qui répond à l'annulation du préchauffage côté navigateur sur geste : même
+  // si un lot de préchauffage échappe à l'annulation sur geste, il ne peut pas
+  // affamer la rafale de premier plan une fois le pipeline occupé.
   //
-  // Threshold rationale: a typical search-bar prewarm fires ≤14 tiles +
-  // child/parent (~20 max). Mapbox's visible viewport at z14 60° pitch
-  // peaks around 24 tiles. Setting the cap at 24 means: if real foreground
-  // is actively flowing, prefetch yields. Below 24 (cold cache, idle map),
-  // prefetch runs normally.
+  // Justification du seuil : un préchauffage typique de la barre de recherche
+  // lance ≤ 14 tuiles + enfants / parents (~20 au plus). La vue visible de
+  // Mapbox à z14 inclinée à 60° culmine vers 24 tuiles. Avec un plafond à 24 :
+  // si un vrai trafic de premier plan circule, le préchargement s'efface. En
+  // dessous de 24 (cache froid, carte au repos), il tourne normalement.
   if (_depth === 0 && _request) {
     let isPrefetch = false;
     try {
@@ -47,10 +49,10 @@ async function handleDemRequest(_request, z, x, y, _depth, demProfile) {
     }
   }
 
-  // ── In-flight coalescing — only at the top level. We deliberately skip
-  // dedup for recursive overzoom calls (depth>0) because those carry their
-  // own internal child requests and we don't want to deadlock by awaiting
-  // ourselves through a Promise chain.
+  // ── Fusion des requêtes en cours — au premier niveau seulement. On saute
+  // volontairement la déduplication pour les appels récursifs d'overzoom
+  // (depth > 0), qui portent leurs propres requêtes d'enfants internes : on ne
+  // veut pas d'interblocage en s'attendant soi-même à travers une chaîne de Promise.
   if (_depth === 0) {
     if (isVideoDemTileRequest(_request)) return handleVideoDemRequest(_request, z, x, y, demProfile);
     return coalesceDemRequest(_request, z, x, y, demProfile);
@@ -61,9 +63,10 @@ async function handleDemRequest(_request, z, x, y, _depth, demProfile) {
 
 async function coalesceDemRequest(request, z, x, y, demProfile, options) {
   const inflightKey = `${demProfile}:${z}/${x}/${y}`;
-  // A build cancelled for its original requester (the map dropped the tile,
-  // then asked for it again) is no answer for this one: join the rebuild
-  // another waiter may have started, else start it.
+  // Une construction annulée pour son demandeur d'origine (la carte a abandonné
+  // la tuile, puis l'a redemandée) n'est pas une réponse pour celui-ci : on
+  // rejoint la reconstruction qu'un autre demandeur a peut-être lancée, sinon on
+  // la lance.
   const awaited = new Set();
   let existing = DEM_INFLIGHT.get(inflightKey);
   while (existing && !awaited.has(existing)) {
@@ -73,7 +76,7 @@ async function coalesceDemRequest(request, z, x, y, demProfile, options) {
       const cancelled = shared.status === 204
         && shared.headers.get('X-DEM-Reason') === DEM_CANCELLED_REASON;
       if (!cancelled) return shared.clone();
-    } catch { /* fall through and recompute */ }
+    } catch { /* on continue et on recalcule */ }
     existing = DEM_INFLIGHT.get(inflightKey);
   }
 
@@ -83,28 +86,29 @@ async function coalesceDemRequest(request, z, x, y, demProfile, options) {
     const response = await work;
     return response.clone();
   } finally {
-    // A newer build may own the key (DEM_WANTED_TILES dropped this one).
+    // Une construction plus récente peut posséder la clé (DEM_WANTED_TILES a abandonné celle-ci).
     if (DEM_INFLIGHT.get(inflightKey) === work) DEM_INFLIGHT.delete(inflightKey);
   }
 }
 
-// ── Flyover video export (`rv-src=video`) ─────────────────────────────
-// The export films a frame once every tile of it is loaded and never reloads
-// a terrain tile in place (flyover/video/videoMap.ts): a stand-in answered
-// now — parent overzoom, bare earth or AWS 30 m after a transient LiDAR
-// failure, a partial build whose upgrade is still running — would stay in the
-// video for as long as the tile is on screen. A video request therefore skips
-// the stand-ins cached for the live map and, when the build still comes out
-// provisional, retries it with the transient failures forgotten. Bounded: a
-// retry only starts in the first VIDEO_DEM_RETRY_START_LIMIT_MS, so the
-// answer (the stand-in, at worst) comes well within the export's per-frame
-// wait (FRAME_SETTLE_TIMEOUT_MS, flyover/video/config.ts) and the browsers'
-// fetch-event limits.
+// ── Export vidéo du survol (`rv-src=video`) ───────────────────────────
+// L'export filme une image dès que toutes ses tuiles sont chargées et ne
+// recharge jamais une tuile de terrain sur place (flyover/video/videoMap.ts) : un
+// remplaçant servi maintenant — overzoom du parent, sol nu ou AWS à 30 m après
+// un échec LiDAR passager, une construction partielle dont la mise à niveau est
+// encore en cours — resterait dans la vidéo tant que la tuile est à l'écran. Une
+// requête vidéo saute donc les remplaçants mis en cache pour la carte en
+// direct et, quand la construction sort encore provisoire, la réessaie en
+// oubliant les échecs passagers. Borné : une nouvelle tentative ne démarre que
+// pendant les VIDEO_DEM_RETRY_START_LIMIT_MS premières millisecondes, pour que
+// la réponse (au pire le remplaçant) arrive bien avant l'attente par image de
+// l'export (FRAME_SETTLE_TIMEOUT_MS, flyover/video/config.ts) et les limites des
+// événements fetch des navigateurs.
 const VIDEO_DEM_RETRY_DELAYS_MS = [1_000, 2_500, 5_000, 8_000];
 const VIDEO_DEM_RETRY_START_LIMIT_MS = 30_000;
-// 204s that are the tile's answer (no relief there), not a failure to retry.
-// A video build skips the short negative entries, so its `neg-cache` is a
-// confirmed empty tile.
+// Les 204 qui sont la réponse de la tuile (pas de relief ici), et non un échec à
+// réessayer. Une construction vidéo saute les entrées négatives courtes : son
+// `neg-cache` est donc une tuile vide confirmée.
 const VIDEO_DEM_FINAL_EMPTY_REASONS = new Set(['world-zoom', 'no-coverage', 'global-parent-mesh', 'neg-cache']);
 
 function isProvisionalVideoDemAnswer(response, z, x, y, demProfile) {
@@ -113,11 +117,11 @@ function isProvisionalVideoDemAnswer(response, z, x, y, demProfile) {
     return !VIDEO_DEM_FINAL_EMPTY_REASONS.has(response.headers.get('X-DEM-Reason') || '');
   }
   if (response.status !== 200) return true;
-  // Short-cached stand-in (finalize) or a tile the health guard replaced.
+  // Remplaçant brièvement en cache (finalize) ou tuile remplacée par le garde-fou de santé.
   if (response.headers.get('x-cache-ttl-ms')) return true;
   if ((response.headers.get('X-DEM-Health') || 'ok').toLowerCase() !== 'ok') return true;
-  // Partial IGN build: its background upgrade (scheduleBackgroundUpgrade) is
-  // still fetching the missing sub-tiles.
+  // Construction IGN partielle : sa mise à niveau en arrière-plan
+  // (scheduleBackgroundUpgrade) récupère encore les sous-tuiles manquantes.
   const source = response.headers.get('X-DEM-Source') || '';
   const fullQuality = source.endsWith('+upgrade') || source === 'ign'
     || source.startsWith('ign-fallback-z') || source.startsWith('ign-highres');

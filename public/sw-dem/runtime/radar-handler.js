@@ -1,38 +1,39 @@
 // ---------------------------------------------------------------------------
-// Radar Tile Handler (Service Worker)
-// Intercepts /radar-tiles/{z}/{x}/{y} requests, fetches live Doppler radar
-// frames, and recolors precipitation intensity to match the user's custom palette.
+// Handler des tuiles radar (Service Worker)
+// Intercepte les requêtes /radar-tiles/{z}/{x}/{y}, récupère les images radar
+// Doppler en direct et recolore l'intensité des précipitations selon la palette
+// personnalisée de l'utilisateur.
 // ---------------------------------------------------------------------------
 
 /**
- * Converts RainViewer Scheme 2 (Universal Blue) pixel RGB into an estimated rain rate (mm/h).
- * Monotonically maps from light drizzle (0.1 mm/h) up to severe thunderstorm cores (> 20 mm/h).
+ * Convertit le RGB d'un pixel RainViewer Scheme 2 (Universal Blue) en intensité de pluie estimée (mm/h).
+ * Correspondance monotone, de la bruine légère (0,1 mm/h) aux cœurs d'orages violents (> 20 mm/h).
  */
 function rainviewerRgbToMm(r, g, b) {
   // 1. Warm core: Yellow -> Orange -> Red -> Dark Red (Convective / Heavy / Storm)
   if (r >= 200 && b < 40) {
-    // g ranges from ~238 (yellow ~6 mm/h) down to ~27 (dark red ~23 mm/h)
+    // g va de ~238 (jaune ~6 mm/h) à ~27 (rouge sombre ~23 mm/h)
     return 5.0 + ((255 - g) / 255.0) * 20.0;
   }
   // 2. Magenta / Purple / Extreme Hail (> 25 mm/h)
   if (r >= 180 && b >= 150 && g < 100) {
     return 25.0 + (r / 255.0) * 15.0;
   }
-  // 3. Sand / Pale beige fringe (Light drizzle: 0.1 to 0.8 mm/h)
+  // 3. Frange sable / beige pâle (bruine légère : 0,1 à 0,8 mm/h)
   if (r > 140 && g > 130 && b > 80 && Math.abs(r - g) < 45 && r > b) {
     return 0.1 + (1.0 - Math.min(r, g) / 255.0) * 0.7;
   }
-  // 4. Cyan / Blue spectrum (0.8 to 5.0 mm/h)
+  // 4. Spectre cyan / bleu (0,8 à 5,0 mm/h)
   if (b >= 70) {
-    // Dark blue / deep navy: r < 30, g < 150 -> 3.5 to 5.0 mm/h
+    // Bleu foncé / marine profond : r < 30, g < 150 -> 3,5 à 5,0 mm/h
     if (r < 30 && g < 150) {
       return 3.5 + (1.0 - g / 150.0) * 1.5;
     }
-    // Medium blue: g in [140..190] -> 2.0 to 3.5 mm/h
+    // Bleu moyen : g dans [140..190] -> 2,0 à 3,5 mm/h
     if (g < 190) {
       return 2.0 + (1.0 - (g - 140) / 50.0) * 1.5;
     }
-    // Light cyan: g >= 190 -> 0.8 to 2.0 mm/h
+    // Cyan clair : g >= 190 -> 0,8 à 2,0 mm/h
     return 0.8 + ((255 - r) / 255.0) * 1.2;
   }
   return 0.5;
@@ -162,8 +163,8 @@ function isImageResponse(res) {
 }
 
 /**
- * Intercepts /radar-tiles/{z}/{x}/{y}, fetches the raw RainViewer Doppler tile,
- * recolors it in ~0.7 ms, and returns a PNG response matching the user's custom palette.
+ * Intercepte /radar-tiles/{z}/{x}/{y}, récupère la tuile Doppler RainViewer brute,
+ * la recolore en ~0,7 ms et renvoie un PNG conforme à la palette personnalisée de l'utilisateur.
  */
 async function handleRadarTileRequest(url, z, x, y) {
   const rawHost = (url.searchParams.get('host') || '').trim().replace(/\/+$/, '');

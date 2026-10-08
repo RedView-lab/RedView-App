@@ -34,8 +34,8 @@ async function purgeSlopeCache(zoneHash) {
   }
 }
 
-// Zone pipeline (slope-zone-pipeline.js): one z14 tile at native resolution,
-// masked to the analysis-zone polygon, cached under its `?zone=` key.
+// Pipeline de zone (slope-zone-pipeline.js) : une tuile z14 en résolution
+// native, masquée au polygone de la zone d'analyse, mise en cache sous sa clé `?zone=`.
 function buildAndCacheHdSlopeTile(z, x, y, resFactor, demProfile, zoneHash, options = {}) {
   const key = `${demProfile}:${z}/${x}/${y}?${zoneHash}`;
   if (backgroundHdSlopeInflight.has(key)) {
@@ -96,9 +96,9 @@ function buildAndCacheHdSlopeTile(z, x, y, resFactor, demProfile, zoneHash, opti
         },
       });
 
-      // Provisional (seam-incomplete) builds stay out of both tiers: a hot
-      // entry would be served back instead of the rebuild once the
-      // neighbours exist.
+      // Les constructions provisoires (jointures incomplètes) restent hors des
+      // deux niveaux : une entrée chaude serait resservie au lieu de la
+      // reconstruction une fois les voisines disponibles.
       if (slopeResult.missingNeighbours.length === 0) {
         await slopeCache.put(cacheKey, response.clone());
         try {
@@ -127,13 +127,14 @@ function buildAndCacheHdSlopeTile(z, x, y, resFactor, demProfile, zoneHash, opti
   return task;
 }
 
-// ── Slope tile from an ancestor slope tile ────────────────────────────
-// Bilinear crop + upsample of an already-built SLOPE tile — never of the
-// DEM, which would reintroduce the interpolation ripples the Horn kernel
-// amplifies. Used where the exact DEM tile does not exist:
-//   * outside the HD footprints above the global 30 m native zoom
+// ── Tuile de pente à partir d'une tuile de pente ancêtre ──────────────
+// Recadrage + suréchantillonnage bilinéaire d'une tuile de PENTE déjà
+// construite — jamais du DEM, ce qui réintroduirait les ondulations
+// d'interpolation qu'amplifie le noyau de Horn. Utilisé là où la tuile DEM
+// exacte n'existe pas :
+//   * hors des emprises HD, au-dessus du zoom natif mondial à 30 m
 //     (buildUpsampledGlobalSlopeResponse),
-//   * where the terrain itself shows a parent mesh (buildSlopeFromAncestorDem).
+//   * là où le terrain montre lui-même un maillage parent (buildSlopeFromAncestorDem).
 
 const upsampleAncestorDecodeCache = new Map();
 const UPSAMPLE_ANCESTOR_DECODE_MAX = 8;
@@ -170,10 +171,11 @@ async function decodeSlopeAncestorPixels(key, blob) {
   return decoded;
 }
 
-// Bilinear, alpha-weighted (NoData pixels never bleed into valid ones) on
-// the sqrt-gamma gray channel, sampled at pixel centres so adjacent children
-// line up exactly. `src` is RGBA (decoded PNG) of srcSize², the output covers
-// child (subX, subY) of the 2^dz × 2^dz grid at outSize².
+// Bilinéaire, pondéré par l'alpha (les pixels NoData ne débordent jamais sur
+// les valides), sur le canal gris en gamma racine, échantillonné aux centres
+// des pixels pour que les enfants adjacents s'alignent exactement. `src` est le
+// RGBA (PNG décodé) de srcSize² ; la sortie couvre l'enfant (subX, subY) de la
+// grille 2^dz × 2^dz en outSize².
 function upsampleSlopeAncestor(src, srcSize, dz, subX, subY, outSize) {
   const scale = srcSize / (2 ** dz * outSize);
   const gray = new Uint8Array(outSize * outSize);
@@ -209,7 +211,7 @@ function upsampleSlopeAncestor(src, srcSize, dz, subX, subY, outSize) {
 
 async function upsampleSlopeFromAncestor(ancestorResponse, decodeKey, dz, subX, subY, outSize) {
   const ancestorBlob = await ancestorResponse.blob();
-  // Size in the key: a provisional and a final ancestor build differ.
+  // La taille dans la clé : une construction ancêtre provisoire et une définitive diffèrent.
   const decoded = await decodeSlopeAncestorPixels(`${decodeKey}:${ancestorBlob.size}`, ancestorBlob);
   if (!decoded) return null;
   const { gray, alpha } = upsampleSlopeAncestor(decoded.pixels, decoded.size, dz, subX, subY, outSize);
@@ -218,12 +220,12 @@ async function upsampleSlopeFromAncestor(ancestorResponse, decodeKey, dz, subX, 
     : buildGrayAlphaPng(outSize, outSize, gray, alpha);
 }
 
-// ── Global slope above its native zoom ────────────────────────────────
-// Outside the high-resolution DEM footprints the slope is computed at
-// GLOBAL_SLOPE_NATIVE_MAX_Z from AWS 30 m and the deeper tiles are an
-// upsample of that slope raster. This is what Mapbox overzoom does in the
-// 30 m mode, done in the SW so the HD source (maxzoom 16) keeps showing
-// slope at every zoom.
+// ── Pente mondiale au-delà de son zoom natif ──────────────────────────
+// Hors des emprises de DEM haute résolution, la pente est calculée à
+// GLOBAL_SLOPE_NATIVE_MAX_Z à partir d'AWS 30 m, et les tuiles plus profondes
+// sont un suréchantillonnage de ce raster de pente. C'est ce que fait
+// l'overzoom de Mapbox en mode 30 m, fait ici dans le SW pour que la source HD
+// (maxzoom 16) continue d'afficher la pente à tous les zooms.
 async function buildUpsampledGlobalSlopeResponse(z, x, y, resParam, cacheKey, hotKey, slopeCache) {
   const dz = z - GLOBAL_SLOPE_NATIVE_MAX_Z;
   const ax = x >> dz;
@@ -273,19 +275,20 @@ async function buildUpsampledGlobalSlopeResponse(z, x, y, resParam, cacheKey, ho
   return response;
 }
 
-// ── No DEM tile: the parent's slope ───────────────────────────────────
-// The DEM pipeline answered 204 for this tile (LiDAR pending at high zoom,
-// coverage gap, transient build failure): the terrain renders its parent
-// mesh there. Show that parent's slope instead of a hole — the closest
-// ancestor whose DEM is already available (never built from here), cropped
-// and upsampled. The caller serves it provisional and waits on the real DEM.
+// ── Pas de tuile DEM : la pente du parent ─────────────────────────────
+// Le pipeline DEM a répondu 204 pour cette tuile (LiDAR en attente à fort zoom,
+// trou de couverture, échec passager de construction) : le terrain y rend le
+// maillage de son parent. On montre la pente de ce parent au lieu d'un trou —
+// l'ancêtre le plus proche dont le DEM est déjà disponible (jamais construit
+// d'ici), recadré et suréchantillonné. L'appelant la sert comme provisoire et
+// attend le vrai DEM.
 async function buildSlopeFromAncestorDem(z, x, y, resParam, demProfile, sourceDem, demCache, outSize) {
   for (let dz = 1; dz <= 4 && z - dz >= 0; dz++) {
     const pZ = z - dz;
     const px = x >> dz;
     const py = y >> dz;
     const dem = await getExistingTerrainDemResponse(pZ, px, py, demProfile, demCache, sourceDem, { allowBuild: false });
-    // A short-cached stand-in would make the ancestor's slope request rebuild it.
+    // Un remplaçant brièvement en cache ferait reconstruire la requête de pente de l'ancêtre.
     if (!dem || dem.headers.get('x-cache-ttl-ms')) continue;
     const ancestor = await handleSlopeRequest(pZ, px, py, resParam, demProfile, '', {
       sourceDem,

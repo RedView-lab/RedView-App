@@ -1,11 +1,12 @@
 // ---------------------------------------------------------------------------
-// IGN cancellation — gesture-start aborts of speculative fetches, per-purpose
-// flush/abort, and DEM tiles the map still waits on (DEM_WANTED_TILES).
+// Annulations IGN — abandons des fetchs spéculatifs au début d'un geste, vidage
+// et abandon par usage, et tuiles DEM que la carte attend encore (DEM_WANTED_TILES).
 // ---------------------------------------------------------------------------
 
-// Abort the in-flight speculative IGN fetches on a gesture start. Basemap
-// fetches (no purpose) keep running for the same reason flushIGNQueue()
-// keeps their queue entries; analysis-zone requests are user-initiated.
+// Abandonne les fetchs IGN spéculatifs en cours au début d'un geste. Les fetchs
+// du fond de carte (sans usage) continuent, pour la même raison que
+// flushIGNQueue() garde leurs entrées en file ; les requêtes de zone d'analyse
+// viennent de l'utilisateur.
 function cancelInFlightIGN() {
   if (ignActiveControllers.size === 0) return 0;
   let n = 0;
@@ -18,18 +19,18 @@ function cancelInFlightIGN() {
   return n;
 }
 
-// ── DEM tiles the map is still waiting on ─────────────────────────────
-// Chromium does not propagate a page-side fetch abort to the service worker
-// (FetchEvent.request.signal never fires — checked on Edge 154), so the SW
-// cannot see Mapbox dropping a DEM tile that left the view. The page posts
-// instead the tiles its DEM source still has in flight (DEM_WANTED_TILES,
-// `features/map3d/hooks/useMap/controller/demWantedTiles.ts`): work tagged
-// with a map tile outside that list is stale and gets dropped, everything
-// else runs to completion whatever the camera does.
+// ── Tuiles DEM que la carte attend encore ─────────────────────────────
+// Chromium ne propage pas au service worker l'abandon d'un fetch côté page
+// (FetchEvent.request.signal ne se déclenche jamais — vérifié sur Edge 154) :
+// le SW ne voit donc pas Mapbox abandonner une tuile DEM sortie de la vue. La
+// page envoie à la place les tuiles encore en cours pour sa source DEM
+// (DEM_WANTED_TILES, `features/map3d/hooks/useMap/controller/demWantedTiles.ts`) :
+// un travail associé à une tuile de carte absente de cette liste est périmé et
+// abandonné, tout le reste va jusqu'au bout quoi que fasse la caméra.
 //
-// `sentAt` (Date.now() on the page, same clock as the SW) guards the race
-// with requests issued after the snapshot: only work requested before it
-// can be judged by it.
+// `sentAt` (Date.now() côté page, même horloge que le SW) protège de la course
+// avec les requêtes émises après l'instantané : seul un travail demandé avant
+// lui peut être jugé par lui.
 let mapWantedDemTiles = null; // { keys: Set<'z/x/y'>, sentAt }
 
 function isMapDemTileWanted(mapTile) {
@@ -38,9 +39,10 @@ function isMapDemTileWanted(mapTile) {
   return mapWantedDemTiles.keys.has(mapTile.key);
 }
 
-// Records the snapshot and drops the stale basemap work it reveals: queued
-// entries resolve PRUNED_SENTINEL, in-flight fetches abort with
-// USER_CANCEL_REASON (no negative caching). Returns the tile keys dropped.
+// Enregistre l'instantané et abandonne le travail de fond de carte périmé qu'il
+// révèle : les entrées en file se résolvent en PRUNED_SENTINEL, les fetchs en
+// cours sont annulés avec USER_CANCEL_REASON (sans cache négatif). Renvoie les
+// clés des tuiles abandonnées.
 function pruneUnwantedMapDemWork(keys, sentAt) {
   if (mapWantedDemTiles && sentAt <= mapWantedDemTiles.sentAt) return [];
   mapWantedDemTiles = { keys, sentAt };
@@ -69,14 +71,14 @@ function pruneUnwantedMapDemWork(keys, sentAt) {
   return Array.from(dropped);
 }
 
-// Drain queued (not-yet-running) IGN entries that match a purpose tag.
-// Returns the count of pruned entries. Safe to call concurrently with
-// drainIGN — pruned items resolve with PRUNED_SENTINEL so their callers
-// see a normal `null` return.
+// Vide les entrées IGN en file (pas encore lancées) qui portent un usage donné.
+// Renvoie le nombre d'entrées élaguées. Peut s'exécuter en même temps que
+// drainIGN — les éléments élagués se résolvent en PRUNED_SENTINEL et leurs
+// appelants voient un `null` normal.
 function flushIGNQueueByPurpose(purpose) {
   if (!purpose || totalIGNQueueLength() === 0) return 0;
-  // Route to the queue that owns this purpose tag now that slope-visible
-  // lives in its own queue separate from basemap (May 20 tri-tier rewrite).
+  // Cible la file qui possède cet usage, maintenant que slope-visible a sa
+  // propre file, séparée du fond de carte (réécriture à trois niveaux du 20 mai).
   let targetQueue;
   if (isIGNBackgroundPurpose(purpose)) targetQueue = ignBackgroundQueue;
   else if (isIGNSlopeVisiblePurpose(purpose)) targetQueue = ignSlopeVisibleQueue;
@@ -94,13 +96,13 @@ function flushIGNQueueByPurpose(purpose) {
   return pruned;
 }
 
-// Abort only IGN HTTP fetches tagged with `purpose`. Used by
-// CANCEL_SLOPE_WORK to free terrain-WMS concurrency slots immediately
-// when the user disables 1 m slope, instead of waiting up to
-// IGN_FETCH_TIMEOUT_MS for each in-flight slot to drain naturally
-// (visible as a multi-second stall on subsequent satellite/DEM tile
-// loads). The basemap pipeline is unaffected because it uses the
-// default DEM profile, which never sets a purpose tag.
+// N'annule que les fetchs HTTP IGN marqués avec `purpose`. Utilisé par
+// CANCEL_SLOPE_WORK pour libérer tout de suite les créneaux de concurrence du
+// WMS terrain quand l'utilisateur désactive la pente à 1 m, au lieu d'attendre
+// jusqu'à IGN_FETCH_TIMEOUT_MS que chaque créneau se libère seul (visible comme
+// un blocage de plusieurs secondes sur les chargements suivants de tuiles
+// satellite / DEM). Le pipeline du fond de carte n'est pas touché : il utilise
+// le profil DEM par défaut, qui ne pose jamais d'usage.
 function cancelInFlightIGNByPurpose(purpose) {
   const bucket = ignActiveControllersByPurpose.get(purpose);
   if (!bucket || bucket.size === 0) return 0;
