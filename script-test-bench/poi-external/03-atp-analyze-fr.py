@@ -3,10 +3,11 @@
 import json, io, zipfile, collections
 import shapely
 from shapely.geometry import shape
+from paths import REPO, SYSTEM_TEMP, WORK
 
-ZIP = 'C:/Users/simon/AppData/Local/Temp/atp/output.zip'
-TAXO = json.load(open('C:/Users/simon/Documents/REDVIEWproduction/redview-app/src/features/poi/lib/poi-taxonomy.json', encoding='utf-8'))
-FRANCE = shape(json.load(open('C:/Users/simon/Documents/REDVIEWproduction/redview-app/public/france-border.json', encoding='utf-8')))
+ZIP = SYSTEM_TEMP / 'atp' / 'output.zip'
+TAXO = json.load(open(REPO / 'src/features/poi/lib/poi-taxonomy.json', encoding='utf-8'))
+FRANCE = shape(json.load(open(REPO / 'public/france-border.json', encoding='utf-8')))
 
 def cond_ok(tags, cond):
     v = tags.get(cond['k'])
@@ -102,4 +103,4 @@ for k, v in per_spider.most_common(30): print(f"{v:>8}  {k}")
 print("--- top 20 marques ---")
 for k, v in brands.most_common(20): print(f"{v:>8}  {k}")
 json.dump({'fr': fr, 'geo': geo, 'mapped': sum(per_cat.values()), 'per_cat': dict(per_cat),
-           'brands': len(brands), 'spiders': len(per_spider)}, open('C:/tmp/atp_result.json', 'w'), indent=1)
+           'brands': len(brands), 'spiders': len(per_spider)}, open(WORK / 'atp_result.json', 'w'), indent=1)

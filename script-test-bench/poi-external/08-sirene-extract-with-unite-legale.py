@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
 """Enrichit l'extrait SIRENE avec les noms de StockUniteLegale et mesure le gain."""
 import duckdb, os, time
+from paths import SYSTEM_TEMP, WORK
 
-GEOLOC = 'C:/Users/simon/AppData/Local/Temp/sirene/sirene_geoloc.parquet'
+GEOLOC = (SYSTEM_TEMP / 'sirene' / 'sirene_geoloc.parquet').as_posix()
 STOCK = ('https://static.data.gouv.fr/resources/base-sirene-des-entreprises-et-de-leurs-'
          'etablissements-siren-siret/20260901-090503/stock-stocketablissement-parquet.parquet')
 UL = ('https://static.data.gouv.fr/resources/base-sirene-des-entreprises-et-de-leurs-'
       'etablissements-siren-siret/20260901-084858/stock-stockunitelegale-parquet.parquet')
-OUT = 'C:/tmp/test/sirene2.ndjson'
+OUT = (WORK / 'sirene2.ndjson').as_posix()
 
 NAF = ['56.10A','56.10B','56.10C','56.30Z','47.11B','47.11C','47.11D','47.22Z','10.13A','10.13B',
        '47.24Z','10.71B','10.71C','10.71D','47.30Z','47.64Z','47.73Z','53.10Z','55.10Z','55.90Z',

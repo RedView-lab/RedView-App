@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 """Extrait Overture (categories RedView, conf>=0.5) sur les 20 zones temoin."""
 import duckdb, json, os, re
+from paths import WORK
 
-OUT = 'C:/tmp/test/overture-zones.ndjson'
+OUT = (WORK / 'overture-zones.ndjson').as_posix()
 ZONES = {
  "Paris 1-2":(48.860,2.330,48.872,2.350),"Paris 11":(48.850,2.365,48.862,2.385),
  "Lyon Presqu'ile":(45.750,4.820,45.765,4.845),"Marseille Vieux":(43.288,5.360,43.300,5.380),
@@ -52,7 +53,7 @@ MAP = [("fast_food",r"(fast_food|casual_eatery|food_truck|sandwich_shop|burger|f
 
 con = duckdb.connect(); con.execute("LOAD spatial;"); con.execute("SET enable_progress_bar=false;")
 rows = con.execute(f"""SELECT id, name, coalesce(tax_primary,basic_category) lab, confidence,
- street, city, postcode, phone, website, lat, lon FROM '/tmp/fr_overture.parquet'
+ street, city, postcode, phone, website, lat, lon FROM '{(WORK / 'fr_overture.parquet').as_posix()}'
  WHERE confidence>=0.5 AND ({where})""").fetchall()
 n=0
 with open(OUT,'w',encoding='utf-8') as f:

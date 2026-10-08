@@ -3,8 +3,13 @@
  * Mesure pertinente : dans le pipeline, Overture est importee avant SIRENE.
  */
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import readline from 'node:readline';
 import { DedupeIndex } from '../../server/poi-ingest/lib/dedupe.mjs';
+
+// Dossier de travail de l'étude : même règle que paths.py.
+const WORK = process.env.POI_STUDY_DIR ?? path.join(os.tmpdir(), 'redview-poi-study');
 
 const ZONES = {
   'Paris 1-2': [48.860, 2.330, 48.872, 2.350],
@@ -41,7 +46,7 @@ const inZone = (lat, lon, z) => lat >= z[0] && lat <= z[2] && lon >= z[1] && lon
 
 // Chargement unique des deux jeux, puis repartition par zone.
 const sirene = [];
-for await (const line of readline.createInterface({ input: fs.createReadStream('C:/tmp/test/sirene.ndjson'), crlfDelay: Infinity })) {
+for await (const line of readline.createInterface({ input: fs.createReadStream(path.join(WORK, 'sirene.ndjson')), crlfDelay: Infinity })) {
   if (!line) continue;
   let o; try { o = JSON.parse(line); } catch { continue; }
   const cat = NAF2CAT[o.naf];
@@ -53,7 +58,7 @@ for await (const line of readline.createInterface({ input: fs.createReadStream('
   });
 }
 const overture = [];
-for await (const line of readline.createInterface({ input: fs.createReadStream('C:/tmp/test/overture-zones.ndjson'), crlfDelay: Infinity })) {
+for await (const line of readline.createInterface({ input: fs.createReadStream(path.join(WORK, 'overture-zones.ndjson')), crlfDelay: Infinity })) {
   if (!line) continue;
   try { overture.push(JSON.parse(line)); } catch { /* ignore */ }
 }

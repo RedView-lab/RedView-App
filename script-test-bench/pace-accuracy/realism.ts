@@ -10,6 +10,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { GT20_GPX } from '../core/data-paths.ts';
 import { loadPkg, predictV2, silenceConsole, trackToV2Route, type V2Route } from './lib/engine';
 import { formatHms, haversineM, loadRides } from './lib/rides';
 import { straight } from './lib/synthetic';
@@ -161,7 +162,7 @@ async function main() {
   console.log('   ' + riders.map(([name, rider]) => `${name} ${(100 / (run(flat, rider).total_time_s / 3600)).toFixed(1)}`).join(' | ') + ' km/h');
 
   // ── GT20 ──
-  const gt20 = gpx('C:/Users/simon/Downloads/GT20.gpx');
+  const gt20 = gpx(GT20_GPX);
   const g0 = run(gt20, riders[1]![1], 'auto');
   console.log(`\nGT20 (${(g0.total_distance_m / 1000).toFixed(0)} km, D+ moteur ${Math.round(g0.elevation_gain_m)} m) — temps de déplacement d'une traite :`);
   console.log('   ' + riders.map(([name, rider]) => `${name} ${(run(gt20, rider, 'auto').total_time_s / 3600).toFixed(1)} h`).join(' | '));

@@ -14,8 +14,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { Decoder, Stream } from '@garmin/fitsdk';
 
-export const FIT_DIR = process.env.PACE_FIT_DIR
-  ?? 'C:/Users/simon/Downloads/wetransfer_cham_paris_a_velo_jour_1-fit_2026-09-24_1025';
+import { CHAM_PARIS_FIT_DIR } from '../../core/data-paths.ts';
+
+export const FIT_DIR = process.env.PACE_FIT_DIR ?? CHAM_PARIS_FIT_DIR;
 
 /** Sorties de référence, dans l'ordre du voyage. */
 export const RIDES = [

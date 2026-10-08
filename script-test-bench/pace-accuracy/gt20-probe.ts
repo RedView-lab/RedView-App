@@ -11,13 +11,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { cleanAndInterpolateElevations } from '../../src/features/itineraryPanel/lib/route-metrics/elevationSanitizer.ts';
 import { computeRouteElevationMetrics } from '../../src/features/itineraryPanel/lib/route-metrics/metrics.ts';
+import { benchDataFile, GT20_GPX } from '../core/data-paths.ts';
 import { loadPkg, predictV2, silenceConsole, type V2Route } from './lib/engine';
 import { formatHms, haversineM, loadRides, loadRidesFromDir } from './lib/rides';
 
 const arg = (name: string) => process.argv.find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3);
 const CACHE = path.join(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')), '.cache');
-const GT20 = process.env.PACE_GT20 ?? 'C:/Users/simon/Downloads/GT20.gpx';
-const VICTOR_DIR = process.env.PACE_VICTOR_DIR ?? 'C:/Users/simon/Downloads/victorfit';
+const GT20 = process.env.PACE_GT20 ?? GT20_GPX;
+const VICTOR_DIR = process.env.PACE_VICTOR_DIR ?? benchDataFile('victorfit');
 
 function gpxRoute(file: string): V2Route {
   const text = fs.readFileSync(file, 'utf8');

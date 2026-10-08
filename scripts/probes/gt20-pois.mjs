@@ -1,9 +1,12 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 const VPS_POI_URL = 'http://141.145.220.99/poi/corridor';
-const INPUT_GPX = 'C:/Users/simon/Downloads/GT20.gpx';
-const OUTPUT_GPX_1 = 'C:/Users/simon/Downloads/GT20_POI.gpx';
+// Données hors dépôt : REDVIEW_BENCH_DATA (défaut ~/Downloads), comme script-test-bench/core/data-paths.ts.
+const BENCH_DATA_DIR = process.env.REDVIEW_BENCH_DATA ?? path.join(os.homedir(), 'Downloads');
+const INPUT_GPX = path.join(BENCH_DATA_DIR, 'GT20.gpx');
+const OUTPUT_GPX_1 = path.join(BENCH_DATA_DIR, 'GT20_POI.gpx');
 const OUTPUT_GPX_2 = path.resolve('GT20_POI.gpx');
 const RADIUS_M = 40;
 

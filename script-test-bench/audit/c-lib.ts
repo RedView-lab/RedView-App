@@ -6,9 +6,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-export const DL = 'C:/Users/simon/Downloads';
-export const FIT_DIR = path.join(DL, 'wetransfer_cham_paris_a_velo_jour_1-fit_2026-09-24_1025');
-export const GT20 = path.join(DL, 'GT20.gpx');
+import { BENCH_DATA_DIR, CHAM_PARIS_FIT_DIR, GT20_GPX } from '../core/data-paths.ts';
+
+export const DL = BENCH_DATA_DIR;
+export const FIT_DIR = CHAM_PARIS_FIT_DIR;
+export const GT20 = GT20_GPX;
 export const TDF = path.join(DL, 'Tour de France 2026.gpx');
 
 export type RoutePoint = { lat: number; lon: number; elevationM: number | null };

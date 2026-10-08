@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """Banc d'essai : extrait Overture NDJSON (comme le produira import-overture.mjs)."""
 import duckdb, json, os
+from paths import WORK
 
-OUT = 'C:/tmp/test/overture-fr.ndjson'
-os.makedirs('C:/tmp/test', exist_ok=True)
+OUT = (WORK / 'overture-fr.ndjson').as_posix()
 # Lyon + Bordeaux + un bout de rural : melange urbain/rural representatif
 BOXES = [
     (45.740, 4.820, 45.780, 4.870),
@@ -19,7 +19,7 @@ q = f"""
 SELECT id AS gers_id, name, brand,
        tax_primary, basic_category, confidence, operating_status,
        street, city, postcode, website, phone, email, lon, lat
-FROM '/tmp/fr_overture.parquet'
+FROM '{(WORK / 'fr_overture.parquet').as_posix()}'
 WHERE ({where})
 """
 rows = con.execute(q).fetchall()

@@ -1,9 +1,12 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 // 1. Read real GT20 GPX file
-const inputPath = 'C:/Users/simon/Downloads/GT20.gpx';
-const outputPath = 'C:/Users/simon/Downloads/GT20_POI.gpx';
+// Données hors dépôt : REDVIEW_BENCH_DATA (défaut ~/Downloads), comme script-test-bench/core/data-paths.ts.
+const BENCH_DATA_DIR = process.env.REDVIEW_BENCH_DATA ?? path.join(os.homedir(), 'Downloads');
+const inputPath = path.join(BENCH_DATA_DIR, 'GT20.gpx');
+const outputPath = path.join(BENCH_DATA_DIR, 'GT20_POI.gpx');
 
 console.log(`\x1b[36m[RedView Real Test]\x1b[0m 1. Reading ${inputPath}...`);
 const rawXml = fs.readFileSync(inputPath, 'utf-8');
@@ -158,7 +161,7 @@ fs.writeFileSync(outputPath, gpxAllPois, 'utf-8');
 console.log(`\x1b[32m✔\x1b[0m Generated and saved GPX: ${outputPath} (${(fs.statSync(outputPath).size / 1024).toFixed(1)} KB)`);
 
 // Also save KML for verification
-const kmlOutputPath = 'C:/Users/simon/Downloads/GT20_POI.kml';
+const kmlOutputPath = path.join(BENCH_DATA_DIR, 'GT20_POI.kml');
 const kmlAllPois = buildItineraryKml(itinerary, { favoritesOnly: false });
 fs.writeFileSync(kmlOutputPath, kmlAllPois, 'utf-8');
 console.log(`\x1b[32m✔\x1b[0m Generated and saved KML: ${kmlOutputPath} (${(fs.statSync(kmlOutputPath).size / 1024).toFixed(1)} KB)`);

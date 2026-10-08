@@ -10,9 +10,11 @@ import { createServer, type ViteDevServer } from 'vite';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { BENCH_DATA_DIR } from '../core/data-paths.ts';
+
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 export const PROD_BASE = process.env.AUDIT_PROD_BASE ?? 'https://app.redview.tech';
-export const DOWNLOADS = process.env.AUDIT_GPX_DIR ?? 'C:/Users/simon/Downloads';
+export const DOWNLOADS = process.env.AUDIT_GPX_DIR ?? BENCH_DATA_DIR;
 
 let server: ViteDevServer | null = null;
 

@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 """Reproduit l'extrait NDJSON de import-sirene.mjs (meme SQL) via DuckDB Python."""
 import duckdb, os, time
+from paths import SYSTEM_TEMP, WORK
 
-OUT = 'C:/tmp/test/sirene.ndjson'
-os.makedirs('C:/tmp/test', exist_ok=True)
+OUT = (WORK / 'sirene.ndjson').as_posix()
 
-GEOLOC = 'C:/Users/simon/AppData/Local/Temp/sirene/sirene_geoloc.parquet'
+GEOLOC = (SYSTEM_TEMP / 'sirene' / 'sirene_geoloc.parquet').as_posix()
 STOCK = ('https://static.data.gouv.fr/resources/base-sirene-des-entreprises-et-de-leurs-'
          'etablissements-siren-siret/20260901-090503/stock-stocketablissement-parquet.parquet')
 

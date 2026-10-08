@@ -23,6 +23,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import type { PredictionResult } from '../../src/features/fitPredictor/types.ts';
+import { GT20_GPX } from '../core/data-paths.ts';
 import { CYCLING_ENGINE_VERSION } from '../../src/features/fitPredictor/engine/version.ts';
 import { DEFAULT_AUTO_SORT_RULES } from '../../src/features/poi/lib/autoSort/index.ts';
 import type { PoiCategory as FeaturePoiCategory, PoiFeature } from '../../src/features/poi/types.ts';
@@ -47,7 +48,7 @@ const args = process.argv.slice(2);
 const flag = (name: string) => args.some((a) => a === `--${name}`);
 const option = (name: string, fallback: string) =>
   args.find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3) ?? fallback;
-const gpxPath = args.find((a) => !a.startsWith('--')) ?? 'C:\\Users\\simon\\Downloads\\GT20.gpx';
+const gpxPath = args.find((a) => !a.startsWith('--')) ?? GT20_GPX;
 const level = option('level', 'intermediaire');
 const startTime = option('start', '07:30');
 const startDate = option('date', '');

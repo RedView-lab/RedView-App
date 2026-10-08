@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import json
-rows = json.load(open('C:/tmp/naf_dist.json'))
+from paths import WORK
+rows = json.load(open(WORK / 'naf_dist.json'))
 dist = {r[0]: r[1] for r in rows}
 # NAF rev2 -> nos 46 categories (seules celles qui ont un equivalent economique)
 MAP = {

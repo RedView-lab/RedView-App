@@ -1,7 +1,12 @@
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import readline from 'node:readline';
 import { DedupeIndex } from '../../server/poi-ingest/lib/dedupe.mjs';
 import { normalizeName } from '../../server/poi-ingest/lib/common.mjs';
+
+// Dossier de travail de l'étude : même règle que paths.py.
+const WORK = process.env.POI_STUDY_DIR ?? path.join(os.tmpdir(), 'redview-poi-study');
 
 const ZONES = {
   'Paris 1-2': [48.860, 2.330, 48.872, 2.350], 'Paris 11': [48.850, 2.365, 48.862, 2.385],
@@ -24,7 +29,7 @@ const CATS = [...new Set(Object.values(NAF2CAT))];
 const inZ = (a, b, z) => a >= z[0] && a <= z[2] && b >= z[1] && b <= z[3];
 
 const sir = [];
-for await (const l of readline.createInterface({ input: fs.createReadStream('C:/tmp/test/sirene.ndjson'), crlfDelay: Infinity })) {
+for await (const l of readline.createInterface({ input: fs.createReadStream(path.join(WORK, 'sirene.ndjson')), crlfDelay: Infinity })) {
   if (!l) continue;
   let o; try { o = JSON.parse(l); } catch { continue; }
   const c = NAF2CAT[o.naf];
@@ -35,7 +40,7 @@ for await (const l of readline.createInterface({ input: fs.createReadStream('C:/
   });
 }
 const ov = [];
-for await (const l of readline.createInterface({ input: fs.createReadStream('C:/tmp/test/overture-zones.ndjson'), crlfDelay: Infinity })) {
+for await (const l of readline.createInterface({ input: fs.createReadStream(path.join(WORK, 'overture-zones.ndjson')), crlfDelay: Infinity })) {
   if (!l) continue;
   try { ov.push(JSON.parse(l)); } catch { /* ignore */ }
 }

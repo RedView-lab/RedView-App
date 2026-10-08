@@ -10,6 +10,7 @@
  * débutant nettement plus lent ; ordre monotone.
  */
 import fs from 'node:fs';
+import { GT20_GPX } from '../core/data-paths.ts';
 import { loadPkg, predictV2, trackToV2Route, type V2Route } from './lib/engine';
 import { compare, pct } from './lib/metrics';
 import { formatHms, loadRides } from './lib/rides';
@@ -53,7 +54,7 @@ async function main() {
   const glue = await loadPkg(arg('pkg'));
   const params = arg('params') ? JSON.parse(arg('params')!) : undefined;
   const rides = loadRides();
-  const gt20 = gpxRoute('C:/Users/simon/Downloads/GT20.gpx');
+  const gt20 = gpxRoute(GT20_GPX);
   const flat = synthetic(100_000, () => 100);
   // Col type : 13,8 km à 8,1 % (Alpe d'Huez, profil lissé).
   const col = synthetic(13_800, (d) => 720 + 0.081 * d);

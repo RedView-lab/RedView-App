@@ -5,8 +5,13 @@
  */
 import Database from 'better-sqlite3';
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
-const OUT = 'C:/tmp/test/pois.db';
+// Dossier de travail de l'étude : même règle que paths.py.
+const WORK = process.env.POI_STUDY_DIR ?? path.join(os.tmpdir(), 'redview-poi-study');
+fs.mkdirSync(WORK, { recursive: true });
+const OUT = path.join(WORK, 'pois.db');
 for (const s of ['', '-wal', '-shm']) if (fs.existsSync(OUT + s)) fs.rmSync(OUT + s);
 
 const BOXES = [

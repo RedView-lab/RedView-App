@@ -10,6 +10,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { GT20_GPX } from '../core/data-paths.ts';
 import { BASELINE_PKG, loadPkg, predictLegacy, predictV2, silenceConsole, trackToRoutePoints, trackToV2Route, type V2Route } from './lib/engine';
 import { compare, pct } from './lib/metrics';
 import { enrichRide } from './lib/osm-enrich';
@@ -354,7 +355,7 @@ function s12() {
 }
 
 function s13() {
-  const text = fs.readFileSync('C:/Users/simon/Downloads/GT20.gpx', 'utf8');
+  const text = fs.readFileSync(GT20_GPX, 'utf8');
   const pts: XY[] = [];
   const lat: number[] = [], lon: number[] = [], ele: number[] = [];
   for (const m of text.matchAll(/<(trkpt|rtept)\s+([^>]*?)(\/>|>([\s\S]*?)<\/\1>)/g)) {
@@ -551,7 +552,7 @@ function s23() {
 
 async function s24() {
   const old = await loadPkg(BASELINE_PKG);
-  const gpx = new Uint8Array(fs.readFileSync('C:/Users/simon/Downloads/GT20.gpx'));
+  const gpx = new Uint8Array(fs.readFileSync(GT20_GPX));
   const cfg = { discipline: 'trail', level: 'intermediaire' };
   const a = silenceConsole(() => old.predict_run([], gpx, cfg, () => {})).total_time_s;
   const b = silenceConsole(() => glue.predict_run([], gpx, cfg, () => {})).total_time_s;

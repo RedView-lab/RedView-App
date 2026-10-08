@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Projection AVANT/APRES revisee apres MESURE du taux de doublons SIRENE."""
 import json
+from paths import WORK
 
 BASE = {"restaurant":92139,"shelter":47597,"hotel":42043,"toilets":36548,"fast_food":30298,
 "bakery":29491,"atm":28936,"defibrillator":27937,"drinking_water":26371,"convenience":22519,
@@ -12,8 +13,8 @@ BASE = {"restaurant":92139,"shelter":47597,"hotel":42043,"toilets":36548,"fast_f
 "hospital":2383,"clinic":1993,"water_point":1966,"ice_cream":1803,"vending_machine":1684,
 "compressed_air":1588,"wilderness_hut":1135,"bus_station":805,"alpine_hut":654,"ferry_terminal":616}
 
-OV = json.load(open('C:/tmp/ov_bycat.json'))
-ATP = json.load(open('C:/tmp/atp_result.json'))['per_cat']
+OV = json.load(open(WORK / 'ov_bycat.json'))
+ATP = json.load(open(WORK / 'atp_result.json'))['per_cat']
 
 # SIRENE : comptes REELS produits par import-sirene.mjs (apres regroupement
 # par adresse), et non plus les comptes NAF bruts.
