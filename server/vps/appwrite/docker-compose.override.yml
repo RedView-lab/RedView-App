@@ -24,6 +24,12 @@ services:
     profiles: [disabled]
   appwrite-worker-migrations:
     profiles: [disabled]
+  # Avec `_APP_USAGE_STATS=disabled`, cette tâche écrit « Usage statistics are
+  # disabled » et sort en 0 : `restart: unless-stopped` la relançait en boucle
+  # (démarrage PHP à chaque fois, conteneur `restarting` signalé par
+  # redview-watch). Constaté à l'application du 2026-10-08.
+  appwrite-task-stats-resources:
+    profiles: [disabled]
 
   # Buffer pool 128 Mo par défaut pour ~4 Go de données : le journal temps réel
   # et les projets relisaient le disque. O_DIRECT (défaut Linux de MariaDB
