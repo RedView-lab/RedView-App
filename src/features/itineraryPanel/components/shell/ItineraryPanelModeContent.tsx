@@ -224,9 +224,9 @@ export function ItineraryPanelModeContent({
       break;
   }
 
-  // When switching active mode (e.g. Rythme -> Tracage) or folding the panel, reset
-  // the custom dock height so the dock immediately hugs the active mode's natural
-  // height and fills the rest of the panel.
+  // Au changement de mode actif (par ex. Rythme -> Traçage) ou au repli du panneau,
+  // réinitialiser la hauteur personnalisée du dock pour qu'il épouse aussitôt la
+  // hauteur naturelle du mode actif et remplisse le reste du panneau.
   const [dockLayoutKey, setDockLayoutKey] = useState({ activeMode, collapsed });
   if (dockLayoutKey.activeMode !== activeMode || dockLayoutKey.collapsed !== collapsed) {
     setDockLayoutKey({ activeMode, collapsed });

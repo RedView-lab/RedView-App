@@ -29,8 +29,8 @@ import { logger } from '@/shared/lib/logger';
 type GpxRoutePoint = NonNullable<Itinerary['gpxRoute']>['points'][number];
 
 /**
- * Extract ordered anchor points (start → waypoints → end) from the timeline.
- * These are the nodes between which BRouter will recalculate segments.
+ * Extrait les points d'ancrage ordonnés (départ → étapes → arrivée) de la timeline.
+ * Ce sont les nœuds entre lesquels BRouter recalculera les segments.
  */
 function getTimelineAnchors(
   timeline: TimelineItem[],
@@ -43,7 +43,7 @@ function getTimelineAnchors(
     anchors.push({ lat: start.lat, lon: start.lon });
   }
 
-  // Waypoints in order
+  // Étapes dans l'ordre
   for (const item of timeline) {
     if (item.kind === 'waypoint' && item.lat != null && item.lon != null) {
       anchors.push({ lat: item.lat, lon: item.lon });
@@ -118,9 +118,9 @@ function concatenateSegments(
     const segment = segments[i];
     if (segment.length === 0) continue;
 
-    // The last point of the previous segment and the first point of this
-    // segment are the same anchor — skip the duplicate. Segments that do not
-    // meet there would be joined by a straight line: the recalculation fails.
+    // Le dernier point du segment précédent et le premier point de ce segment
+    // sont la même ancre — sauter le doublon. Des segments qui ne s'y rejoignent
+    // pas seraient reliés par une ligne droite : le recalcul échoue.
     const lastPoint = result[result.length - 1];
     const firstOfSegment = segment[0];
     if (lastPoint && firstOfSegment && !routeSeamJoins(lastPoint, firstOfSegment)) {
@@ -134,7 +134,7 @@ function concatenateSegments(
         ? 1
         : 0;
 
-    // Offset distances
+    // Décaler les distances
     const baseDistanceM = lastPoint?.distanceM ?? 0;
     const segmentBaseM = segment[startIdx]?.distanceM ?? 0;
 
@@ -159,9 +159,9 @@ interface UseRecalculateTraceArgs {
   ) => boolean;
   /** Révision d'historique : un undo/redo abandonne le recalcul en cours. */
   historyRevision: number;
-  /** Cancel any in-flight main routing request so it doesn't race with the recalculate result. */
+  /** Annule toute requête de routage principale en cours pour qu'elle n'entre pas en concurrence avec le résultat du recalcul. */
   cancelRouteRequest: () => void;
-  /** Tell the main routing effect to skip its next "full recompute" run. */
+  /** Indique à l'effet de routage principal de sauter son prochain « recalcul complet ». */
   skipNextRouteRecompute: () => void;
 }
 
@@ -191,7 +191,7 @@ export function useRecalculateTrace({
       return;
     }
 
-    // Abort any previous run
+    // Abandonner toute exécution précédente
     abortRef.current?.abort();
     const ctrl = new AbortController();
     abortRef.current = ctrl;
@@ -271,13 +271,13 @@ export function useRecalculateTrace({
 
       if (ctrl.signal.aborted) return;
 
-      // Concatenate all segments
+      // Concaténer tous les segments
       const mergedPoints = cleanGpxGlitches(concatenateSegments(segments));
       const elevationMetrics = computeRouteElevationMetrics(mergedPoints);
       const totalDistanceM = getRoutePointTotalDistanceM(mergedPoints);
       const distanceKm = roundRouteDistanceKm(totalDistanceM);
 
-      // Aggregate surface metrics from all segments
+      // Agréger les métriques de surface de tous les segments
       let totalTarmacWeighted = 0;
       let totalOffroadWeighted = 0;
       let totalWeightM = 0;
@@ -292,8 +292,8 @@ export function useRecalculateTrace({
       const tarmacPercent = totalWeightM > 0 ? Math.round(totalTarmacWeighted / totalWeightM) : undefined;
       const offroadPercent = totalWeightM > 0 ? Math.round(totalOffroadWeighted / totalWeightM) : undefined;
 
-      // Cancel any in-flight main routing request so it can't race with
-      // the recalculated result.
+      // Annuler toute requête de routage principale en cours pour qu'elle ne
+      // puisse pas entrer en concurrence avec le résultat recalculé.
       cancelRouteRequest();
 
       // Update project with recalculated route (historisé → annulable)
@@ -341,8 +341,8 @@ export function useRecalculateTrace({
         console.warn('[Recalculate] itinerary changed during recalculation — result discarded');
         return;
       }
-      // The source may flip 'gpx' → 'brouter': keep the routing effect from
-      // overwriting the result with a single end-to-end recompute.
+      // La source peut passer de 'gpx' à 'brouter' : empêcher l'effet de routage
+      // d'écraser le résultat par un unique recalcul de bout en bout.
       skipNextRouteRecompute();
 
       logger.brouter.info(

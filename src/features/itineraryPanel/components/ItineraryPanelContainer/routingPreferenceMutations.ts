@@ -76,7 +76,7 @@ export function applyRoadTypeChange<K extends keyof RoadTypesState>(
   key: K,
   value: RoadTypesState[K],
 ): ItineraryProject {
-  // Toggling 'applyToAllItineraries' must only affect the active itinerary and never modify profiles!
+  // Basculer 'applyToAllItineraries' ne doit toucher que l'itinéraire actif et jamais modifier les profils !
   if (key === 'applyToAllItineraries') {
     return {
       ...prev,
@@ -133,8 +133,8 @@ export function applyBatchRoadTypeChange(
           copy.profileId = roadUpdates.activityType;
         }
       } else {
-        // For other itineraries when applyToAll is true:
-        // Only propagate specific road preferences, never change their activityType or profileId or applyToAllItineraries
+        // Pour les autres itinéraires quand applyToAll est vrai :
+        // ne propager que certaines préférences de route, ne jamais changer leur activityType, profileId ni applyToAllItineraries
         const safeRoadUpdates = { ...roadUpdates };
         delete safeRoadUpdates.activityType;
         delete safeRoadUpdates.applyToAllItineraries;

@@ -595,8 +595,8 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
             (it) => it.id === project.activeItineraryId,
           );
           if (!current || normalizeDiscipline(current.discipline) === discipline) return;
-          // Another engine produces the prediction: drop the old one and let
-          // the fit runtime recompute it when the rhythm was already set up.
+          // Un autre moteur produit la prédiction : abandonner l'ancienne et laisser
+          // le runtime fit la recalculer quand le rythme était déjà réglé.
           const shouldRecompute = current.rhythmConfigured === true || current.prediction != null;
           updateActive((it) => {
             it.discipline = discipline;

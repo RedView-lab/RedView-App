@@ -3,9 +3,9 @@ import type { PoiFeature } from '@/features/poi/types';
 import { isAutoHotelOption } from '../../lib/schedule/poi-to-timeline';
 
 /**
- * Pure helpers for reconciling POI favorite flags between the timeline rows
- * and the corridor feature list. Extracted from ItineraryPanelContainer so the
- * component stays focused on orchestration.
+ * Fonctions pures de réconciliation des drapeaux de POI favori entre les lignes
+ * de la timeline et la liste des éléments du couloir. Extraites
+ * d'ItineraryPanelContainer pour que le composant reste centré sur l'orchestration.
  */
 
 /** Un favori basculé à la main n'est plus un favori du tri auto. */

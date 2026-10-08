@@ -2,10 +2,10 @@ import { useMemo } from 'react';
 import { mondayIndex } from './dateUtils';
 
 /**
- * Builds a 6-row × 7-col calendar matrix (always 42 cells, matching the
- * Figma design which leaks into the next month). Each cell carries the
- * actual local-midnight Date plus an `inMonth` flag so the renderer can
- * dim leading/trailing days at opacity 23 (Figma 7365:57971).
+ * Construit une matrice de calendrier de 6 lignes × 7 colonnes (toujours 42
+ * cellules, comme la maquette Figma qui déborde sur le mois suivant). Chaque
+ * cellule porte la vraie Date à minuit local plus un drapeau `inMonth` pour que
+ * le rendu atténue les jours de début/fin à l'opacité 23 (Figma 7365:57971).
  */
 export interface CalendarCell {
   date: Date;
@@ -18,7 +18,7 @@ export function useMonthMatrix(viewMonth: Date): CalendarCell[] {
     const month = viewMonth.getMonth();
 
     const firstOfMonth = new Date(year, month, 1);
-    const leading = mondayIndex(firstOfMonth); // 0..6 cells from prev month
+    const leading = mondayIndex(firstOfMonth); // 0..6 cellules du mois précédent
     const gridStart = new Date(year, month, 1 - leading);
 
     const cells: CalendarCell[] = [];

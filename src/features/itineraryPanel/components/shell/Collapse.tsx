@@ -1,21 +1,21 @@
 import { useEffect, useState, type ReactNode } from 'react';
 
 /**
- * Smoothly collapses / expands its children using the modern
- * `grid-template-rows: 0fr → 1fr` technique. No JS height-measuring,
- * works for variable content heights, plays well with auto-layout.
+ * Replie / déplie en douceur ses enfants avec la technique moderne
+ * `grid-template-rows: 0fr → 1fr`. Pas de mesure de hauteur en JS, fonctionne
+ * avec des contenus de hauteur variable, s'accorde avec la mise en page automatique.
  *
- * Visuals:
- *  - opacity fades 0 ↔ 1 (180 ms, ease-out)
- *  - height grows from 0 to natural height (220 ms, cubic-bezier)
- *  - children are kept mounted while the closing animation runs, then
- *    unmounted to avoid stale focus / tab-order inside a 0-height block.
+ * Rendu :
+ *  - fondu de l'opacité 0 ↔ 1 (180 ms, ease-out)
+ *  - la hauteur passe de 0 à la hauteur naturelle (220 ms, cubic-bezier)
+ *  - les enfants restent montés pendant l'animation de fermeture, puis sont
+ *    démontés pour éviter un focus / un ordre de tabulation périmé dans un bloc de hauteur 0.
  */
 interface CollapseProps {
   open: boolean;
-  /** Optional outer className applied to the wrapper. */
+  /** className extérieure optionnelle appliquée à l'enveloppe. */
   className?: string;
-  /** Animation duration in ms (default 220). */
+  /** Durée de l'animation en ms (220 par défaut). */
   duration?: number;
   children: ReactNode;
 }
@@ -26,8 +26,8 @@ export function Collapse({
   duration = 220,
   children,
 }: CollapseProps) {
-  // Keep children mounted during the close animation. We unmount only
-  // once the wrapper has fully collapsed.
+  // Garder les enfants montés pendant l'animation de fermeture. On ne démonte
+  // qu'une fois l'enveloppe entièrement repliée.
   const [mounted, setMounted] = useState(open);
   if (open && !mounted) setMounted(true);
 

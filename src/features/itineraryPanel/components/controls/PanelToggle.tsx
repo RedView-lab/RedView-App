@@ -29,12 +29,12 @@ interface ToggleRowProps {
   trailing?: ReactNode;
   trailingMuted?: boolean;
   /**
-   * When true the trailing element hugs the label at a 4-px gap instead
-   * of the row's default 12-px gap. Matches Figma 855:19587 (POI favori
-   * toggle row, where the info icon lives inside the same flex-[1_0_0]
-   * gap-4 wrapper as the label). Leave false for rows where the trailing
-   * slot is a true sibling of the label at the row-level gap (e.g. the
-   * "+" button on the Interval toggle, Figma 855:19785).
+   * À true, l'élément de fin se colle au libellé avec un écart de 4 px au lieu
+   * de l'écart de 12 px par défaut de la ligne. Conforme à Figma 855:19587 (ligne
+   * de bascule POI favori, où l'icône d'info vit dans le même conteneur
+   * flex-[1_0_0] gap-4 que le libellé). Laisser à false pour les lignes où
+   * l'emplacement de fin est un vrai frère du libellé à l'écart de la ligne (par
+   * ex. le bouton « + » de la bascule Intervalle, Figma 855:19785).
    */
   trailingTight?: boolean;
 }

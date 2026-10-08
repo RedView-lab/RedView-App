@@ -11,25 +11,25 @@ import {
 } from './dateUtils';
 
 /**
- * Pixel-perfect calendar grid (Figma node 1710:47397).
+ * Grille de calendrier au pixel près (nœud Figma 1710:47397).
  *
- * Composition (top-to-bottom):
- *   • Header     — chevron-left · "January 2025" · chevron-right (32 px)
- *   • Actions    — long French date pill (flex 1) + "Today" pill (74 × 30)
- *   • Dates      — 7-col grid: weekday headers + 6 rows of 40 × 40 cells
+ * Composition (de haut en bas) :
+ *   • En-tête  — chevron gauche · « Janvier 2025 » · chevron droit (32 px)
+ *   • Actions  — pastille de date longue en français (flex 1) + pastille « Aujourd'hui » (74 × 30)
+ *   • Dates    — grille de 7 colonnes : en-têtes des jours + 6 lignes de cellules 40 × 40
  *
- * Behaviour:
- *   • Controlled by an ISO `yyyy-mm-dd` string (matches RhythmState.startDate).
- *   • Internal `viewMonth` lets the user navigate without changing selection.
- *   • Picking a day OR clicking "Today" both call `onSelect(iso)`.
- *   • A small 5×5 dot under day 1 / 4 mirrors the Figma "marker" affordance,
- *     emitted only when `markedDates` (ISO strings) contains that cell.
+ * Comportement :
+ *   • Contrôlé par une chaîne ISO `yyyy-mm-dd` (comme RhythmState.startDate).
+ *   • Un `viewMonth` interne permet de naviguer sans changer la sélection.
+ *   • Choisir un jour OU cliquer « Aujourd'hui » appellent tous deux `onSelect(iso)`.
+ *   • Un petit point de 5×5 sous le jour 1 / 4 reprend le « marqueur » de Figma,
+ *     émis seulement quand `markedDates` (chaînes ISO) contient cette cellule.
  */
 export interface CalendarProps {
-  /** Selected day as ISO `yyyy-mm-dd`, or null when nothing is picked. */
+  /** Jour sélectionné en ISO `yyyy-mm-dd`, ou null quand rien n'est choisi. */
   value: string | null;
   onSelect: (iso: string) => void;
-  /** Optional ISO list of marker dots (Figma 7365:57927). */
+  /** Liste ISO optionnelle des points marqueurs (Figma 7365:57927). */
   markedDates?: ReadonlyArray<string>;
 }
 
@@ -53,7 +53,7 @@ export function Calendar({ value, onSelect, markedDates }: CalendarProps) {
     year: 'numeric',
   }).format(date);
 
-  // Re-sync the visible month if the parent changes the selection externally.
+  // Resynchroniser le mois visible si le parent change la sélection de l'extérieur.
   useEffect(() => {
     if (!selected) return;
     if (
@@ -73,7 +73,7 @@ export function Calendar({ value, onSelect, markedDates }: CalendarProps) {
 
   return (
     <div className="rvi-calendar" role="dialog" aria-label={t('Sélection de date')}>
-      {/* Header — month nav */}
+      {/* En-tête — navigation entre mois */}
       <div className="rvi-calendar__month">
         <button
           type="button"
@@ -94,7 +94,7 @@ export function Calendar({ value, onSelect, markedDates }: CalendarProps) {
         </button>
       </div>
 
-      {/* Actions — long label + Today */}
+      {/* Actions — libellé long + Aujourd'hui */}
       <div className="rvi-calendar__actions">
         <div className="rvi-calendar__active" aria-live="polite">
           {longLabel}
@@ -111,7 +111,7 @@ export function Calendar({ value, onSelect, markedDates }: CalendarProps) {
         </button>
       </div>
 
-      {/* Dates grid */}
+      {/* Grille des dates */}
       <div className="rvi-calendar__dates" role="grid">
         {weekdayLabels.map((label) => (
           <div key={label} className="rvi-calendar__cell rvi-calendar__cell--head">

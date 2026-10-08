@@ -1,8 +1,8 @@
 /**
- * Icons used by the Itinerary Panel.
+ * Icônes du panneau d'itinéraire.
  *
- * We re-export shared primitives from the right-dock icon set so the visual
- * language stays consistent across panels.
+ * On réexporte les primitives partagées du jeu d'icônes du dock de droite pour
+ * que le langage visuel reste cohérent d'un panneau à l'autre.
  */
 import { AssetIcon, type AssetIconProps } from '@/shared/components/AssetIcon';
 import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
@@ -190,24 +190,24 @@ export const IconShoppingCart = ({ size = 12, ...p }: AssetGlyphProps) => (
 );
 
 /**
- * Untitled-UI "settings-04" — matches Figma node 170:4952. Two horizontal
- * sliders with knobs (top knob right, bottom knob left).
+ * « settings-04 » d'Untitled-UI — conforme au nœud Figma 170:4952. Deux
+ * curseurs horizontaux avec boutons (bouton du haut à droite, du bas à gauche).
  */
 export const IconSettings04 = ({ size = 16, ...p }: AssetGlyphProps) => (
   <AssetIcon src={ITINERARY_ICON_ASSETS.settings04} size={size} {...p} />
 );
 
 /**
- * Untitled-UI "plus-circle" filled — matches Figma node 855:22703.
- * White plus inside a transparent ring; used by the red split-button.
+ * « plus-circle » plein d'Untitled-UI — conforme au nœud Figma 855:22703.
+ * Plus blanc dans un anneau transparent ; utilisé par le bouton scindé rouge.
  */
 export const IconPlusCircleFilled = ({ size = 16, ...p }: AssetGlyphProps) => (
   <AssetIcon src={ITINERARY_ICON_ASSETS.plusCircle} size={size} {...p} />
 );
 
 /**
- * "Mobile_Ios_Map_Checkpoint" — Figma node 855:20895. Black filled circle
- * with a white play-triangle inside, used as the "Départ" marker.
+ * « Mobile_Ios_Map_Checkpoint » — nœud Figma 855:20895. Cercle noir plein avec
+ * un triangle de lecture blanc dedans, utilisé comme marqueur « Départ ».
  */
 export const IconCheckpointStart = ({ size = 20, ...p }: AssetGlyphProps) => (
   <FullColorSvgIcon src="/icons/ui/checkpoint-start.svg" size={size} {...p} />
@@ -222,8 +222,8 @@ export const IconCheckpointEndMarker = ({ size = 20, ...p }: AssetGlyphProps) =>
 );
 
 /**
- * Waypoint dot — Round "blanc - noir - blanc" concentric circle.
- * No inner icon.
+ * Point d'étape — cercle concentrique rond « blanc - noir - blanc ».
+ * Pas d'icône intérieure.
  */
 export const IconWaypointDot = ({ size = 20, className, style, ...p }: AssetGlyphProps) => (
   <span
@@ -252,11 +252,11 @@ export const IconWaypointDot = ({ size = 20, className, style, ...p }: AssetGlyp
 );
 
 /**
- * Teardrop pin (Ellipse + tooltip-shape composite from Figma — nodes
- * 855:20633 + 855:20635). A circular head with a small downward tip,
- * filled with `color`. Renders the white icon centred in the head.
+ * Épingle en goutte (composite ellipse + forme d'infobulle de Figma — nœuds
+ * 855:20633 + 855:20635). Une tête circulaire avec une petite pointe vers le
+ * bas, remplie de `color`. Affiche l'icône blanche centrée dans la tête.
  *
- * The tip points downward at ~42° from the bottom of the head.
+ * La pointe descend à ~42° depuis le bas de la tête.
  */
 export const IconTeardropPin = ({
   size = 20,
@@ -268,14 +268,14 @@ export const IconTeardropPin = ({
 );
 
 /**
- * "Pause" badge — Figma node 855:20798. Filled dark circle with the
- * pause-circle icon centred. Smaller than the teardrop pins.
+ * Badge « Pause » — nœud Figma 855:20798. Cercle sombre plein avec l'icône
+ * pause-circle centrée. Plus petit que les épingles en goutte.
  */
 export const IconPauseBadge = ({ size = 20, ...p }: AssetGlyphProps) => (
   <SvgV2Icon name="pause-circle.svg" size={size} {...p} />
 );
 
-/* -- POI category icons (white glyphs sized for the teardrop pin head) -- */
+/* -- Icônes des catégories de POI (glyphes blancs dimensionnés pour la tête de l'épingle en goutte) -- */
 
 export const IconToilet = ({ size = 10, ...p }: AssetGlyphProps) => (
   <AssetIcon src={PROVIDED_POI_SVG.toilet} size={size} {...p} />
@@ -348,7 +348,7 @@ export const IconNiceManYellow = ({ size = 15, className, style, ...p }: AssetGl
   );
 };
 
-/** Vertical "⋮" trigger of the per-row actions menus. */
+/** Déclencheur vertical « ⋮ » des menus d'actions par ligne. */
 export function IconKebab({ size = 14 }: { size?: number }) {
   const radius = Math.max(1.1, size * 0.1);
   const centerX = size / 2;

@@ -13,24 +13,24 @@ import { createDocumentId } from '../../lib/project/ids';
 import { isRoutableTimelineRow } from './timelineRoutePatch';
 
 /**
- * Insert a brand-new `waypoint` row into the timeline at the position that
- * matches where the user grabbed the trace (expressed as a cumulative distance
- * along the route). Unlike {@link insertTimelineItem} — which always appends
- * before the `end` row — this places the row in physical order along the route
- * so the downstream patch (`buildPendingRoutePatchForEditedRow`) reroutes the
- * correct local segment.
+ * Insère une toute nouvelle ligne `waypoint` dans la timeline à la position
+ * correspondant à l'endroit où l'utilisateur a saisi le tracé (exprimé en
+ * distance cumulée le long de la route). Contrairement à
+ * {@link insertTimelineItem} — qui ajoute toujours avant la ligne `end` — ceci
+ * place la ligne dans l'ordre physique le long du tracé pour que le patch en aval
+ * (`buildPendingRoutePatchForEditedRow`) reroute le bon segment local.
  *
- * Returns the new row's id and the grabbed position along the route (or null
- * when the geometry is unusable), so the caller can feed them straight to
- * `buildPendingRoutePatchForEditedRow`.
+ * Renvoie l'id de la nouvelle ligne et la position saisie le long du tracé (ou
+ * null quand la géométrie est inutilisable), pour que l'appelant les passe
+ * directement à `buildPendingRoutePatchForEditedRow`.
  *
- * @param routePoints  Active Brouter route points (must be ≥ 2).
- * @param anchorLonLat Geographic coordinate the user grabbed on the trace.
- *                     Projected onto the polyline to derive the insertion
- *                     distance — not stored on the row.
- * @param dropLatLon   Coordinate where the user released the drag. Becomes the
- *                     waypoint's persisted lat/lon (BRouter snaps it to the
- *                     nearest road server-side).
+ * @param routePoints  Points du tracé BRouter actif (au moins 2).
+ * @param anchorLonLat Coordonnée géographique que l'utilisateur a saisie sur le
+ *                     tracé. Projetée sur la polyligne pour en déduire la
+ *                     distance d'insertion — pas stockée sur la ligne.
+ * @param dropLatLon   Coordonnée où l'utilisateur a relâché le glisser. Devient
+ *                     le lat/lon persisté de l'étape (BRouter l'accroche à la
+ *                     route la plus proche côté serveur).
  */
 export function insertWaypointAtRoutePosition(
   timeline: TimelineItem[],
@@ -44,10 +44,10 @@ export function insertWaypointAtRoutePosition(
   const anchor = projectPointAlongRoute(anchorLonLat, routePoints, cumulative);
   if (!anchor) return null;
 
-  // Walk the timeline in order, finding the index of the first routable row
-  // whose distance exceeds the anchor. The new waypoint splices in just before
-  // it. `end` (distance = total) naturally acts as a sentinel for an anchor
-  // near the tail.
+  // Parcourir la timeline dans l'ordre pour trouver l'indice de la première
+  // ligne routable dont la distance dépasse l'ancre. La nouvelle étape s'insère
+  // juste avant. `end` (distance = total) sert naturellement de sentinelle pour
+  // une ancre proche de la fin.
   let insertIndex = timeline.length;
   for (let index = 0; index < timeline.length; index += 1) {
     const row = timeline[index];
@@ -63,7 +63,7 @@ export function insertWaypointAtRoutePosition(
     }
   }
 
-  // Clamp so we never insert past the `end` row's natural tail slot.
+  // Borner pour ne jamais insérer après l'emplacement naturel de fin de la ligne `end`.
   const endIndex = timeline.findIndex((row) => row.kind === 'end');
   if (endIndex >= 0) insertIndex = Math.min(insertIndex, endIndex);
 
@@ -91,9 +91,9 @@ export interface InsertWaypointOptions {
   osmId?: number;
   poiCategory?: TimelineItem['poiCategory'];
   /**
-   * Position along the route (m) when the point was picked on the route
-   * itself (analysis chart): used as is instead of projecting the point, which
-   * could land on another pass of a loop or an out-and-back.
+   * Position le long du tracé (m) quand le point a été choisi sur le tracé
+   * lui-même (graphique d'analyse) : utilisée telle quelle au lieu de projeter le
+   * point, qui pourrait tomber sur un autre passage d'une boucle ou d'un aller-retour.
    */
   routeDistanceM?: number;
 }

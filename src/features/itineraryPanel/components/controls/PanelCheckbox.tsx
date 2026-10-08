@@ -32,7 +32,7 @@ interface CheckboxFieldProps {
   trailing: ReactNode;
 }
 
-/** Row: [✓] Label (opacity 64) <trailing element>. */
+/** Ligne : [✓] Libellé (opacité 64) <élément de fin>. */
 export function CheckboxField({
   checked,
   onToggle,

@@ -120,8 +120,8 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
   const active = project.itineraries.find((i) => i.id === project.activeItineraryId);
   const activeMode = resolveVisiblePanelMode(project.activeMode);
   const [collapsedMode, setCollapsedMode] = useState<Exclude<PanelMode, 'nutrition'> | null>(null);
-  // A brand-new project starts with no itinerary at all: the mode menu has
-  // nothing to edit, so it is disabled, collapsed and shows no selection.
+  // Un tout nouveau projet commence sans aucun itinéraire : le menu des modes n'a
+  // rien à éditer, il est donc désactivé, replié et sans sélection.
   const settingsDisabled = !active;
   const modeCollapsed = settingsDisabled || collapsedMode === activeMode;
   const isTimelineFullscreenOpen = timelineFullscreen && Boolean(active);
@@ -297,8 +297,8 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
         className={`rvi-panel__scroll${isAutoscrolling ? ' is-middle-autoscrolling' : ''}`}
       >
         <RouteStatusBanners routeError={routeError} routeWarnings={routeWarnings} />
-        {/* With no itinerary yet the mode settings are inert — render a short
-            hint pointing at the itinerary menu instead of the editor. */}
+        {/* Sans itinéraire, les réglages de mode sont inertes — afficher une courte
+            indication pointant vers le menu des itinéraires au lieu de l'éditeur. */}
         {settingsDisabled ? (
           <p className="rvi-panel__empty-hint">
             {t('Créez un itinéraire, une variante ou importez une trace pour commencer.')}

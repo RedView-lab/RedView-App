@@ -89,7 +89,7 @@ export function PortalDropdown({
 
       let left = align === 'right' ? rect.right - scaledWidth : rect.left;
 
-      // Keep within viewport boundaries
+      // Rester dans les limites de la fenêtre
       left = Math.max(8, Math.min(left, window.innerWidth - scaledWidth - 8));
 
       setPos({
@@ -101,7 +101,7 @@ export function PortalDropdown({
     };
 
     updatePos();
-    // Second pass once the menu is in the DOM so its real height drives placement.
+    // Seconde passe une fois le menu dans le DOM, pour que sa vraie hauteur pilote le placement.
     const raf = requestAnimationFrame(updatePos);
 
     window.addEventListener('scroll', updatePos, true);

@@ -9,11 +9,12 @@ import type {
 } from '@/features/map3d';
 
 /**
- * Pure builders + timeline mutators used when a POI draft (or map context
- * menu action) is folded into an itinerary. These operate on a cloned
- * itinerary, so callers are free to mutate in place.
+ * Constructeurs purs + modificateurs de timeline utilisés quand un brouillon de
+ * POI (ou une action du menu contextuel de la carte) est intégré à un
+ * itinéraire. Ils opèrent sur un itinéraire cloné : les appelants peuvent le
+ * modifier sur place.
  *
- * Extracted from ItineraryPanelContainer for clarity.
+ * Extraits d'ItineraryPanelContainer par souci de clarté.
  */
 
 export function resolveMapContextPointTitle(point: MapContextMenuPoint): string {

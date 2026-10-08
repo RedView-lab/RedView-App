@@ -38,15 +38,15 @@ interface UseItineraryGpxImportArgs {
   addItinerary: (overrides?: Partial<Itinerary>) => string | null;
   setPendingCorridorFor: (id: string | null) => void;
   /**
-   * Called with the file name the moment parsing starts, and with `null` once
-   * the itinerary has been added (or the import failed). Drives the loading row
-   * in the itinerary list, so the user sees the import in the slot the parsed
-   * itinerary will occupy.
+   * Appelé avec le nom du fichier au début du parse, puis avec `null` une fois
+   * l'itinéraire ajouté (ou l'import échoué). Pilote la ligne de chargement de la
+   * liste des itinéraires, pour que l'utilisateur voie l'import à l'emplacement
+   * qu'occupera l'itinéraire parsé.
    */
   onImportStateChange?: (fileName: string | null) => void;
   /**
-   * Called after an itinerary has been added from a GPX, with its route points.
-   * Used to frame the map on the freshly imported itinerary.
+   * Appelé après l'ajout d'un itinéraire depuis un GPX, avec ses points de tracé.
+   * Sert à cadrer la carte sur l'itinéraire tout juste importé.
    */
   onItineraryImported?: (itineraryId: string, points: [number, number][]) => void;
 }
@@ -228,8 +228,8 @@ export function useItineraryGpxImport({
       if (file.size > MAX_GPX_IMPORT_BYTES) {
         throw new GpxFileTooLargeError();
       }
-      // Surface the import in the itinerary list straight away: the list shows
-      // a loading row named after the file until the itinerary row replaces it.
+      // Montrer l'import dans la liste des itinéraires tout de suite : la liste
+      // affiche une ligne de chargement au nom du fichier jusqu'à ce que la ligne de l'itinéraire la remplace.
       onImportStateChange?.(file.name);
       try {
         // Discontinuités du fichier reliées par la route, jamais en ligne droite.
@@ -282,10 +282,10 @@ export function useItineraryGpxImport({
         });
 
         if (id) {
-          // Central panel:
-          // 1. Only the newly created itinerary is visible in analysis
-          // 2. Simple elevation view by default (Altitude / Altitude, distance mode)
-          // 3. All analysis filters (poi, pauses, etc.) enabled by default
+          // Panneau central :
+          // 1. Seul l'itinéraire nouvellement créé est visible dans l'analyse
+          // 2. Vue d'altitude simple par défaut (Altitude / Altitude, mode distance)
+          // 3. Tous les filtres d'analyse (POI, pauses, etc.) activés par défaut
           setProject((projectState) => ({
             ...projectState,
             itineraries: projectState.itineraries.map((itinerary) => ({

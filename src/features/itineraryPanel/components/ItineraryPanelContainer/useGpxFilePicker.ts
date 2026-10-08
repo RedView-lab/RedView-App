@@ -28,7 +28,7 @@ export function useGpxFilePicker({
   setPendingCorridorFor,
   onRevealCenterPanel,
 }: UseGpxFilePickerOptions) {
-  // GPX import progress, surfaced as a loading row in the itinerary list.
+  // Progression de l'import GPX, affichée comme une ligne de chargement dans la liste des itinéraires.
   const [pendingImportName, setPendingImportName] = useState<string | null>(null);
   const gpxInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -80,7 +80,7 @@ export function useGpxFilePicker({
       } catch (err) {
         console.warn('[ItineraryPanelContainer] GPX import failed', err);
         if (err instanceof GpxFileTooLargeError) {
-          // No toast system in the itinerary panel: a native alert is the minimal visible feedback.
+          // Pas de système de toasts dans le panneau d'itinéraire : une alerte native est le retour visible minimal.
           window.alert(err.message);
         }
       }

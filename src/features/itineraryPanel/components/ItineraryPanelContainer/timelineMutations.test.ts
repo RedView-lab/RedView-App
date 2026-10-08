@@ -52,7 +52,7 @@ describe('placeRouteEndpoint on the route (crop)', () => {
     const start = itinerary.timeline.find((row) => row.kind === 'start')!;
     expect(start).toMatchObject({ label: 'Ici', distanceKm: 0 });
     expect(start.lat).toBeCloseTo(route.points[0]!.lat, 9);
-    // Stamped for the new start: the routing effect does not recompute it.
+    // Tamponné pour le nouveau départ : l'effet de routage ne le recalcule pas.
     expect(routeStampMatches(itinerary, route.routedInputsKey)).toBe(true);
   });
 
@@ -153,7 +153,7 @@ describe('removing the start or the end on the map', () => {
     expect(itinerary.timeline.find((row) => row.kind === 'end')?.id).toBe('auto');
     expect(points[points.length - 1]!.lat).toBeCloseTo(at(70).lat, 9);
     expect(itinerary.metrics?.distanceKm).toBeCloseTo(70, 1);
-    // No step left after the new end (it was drawn on the end of the route).
+    // Plus aucune étape après la nouvelle arrivée (elle était dessinée sur la fin du tracé).
     const endKm = itinerary.timeline.find((row) => row.kind === 'end')!.distanceKm!;
     for (const row of itinerary.timeline.filter((item) => item.kind === 'waypoint')) {
       expect(row.distanceKm!).toBeLessThan(endKm);

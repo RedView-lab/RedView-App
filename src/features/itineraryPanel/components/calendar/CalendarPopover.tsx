@@ -4,21 +4,21 @@ import { appScaledOverlayStyle, readAppScale } from '@/shared/lib/appScale';
 import { Calendar, type CalendarProps } from './Calendar';
 
 /**
- * Floating popover that hosts a `<Calendar />` and anchors itself to a
- * trigger element. Renders into `document.body` (portal) so the
- * surrounding panel's `overflow: hidden` cannot clip it.
+ * Popover flottant qui contient un `<Calendar />` et s'ancre à un élément
+ * déclencheur. Rendu dans `document.body` (portail) pour que le
+ * `overflow: hidden` du panneau environnant ne puisse pas le rogner.
  *
- * Positioning rules (deterministic, no third-party "floating-ui" dep):
- *   • Open below the trigger by default (8 px gap).
- *   • Flip above when there isn't enough room below.
- *   • Align the popover's left edge with the trigger; clamp inside the
- *     viewport with an 8 px safe-area.
- *   • Reposition on scroll/resize while open.
+ * Règles de positionnement (déterministes, sans dépendance « floating-ui ») :
+ *   • Ouvert sous le déclencheur par défaut (écart de 8 px).
+ *   • Basculé au-dessus quand la place manque en dessous.
+ *   • Bord gauche du popover aligné sur le déclencheur ; borné dans la
+ *     fenêtre avec une marge de sécurité de 8 px.
+ *   • Repositionné au défilement/redimensionnement tant qu'il est ouvert.
  *
- * Dismissal:
- *   • Click outside anywhere (capture phase).
- *   • Escape key.
- *   • Selecting a date.
+ * Fermeture :
+ *   • Clic n'importe où à l'extérieur (phase de capture).
+ *   • Touche Échap.
+ *   • Choix d'une date.
  */
 export interface CalendarPopoverProps extends CalendarProps {
   open: boolean;
@@ -26,7 +26,7 @@ export interface CalendarPopoverProps extends CalendarProps {
   onClose: () => void;
 }
 
-const POPOVER_WIDTH = 304; // 7 cells × 40 + 2 × 12 padding
+const POPOVER_WIDTH = 304; // 7 cellules × 40 + 2 × 12 de padding
 const VIEWPORT_PADDING = 8;
 const TRIGGER_GAP = 6;
 
@@ -41,7 +41,7 @@ export function CalendarPopover({
   const popoverRef = useRef<HTMLDivElement | null>(null);
   const [pos, setPos] = useState<{ top: number; left: number; scale: number } | null>(null);
 
-  // Position computation — runs on open, scroll, and resize.
+  // Calcul de la position — à l'ouverture, au défilement et au redimensionnement.
   useLayoutEffect(() => {
     if (!open) return;
 
@@ -79,7 +79,7 @@ export function CalendarPopover({
     };
   }, [open, anchorRef]);
 
-  // Click-outside + Escape.
+  // Clic extérieur + Échap.
   useEffect(() => {
     if (!open) return;
     const onDocClick = (e: MouseEvent) => {
@@ -112,8 +112,8 @@ export function CalendarPopover({
       style={{
         ...(pos ? appScaledOverlayStyle(pos) : { top: -9999, left: -9999 }),
         width: POPOVER_WIDTH,
-        // Hide the popover for one frame while we measure to avoid a flash
-        // at the wrong position.
+        // Masquer le popover une image le temps de la mesure pour éviter un
+        // flash à la mauvaise position.
         visibility: pos ? 'visible' : 'hidden',
       }}
     >

@@ -1,12 +1,12 @@
 import type { AssetIconProps } from '@/shared/components/AssetIcon';
 import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
 
-/** Figma I1710:47397;1710:47194 — chevron-left, 16×16 viewBox bounds. */
+/** Figma I1710:47397;1710:47194 — chevron gauche, viewBox de 16×16. */
 export const IconChevronLeft = ({ size = 16, ...p }: AssetIconProps) => (
   <SvgV2Icon name="chevron-left.svg" size={size} {...p} />
 );
 
-/** Figma I1710:47397;1710:47196 — chevron-right. */
+/** Figma I1710:47397;1710:47196 — chevron droit. */
 export const IconChevronRight = ({ size = 16, ...p }: AssetIconProps) => (
   <SvgV2Icon name="chevron-right.svg" size={size} {...p} />
 );

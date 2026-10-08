@@ -261,9 +261,9 @@ export function useItineraryMapActions({
     }
   }, [addItinerary, itineraryCount, onSelectAndCenterTimelineRow, updateActive, updateActiveWithHistory]);
 
-  // Point placed on the active route from the analysis chart: it lies on the
-  // trace, so a step adds a row without rerouting; start / finish move like
-  // « Démarrer ici » / « Finir ici ».
+  // Point posé sur le tracé actif depuis le graphique d'analyse : il est sur le
+  // tracé, une étape ajoute donc une ligne sans reroutage ; départ / arrivée se
+  // déplacent comme « Démarrer ici » / « Finir ici ».
   const handleRoutePointAdd = useCallback((payload: RoutePointAddPayload) => {
     if (payload.itineraryId !== activeItineraryId) return;
     const point = { lat: payload.lat, lon: payload.lon };

@@ -1,12 +1,12 @@
 /**
- * Date utilities for the Calendar popover.
+ * Outils de dates du popover de calendrier.
  *
- * All helpers are pure and timezone-stable (we always operate at local
- * midnight to avoid the classic
- * `new Date('2025-01-10').getDate() === 9` UTC bug).
+ * Toutes les fonctions sont pures et stables vis-à-vis du fuseau (on travaille
+ * toujours à minuit local pour éviter le bug UTC classique
+ * `new Date('2025-01-10').getDate() === 9`).
  */
 
-/** Parse an ISO `yyyy-mm-dd` string to a local-midnight Date, or null. */
+/** Parse une chaîne ISO `yyyy-mm-dd` en Date à minuit local, ou null. */
 export function parseISO(iso: string | null | undefined): Date | null {
   if (!iso) return null;
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
@@ -15,19 +15,19 @@ export function parseISO(iso: string | null | undefined): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
-/** Format a Date as `yyyy-mm-dd` in local time. */
+/** Met en forme une Date en `yyyy-mm-dd` en heure locale. */
 export function toISO(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-/** Returns midnight today (local). */
+/** Renvoie minuit aujourd'hui (local). */
 export function startOfToday(): Date {
   const t = new Date();
   return new Date(t.getFullYear(), t.getMonth(), t.getDate());
 }
 
-/** True when both dates are the same calendar day (local). */
+/** Vrai quand les deux dates sont le même jour calendaire (local). */
 export function isSameDay(a: Date | null, b: Date | null): boolean {
   if (!a || !b) return false;
   return (
@@ -37,13 +37,13 @@ export function isSameDay(a: Date | null, b: Date | null): boolean {
   );
 }
 
-/** Week-day index with Monday = 0 … Sunday = 6. */
+/** Indice du jour de la semaine avec lundi = 0 … dimanche = 6. */
 export function mondayIndex(d: Date): number {
-  // JS: 0 = Sunday … 6 = Saturday → shift so Monday = 0.
+  // JS : 0 = dimanche … 6 = samedi → décaler pour que lundi = 0.
   return (d.getDay() + 6) % 7;
 }
 
-/** Move a Date by `n` months, clamping the day to the new month length. */
+/** Décale une Date de `n` mois, en bornant le jour à la longueur du nouveau mois. */
 export function addMonths(d: Date, n: number): Date {
   const target = new Date(d.getFullYear(), d.getMonth() + n, 1);
   const lastDay = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
