@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { readDocumentAppLocale, translateAppText, useAppI18n } from '@/shared/i18n';
 import { ActionButtonStack, ToggleRow } from '../components/controls';
 import { PortalDropdown } from '../components/controls/PortalDropdown';
@@ -135,7 +135,7 @@ function StartTimeSelect({
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="listbox"
         aria-expanded={open}
-        aria-label={ariaLabel}
+        aria-label={`${ariaLabel} ${hours.padStart(2, '0')}:${minutes.padStart(2, '0')}`}
       >
         <ClockIcon size={12} />
         <span className="rvi-rythme-figma__time-digits">
@@ -244,7 +244,7 @@ function ReferenceActivitiesField({
           type="button"
           className="rvi-rythme-figma__fit-btn"
           onClick={onUploadFit}
-          aria-label={t('Ajouter des fichiers .fit')}
+          aria-label={`${t('Ajouter des fichiers .fit')} — ${t('Jusqu’à {{count}} .fit', { count: MAX_FIT_FILES })}`}
         >
           <UploadFitIcon size={16} />
           <span className="rvi-rythme-figma__fit-text">
@@ -360,9 +360,15 @@ export function RythmeSection({
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [tiresMenuOpen, setTiresMenuOpen] = useState(false);
   const profileBtnRef = useRef<HTMLButtonElement | null>(null);
+  // Nom accessible du bouton = libellé + profil affiché (« Profil de rythme
+  // Débutant ») : un aria-label seul cachait la valeur visible (WCAG 2.5.3).
+  const profileLabelId = useId();
+  const profileValueId = useId();
   const tiresBtnRef = useRef<HTMLButtonElement | null>(null);
 
   const displayTime = rhythm.startTime || DEFAULT_START_TIME;
+  const startDateText = rhythm.startDate ? formatDateForLocale(rhythm.startDate, locale) : '22/04/26';
+  const tiresText = rhythm.tiresMm ? `${rhythm.tiresMm}mm` : '35mm';
   const isCustom = isCustomRhythmProfile(rhythm);
   const presetLevel = PRACTICE_LEVELS.find((l) => l.id === rhythm.practiceLevel) ?? PRACTICE_LEVELS[0];
   const profileLabel = isCustom ? CUSTOM_PROFILE_LABEL : presetLevel.label;
@@ -393,12 +399,10 @@ export function RythmeSection({
               onClick={() => setCalendarOpen((v) => !v)}
               aria-haspopup="dialog"
               aria-expanded={calendarOpen}
-              aria-label={t('Date de départ')}
+              aria-label={`${t('Date de départ')} ${startDateText}`}
             >
               <CalendarIcon size={10} />
-              <span>
-                {rhythm.startDate ? formatDateForLocale(rhythm.startDate, locale) : '22/04/26'}
-              </span>
+              <span>{startDateText}</span>
             </button>
             <CalendarPopover
               open={calendarOpen}
@@ -426,17 +430,17 @@ export function RythmeSection({
 
         {/* ── Profil de rythme ── */}
         <div className="rvi-rythme-figma__field">
-          <span className="rvi-rythme-figma__label-title">{t('Profil de rythme')}</span>
+          <span id={profileLabelId} className="rvi-rythme-figma__label-title">{t('Profil de rythme')}</span>
           <button
             ref={profileBtnRef}
             type="button"
             className={`rvi-rythme-figma__profile-btn${profileMenuOpen ? ' is-open' : ''}`}
             onClick={() => setProfileMenuOpen((v) => !v)}
-            aria-label={t('Profil de rythme')}
+            aria-labelledby={`${profileLabelId} ${profileValueId}`}
             aria-haspopup="listbox"
             aria-expanded={profileMenuOpen}
           >
-            <span className="rvi-rythme-figma__profile-text">{t(profileLabel)}</span>
+            <span id={profileValueId} className="rvi-rythme-figma__profile-text">{t(profileLabel)}</span>
             <span className={`rvi-rythme-figma__profile-chevron${profileMenuOpen ? ' is-open' : ''}`}>
               <IconFigmaChevronDown size={24} />
             </span>
@@ -513,12 +517,12 @@ export function RythmeSection({
                       type="button"
                       className={`rvi-rythme-figma__card-box${tiresMenuOpen ? ' is-open' : ''}`}
                       onClick={() => setTiresMenuOpen((v) => !v)}
-                      aria-label={t('Largeur de pneus')}
+                      aria-label={`${t('Largeur de pneus')} ${tiresText}`}
                       aria-haspopup="listbox"
                       aria-expanded={tiresMenuOpen}
                     >
                       <span className="rvi-rythme-figma__card-value">
-                        {rhythm.tiresMm ? `${rhythm.tiresMm}mm` : '35mm'}
+                        {tiresText}
                       </span>
                     </button>
 
