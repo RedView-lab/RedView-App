@@ -123,17 +123,20 @@ function getOrCreateLookup(pStr) {
 }
 
 /**
- * Couleur d'une intensité de pluie (mm/h) dans la palette `pStr` (vide ou
- * invalide : palette par défaut), sur l'échelle 0–20 mm/h de toutes les
- * tuiles radar ; null là où la palette ne dessine rien (pluie trop faible,
- * bande masquée). Utilisée par opera-radar.mjs.
+ * Table de 256 couleurs de la palette `pStr` (vide ou invalide : palette par
+ * défaut) sur l'échelle 0–20 mm/h de toutes les tuiles radar :
+ * `radarPaletteIndex(mm)` y donne la case d'une intensité. Une case
+ * `visible: false` ne se dessine pas (pluie trop faible, bande masquée).
+ * À lire une fois par tuile, jamais par pixel (validation et cache LRU).
  *
- * @param {number} mm
  * @param {string} pStr
- * @returns {{ r: number, g: number, b: number } | null}
+ * @returns {ReadonlyArray<{ r: number, g: number, b: number, visible: boolean }>}
  */
-export function radarColorForRainRate(mm, pStr) {
-  const lookup = getOrCreateLookup(pStr && isValidRadarPaletteParam(pStr) ? pStr : '');
-  const color = lookup[Math.round(Math.max(0, Math.min(1, mm / 20.0)) * 255.0)];
-  return color.visible ? color : null;
+export function radarPaletteLookup(pStr) {
+  return getOrCreateLookup(pStr && isValidRadarPaletteParam(pStr) ? pStr : '');
+}
+
+/** Case de la table de palette d'une intensité de pluie (mm/h). */
+export function radarPaletteIndex(mm) {
+  return Math.round(Math.max(0, Math.min(1, mm / 20.0)) * 255.0);
 }

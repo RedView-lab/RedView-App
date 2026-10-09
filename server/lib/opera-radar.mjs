@@ -24,7 +24,7 @@
 import { deflateSync, inflateSync, crc32 } from 'node:zlib';
 
 import { createByteLru } from './byte-lru.mjs';
-import { radarColorForRainRate } from './radar-recolor.mjs';
+import { radarPaletteIndex, radarPaletteLookup } from './radar-recolor.mjs';
 
 const BUCKET_URL = 'https://s3.waw3-1.cloudferro.com/openradar-24h';
 const FETCH_TIMEOUT_MS = 10_000;
@@ -232,6 +232,21 @@ function decodeDbz(code) {
   return MIN_DBZ + (code - 1) / 4;
 }
 
+/**
+ * Case de palette de chaque code de réflectivité (le code tient sur un
+ * octet) : la conversion en pluie (puissance) n'est jamais faite par pixel.
+ * Remplie à la première tuile (rainRateFromDbz est défini plus bas).
+ */
+let paletteIndexByCode = null;
+
+function paletteIndexForCode() {
+  if (!paletteIndexByCode) {
+    paletteIndexByCode = new Uint8Array(256);
+    for (let code = 1; code < 256; code++) paletteIndexByCode[code] = radarPaletteIndex(rainRateFromDbz(decodeDbz(code)));
+  }
+  return paletteIndexByCode;
+}
+
 /** @returns {Promise<Uint8Array>} */
 function cogTile(frame, header, levelIndex, tileIndex) {
   const key = `${frame}|${levelIndex}|${tileIndex}`;
@@ -387,7 +402,10 @@ function encodeRgbaPng(width, height, rgba) {
   return Buffer.concat([
     Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
     chunk('IHDR', ihdr),
-    chunk('IDAT', deflateSync(scanlines, { level: 6 })),
+    // Niveau 3 : 2,6× plus rapide que le niveau 6 pour des tuiles ~20 % plus
+    // lourdes (mesuré sur une vraie image : 3,1 ms / 41 Ko contre 8,2 ms / 34 Ko) ;
+    // l'encodage tourne sur le fil principal à chaque palette inédite.
+    chunk('IDAT', deflateSync(scanlines, { level: 3 })),
     chunk('IEND', Buffer.alloc(0)),
   ]);
 }
@@ -427,6 +445,8 @@ export async function renderOperaTile(frame, z, x, y, palette = '') {
   }));
 
   const rgba = Buffer.alloc(TILE_SIZE * TILE_SIZE * 4);
+  const colors = radarPaletteLookup(palette);
+  const indexByCode = paletteIndexForCode();
   for (let i = 0; i < map.length; i++) {
     const index = map[i];
     if (index < 0) continue;
@@ -435,8 +455,8 @@ export async function renderOperaTile(frame, z, x, y, palette = '') {
     const tile = tiles.get(Math.floor(row / level.tileHeight) * tilesAcross + Math.floor(col / level.tileWidth));
     const code = tile[(row % level.tileHeight) * level.tileWidth + (col % level.tileWidth)];
     if (code === 0) continue;
-    const color = radarColorForRainRate(rainRateFromDbz(decodeDbz(code)), palette);
-    if (!color) continue;
+    const color = colors[indexByCode[code]];
+    if (!color.visible) continue;
     rgba[i * 4] = color.r;
     rgba[i * 4 + 1] = color.g;
     rgba[i * 4 + 2] = color.b;
