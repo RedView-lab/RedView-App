@@ -5,3 +5,4 @@
  */
 export { LEGAL_PAGES, legalPagePath, resolveLegalPage, type LegalPageId } from './lib/routes';
 export { LegalLinks } from './components/LegalLinks';
+export { LEGAL_PUBLISHER } from './lib/publisher';

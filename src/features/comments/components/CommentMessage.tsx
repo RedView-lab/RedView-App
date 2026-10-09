@@ -1,12 +1,14 @@
 import { memo, useState } from 'react';
 
 import type { ProjectCommentMessage } from '@/features/itineraryPanel/types';
+import { LEGAL_PUBLISHER } from '@/features/legal';
 import { UserAvatar } from '@/shared/components/UserAvatar/UserAvatar';
 import { useAppI18n } from '@/shared/i18n';
 
 import { groupReactions, type CommentTextInput } from '../lib/commentActions';
 import { tokenizeMessage, type MentionCandidate } from '../lib/messageText';
 import { formatFullDate, formatRelativeTime } from '../lib/relativeTime';
+import { buildCommentReportHref } from '../lib/reportComment';
 import { CommentComposer } from './CommentComposer';
 import { CommentPopover } from './CommentPopover';
 import { IconMore, IconSmile } from './icons';
@@ -15,7 +17,9 @@ import { ReactionPicker } from './ReactionPicker';
 /**
  * Un message d'un fil : avatar, nom, date relative, « (modifié) », texte
  * (mentions surlignées, liens http(s)), réactions. Au survol : réagir, et pour
- * ses propres messages un menu Modifier / Supprimer (modification sur place).
+ * ses propres messages un menu Modifier / Supprimer (modification sur place) ;
+ * sur ceux des autres, « Signaler » (e-mail prérempli à l'adresse de contact,
+ * DSA art. 16, CGU § 5).
  */
 
 interface CommentMessageProps {
@@ -67,6 +71,10 @@ export const CommentMessage = memo(function CommentMessage({
     setMenuAnchor(null);
     setConfirmDelete(false);
   };
+  const canReport = !canEdit && Boolean(LEGAL_PUBLISHER.contactEmail);
+  const reportHref = canReport && menuAnchor && LEGAL_PUBLISHER.contactEmail
+    ? buildCommentReportHref(LEGAL_PUBLISHER.contactEmail, message, authorName, t)
+    : undefined;
 
   return (
     <article className={`rv-comment-message${editing ? ' is-editing' : ''}`}>
@@ -138,7 +146,7 @@ export const CommentMessage = memo(function CommentMessage({
           >
             <IconSmile />
           </button>
-          {canEdit ? (
+          {canEdit || canReport ? (
             <button
               type="button"
               className="rv-comment-icon-button"
@@ -158,36 +166,45 @@ export const CommentMessage = memo(function CommentMessage({
       ) : null}
       <ReactionPicker anchorEl={reactAnchor} open={reactAnchor !== null} onClose={() => setReactAnchor(null)} onPick={onToggleReaction} selected={mine} />
       <CommentPopover anchorEl={menuAnchor} open={menuAnchor !== null} onClose={closeMenu} width={200} className="rv-dropdown">
-        <button
-          type="button"
-          role="menuitem"
-          className="rv-dropdown__item rv-dropdown__item--no-check"
-          onClick={() => {
-            closeMenu();
-            setEditing(true);
-          }}
-        >
-          <span className="rv-dropdown__label">{t('Modifier')}</span>
-        </button>
-        <button
-          type="button"
-          role="menuitem"
-          className="rv-dropdown__item rv-dropdown__item--no-check rv-dropdown__item--danger"
-          onClick={() => {
-            if (!confirmDelete) {
-              setConfirmDelete(true);
-              return;
-            }
-            closeMenu();
-            onDelete();
-          }}
-        >
-          <span className="rv-dropdown__label">
-            {confirmDelete
-              ? t('Confirmer la suppression')
-              : deletesThread ? t('Supprimer le fil') : t('Supprimer')}
-          </span>
-        </button>
+        {reportHref ? (
+          <a role="menuitem" className="rv-dropdown__item rv-dropdown__item--no-check" href={reportHref} onClick={closeMenu}>
+            <span className="rv-dropdown__label">{t('Signaler')}</span>
+          </a>
+        ) : null}
+        {canEdit ? (
+          <>
+            <button
+              type="button"
+              role="menuitem"
+              className="rv-dropdown__item rv-dropdown__item--no-check"
+              onClick={() => {
+                closeMenu();
+                setEditing(true);
+              }}
+            >
+              <span className="rv-dropdown__label">{t('Modifier')}</span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="rv-dropdown__item rv-dropdown__item--no-check rv-dropdown__item--danger"
+              onClick={() => {
+                if (!confirmDelete) {
+                  setConfirmDelete(true);
+                  return;
+                }
+                closeMenu();
+                onDelete();
+              }}
+            >
+              <span className="rv-dropdown__label">
+                {confirmDelete
+                  ? t('Confirmer la suppression')
+                  : deletesThread ? t('Supprimer le fil') : t('Supprimer')}
+              </span>
+            </button>
+          </>
+        ) : null}
       </CommentPopover>
     </article>
   );

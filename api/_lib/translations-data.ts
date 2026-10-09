@@ -5973,6 +5973,38 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "More actions"
   },
   {
+    "fr": "Signaler",
+    "en": "Report"
+  },
+  {
+    "fr": "Signalement d’un commentaire RedView",
+    "en": "Report of a RedView comment"
+  },
+  {
+    "fr": "Je signale ce commentaire comme illicite.",
+    "en": "I am reporting this comment as illegal content."
+  },
+  {
+    "fr": "Auteur : {{name}}",
+    "en": "Author: {{name}}"
+  },
+  {
+    "fr": "Date : {{date}}",
+    "en": "Date: {{date}}"
+  },
+  {
+    "fr": "Identifiant du message : {{id}}",
+    "en": "Message ID: {{id}}"
+  },
+  {
+    "fr": "Texte : « {{text}} »",
+    "en": "Text: “{{text}}”"
+  },
+  {
+    "fr": "Raison du signalement :",
+    "en": "Reason for the report:"
+  },
+  {
     "fr": "Marquer comme non lu",
     "en": "Mark as unread"
   },
