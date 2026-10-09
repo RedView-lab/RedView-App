@@ -5,6 +5,7 @@ import { stitchOrtho } from './orthoStitcher';
 import { getTimeZoneForCoordinates, toWgs84, trueNorthGridBearingDeg } from '../lib/coordConvert';
 import { resolveTimeZoneAt } from '@/shared/lib/timeZoneAt';
 import { createViewerPanel, type SnowModeKey } from '../viewer/panel/controller';
+import { snowUnavailableMessage } from '../viewer/session/snowStatus';
 import { factorToElevationPercent } from '../viewer/panel/sliderScales';
 import { buildGoogleMapsTileCenterUrl, buildTileLocationLabel } from '../viewer/panel/location';
 import { exitLidarViewer, switchViewerEngine } from '../viewer/panel/runtime/navigation';
@@ -275,9 +276,11 @@ export async function runWebGLFallback(
       });
       requestRender();
       snowFieldLoaded = true;
+      panel.setSnowStatus(null);
       return true;
     } catch (err) {
       console.error('[WebGL Viewer] Snow fetch failed:', err);
+      panel.setSnowStatus(snowUnavailableMessage(err));
       renderer.setSnowMode(0);
       requestRender();
       return false;

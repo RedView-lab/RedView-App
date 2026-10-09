@@ -128,6 +128,7 @@ export function createViewerPanel(options: ViewerPanelOptions) {
   const snowToggle = queryElement<HTMLInputElement>('panel-snow-toggle');
   const snowModeButton = queryElement<HTMLButtonElement>('panel-snow-mode-button');
   const snowModeValue = queryElement<HTMLSpanElement>('panel-snow-mode-value');
+  const snowStatus = queryElement<HTMLParagraphElement>('panel-snow-status');
   const snowModeMenu = queryElement<HTMLDivElement>('panel-snow-mode-menu');
   const snowModeOptions = Array.from(
     root.querySelectorAll<HTMLButtonElement>('[data-snow-mode-option]'),
@@ -568,6 +569,12 @@ export function createViewerPanel(options: ViewerPanelOptions) {
     setSnowLoading(loading: boolean) {
       snowLoading = loading;
       syncSnowAvailability();
+    },
+    /** Message sous la neige (null = rien) : p. ex. hauteur de neige indisponible. */
+    setSnowStatus(message: string | null) {
+      if (!snowStatus) return;
+      snowStatus.textContent = message ?? '';
+      snowStatus.hidden = !message;
     },
     setPrimaryActionState(state: PrimaryActionState) {
       if (!primaryActionBtn) return;

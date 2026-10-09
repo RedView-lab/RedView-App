@@ -91,6 +91,8 @@ export const lidarTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'Activer ou désactiver la neige', en: 'Toggle snow' },
   { fr: 'Affichage', en: 'Display' },
   { fr: 'Couverture neigeuse', en: 'Snow cover' },
+  { fr: 'Hauteur de neige indisponible ici pour le moment : l’analyse Météo-France n’a pas pu être chargée, ou ce secteur est hors de sa couverture.', en: 'Snow depth is unavailable here for now: the Météo-France analysis could not be loaded, or this area is outside its coverage.' },
+  { fr: 'Hauteur de neige pas encore disponible : la source Météo-France n’est pas active pour le moment.', en: 'Snow depth is not available yet: the Météo-France source is not active for now.' },
   { fr: 'Épaisseur (cm)', en: 'Depth (cm)' },
   { fr: 'Navigation des tuiles LiDAR', en: 'LiDAR tile navigation' },
   { fr: 'Tuiles LiDAR voisines', en: 'Neighbouring LiDAR tiles' },

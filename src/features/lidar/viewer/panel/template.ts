@@ -147,6 +147,7 @@ const PANEL_TEMPLATE = `
         </div>
       </div>
     </div>
+    <p id="panel-snow-status" class="viewer-panel__status" role="status" hidden></p>
     <div class="viewer-panel__divider"></div>
     <section class="viewer-panel__tile-nav" aria-label="Navigation des tuiles LiDAR">
       <p id="viewer-tile-nav-status" class="viewer-panel__sr-only" aria-live="polite">

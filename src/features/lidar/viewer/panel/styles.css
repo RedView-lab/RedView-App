@@ -304,6 +304,15 @@
   color: rgba(255, 255, 255, 0.64);
 }
 
+/* Ligne d'état d'une couche (neige indisponible…) : style « message, aide ». */
+.viewer-panel__status {
+  margin: -4px 0 0;
+  font-size: var(--rv-font-size-sm);
+  font-weight: 400;
+  line-height: 16px;
+  color: rgba(255, 255, 255, 0.64);
+}
+
 .viewer-panel__point-controls,
 .viewer-panel__elevation-controls {
   display: flex;

@@ -31,6 +31,21 @@ export interface AromeGrid {
   runHour: string;
 }
 
+/**
+ * Refus de /api/meteofrance, avec son statut HTTP : 503 = source Météo-France
+ * non configurée sur le serveur (clé absente), 502 = WCS injoignable ou
+ * secteur hors du domaine AROME. Le visualiseur choisit son message dessus.
+ */
+export class AromeFetchError extends Error {
+  readonly status: number;
+
+  constructor(status: number, detail: string) {
+    super(`Météo-France fetch failed: HTTP ${status} ${detail}`);
+    this.name = 'AromeFetchError';
+    this.status = status;
+  }
+}
+
 export async function fetchAromeSnow(center: LonLat, signal?: AbortSignal): Promise<AromeGrid> {
   const url =
     `/api/meteofrance` +
@@ -47,7 +62,7 @@ export async function fetchAromeSnow(center: LonLat, signal?: AbortSignal): Prom
     } catch {
       detail = res.statusText;
     }
-    throw new Error(`Météo-France fetch failed: HTTP ${res.status} ${detail}`);
+    throw new AromeFetchError(res.status, detail);
   }
   const json = (await res.json()) as MeteoFranceResponse;
   const { width, height, valuesCm } = json;

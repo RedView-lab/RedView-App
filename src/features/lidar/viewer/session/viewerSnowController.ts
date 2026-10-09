@@ -4,6 +4,7 @@ import type { DetectedCrs, PointCloudData } from '../../types';
 import type { TerrainCache } from '../../lib/storage';
 import type { LidarRenderer } from '../renderer/sceneRenderer';
 import type { SnowModeKey } from '../panel/controller';
+import { snowUnavailableMessage } from './snowStatus';
 
 const SNOW_MODES: Record<SnowModeKey, 0 | 1 | 2> = {
   off: 0,
@@ -26,6 +27,8 @@ export interface SnowSceneContext {
   /** Couvert de canopée de la scène d'après le nuage de points (interception de la neige en forêt). */
   readCanopy?: (cellM: number) => Promise<CanopyGrid | null>;
   onProgressState: (loading: boolean) => void;
+  /** Message sous la neige (null = rien). */
+  onSnowStatus?: (message: string | null) => void;
   requestRender: () => void;
 }
 
@@ -93,9 +96,11 @@ export class ViewerSnowController {
         `avalanches ${d.gravity.movedPct.toFixed(0)}%, melt ${d.melt.flatMeltCm.toFixed(0)}cm)`,
         field.sources,
       );
+      ctx.onSnowStatus?.(null);
       return true;
     } catch (err) {
       console.error('[Viewer] Snow fetch failed:', err);
+      ctx.onSnowStatus?.(snowUnavailableMessage(err));
       renderer.setSnowMode(0);
       ctx.requestRender();
       return false;

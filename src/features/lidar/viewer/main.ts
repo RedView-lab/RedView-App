@@ -510,6 +510,7 @@ function edlRadiusPx(): number {
       cz,
       readCanopy: (cellM) => tools?.readSceneCanopy(cellM) ?? Promise.resolve(null),
       onProgressState: (loading) => panel.setSnowLoading(loading),
+      onSnowStatus: (message) => panel.setSnowStatus(message),
       requestRender,
     });
 
