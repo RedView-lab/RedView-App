@@ -6,7 +6,7 @@
  *   GET /api/weather/meta.json
  *   GET /api/weather/tiles/:variable/:hour.(webp|png)
  *   GET /api/weather/point?lat=...&lon=...
- *   GET /api/weather/radar.json (images radar RainViewer, relayées et mises en cache)
+ *   GET /api/weather/radar.json (images du radar européen EUMETNET OPERA, server/lib/opera-radar.mjs)
  *
  * Variable d'environnement amont (obligatoire pour le relais VPS ; si absente,
  * seul le repli local `dist_weather/` est servi, sinon 503) :
@@ -16,13 +16,10 @@ import type { ApiRequest, ApiResponse } from './_lib/types.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createByteLru } from '../server/lib/byte-lru.mjs';
+import { listOperaFrames, OPERA_RADAR_HOST } from '../server/lib/opera-radar.mjs';
 
 const TIMEOUT_MS = 15_000;
 
-/** Liste des images radar RainViewer : une nouvelle image toutes les 10 min, gardée 1 min pour tous les clients. */
-const RADAR_MAPS_URL = 'https://api.rainviewer.com/public/weather-maps.json';
-const RADAR_MAPS_CACHE_KEY = 'radar-maps';
-const RADAR_MAPS_TTL_MS = 60_000;
 
 interface CacheEntry {
   body: Buffer;
@@ -151,33 +148,20 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     return res.status(400).json({ error: 'Invalid path parameter' });
   }
 
-  // Liste des images radar RainViewer (`/api/weather/radar.json`). Les tuiles
-  // radar passent par `/radar-tiles/*` (Service Worker, sinon server.mjs).
+  // Images du radar européen (`/api/weather/radar.json`, même forme que
+  // l'ancienne liste RainViewer) : composites EUMETNET OPERA, liste gardée 1 min
+  // côté serveur (opera-radar.mjs). Les tuiles passent par `/radar-tiles/*`.
   if (subPath.startsWith('radar')) {
-    const sendRadarMaps = (body: Buffer) => {
+    try {
+      const past = await listOperaFrames();
+      if (past.length === 0) throw new Error('OPERA: no recent frame');
       res.status(200);
       res.setHeader('Content-Type', 'application/json; charset=utf-8');
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Cache-Control', 'public, max-age=120, stale-while-revalidate=300');
-      res.setHeader('X-Weather-Source', 'radar-nowcast');
-      return res.send(body);
-    };
-    const cachedMaps = getCached(RADAR_MAPS_CACHE_KEY);
-    if (cachedMaps) return sendRadarMaps(cachedMaps.body);
-    try {
-      const { response, body } = await fetchUpstream(RADAR_MAPS_URL);
-      if (!response.ok) {
-        throw new Error(`RainViewer HTTP ${response.status}`);
-      }
-      setCached(RADAR_MAPS_CACHE_KEY, {
-        body,
-        contentType: 'application/json; charset=utf-8',
-        status: 200,
-        expiresAt: Date.now() + RADAR_MAPS_TTL_MS,
-      });
-      return sendRadarMaps(body);
+      res.setHeader('Cache-Control', 'public, max-age=60');
+      res.setHeader('X-Weather-Source', 'eumetnet-opera');
+      return res.json({ version: '2.0', generated: Math.round(Date.now() / 1000), host: OPERA_RADAR_HOST, radar: { past } });
     } catch (radarErr) {
-      console.warn('[weather-proxy] radar fetch failed:', radarErr);
+      console.warn('[weather-proxy] radar listing failed:', radarErr);
       return res.status(502).json({ error: 'Radar service unavailable' });
     }
   }

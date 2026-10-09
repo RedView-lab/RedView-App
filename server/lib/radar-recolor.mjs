@@ -1,34 +1,10 @@
 /**
- * Recoloration des tuiles radar Doppler côté serveur
- * Décompresse les tuiles PNG RainViewer Scheme 2 (512x512 RGBA) et recolore
- * l'intensité des précipitations en ~3 ms avec node:zlib, sans dépendance
- * externe.
+ * Palette du radar de précipitations : la chaîne `p` des tuiles radar
+ * (`gradient|fill:hex_min_max:…`, construite par le client dans
+ * radarClient.ts) devient une table de 256 couleurs sur l'échelle 0–20 mm/h.
+ * Utilisée par opera-radar.mjs pour colorer chaque pixel de pluie.
  */
-import { inflateSync, deflateSync, crc32 } from 'node:zlib';
-
 import { createOldestKeyTaker } from './oldest-key.mjs';
-
-function rainviewerRgbToMm(r, g, b) {
-  if (r >= 200 && b < 40) {
-    return 5.0 + ((255 - g) / 255.0) * 20.0;
-  }
-  if (r >= 180 && b >= 150 && g < 100) {
-    return 25.0 + (r / 255.0) * 15.0;
-  }
-  if (r > 140 && g > 130 && b > 80 && Math.abs(r - g) < 45 && r > b) {
-    return 0.1 + (1.0 - Math.min(r, g) / 255.0) * 0.7;
-  }
-  if (b >= 70) {
-    if (r < 30 && g < 150) {
-      return 3.5 + (1.0 - g / 150.0) * 1.5;
-    }
-    if (g < 190) {
-      return 2.0 + (1.0 - (g - 140) / 50.0) * 1.5;
-    }
-    return 0.8 + ((255 - r) / 255.0) * 1.2;
-  }
-  return 0.5;
-}
 
 function hexToRgb(hex) {
   const safe = hex.replace('#', '').trim();
@@ -146,96 +122,18 @@ function getOrCreateLookup(pStr) {
   return lookup;
 }
 
-function makeChunk(typeStr, dataBuf) {
-  const typeBuf = Buffer.from(typeStr, 'ascii');
-  const lenBuf = Buffer.alloc(4);
-  lenBuf.writeUInt32BE(dataBuf.length, 0);
-  const toCrc = Buffer.concat([typeBuf, dataBuf]);
-  const crc = crc32(toCrc);
-  const crcBuf = Buffer.alloc(4);
-  crcBuf.writeUInt32BE(crc, 0);
-  return Buffer.concat([lenBuf, toCrc, crcBuf]);
-}
-
 /**
- * Recolore un Buffer PNG de radar Doppler RainViewer selon la chaîne de
- * paramètres de palette `pStr`. Renvoie le Buffer PNG recoloré en ~3 ms.
+ * Couleur d'une intensité de pluie (mm/h) dans la palette `pStr` (vide ou
+ * invalide : palette par défaut), sur l'échelle 0–20 mm/h de toutes les
+ * tuiles radar ; null là où la palette ne dessine rien (pluie trop faible,
+ * bande masquée). Utilisée par opera-radar.mjs.
+ *
+ * @param {number} mm
+ * @param {string} pStr
+ * @returns {{ r: number, g: number, b: number } | null}
  */
-export function recolorRadarPng(rawPngBuffer, pStr) {
-  if (!pStr || !isValidRadarPaletteParam(pStr)) return rawPngBuffer;
-
-  try {
-    let offset = 8;
-    const idatParts = [];
-    while (offset < rawPngBuffer.length) {
-      const len = rawPngBuffer.readUInt32BE(offset);
-      const type = rawPngBuffer.slice(offset + 4, offset + 8).toString('ascii');
-      if (type === 'IDAT') {
-        idatParts.push(rawPngBuffer.slice(offset + 8, offset + 8 + len));
-      }
-      offset += 12 + len;
-    }
-
-    if (idatParts.length === 0) return rawPngBuffer;
-
-    // Tuile 512×512 RGBA ≈ 1 Mo décompressée : 8 Mo de marge suffisent.
-    const raw = inflateSync(Buffer.concat(idatParts), { maxOutputLength: 8 * 1024 * 1024 });
-    // Vérifie la taille des lignes RGBA 512x512 : 512 * 2049 = 1 049 088 octets
-    if (raw.length !== 1049088) return rawPngBuffer;
-
-    const lookup = getOrCreateLookup(pStr);
-
-    for (let y = 0; y < 512; y++) {
-      const row = y * 2049 + 1;
-      for (let x = 0; x < 512; x++) {
-        const idx = row + x * 4;
-        const a = raw[idx + 3];
-        if (a < 15) {
-          raw[idx] = 0;
-          raw[idx + 1] = 0;
-          raw[idx + 2] = 0;
-          raw[idx + 3] = 0;
-          continue;
-        }
-        const r = raw[idx];
-        const g = raw[idx + 1];
-        const b = raw[idx + 2];
-        const mm = rainviewerRgbToMm(r, g, b);
-        const lIdx = Math.round(Math.max(0, Math.min(1, mm / 20.0)) * 255.0);
-        const c = lookup[lIdx];
-        if (!c.visible) {
-          raw[idx] = 0;
-          raw[idx + 1] = 0;
-          raw[idx + 2] = 0;
-          raw[idx + 3] = 0;
-        } else {
-          raw[idx] = c.r;
-          raw[idx + 1] = c.g;
-          raw[idx + 2] = c.b;
-          // alpha préservé
-        }
-      }
-    }
-
-    const deflated = deflateSync(raw, { level: 1 });
-
-    const ihdrData = Buffer.alloc(13);
-    ihdrData.writeUInt32BE(512, 0);
-    ihdrData.writeUInt32BE(512, 4);
-    ihdrData[8] = 8; // depth 8
-    ihdrData[9] = 6; // RGBA
-    ihdrData[10] = 0;
-    ihdrData[11] = 0;
-    ihdrData[12] = 0;
-
-    return Buffer.concat([
-      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-      makeChunk('IHDR', ihdrData),
-      makeChunk('IDAT', deflated),
-      makeChunk('IEND', Buffer.alloc(0)),
-    ]);
-  } catch (err) {
-    console.warn('[radar-recolor] server recoloring fallback to raw:', err);
-    return rawPngBuffer;
-  }
+export function radarColorForRainRate(mm, pStr) {
+  const lookup = getOrCreateLookup(pStr && isValidRadarPaletteParam(pStr) ? pStr : '');
+  const color = lookup[Math.round(Math.max(0, Math.min(1, mm / 20.0)) * 255.0)];
+  return color.visible ? color : null;
 }

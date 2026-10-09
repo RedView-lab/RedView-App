@@ -1,7 +1,8 @@
 /**
- * Client du radar Doppler européen de RedView
- * Récupère les images radar composites en temps réel pour l'observation des
- * précipitations en direct (instant T).
+ * Client du radar de précipitations européen de RedView : composites EUMETNET
+ * OPERA (CC BY 4.0), une image toutes les 5 minutes, listés par
+ * /api/weather/radar.json et dessinés par le serveur (server/lib/opera-radar.mjs)
+ * pour l'observation des précipitations en direct (instant T).
  */
 
 export interface RadarFrame {
@@ -35,12 +36,8 @@ export async function fetchRadarMeta(signal?: AbortSignal): Promise<RadarMapsPay
 
     inFlightRadarPromise = (async () => {
       try {
-        // Principal : proxy de même origine (api/weather.ts), mis en cache côté serveur
-        let res = await fetch('/api/weather/radar.json', { signal: fetchController.signal });
-        if (!res.ok) {
-          // Repli : point d'accès public RainViewer en direct
-          res = await fetch('https://api.rainviewer.com/public/weather-maps.json', { signal: fetchController.signal });
-        }
+        // Liste servie par l'API (api/weather.ts), gardée 1 min côté serveur.
+        const res = await fetch('/api/weather/radar.json', { signal: fetchController.signal });
         window.clearTimeout(timeout);
         if (!res.ok) throw new Error(`Radar meta HTTP ${res.status}`);
         const data = (await res.json()) as RadarMapsPayload;
@@ -110,12 +107,9 @@ export function formatRadarPaletteParam(
 }
 
 /**
- * Construit l'URL de tuile raster compatible Mapbox pour le chemin d'image
- * radar donné. Si le Service Worker contrôle la page, passe par
- * /radar-tiles/{z}/{x}/{y} pour recolorer en temps réel les tuiles de
- * réflectivité du radar Doppler selon la palette de l'utilisateur.
- * Sinon, se replie sur l'URL directe du CDN Slippy de RainViewer, sans latence
- * et fiable dans tout environnement (HTTP simple, navigation privée, sans SW).
+ * Construit l'URL de tuile raster compatible Mapbox pour l'image radar donnée :
+ * /radar-tiles/{z}/{x}/{y}, fabriquée par le serveur aux couleurs de la palette
+ * de l'utilisateur (le Service Worker la lui relaie).
  */
 export function buildRadarTileUrl(
   host: string,

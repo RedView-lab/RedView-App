@@ -128,10 +128,10 @@ export const DATA_SOURCE_GROUPS: readonly DataSourceGroup[] = [
         href: 'https://www.ncei.noaa.gov/products/weather-climate-models/global-forecast',
       },
       {
-        name: 'RainViewer',
-        description: 'Radar de précipitations',
-        licenseLabel: '© RainViewer',
-        href: 'https://www.rainviewer.com',
+        name: 'EUMETNET OPERA',
+        description: 'Radar de précipitations en Europe',
+        licenseLabel: '© EUMETNET OPERA, CC BY 4.0',
+        href: 'https://www.eumetnet.eu/activities/observations-programme/current-activities/opera/',
       },
       {
         name: 'SLF (WSL)',

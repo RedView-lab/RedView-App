@@ -8,7 +8,7 @@
 //   - IP client fiable pour le rate limiting (XFF le plus à droite, CF
 //     seulement si la connexion vient réellement de Cloudflare) ;
 //   - rate limiter mémoire borné ;
-//   - validation des tuiles XYZ et de l'upstream radar (anti-SSRF).
+//   - validation des tuiles XYZ et des sources LiDAR relayées (anti-SSRF).
 // ---------------------------------------------------------------------------
 import fs from 'node:fs';
 import net from 'node:net';
@@ -286,28 +286,6 @@ export function parseTileCoords(pathname, prefixRe) {
   const n = 2 ** z;
   if (!Number.isInteger(x) || !Number.isInteger(y) || x < 0 || y < 0 || x >= n || y >= n) return null;
   return { z, x, y };
-}
-
-export const ALLOWED_RADAR_HOSTS = new Set([
-  'https://tilecache.rainviewer.com',
-  'https://tilecache.rainviewer.net',
-]);
-const DEFAULT_RADAR_HOST = 'https://tilecache.rainviewer.com';
-const RADAR_FRAME_PATH_RE = /^\/?[a-zA-Z0-9_-]+(\/[a-zA-Z0-9_-]+)*$/;
-
-/**
- * Construit l'URL RainViewer d'une tuile radar. L'hôte est forcé dans
- * l'allowlist et le chemin de frame doit être purement alphanumérique :
- * impossible de viser un autre hôte (SSRF) ou un autre chemin.
- * Retourne `null` si les paramètres sont invalides.
- */
-export function buildRadarUpstreamUrl(searchParams, { z, x, y }) {
-  const rawHost = (searchParams.get('host') || '').trim().replace(/\/+$/, '');
-  const host = ALLOWED_RADAR_HOSTS.has(rawHost) ? rawHost : DEFAULT_RADAR_HOST;
-  const rawPath = (searchParams.get('path') || '').trim();
-  if (!rawPath || rawPath.length > 200 || !RADAR_FRAME_PATH_RE.test(rawPath)) return null;
-  const cleanPath = rawPath.startsWith('/') ? rawPath : `/${rawPath}`;
-  return `${host}${cleanPath}/512/${z}/${x}/${y}/2/1_1.png`;
 }
 
 // ── Proxy nuages de points (/api/pointcloud) ───────────────────────────────

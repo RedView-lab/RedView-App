@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { serveTileFallback, tileFallbackFamily, tileFallbackHitsUpstream } from '../tile-fallbacks.mjs';
+import { buildFixtureCog, fixtureFetch } from './operaFixture';
 
 interface CapturedResponse {
   statusCode: number;
@@ -68,23 +69,31 @@ describe('serveTileFallback', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('relays a radar tile from the allowed host only', async () => {
-    const out = await serve('/radar-tiles/3/4/2?host=https://evil.example&path=/v2/radar/abc');
+  it('draws an OPERA radar tile on the server, immutable once published', async () => {
+    vi.stubGlobal('fetch', fixtureFetch(buildFixtureCog(), ['20261009T1320']));
+    const out = await serve('/radar-tiles/6/32/22?host=opera&path=%2Fopera%2F20261009T1320&p=fill:ff0000_0_100');
     expect(out.statusCode).toBe(200);
     expect(out.headers['content-type']).toBe('image/png');
-    expect(out.headers['x-weather-source']).toBe('server-radar-proxy');
-    expect(String(fetchMock.mock.calls[0]?.[0])).toBe('https://tilecache.rainviewer.com/v2/radar/abc/512/3/4/2/2/1_1.png');
+    expect(out.headers['cache-control']).toBe('public, max-age=86400, immutable');
+    expect(out.headers['x-weather-source']).toBe('eumetnet-opera');
   });
 
-  it('refuses a radar tile without a valid frame path', async () => {
-    const out = await serve('/radar-tiles/3/4/2?path=../../etc');
-    expect(out.statusCode).toBe(400);
+  it('never reaches RainViewer any more: an old RainViewer frame gets a 204, without any fetch', async () => {
+    const out = await serve('/radar-tiles/3/4/2?host=https://tilecache.rainviewer.com&path=/v2/radar/abc');
+    expect(out.statusCode).toBe(204);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('answers 204 when RainViewer has no image', async () => {
-    fetchMock.mockResolvedValueOnce(new Response('nope', { status: 404, headers: { 'content-type': 'text/plain' } }));
-    const out = await serve('/radar-tiles/3/4/2?path=/v2/radar/abc');
+  it('refuses a radar frame path other than /opera/<time>, and zooms beyond the 1 km grid', async () => {
+    for (const url of ['/radar-tiles/3/4/2?host=opera&path=/opera/../../etc', '/radar-tiles/8/130/90?host=opera&path=/opera/20261009T1320']) {
+      expect((await serve(url)).statusCode).toBe(204);
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('answers 204 when the OPERA bucket has no such image', async () => {
+    fetchMock.mockResolvedValueOnce(new Response('nope', { status: 404 }));
+    const out = await serve('/radar-tiles/3/4/2?host=opera&path=/opera/20261009T1325');
     expect(out.statusCode).toBe(204);
   });
 

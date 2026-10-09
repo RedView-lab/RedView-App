@@ -7,7 +7,6 @@ import {
   HttpError,
   MAX_TILE_ZOOM,
   bodyLimitFor,
-  buildRadarUpstreamUrl,
   createRateLimiter,
   decodeSafePathname,
   getClientIp,
@@ -270,26 +269,6 @@ describe('parseTileCoords', () => {
     '/slope-tiles/a/b/c',
   ])('rejects %s', (pathname) => {
     expect(parseTileCoords(pathname, SLOPE_TILE_RE)).toBeNull();
-  });
-});
-
-describe('buildRadarUpstreamUrl', () => {
-  const coords = { z: 5, x: 16, y: 11 };
-
-  it('builds a RainViewer URL on an allowed host', () => {
-    const params = new URLSearchParams({ host: 'https://tilecache.rainviewer.net/', path: 'v2/radar/1700000000' });
-    expect(buildRadarUpstreamUrl(params, coords)).toBe(
-      'https://tilecache.rainviewer.net/v2/radar/1700000000/512/5/16/11/2/1_1.png',
-    );
-  });
-
-  it('forces the default host for anything outside the allowlist (SSRF)', () => {
-    const params = new URLSearchParams({ host: 'http://169.254.169.254', path: '/v2/radar/1' });
-    expect(buildRadarUpstreamUrl(params, coords)).toBe('https://tilecache.rainviewer.com/v2/radar/1/512/5/16/11/2/1_1.png');
-  });
-
-  it.each(['', '../../admin', 'v2/radar/1?x=1', 'v2//radar', `v2/${'a'.repeat(200)}`])('rejects frame path %j', (framePath) => {
-    expect(buildRadarUpstreamUrl(new URLSearchParams({ path: framePath }), coords)).toBeNull();
   });
 });
 

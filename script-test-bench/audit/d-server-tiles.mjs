@@ -4,7 +4,7 @@
 //
 // Sort avec un code non nul quand l'un des contrôles de régression marqués BUG se reproduit.
 // La section de limitation de débit ne martèle que le serveur LOCAL (routes 204 peu coûteuses).
-import { inflateSync, crc32 } from 'node:zlib';
+import { crc32 } from 'node:zlib';
 
 const args = process.argv.slice(2);
 const BASE = (() => {
@@ -50,17 +50,6 @@ function pngValidate(buf) {
   return errors.length ? errors.concat([`chunks=${types.join(',')}`]) : [];
 }
 
-function pngIdat(buf) {
-  let off = 8; const parts = [];
-  while (off < buf.length) {
-    const len = buf.readUInt32BE(off);
-    const type = buf.slice(off + 4, off + 8).toString('ascii');
-    if (type === 'IDAT') parts.push(buf.slice(off + 8, off + 8 + len));
-    off += 12 + len;
-  }
-  return inflateSync(Buffer.concat(parts));
-}
-
 // ── A. En-têtes / CSP ───────────────────────────────────────────────────
 async function sectionHeaders() {
   console.log('\n== A. headers / CSP ==');
@@ -75,7 +64,6 @@ async function sectionHeaders() {
   // Chaque hôte externe auquel le navigateur (page ou SW) parle pour les couches de carte.
   const required = [
     'https://api.mapbox.com', 'https://events.mapbox.com', 'https://a.tiles.mapbox.com',
-    'https://api.rainviewer.com', 'https://tilecache.rainviewer.com', 'https://tilecache.rainviewer.net',
     'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/1/1/1.png',
     'https://data.geopf.fr', 'https://data.geo.admin.ch', 'https://wmts10.geo.admin.ch',
     'https://hoydedata.no', 'https://wcs.hoydedata.no', 'https://servicios.idee.es', 'https://www.ign.es',
@@ -106,7 +94,7 @@ async function sectionInvalid() {
   const bad = ['-1/0/0', '23/0/0', '99999999999999999999/0/0', '1/2/0', '1/0/2', '3/8/1', 'a/b/c', '1.5/0/0', '%2e%2e/%2e%2e/x', '..%2f..%2fetc/passwd/1', '0/0', '12/2100/1460/extra'];
   for (const prefix of ['/slope-tiles/', '/altitude-tiles/', '/dem-tiles/', '/radar-tiles/', '/ortho-tiles/']) {
     for (const c of bad) {
-      const p = prefix + c + (prefix === '/radar-tiles/' ? '?path=/v2/radar/abc' : '');
+      const p = prefix + c + (prefix === '/radar-tiles/' ? '?host=opera&path=/opera/20261009T1300' : '');
       const { res, buf } = await get(p);
       const ct = res.headers.get('content-type') || '';
       let ok;
@@ -164,42 +152,30 @@ async function sectionValid() {
     `plain=${a.buf.length}B zone+profile=${b.buf.length}B identical=${a.buf.equals(b.buf)}`, { bug: false });
 }
 
-// ── D. radar fallback ───────────────────────────────────────────────────
+// ── D. radar (EUMETNET OPERA, tuiles dessinées par le serveur) ──────────
 async function sectionRadar() {
   console.log('\n== D. radar ==');
   let path;
   try {
-    const meta = await (await fetch('https://api.rainviewer.com/public/weather-maps.json')).json();
+    const meta = await (await get('/api/weather/radar.json')).res.json();
     path = meta.radar.past.at(-1).path;
-    console.log(`      rainviewer frames past=${meta.radar.past.length} nowcast=${meta.radar.nowcast?.length ?? 0} latest=${path}`);
+    console.log(`      opera frames past=${meta.radar.past.length} host=${meta.host} latest=${path}`);
   } catch (e) {
-    console.log('      rainviewer meta unavailable', e.message);
+    console.log('      opera frame list unavailable', e.message);
     return;
   }
   const z = 5, x = 16, y = 11;
-  const upstream = `https://tilecache.rainviewer.com${path}/512/${z}/${x}/${y}/2/1_1.png`;
-  const t0 = performance.now();
-  const raw = Buffer.from(await (await fetch(upstream)).arrayBuffer());
-  const info = pngInfo(raw);
-  let filters = {};
-  try {
-    const inflated = pngIdat(raw);
-    const bpp = info.colorType === 6 ? 4 : info.colorType === 3 ? 1 : 3;
-    const stride = 1 + info.w * bpp * (info.depth / 8);
-    for (let r = 0; r < info.h; r++) filters[inflated[r * stride]] = (filters[inflated[r * stride]] || 0) + 1;
-  } catch (e) { filters = { error: e.message }; }
-  console.log(`      upstream ${raw.length}B ${(performance.now() - t0).toFixed(0)}ms png=${JSON.stringify(info)} rowFilters=${JSON.stringify(filters)}`);
   const pal = 'gradient:3b82f6_0_2:22c55e_2_5:ef4444_5_20';
-  const local = await get(`/radar-tiles/${z}/${x}/${y}?host=${encodeURIComponent('https://tilecache.rainviewer.com')}&path=${encodeURIComponent(path)}&p=${encodeURIComponent(pal)}`);
-  const recolored = !local.buf.equals(raw);
-  console.log(`      local /radar-tiles ${local.res.status} ${local.ms.toFixed(0)}ms ${local.buf.length}B source=${local.res.headers.get('x-weather-source')} changed=${recolored}`);
-  const nonZeroFilterRows = Object.entries(filters).filter(([f]) => f !== '0').reduce((s, [, n]) => s + n, 0);
-  check('D.server radar recolor handles PNG row filters', !(info?.colorType === 6 && nonZeroFilterRows > 0 && recolored),
-    `upstream colorType=${info?.colorType} rows with filter!=0: ${nonZeroFilterRows}/${info?.h}; recolorRadarPng() rewrites the still-filtered bytes as if they were pixels`);
-  check('D.server radar recolor actually applied', info?.colorType !== 6 ? !(local.res.headers.get('x-weather-source') === 'server-radar-recolor' && !recolored) : true,
-    `upstream colorType=${info?.colorType}; header claims ${local.res.headers.get('x-weather-source')} while bytes ${recolored ? 'differ' : 'are identical to upstream'}`);
-  const evil = await get(`/radar-tiles/${z}/${x}/${y}?host=${encodeURIComponent('https://evil.example')}&path=${encodeURIComponent('/../../x')}`);
-  check('D.radar SSRF path rejected', evil.res.status === 400, `status=${evil.res.status}`);
+  const local = await get(`/radar-tiles/${z}/${x}/${y}?host=opera&path=${encodeURIComponent(path)}&p=${encodeURIComponent(pal)}`);
+  const info = pngInfo(local.buf);
+  console.log(`      local /radar-tiles ${local.res.status} ${local.ms.toFixed(0)}ms ${local.buf.length}B source=${local.res.headers.get('x-weather-source')} png=${JSON.stringify(info)}`);
+  check('D.radar OPERA tile drawn by the server', local.res.status === 200 && info?.w === 512 && info?.colorType === 6, `status=${local.res.status} png=${JSON.stringify(info)}`);
+  const cached = await get(`/radar-tiles/${z}/${x}/${y}?host=opera&path=${encodeURIComponent(path)}&p=${encodeURIComponent(pal)}`);
+  check('D.radar second request served from cache', cached.buf.equals(local.buf) && cached.ms < local.ms, `first ${local.ms.toFixed(0)}ms, second ${cached.ms.toFixed(0)}ms`);
+  const legacy = await get(`/radar-tiles/${z}/${x}/${y}?host=${encodeURIComponent('https://tilecache.rainviewer.com')}&path=${encodeURIComponent('/v2/radar/abc')}`);
+  check('D.radar RainViewer never reached (204)', legacy.res.status === 204, `status=${legacy.res.status}`);
+  const evil = await get(`/radar-tiles/${z}/${x}/${y}?host=opera&path=${encodeURIComponent('/opera/../../x')}`);
+  check('D.radar frame path outside /opera/<time> refused', evil.res.status === 204, `status=${evil.res.status}`);
 }
 
 // ── E. limitation de débit (seau des tuiles) ────────────────────────────

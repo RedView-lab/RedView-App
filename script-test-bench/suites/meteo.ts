@@ -10,7 +10,9 @@
  *    (getRouteWeatherAtDistanceAndTime : encadrement des stations, heure,
  *    correction d'altitude).
  * 3. Grille de vent régulière (computeWindGrid) pour le GPU.
- * 4. Recoloration des tuiles radar RainViewer côté serveur (recolorRadarPng).
+ * 4. Tuile du radar européen EUMETNET OPERA dessinée côté serveur
+ *    (renderOperaTile : en-tête et tuiles du COG, reprojection, palette, PNG),
+ *    sur un COG synthétique servi en mémoire, une image neuve par itération.
  * 5. Latence HTTP /api/weather si un serveur local répond.
  * Jusqu'au 2026-10-06, 1 et 2 mesuraient des copies écrites dans le bench
  * (JSON.parse d'une station, interpolation simplifiée).
@@ -24,8 +26,8 @@ import {
   type RouteWeatherDataset,
 } from '../../src/features/weather/lib/routeWeather.ts';
 import type { RouteChartPoint } from '../../src/features/centerPanel/components/chart/seriesCommon.ts';
-import { recolorRadarPng } from '../../server/lib/radar-recolor.mjs';
-import { deflateSync, crc32 } from 'node:zlib';
+import { renderOperaTile } from '../../server/lib/opera-radar.mjs';
+import { buildFixtureCog, fixtureFetch } from '../../server/lib/__tests__/operaFixture.ts';
 
 const ROUTE_KM = 1200;
 const FORECAST_DAYS = 16;
@@ -76,9 +78,7 @@ export async function runMeteoBenchmark(options: { quick?: boolean } = {}): Prom
   const startDate = localDateIso(new Date());
   const body = openMeteoBody(26, startDate);
 
-  // Un PNG 512x512 valide pour la recoloration radar RainViewer.
-  const mockRadarPng = createSynthetic512x512Png();
-  const samplePalette = 'gradient:#2DBF8C_0_5:#7CD95F_5_15:#FFD800_15_25:#FF0000_25_50';
+  const samplePalette = 'gradient:2DBF8C_0_5:7CD95F_5_15:FFD800_15_25:FF0000_25_50';
 
   // --- BENCHMARK 1 : réponse Open-Meteo de la trace (fetchRouteWeatherDataset) ---
   const realFetch = globalThis.fetch;
@@ -146,18 +146,26 @@ export async function runMeteoBenchmark(options: { quick?: boolean } = {}): Prom
     },
   );
 
-  // --- BENCHMARK 4 : Recoloration PNG Radar Doppler (recolorRadarPng) ---
-  suite.measureSync(
-    {
-      name: 'Recoloration Tuile Radar PNG (512x512)',
-      category: 'meteo-radar-recolor',
-      iterations,
-      regressionThresholdP95Ms: 25.0,
-    },
-    () => {
-      return recolorRadarPng(mockRadarPng, samplePalette);
-    },
-  );
+  // --- BENCHMARK 4 : tuile radar OPERA (renderOperaTile), image neuve à chaque itération ---
+  const operaFetch = globalThis.fetch;
+  globalThis.fetch = fixtureFetch(buildFixtureCog(), []) as typeof fetch;
+  let operaFrame = 0;
+  try {
+    await suite.measureAsync(
+      {
+        name: 'Tuile radar OPERA 512x512 (COG → reprojection → palette → PNG)',
+        category: 'meteo-radar-opera',
+        iterations,
+        regressionThresholdP95Ms: 120.0,
+      },
+      async () => {
+        operaFrame += 1;
+        return renderOperaTile(`20261009T${String(1000 + operaFrame).slice(-4)}`, 6, 32, 22, samplePalette);
+      },
+    );
+  } finally {
+    globalThis.fetch = operaFetch;
+  }
 
   // --- BENCHMARK 5 : Test Live HTTP si disponible ---
   const liveTarget = process.env.WEATHER_API_URL || 'http://localhost:3000/api/weather';
@@ -188,67 +196,16 @@ export async function runMeteoBenchmark(options: { quick?: boolean } = {}): Prom
 
   // Diagnostics & Recommandations DevOps
   suite.addRegressionRisk(
-    'Recoloration binaire synchrone sur le thread Node.js : décompression zlib 512x512 saturant sous charge concurrente.',
+    'Tuile radar dessinée sur le thread Node.js : décompression des tuiles du COG et reprojection de 262 144 pixels à la première demande de chaque tuile.',
   );
   suite.addRegressionRisk(
     'Taille mémoire des grilles de vent : fuite potentielle si les textures GPU ne sont pas libérées lors du pan.',
   );
   suite.addRecommendation(
-    'Mettre en cache LRU en mémoire les tuiles radar recolorées (clé: tile_z_x_y + hash_palette) pour un coût CPU nul sur requêtes répétées.',
-  );
-  suite.addRecommendation(
-    'Déporter la recoloration RainViewer vers un Web Worker ou shader WebGL côté client pour décharger à 100% le serveur Node.',
+    'Si la charge radar grandit : préparer les tuiles des zooms 3 à 7 de chaque nouvelle image OPERA dans un worker_thread au lieu de les dessiner à la demande.',
   );
 
   return suite;
-}
-
-function createSynthetic512x512Png(): Buffer {
-  const width = 512;
-  const height = 512;
-  // Lignes RGBA : 512 lignes, chacune a 1 octet de filtre + 512 * 4 octets = 2049 octets
-  const rawScanlines = Buffer.alloc(height * (1 + width * 4));
-
-  for (let y = 0; y < height; y++) {
-    const rowOffset = y * (1 + width * 4);
-    rawScanlines[rowOffset] = 0; // Filtre None
-    for (let x = 0; x < width; x++) {
-      const pxOffset = rowOffset + 1 + x * 4;
-      // Simulation de cellules de pluie
-      const dist = Math.hypot(x - 256, y - 256);
-      if (dist < 120) {
-        rawScanlines[pxOffset] = 220; // R
-        rawScanlines[pxOffset + 1] = 80;  // G
-        rawScanlines[pxOffset + 2] = 30;  // B
-        rawScanlines[pxOffset + 3] = 255; // A
-      } else {
-        rawScanlines[pxOffset + 3] = 0; // Transparent
-      }
-    }
-  }
-
-  const deflated = deflateSync(rawScanlines, { level: 1 });
-  const ihdr = Buffer.alloc(13);
-  ihdr.writeUInt32BE(width, 0);
-  ihdr.writeUInt32BE(height, 4);
-  ihdr[8] = 8;
-  ihdr[9] = 6;
-
-  function makeChunk(type: string, data: Buffer): Buffer {
-    const len = Buffer.alloc(4);
-    len.writeUInt32BE(data.length, 0);
-    const t = Buffer.from(type, 'ascii');
-    const crc = Buffer.alloc(4);
-    crc.writeUInt32BE(crc32(Buffer.concat([t, data])), 0);
-    return Buffer.concat([len, t, data, crc]);
-  }
-
-  return Buffer.concat([
-    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-    makeChunk('IHDR', ihdr),
-    makeChunk('IDAT', deflated),
-    makeChunk('IEND', Buffer.alloc(0)),
-  ]);
 }
 
 // Exécution autonome

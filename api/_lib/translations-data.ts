@@ -6209,8 +6209,8 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Worldwide wind and weather"
   },
   {
-    "fr": "Radar de précipitations",
-    "en": "Precipitation radar"
+    "fr": "Radar de précipitations en Europe",
+    "en": "Precipitation radar in Europe"
   },
   {
     "fr": "Hauteurs de neige des stations IMIS en Suisse",
@@ -6285,12 +6285,12 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Sourced from LINZ. CC BY 4.0 · satellite imagery © Maxar Technologies and modified Copernicus Sentinel data, licensed by Sinergise Ltd."
   },
   {
-    "fr": "© RainViewer",
-    "en": "© RainViewer"
+    "fr": "© EUMETNET OPERA, CC BY 4.0",
+    "en": "© EUMETNET OPERA, CC BY 4.0"
   },
   {
-    "fr": "RainViewer",
-    "en": "RainViewer"
+    "fr": "© EUMETNET OPERA",
+    "en": "© EUMETNET OPERA"
   },
   {
     "fr": "CC BY 4.0",

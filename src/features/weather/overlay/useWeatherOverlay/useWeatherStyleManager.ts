@@ -29,11 +29,11 @@ import {
 import { createOverlayStatus } from '@/features/map3d';
 
 /**
- * Crédit exigé par l'API RainViewer (« mention the RainViewer API as a source
- * of the data … with a link ») : affiché par le contrôle d'attribution de la
+ * Crédit exigé par la licence CC BY 4.0 des composites radar EUMETNET OPERA
+ * (server/lib/opera-radar.mjs) : affiché par le contrôle d'attribution de la
  * carte tant que la couche radar est présente.
  */
-const RADAR_ATTRIBUTION = '<a href="https://www.rainviewer.com/" target="_blank" rel="noopener noreferrer">RainViewer</a>';
+const RADAR_ATTRIBUTION = '<a href="https://www.eumetnet.eu/activities/observations-programme/current-activities/opera/" target="_blank" rel="noopener noreferrer">© EUMETNET OPERA</a>';
 
 interface UseWeatherStyleManagerArgs {
   map: MapboxMap | null;
@@ -450,7 +450,7 @@ export function useWeatherStyleManager({
           tiles: [tileUrl],
           tileSize: 512,
           minzoom: 0,
-          maxzoom: 7, // RainViewer plafonne à 7. Mapbox suréchantillonne automatiquement à partir du zoom 8
+          maxzoom: 7, // Grille OPERA de 1 km : le zoom 7 la montre entière, Mapbox agrandit au-delà
           attribution: RADAR_ATTRIBUTION,
         } as never);
       }

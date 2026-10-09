@@ -25,7 +25,11 @@
 // Tampon de cache — modifié à chaque changement qui invalide le cache, pour que
 // le navigateur détecte une différence d'octets dans ce fichier et déclenche
 // install→activate→purge.
-// Actuel : dem-tiles-v54-rgb-up-rle / radar-v3 / dem-negative-v30 / slope-tiles-v3-rle / vhr-tiles-v1 / altitude-stale-v1
+// Actuel : dem-tiles-v54-rgb-up-rle / radar-v4-opera / dem-negative-v30 / slope-tiles-v3-rle / vhr-tiles-v1 / altitude-stale-v1
+// 2026-10-09 radar-v4-opera : radar européen EUMETNET OPERA (CC BY 4.0) à la place
+// de RainViewer (API gratuite réservée à l'usage personnel) ; le Service Worker
+// relaie les tuiles /radar-tiles au serveur, qui les fabrique, au lieu de recolorer
+// des tuiles RainViewer. Aucun nom de cache ne change.
 // 2026-10-08 commentaires seulement : commentaires des modules traduits en
 // français ; runtime/router.js et radar-handler.js citent
 // server/lib/http-security.mjs (déplacé). Aucun nom de cache ne change : rien

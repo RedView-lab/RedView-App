@@ -30,8 +30,8 @@ export function buildCspHeader({ reportUri = CSP_REPORT_URI, upgradeInsecureRequ
     "child-src 'self' blob:",
     "style-src 'self' 'unsafe-inline' https://api.mapbox.com",
     "font-src 'self' data:",
-    `img-src 'self' data: blob: https://appwrite.redview.tech https://*.tilecache.rainviewer.com https://*.rainviewer.com https://*.rainviewer.net https://api.mapbox.com https://*.mapbox.com ${GEO_SOURCES} ${NATIONAL_SOURCES}`,
-    `connect-src 'self' blob: data: wss://app.redview.tech wss://redview.tech https://appwrite.redview.tech https://errors.redview.tech https://api.stripe.com https://api.mapbox.com https://events.mapbox.com https://*.mapbox.com https://*.rainviewer.com https://*.rainviewer.net ${GEO_SOURCES} https://opentopography.s3.sdsc.edu ${NATIONAL_SOURCES}`,
+    `img-src 'self' data: blob: https://appwrite.redview.tech https://api.mapbox.com https://*.mapbox.com ${GEO_SOURCES} ${NATIONAL_SOURCES}`,
+    `connect-src 'self' blob: data: wss://app.redview.tech wss://redview.tech https://appwrite.redview.tech https://errors.redview.tech https://api.stripe.com https://api.mapbox.com https://events.mapbox.com https://*.mapbox.com ${GEO_SOURCES} https://opentopography.s3.sdsc.edu ${NATIONAL_SOURCES}`,
     // Stripe Elements + défi 3-D Secure (iframe hooks.stripe.com) : liste de la doc Stripe.
     'frame-src https://js.stripe.com https://*.js.stripe.com https://hooks.stripe.com',
     "object-src 'none'",

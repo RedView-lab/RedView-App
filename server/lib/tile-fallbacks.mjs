@@ -8,22 +8,25 @@
 //  - /vhr-tiles : l'ortho très haute résolution n'existe que côté SW (Mapbox
 //    Satellite reste visible dessous) → 204 ;
 //  - `?pf=1` : préchargement spéculatif, inutile sans SW → 204 ;
-//  - /radar-tiles : tuile RainViewer relayée (hôte et chemin en liste blanche),
-//    recolorée si la palette `p` est donnée ;
+//  - /radar-tiles : tuile du radar européen EUMETNET OPERA, fabriquée ici
+//    (server/lib/opera-radar.mjs) et colorée avec la palette `p` ; aussi
+//    demandée par le Service Worker, qui ne la calcule pas ;
 //  - /slope-tiles, /altitude-tiles : calculées sur le serveur
 //    (server/lib/terrain-tiles.mjs).
 // Une tuile absente répond 204 jamais mis en cache : une panne passagère ne
 // doit pas être mémorisée comme une vraie tuile.
 // ---------------------------------------------------------------------------
-import { buildRadarUpstreamUrl, parseTileCoords } from './http-security.mjs';
-import { recolorRadarPng } from './radar-recolor.mjs';
+import { parseTileCoords } from './http-security.mjs';
+import { OPERA_RADAR_HOST, operaFrameFromPath, renderOperaTile } from './opera-radar.mjs';
+import { isValidRadarPaletteParam } from './radar-recolor.mjs';
 import { generateAltitudeTile, generateSlopeTile } from './terrain-tiles.mjs';
 
 /** @typedef {'radar' | 'slope' | 'altitude' | 'dem' | 'vhr'} TileFamily */
 /** @typedef {import('node:http').ServerResponse} ServerResponse */
 
 const TILE_FAMILY_RE = /^\/(radar|slope|altitude|dem|vhr)-tiles\//;
-const RADAR_UPSTREAM_TIMEOUT_MS = 10_000;
+/** Au-delà, la carte agrandit le zoom 7 (source radar de la carte : maxzoom 7). */
+const RADAR_MAX_ZOOM = 7;
 
 /**
  * Famille de tuiles d'un chemin (`/slope-tiles/…` → `slope`), `null` sinon.
@@ -36,8 +39,8 @@ export function tileFallbackFamily(pathname) {
 }
 
 /**
- * La requête déclenche-t-elle un travail amont (fetch RainViewer, calcul de
- * tuile) ? Seules celles-là comptent dans le quota de l'IP.
+ * La requête déclenche-t-elle un travail amont (lecture du radar OPERA,
+ * calcul de tuile) ? Seules celles-là comptent dans le quota de l'IP.
  *
  * @param {TileFamily} family
  * @param {URLSearchParams} searchParams
@@ -73,24 +76,23 @@ function sendPng(res, png, headers) {
  */
 async function serveRadarTile(pathname, searchParams, res) {
   const coords = parseTileCoords(pathname, /^\/radar-tiles\/(\d+)\/(\d+)\/(\d+)/);
-  // Hôte forcé dans l'allowlist, chemin de frame strictement alphanumérique (anti-SSRF).
-  const target = coords ? buildRadarUpstreamUrl(searchParams, coords) : null;
-  if (!target) {
+  // Image `/opera/AAAAMMJJTHHMM` seulement : rien d'autre n'atteint le bucket.
+  const frame = searchParams.get('host') === OPERA_RADAR_HOST ? operaFrameFromPath(searchParams.get('path')) : null;
+  if (!coords || !frame) {
+    // Ancienne image RainViewer (onglet ouvert avant le passage à OPERA) : plus servie.
+    if (coords) return sendNoTile(res);
     res.statusCode = 400;
     res.end('Invalid radar tile request');
     return;
   }
+  if (coords.z > RADAR_MAX_ZOOM) return sendNoTile(res);
+  const rawPalette = searchParams.get('p') || '';
+  const palette = isValidRadarPaletteParam(rawPalette) ? rawPalette : '';
   try {
-    const upstream = await fetch(target, { signal: AbortSignal.timeout(RADAR_UPSTREAM_TIMEOUT_MS) });
-    if (upstream.ok && (upstream.headers.get('content-type') || '').startsWith('image/')) {
-      const raw = Buffer.from(await upstream.arrayBuffer());
-      const palette = searchParams.get('p') || '';
-      sendPng(res, palette ? recolorRadarPng(raw, palette) : raw, {
-        'Cache-Control': 'public, max-age=300',
-        'X-Weather-Source': palette ? 'server-radar-recolor' : 'server-radar-proxy',
-      });
-      return;
-    }
+    const png = await renderOperaTile(frame, coords.z, coords.x, coords.y, palette);
+    // Une image publiée ne change plus : sa tuile non plus.
+    sendPng(res, png, { 'Cache-Control': 'public, max-age=86400, immutable', 'X-Weather-Source': 'eumetnet-opera' });
+    return;
   } catch (error) {
     console.warn('[tile-fallbacks] radar tile failed:', error);
   }
