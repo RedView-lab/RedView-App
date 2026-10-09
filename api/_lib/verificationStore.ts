@@ -265,6 +265,20 @@ export function consumeVerificationRequestQuota(email: string): void {
   saveQuota(normalizedEmail, quota);
 }
 
+/**
+ * Rend la dernière demande consommée par `consumeVerificationRequestQuota`
+ * quand l'e-mail n'a pas pu partir : la personne peut réessayer tout de suite,
+ * au lieu d'attendre 30 s et d'entamer son quota horaire pour un envoi qui
+ * n'a pas eu lieu.
+ */
+export function releaseVerificationRequest(email: string): void {
+  const normalizedEmail = normalizeVerificationEmail(email);
+  const quota = getQuota(normalizedEmail, Date.now());
+  if (quota.requests.length === 0) return;
+  quota.requests.splice(quota.requests.indexOf(Math.max(...quota.requests)), 1);
+  saveQuota(normalizedEmail, quota);
+}
+
 /** Nouveau code pour `key` (remplace le précédent), rendu en clair pour l'e-mail. */
 function issueCode(key: string, target?: string): string {
   const now = Date.now();

@@ -78,4 +78,17 @@ describe('send-verification-code', () => {
     expect(sent[0].text).not.toContain('suspendu');
     expect(sent[0].text.startsWith('Bonjour,')).toBe(true);
   });
+
+  it.each([
+    ['no account', 0],
+    ['existing account', 1],
+  ])('answers 503 when the e-mail could not be sent (%s), and lets the person retry at once', async (_label, total) => {
+    users.list.mockResolvedValue({ total, users: [] });
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ message: 'Resend down' }), { status: 500 })));
+    const email = `resend-down-${total}@example.com`;
+    expect(await requestCode(email, 'Nom')).toBe(503);
+    // Sans remboursement de la demande, le second essai tomberait sur le délai de 30 s (429).
+    expect(await requestCode(email, 'Nom')).toBe(503);
+  });
 });

@@ -5321,6 +5321,10 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Start your {{days}}-day free trial."
   },
   {
+    "fr": "L’e-mail n’a pas pu être envoyé. Réessayez dans quelques minutes.",
+    "en": "The e-mail could not be sent. Try again in a few minutes."
+  },
+  {
     "fr": "E-mail de récupération envoyé",
     "en": "Recovery e-mail sent"
   },
