@@ -1,13 +1,14 @@
 import { countBucket, trackAnalyticsEvent } from '@/shared/lib/analytics';
 import { useCallback, useRef, type ChangeEvent, type Dispatch, type SetStateAction } from 'react';
 import { translateAppText } from '@/shared/i18n';
+import { appwriteFailureMessage } from '@/shared/lib/appwriteErrors';
 import { ensureHealthDataConsent } from '@/shared/services/healthDataConsent';
 import { deleteFitUploads, uploadProjectItineraryFitFiles } from '@/shared/services/projects';
 import { validateFitFile, type FitFileProblem } from '@/features/fitPredictor/lib/fitFileValidation';
 import { buildFitUploadsSignature } from '../../lib/schedule';
 import { MAX_FIT_FILES } from '../../lib/rhythm/profile';
 import type { Itinerary, ItineraryProject } from '../../types';
-import { buildLocalFitUploadSignature, fitFileKey, mergeFitFiles } from './files';
+import { buildLocalFitUploadSignature, fitFileKey, planFitSelection } from './files';
 import { buildRejectedFitNotice } from './labels';
 import {
   createEmptyFitRuntime,
@@ -61,31 +62,44 @@ export function useFitFileHandlers({
       const itineraryId = fitUploadTargetIdRef.current ?? active?.id;
       if (!itineraryId) return;
 
-      const selected = Array.from(event.target.files ?? []).filter((file) =>
-        file.name.toLowerCase().endsWith('.fit'),
-      );
+      const selected = Array.from(event.target.files ?? []);
       if (selected.length === 0) return;
 
       // L'extension ne suffit pas (GPX renommé, fichier vide ou tronqué) : un
       // seul fichier illisible faisait échouer toute la prédiction, et
-      // persisté, après chaque rechargement.
+      // persisté, après chaque rechargement. Un fichier d'une autre extension
+      // est nommé comme refusé (il était écarté sans un mot).
       const problems = await Promise.all(
-        selected.map((file) => validateFitFile(file).catch((): FitFileProblem => 'not-fit')),
+        selected.map((file) =>
+          file.name.toLowerCase().endsWith('.fit')
+            ? validateFitFile(file).catch((): FitFileProblem => 'not-fit')
+            : Promise.resolve<FitFileProblem>('not-fit'),
+        ),
       );
-      const incoming = selected.filter((_, index) => problems[index] === null);
-      const rejected = selected.flatMap((file, index) => {
-        const reason = problems[index];
-        return reason ? [{ file, reason }] : [];
-      });
-      const rejectedNotice = rejected.length > 0 ? buildRejectedFitNotice(rejected) : null;
-      if (incoming.length === 0) {
+      const current = fitRuntimeRef.current[itineraryId] ?? createEmptyFitRuntime();
+      const { nextFitFiles, added, rejected, overLimit } = planFitSelection(
+        current.fitFiles,
+        selected,
+        problems,
+        MAX_FIT_FILES,
+      );
+      const rejectedNotice = [
+        rejected.length > 0 ? buildRejectedFitNotice(rejected) : null,
+        overLimit.length > 0
+          ? translateAppText('Limite de {{count}} fichiers .fit : {{list}} non ajoutés.', {
+              count: MAX_FIT_FILES,
+              list: overLimit.map((file) => file.name).join(', '),
+            })
+          : null,
+      ].filter(Boolean).join(' ') || null;
+      // Rien de neuf (refusés, doublons, limite atteinte) : pas d'envoi ni de
+      // nouveau calcul de la prédiction.
+      if (added === 0) {
         updateFitRuntime(itineraryId, (prev) => ({ ...prev, uploadNotice: rejectedNotice }));
         return;
       }
-      trackAnalyticsEvent({ name: 'fit_uploaded', data: { files: countBucket(incoming.length) } });
+      trackAnalyticsEvent({ name: 'fit_uploaded', data: { files: countBucket(added) } });
 
-      const current = fitRuntimeRef.current[itineraryId] ?? createEmptyFitRuntime();
-      const nextFitFiles = mergeFitFiles(current.fitFiles, incoming).slice(0, MAX_FIT_FILES);
       const nextFitFileNames = nextFitFiles.map((file) => file.name);
       const localSignature = buildLocalFitUploadSignature(nextFitFiles);
 
@@ -176,10 +190,10 @@ export function useFitFileHandlers({
         updateFitRuntime(itineraryId, (prev) => ({
           ...prev,
           status: 'error',
-          error:
-            error instanceof Error
-              ? translateAppText(error.message)
-              : translateAppText('Impossible de sauvegarder les fichiers FIT sur le serveur.'),
+          // Jamais le message anglais d'Appwrite, écrit pour un développeur.
+          error: translateAppText(
+            appwriteFailureMessage(error, 'Impossible de sauvegarder les fichiers FIT sur le serveur.'),
+          ),
           uploadNotice: translateAppText('Impossible de sauvegarder les fichiers FIT sur le serveur.'),
           updatedAt: new Date().toISOString(),
         }));

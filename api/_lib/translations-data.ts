@@ -4737,6 +4737,10 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "FIT files ignored: {{list}}"
   },
   {
+    "fr": "Limite de {{count}} fichiers .fit : {{list}} non ajoutés.",
+    "en": "Limit of {{count}} .fit files: {{list}} not added."
+  },
+  {
     "fr": "fichier vide",
     "en": "empty file"
   },

@@ -608,6 +608,7 @@ export const dashboardTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'Envoi impossible pour : {{list}}. Ces fichiers sont utilisés mais ne seront pas conservés dans le projet.', en: 'Upload failed for: {{list}}. These files are used but will not be kept in the project.' },
   { fr: 'Impossible de sauvegarder les fichiers FIT sur le serveur.', en: 'Unable to save the FIT files on the server.' },
   { fr: 'Fichiers FIT ignorés : {{list}}', en: 'FIT files ignored: {{list}}' },
+  { fr: 'Limite de {{count}} fichiers .fit : {{list}} non ajoutés.', en: 'Limit of {{count}} .fit files: {{list}} not added.' },
   { fr: 'fichier vide', en: 'empty file' },
   { fr: 'aucune donnée d’activité', en: 'no activity data' },
   { fr: 'fichier tronqué', en: 'truncated file' },

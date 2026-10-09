@@ -5,7 +5,7 @@ export function fitFileKey(file: { name: string; lastModified: number; size: num
   return `${file.name}:${file.lastModified}:${file.size}`;
 }
 
-export function mergeFitFiles(existingFiles: readonly File[], incomingFiles: readonly File[]): File[] {
+function mergeFitFiles(existingFiles: readonly File[], incomingFiles: readonly File[]): File[] {
   const merged: File[] = [...existingFiles];
   const seen = new Set(existingFiles.map(fitFileKey));
 
@@ -41,4 +41,30 @@ export function buildLocalFitUploadSignature(files: readonly File[]): string {
       size: file.size,
     })),
   );
+}
+/**
+ * Fichiers d'une sélection à ajouter à un itinéraire : les `.fit` lisibles,
+ * dédoublonnés, dans la limite de `maxFiles`. Ceux qui ne passent pas
+ * (`problems[i]` non nul, extension autre que .fit) ou dépassent la limite
+ * sont rendus pour être nommés à l'utilisateur — jamais écartés en silence.
+ */
+export function planFitSelection<P>(
+  currentFiles: readonly File[],
+  selected: readonly File[],
+  problems: readonly (P | null)[],
+  maxFiles: number,
+): { nextFitFiles: File[]; added: number; rejected: Array<{ file: File; reason: P }>; overLimit: File[] } {
+  const incoming = selected.filter((_, index) => problems[index] == null);
+  const rejected = selected.flatMap((file, index) => {
+    const reason = problems[index];
+    return reason != null ? [{ file, reason }] : [];
+  });
+  const merged = mergeFitFiles(currentFiles, incoming);
+  const nextFitFiles = merged.slice(0, Math.max(maxFiles, currentFiles.length));
+  return {
+    nextFitFiles,
+    added: nextFitFiles.length - currentFiles.length,
+    rejected,
+    overLimit: merged.slice(nextFitFiles.length),
+  };
 }
