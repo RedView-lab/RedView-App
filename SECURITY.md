@@ -4,9 +4,12 @@
 
 ## Signaler une vulnérabilité
 
-Merci de signaler les problèmes de sécurité **en privé** via les
+Merci de signaler les problèmes de sécurité **en privé**, par e-mail à
+[redview.app@proton.me](mailto:redview.app@proton.me) (adresse publiée aussi
+dans [`/.well-known/security.txt`](public/.well-known/security.txt), RFC 9116)
+ou via les
 [GitHub Security Advisories](https://github.com/RedView-lab/RedView-App/security/advisories/new),
-pas dans une issue publique.
+jamais dans une issue publique.
 
 Indiquer :
 

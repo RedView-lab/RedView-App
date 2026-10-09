@@ -1,0 +1,7 @@
+# Signaler une vulnérabilité de RedView (app.redview.tech) — RFC 9116.
+# Merci de ne pas divulguer publiquement avant notre réponse. Français ou anglais.
+Contact: mailto:redview.app@proton.me
+Expires: 2027-10-09T00:00:00.000Z
+Preferred-Languages: fr, en
+Canonical: https://app.redview.tech/.well-known/security.txt
+Policy: https://app.redview.tech/mentions-legales
