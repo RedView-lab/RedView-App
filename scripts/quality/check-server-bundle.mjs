@@ -4,6 +4,7 @@
  *   npm run server:check     (étape de check:full, après `vite build`)
  *
  * 1. `scripts/build/build-server.mjs` (dist-server/) et `scripts/build/precompress-dist.mjs` (dist/) ;
+ *    puis chaque route bundlée chargée (`scripts/build/check-route-imports.mjs`, aussi lancé dans l'image) ;
  * 2. `node dist-server/server.mjs` sur un port libre : /health, le plus gros
  *    chunk servi depuis sa variante brotli (octets identiques après
  *    décompression), une route API sans dépendance externe (brute et brotli),
@@ -162,6 +163,8 @@ async function checkMultiplayerServer() {
 
 runScript('scripts/build/build-server.mjs');
 runScript('scripts/build/precompress-dist.mjs', 'dist');
+// Chaque route se charge sur cette plateforme (l'image le refait sur aarch64 musl).
+runScript('scripts/build/check-route-imports.mjs', 'dist-server/api');
 await checkAppServer();
 stopChildren();
 await checkMultiplayerServer();

@@ -54,8 +54,33 @@ RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 redview
 COPY --from=builder /app/package*.json ./
 RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev
 
+# @mattnucc/gribberish (GRIB2 de Météo-France, api/meteofrance.ts) n'a aucun
+# binaire Linux ARM64 : sur le VPS (Oracle A1, aarch64 musl), il se replie sur
+# sa version WebAssembly (même décodeur Rust), que npm n'installe jamais
+# d'office (`cpu: wasm32`). Installée à part, à la version du paquet principal,
+# puis copiée paquet par paquet sans rien écraser (`cp -rn` de BusyBox saute un
+# dossier de portée déjà présent, @mattnucc, au lieu de le fusionner). Vérifié
+# le 2026-10-09 dans node:22-alpine sur le VPS : repli automatique, GRIB2
+# décodé à l'identique du binaire natif.
+RUN --mount=type=cache,target=/root/.npm \
+    GRIB_VERSION="$(node -p "require('./node_modules/@mattnucc/gribberish/package.json').version")" \
+  && npm install --prefix /tmp/grib-wasi --no-save --no-package-lock --force --ignore-scripts \
+       "@mattnucc/gribberish-wasm32-wasi@${GRIB_VERSION}" \
+  && cd /tmp/grib-wasi/node_modules \
+  && for pkg in */ @*/*/; do \
+       [ -e "/app/node_modules/$pkg" ] || { mkdir -p "/app/node_modules/$(dirname "$pkg")" && cp -r "$pkg" "/app/node_modules/$pkg"; }; \
+     done \
+  && cd /app \
+  && rm -rf /tmp/grib-wasi
+
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/dist-server ./dist-server
+
+# Chaque route se charge sur la plateforme de l'image : un module natif sans
+# binaire pour elle fait échouer le build (l'ancienne image reste en ligne)
+# au lieu de répondre 500 en production.
+COPY --from=builder /app/scripts/build/check-route-imports.mjs ./scripts/build/check-route-imports.mjs
+RUN node scripts/build/check-route-imports.mjs dist-server/api
 
 # Release des erreurs serveur (server/lib/build-id.mjs), même valeur que le front ;
 # après npm ci pour ne pas invalider son cache à chaque commit.
