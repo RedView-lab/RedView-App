@@ -4,6 +4,11 @@
 export const ORTHO_TILE_SIZE = 256;
 const DEFAULT_GREY = 128;
 
+/** Couleur des points sans orthophoto (aucune source pour le territoire). */
+export function fillDefaultOrthoColors(colors: Uint8Array, count: number): void {
+  colors.fill(DEFAULT_GREY, 0, count * 3);
+}
+
 /** Tuiles RGBA décodées de l'emprise, par colonnes : slot = col · rows + row. */
 export interface OrthoTileGrid {
   minTileCol: number;

@@ -92,10 +92,11 @@ export const DATA_SOURCE_GROUPS: readonly DataSourceGroup[] = [
         href: 'https://www.linz.govt.nz',
       },
       {
-        name: 'Esri World Imagery',
+        name: 'LINZ Basemaps',
         description: 'Couleurs des nuages de points en Nouvelle-Zélande',
-        licenseLabel: 'Esri, Maxar, Earthstar Geographics',
-        href: 'https://www.esri.com',
+        // Texte imposé par LINZ pour l'imagerie aérienne (attributing-linz-basemaps-data).
+        licenseLabel: 'Sourced from LINZ. CC BY 4.0 · imagerie satellite © Maxar Technologies et données Copernicus Sentinel modifiées, sous licence Sinergise Ltd.',
+        href: 'https://www.linz.govt.nz/copyright',
       },
       {
         name: 'GSI, AIST 3DDB, préfectures de Shizuoka et Kanagawa',

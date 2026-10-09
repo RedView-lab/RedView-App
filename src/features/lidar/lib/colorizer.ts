@@ -1,8 +1,8 @@
 import type { PointCloudData, DetectedCrs } from '../types';
 import { toWgs84, isJgd2011Crs } from './coordConvert';
-import { fetchEsriImageryTile } from './nz/esriImagery';
+import { fetchLinzImageryTile, linzBasemapsApiKey } from './nz/linzImagery';
 import { beneluxOrthoTileUrl } from './beneluxOrtho';
-import { ORTHO_TILE_SIZE as TILE_SIZE, sampleOrthoColors } from './orthoSampling';
+import { fillDefaultOrthoColors, ORTHO_TILE_SIZE as TILE_SIZE, sampleOrthoColors } from './orthoSampling';
 
 const WMTS_ZOOM = 19;
 
@@ -19,18 +19,23 @@ const SWISS_ORTHO_URL = (z: number, x: number, y: number) => {
   return `https://wmts${sub}.geo.admin.ch/1.0.0/ch.swisstopo.swissimage/default/current/3857/${z}/${x}/${y}.jpeg`;
 };
 
-// Nouvelle-Zélande : Esri World Imagery via `fetchEsriImageryTile`, qui écarte
-// les tuiles de remplacement « Map data not yet available » d'Esri (voir nz/esriImagery.ts).
+// Nouvelle-Zélande : imagerie aérienne LINZ Basemaps via `fetchLinzImageryTile`
+// (clé d'API de la build, voir nz/linzImagery.ts).
 function orthoUrlForCrs(crs: DetectedCrs, z: number, x: number, y: number): string {
   if (crs === 'CH1903_LV95') return SWISS_ORTHO_URL(z, x, y);
   return beneluxOrthoTileUrl(crs, z, x, y) ?? IGN_ORTHO_URL(z, x, y);
 }
 
 async function fetchOrthoBitmap(crs: DetectedCrs, z: number, x: number, y: number): Promise<ImageBitmap | null> {
-  if (crs === 'NZTM2000') return fetchEsriImageryTile(z, x, y);
+  if (crs === 'NZTM2000') return fetchLinzImageryTile(z, x, y);
   const response = await fetch(orthoUrlForCrs(crs, z, x, y));
   if (!response.ok) return null;
   return createImageBitmap(await response.blob());
+}
+
+/** `false` quand l'orthophoto du territoire n'est pas disponible dans cette build. */
+function hasOrthoSource(crs: DetectedCrs): boolean {
+  return crs !== 'NZTM2000' || linzBasemapsApiKey() !== null;
 }
 
 let _sharedOrthoCanvas: OffscreenCanvas | null = null;
@@ -172,6 +177,7 @@ function computeOrthoTileRange(bounds: PointCloudData['bounds'], crs: DetectedCr
  * l'emprise de l'en-tête COPC) sans les attendre. `colorizePointCloud` les reprend.
  */
 export function prefetchOrthoTiles(bounds: PointCloudData['bounds'], crs: DetectedCrs): void {
+  if (!hasOrthoSource(crs)) return;
   const range = computeOrthoTileRange(bounds, crs);
   for (let col = range.minTileCol; col <= range.maxTileCol; col++) {
     for (let row = range.minTileRow; row <= range.maxTileRow; row++) {
@@ -185,6 +191,14 @@ export async function colorizePointCloud(
   onProgress?: (phase: string, percent: number) => void
 ): Promise<void> {
   const { positions, colors, count, crs, bounds, origin } = pointCloud;
+
+  // Sans source d'orthophoto (Nouvelle-Zélande sans clé LINZ), aucune
+  // requête : tous les points prennent le gris par défaut.
+  if (!hasOrthoSource(crs)) {
+    fillDefaultOrthoColors(colors, count);
+    onProgress?.('Colorisation terminée', 100);
+    return;
+  }
 
   const {
     px00, py00, px10, py10, px01, py01, px11, py11,

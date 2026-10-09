@@ -6281,8 +6281,8 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "© Instituto Geográfico Nacional, CC BY 4.0"
   },
   {
-    "fr": "Esri, Maxar, Earthstar Geographics",
-    "en": "Esri, Maxar, Earthstar Geographics"
+    "fr": "Sourced from LINZ. CC BY 4.0 · imagerie satellite © Maxar Technologies et données Copernicus Sentinel modifiées, sous licence Sinergise Ltd.",
+    "en": "Sourced from LINZ. CC BY 4.0 · satellite imagery © Maxar Technologies and modified Copernicus Sentinel data, licensed by Sinergise Ltd."
   },
   {
     "fr": "© RainViewer",

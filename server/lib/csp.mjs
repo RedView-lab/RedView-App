@@ -15,7 +15,7 @@
 export const CSP_REPORT_URI = 'https://errors.redview.tech/api/1/security/?glitchtip_key=560280d647da4557b67bd2e937b5893f';
 
 const GEO_SOURCES = 'https://s3.amazonaws.com/elevation-tiles-prod/ https://japan-pointcloud.s3.ap-northeast-1.amazonaws.com https://virtual-shizuoka.s3.ap-northeast-1.amazonaws.com https://kanagawa-pointcloud.s3.ap-northeast-1.amazonaws.com https://gsvrg.ipri.aist.go.jp';
-const NATIONAL_SOURCES = 'https://data.geopf.fr https://*.geopf.fr https://data.geo.admin.ch https://*.geo.admin.ch https://*.admin.ch https://servicios.idee.es https://*.idee.es https://www.ign.es https://*.ign.es https://hoydedata.no https://*.hoydedata.no https://cyberjapandata.gsi.go.jp https://*.gsi.go.jp https://server.arcgisonline.com https://*.arcgisonline.com https://service.pdok.nl https://geo.api.vlaanderen.be https://remotesensing.vlaanderen.be';
+const NATIONAL_SOURCES = 'https://data.geopf.fr https://*.geopf.fr https://data.geo.admin.ch https://*.geo.admin.ch https://*.admin.ch https://servicios.idee.es https://*.idee.es https://www.ign.es https://*.ign.es https://hoydedata.no https://*.hoydedata.no https://cyberjapandata.gsi.go.jp https://*.gsi.go.jp https://basemaps.linz.govt.nz https://service.pdok.nl https://geo.api.vlaanderen.be https://remotesensing.vlaanderen.be';
 
 /**
  * @param {{ reportUri?: string | null, upgradeInsecureRequests?: boolean }} [options]

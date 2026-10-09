@@ -8,7 +8,7 @@
 // worker puisse précalculer les UV par sommet.
 
 import { toWgs84, isJgd2011Crs } from '../lib/coordConvert';
-import { fetchEsriImageryTile } from '../lib/nz/esriImagery';
+import { fetchLinzImageryTile } from '../lib/nz/linzImagery';
 import { beneluxOrthoTileUrl } from '../lib/beneluxOrtho';
 import type { PointCloudBounds, DetectedCrs } from '../types';
 import type { CornerUV } from './terrainWorker';
@@ -62,10 +62,8 @@ async function fetchTile(col: number, row: number, crs: DetectedCrs): Promise<Im
   } else if (crs === 'RD_NEW' || crs === 'BL72') {
     url = beneluxOrthoTileUrl(crs, WMTS_ZOOM, col, row)!;
   } else if (crs === 'NZTM2000') {
-    // Nouvelle-Zélande — Esri World Imagery, avec repli sur l'ancêtre le plus proche
-    // là où z19 n'existe que sous forme de remplacement « Map data not yet available ».
-    // L'appelant dessine la bitmap dans une cellule de tuile entière, ce qui l'agrandit.
-    return fetchEsriImageryTile(WMTS_ZOOM, col, row);
+    // Nouvelle-Zélande — imagerie aérienne LINZ Basemaps (null sans clé d'API).
+    return fetchLinzImageryTile(WMTS_ZOOM, col, row);
   } else {
     url =
       `https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0` +
