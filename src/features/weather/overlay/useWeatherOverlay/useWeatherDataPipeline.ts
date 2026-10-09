@@ -133,7 +133,7 @@ export function useWeatherDataPipeline({
               break;
             }
           }
-          const sig = ['vps', closestHour, activeLayer.mode, paletteSignature(currentState, activeLayer.key)].join('|');
+          const sig = ['vps', cachedMeta.updatedAt, closestHour, activeLayer.mode, paletteSignature(currentState, activeLayer.key)].join('|');
           const rendered = renderedRef.current[activeLayer.key];
           const hasRendered = rendered && rendered.signature === sig && coordsEqual(rendered.coords, coords);
           const hasBlob = Boolean(getCachedRecoloredBlob(sig));
@@ -164,7 +164,7 @@ export function useWeatherDataPipeline({
 
           for (const activeLayer of freshActive) {
             const key = activeLayer.key;
-            const sig = ['vps', closestHour, activeLayer.mode, paletteSignature(stateRef.current, key)].join('|');
+            const sig = ['vps', cachedMeta.updatedAt, closestHour, activeLayer.mode, paletteSignature(stateRef.current, key)].join('|');
             const rendered = renderedRef.current[key];
             if (rendered && rendered.signature === sig && coordsEqual(rendered.coords, coords)) {
               ensureLayer(key, activeLayer.mode, rendered.url, rendered.coords);
@@ -193,8 +193,9 @@ export function useWeatherDataPipeline({
                 closestHour,
                 cachedMeta.hours,
                 cachedMeta.tileFormat || 'png',
+                cachedMeta.updatedAt,
                 (_url, img, h) => {
-                  const preSig = ['vps', h, activeLayer.mode, paletteSignature(currentState, activeLayer.key)].join('|');
+                  const preSig = ['vps', cachedMeta.updatedAt, h, activeLayer.mode, paletteSignature(currentState, activeLayer.key)].join('|');
                   const varSpec = cachedMeta.variables[activeLayer.key];
                   preRecolorTile(
                     img,
@@ -308,6 +309,7 @@ export function useWeatherDataPipeline({
 
       const signature = [
         'vps',
+        meta.updatedAt,
         closestHour,
         activeLayer.mode,
         paletteSignature(currentState, key),
@@ -336,7 +338,7 @@ export function useWeatherDataPipeline({
       }
 
       // Charge la tuile raster haute résolution du VPS (cache mémoire instantané + HTTP/2)
-      const tileUrl = buildVpsTileUrl(key, closestHour, meta.tileFormat || 'png');
+      const tileUrl = buildVpsTileUrl(key, closestHour, meta.tileFormat || 'png', meta.updatedAt);
       let img: HTMLImageElement;
       try {
         img = await loadTileImage(tileUrl, signal);
@@ -400,8 +402,9 @@ export function useWeatherDataPipeline({
         closestHour,
         meta.hours,
         meta.tileFormat || 'png',
+        meta.updatedAt,
         (_url, preImg, h) => {
-          const preSig = ['vps', h, activeLayer.mode, paletteSignature(currentState, key)].join('|');
+          const preSig = ['vps', meta.updatedAt, h, activeLayer.mode, paletteSignature(currentState, key)].join('|');
           preRecolorTile(
             preImg,
             key,

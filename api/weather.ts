@@ -166,6 +166,17 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     }
   }
 
+  // Une tuile versionnée par son run (`?v=`, vpsWeatherClient.buildVpsTileUrl)
+  // ne change plus ; sans version (onglet d'un ancien build), le même fichier
+  // est réécrit au run suivant : cache court.
+  const isTile = subPath.includes('tiles/');
+  const isVersionedTile = isTile && parsedUrl.searchParams.has('v');
+  const cacheControl = isVersionedTile
+    ? 'public, max-age=3600, stale-while-revalidate=7200, immutable'
+    : isTile
+      ? 'public, max-age=300'
+      : 'public, max-age=60, stale-while-revalidate=120';
+
   // 1. Regarde le cache LRU en mémoire (latence < 1 ms)
   const cacheKey = `${subPath}${parsedUrl.search}`;
   const cached = getCached(cacheKey);
@@ -174,11 +185,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     res.setHeader('Content-Type', cached.contentType);
     res.setHeader('X-Weather-Source', 'memory-cache');
     res.setHeader('Access-Control-Allow-Origin', '*');
-    if (subPath.includes('tiles/')) {
-      res.setHeader('Cache-Control', 'public, max-age=3600, stale-while-revalidate=7200, immutable');
-    } else {
-      res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=120');
-    }
+    res.setHeader('Cache-Control', cacheControl);
     return res.send(cached.body);
   }
 
@@ -204,8 +211,9 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
        subPath.endsWith('.png') ? 'image/png' :
        'application/json; charset=utf-8');
 
-    // Remplit le cache mémoire : 60 s pour les métadonnées, 1 h pour les tuiles raster immuables
-    const ttlMs = subPath.includes('tiles/') ? 3_600_000 : 60_000;
+    // Remplit le cache mémoire : 60 s pour les métadonnées, 1 h pour une tuile
+    // versionnée, 5 min pour une tuile sans version.
+    const ttlMs = isVersionedTile ? 3_600_000 : isTile ? 300_000 : 60_000;
     setCached(cacheKey, {
       body,
       contentType,
@@ -217,12 +225,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     res.setHeader('Content-Type', contentType);
     res.setHeader('X-Weather-Source', 'oracle-vps');
     res.setHeader('Access-Control-Allow-Origin', '*');
-
-    if (subPath.includes('tiles/')) {
-      res.setHeader('Cache-Control', 'public, max-age=3600, stale-while-revalidate=7200, immutable');
-    } else {
-      res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=120');
-    }
+    res.setHeader('Cache-Control', cacheControl);
 
     return res.send(body);
   } catch (err) {

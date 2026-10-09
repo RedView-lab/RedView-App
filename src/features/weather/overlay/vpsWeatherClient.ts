@@ -177,8 +177,16 @@ export function findClosestForecastHour(targetDate: string, targetTime: string, 
   return minDiff <= MAX_FORECAST_HOUR_GAP_MS ? bestHour : '';
 }
 
-export function buildVpsTileUrl(variable: string, isoHour: string, tileFormat: string = 'png'): string {
-  return `/api/weather/tiles/${variable}_${isoHour}.${tileFormat}`;
+/**
+ * Tuile d'une variable à une heure de validité. Le VPS réécrit le même
+ * fichier à chaque run de prévision : `runVersion` (`meta.updatedAt`) fait
+ * de chaque run une URL à part, donc les caches (serveur, navigateur, tuiles
+ * recolorées) ne servent jamais l'ancien run pour la même heure. Les serveurs
+ * de tuiles du VPS ignorent la chaîne de requête.
+ */
+export function buildVpsTileUrl(variable: string, isoHour: string, tileFormat: string = 'png', runVersion: string = ''): string {
+  const url = `/api/weather/tiles/${variable}_${isoHour}.${tileFormat}`;
+  return runVersion ? `${url}?v=${encodeURIComponent(runVersion)}` : url;
 }
 
 const tileImageCache = new Map<string, HTMLImageElement>();
@@ -275,6 +283,7 @@ export function prefetchAdjacentHours(
   currentHour: string,
   availableHours: string[],
   tileFormat: string = 'png',
+  runVersion: string = '',
   onTileLoaded?: (url: string, img: HTMLImageElement, hour: string) => void,
 ): void {
   cancelPrefetch();
@@ -294,7 +303,7 @@ export function prefetchAdjacentHours(
   for (const idx of targetIndices) {
     if (idx >= 0 && idx < availableHours.length) {
       const h = availableHours[idx]!;
-      const url = buildVpsTileUrl(variable, h, tileFormat);
+      const url = buildVpsTileUrl(variable, h, tileFormat, runVersion);
       if (!tileImageCache.has(url) && !inFlightImagePromises.has(url)) {
         itemsToPrefetch.push({ url, hour: h });
       }
