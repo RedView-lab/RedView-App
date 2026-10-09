@@ -3,7 +3,7 @@ import type { AddressInfo } from 'node:net';
 import { Writable } from 'node:stream';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { createRequestLogger, normalizeRoutePath, resolveRequestId } from '../request-logging.mjs';
+import { createRequestLogger, markLoadShed, normalizeRoutePath, resolveRequestId } from '../request-logging.mjs';
 import { scrubServerEvent } from '../observability.mjs';
 
 describe('normalizeRoutePath', () => {
@@ -78,7 +78,9 @@ describe('createRequestLogger', () => {
         res.setHeader('X-Brouter-Timeout', 'compute');
         res.setHeader('X-Route-Cache', 'lonlats=6.1,45.2');
       }
-      res.statusCode = pathname === '/boom' ? 500 : 200;
+      if (pathname === '/busy') res.setHeader('Retry-After', '5');
+      if (pathname === '/shed') markLoadShed(res);
+      res.statusCode = pathname === '/boom' ? 500 : ['/busy', '/shed', '/down'].includes(pathname) ? 503 : 200;
       res.end('ok');
     });
     await new Promise<void>((resolve) => server!.listen(0, '127.0.0.1', () => resolve()));
@@ -137,6 +139,18 @@ describe('createRequestLogger', () => {
     expect(lines[0]).toMatchObject({ level: 50, route: '/:page', res: { statusCode: 500 } });
     // Pas d'erreur synthétique dont la pile ne montre que les rouages de pino-http.
     expect(lines[0]).not.toHaveProperty('err');
+  });
+
+  it('logs a deliberate 503 (Retry-After, or marked load shedding) as a warning, any other 5xx as an error', async () => {
+    const { lines, base } = await startServer();
+    await fetch(`${base}/busy`);
+    await fetch(`${base}/shed`);
+    await fetch(`${base}/down`);
+    await expect.poll(() => lines.length).toBe(3);
+    expect(lines.filter((line) => line.level === 40)).toHaveLength(2);
+    expect(lines.filter((line) => line.level === 50)).toHaveLength(1);
+    const shed = await fetch(`${base}/shed`);
+    expect([...shed.headers.keys()].some((name) => /shed/i.test(name))).toBe(false);
   });
 
   it('logs static assets at debug level only', async () => {

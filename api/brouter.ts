@@ -31,6 +31,7 @@ import crypto from 'node:crypto';
 import { promisify } from 'node:util';
 import zlib from 'node:zlib';
 import { createByteLru } from '../server/lib/byte-lru.mjs';
+import { markLoadShed } from '../server/lib/request-logging.mjs';
 import { effectiveSearchKm, resolvePass1Coefficient } from './_lib/brouter-search.js';
 import type { ApiRequest, ApiResponse } from './_lib/types.js';
 import { createUpstreamGate, UpstreamBusyError, type UpstreamSlot } from './_lib/upstreamGate.js';
@@ -388,6 +389,9 @@ function takeFreeBrouterSlot(res: ApiResponse): UpstreamSlot | null {
     res.setHeader('X-Upstream-Wait-Ms', '0');
     return slot;
   }
+  // Refus voulu, sans Retry-After (un secours n'est jamais réessayé,
+  // customProfileFetch.ts) : journalisé en avertissement, pas en erreur.
+  markLoadShed(res);
   res.setHeader('Cache-Control', 'no-store');
   res.status(503).json({ error: 'BRouter busy, no slot for a backup search' });
   return null;

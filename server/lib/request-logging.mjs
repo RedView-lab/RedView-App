@@ -88,9 +88,28 @@ function withUpstream(object, res) {
   return upstream ? { ...object, upstream } : object;
 }
 
+const LOAD_SHED = Symbol('redview.loadShed');
+
+/**
+ * Marque un 503 comme délestage voulu quand la réponse ne porte pas de
+ * Retry-After (le secours BRouter refusé n'invite pas à réessayer) : journalisé
+ * en avertissement. Propriété interne, jamais envoyée au client.
+ *
+ * @param {import('node:http').ServerResponse} res
+ */
+export function markLoadShed(res) {
+  /** @type {Record<symbol, unknown>} */ (/** @type {unknown} */ (res))[LOAD_SHED] = true;
+}
+
 function logLevelFor(req, res, error) {
   const route = routeOf(req);
-  if (error || res.statusCode >= 500) return 'error';
+  if (error) return 'error';
+  // 503 de délestage voulu (file BRouter saturée, géocodeur au plafond de
+  // Nominatim : Retry-After ; secours BRouter sans place : markLoadShed) — un
+  // avertissement, pas une panne : ces refus arrivent par rafales sous charge
+  // et noyaient les vraies erreurs.
+  if (res.statusCode === 503 && (res.getHeader('retry-after') != null || res[LOAD_SHED] === true)) return 'warn';
+  if (res.statusCode >= 500) return 'error';
   if (res.statusCode >= 400) return 'warn';
   if (HEALTH_PATHS.has(route)) return 'silent';
   if (route === '/assets/*' || route === '/sw-dem/*' || route === '/:file') return 'debug';
