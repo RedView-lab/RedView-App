@@ -297,6 +297,15 @@ describe('api/brouter — file d’attente vers BRouter', () => {
     expect(retry.status).toBe(200);
   });
 
+  it('un nom de profil hors de [A-Za-z0-9_-] est refusé sans atteindre BRouter', async () => {
+    for (const profile of ['../profiles2/trekking', 'custom_x/../../y', 'a b', '']) {
+      const refused = call(handler, { lonlats: '6.1,45.1|6.1,45.2', profile });
+      await refused.done;
+      expect(refused.status).toBe(400);
+    }
+    expect(brouter.fetchMock).not.toHaveBeenCalled();
+  });
+
   it('une réponse du cache ne passe pas par la file', async () => {
     const first = call(handler, route(1));
     await flush();

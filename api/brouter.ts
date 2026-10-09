@@ -115,6 +115,12 @@ const KNOWN_PROFILES = createByteLru<string>({
   sizeOf: (text) => text.length * 2,
 });
 const CUSTOM_PROFILE_PREFIX = 'custom_';
+/**
+ * Nom de profil accepté dans `?profile=` : BRouter en fait un chemin de
+ * fichier (`<dossier des profils>/<nom>.brf`). L'app n'envoie que
+ * `trekking` et des `custom_<empreinte>` ; rien d'autre n'atteint BRouter.
+ */
+const PROFILE_NAME_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 
 /** Valeur d'en-tête sûre : ASCII imprimable uniquement, tronquée. */
 function sanitizeHeaderValue(value: string): string {
@@ -246,6 +252,9 @@ async function handleRouteQuery(
   }
   if (!params.has('format')) params.set('format', 'geojson');
   if (!params.has('profile')) params.set('profile', 'trekking');
+  if (!PROFILE_NAME_PATTERN.test(params.get('profile') ?? '')) {
+    return res.status(400).json({ error: 'Invalid "profile" parameter' });
+  }
 
   // Passe unique imposée (la passe exacte est quadratique sur les longs tracés) ;
   // coefficient A* du client borné selon la distance (calculé s'il manque).
