@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { createDefaultProject } from '@/features/itineraryPanel/lib/project/defaultState';
 import { extractProjectView, type ProjectViewState } from '@/features/itineraryPanel/lib/project/layers';
@@ -20,6 +20,14 @@ async function load() {
   const views = await import('./projectViews');
   return { ...harness, views, docId: (projectId: string) => views.projectViewDocumentId(projectId, ME) };
 }
+
+// Graphe de modules (persistance, faux SDK, fake-indexeddb) transformé une fois
+// ici, hors du délai de 5 s des tests : sous la charge de `npm run check`, le
+// premier test le payait seul et dépassait ce délai. Chaque test recharge
+// toujours des modules neufs (loadProjectPersistence → resetModules).
+beforeAll(async () => {
+  await load();
+}, 60_000);
 
 const baseView = extractProjectView(createDefaultProject());
 const view = (activeItineraryId: string): ProjectViewState => ({ ...baseView, activeItineraryId });

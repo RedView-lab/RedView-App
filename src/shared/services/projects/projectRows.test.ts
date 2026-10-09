@@ -1,5 +1,5 @@
 import { IDBObjectStore } from 'fake-indexeddb';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createDefaultItinerary, createDefaultProject } from '@/features/itineraryPanel/lib/project/defaultState';
 import { loadProjectPersistence, reloadProjectSession as reloadTab, type MockAppwriteSdk as MockSdk } from '@/shared/test/projectPersistence';
@@ -34,6 +34,14 @@ async function load() {
     live: await import('./liveSessions'),
   };
 }
+
+// Graphe de modules (persistance, faux SDK, fake-indexeddb) transformé une fois
+// ici, hors du délai de 5 s des tests : sous la charge de `npm run check`, le
+// premier test le payait seul et dépassait ce délai. Chaque test recharge
+// toujours des modules neufs (loadProjectPersistence → resetModules).
+beforeAll(async () => {
+  await load();
+}, 60_000);
 
 const project = (name: string) => ({ ...createDefaultProject(), name });
 const updates = (mock: MockSdk['__mock']) => mock.calls.filter((call) => call === 'updateDocument:projects').length;

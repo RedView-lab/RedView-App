@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { loadProjectPersistence } from '@/shared/test/projectPersistence';
 
@@ -20,6 +20,14 @@ async function load() {
     live: await import('./liveSessions'),
   };
 }
+
+// Graphe de modules (persistance, faux SDK, fake-indexeddb) transformé une fois
+// ici, hors du délai de 5 s des tests : sous la charge de `npm run check`, le
+// premier test le payait seul et dépassait ce délai. Chaque test recharge
+// toujours des modules neufs (loadProjectPersistence → resetModules).
+beforeAll(async () => {
+  await load();
+}, 60_000);
 
 const fitFile = (name: string, content = 'FIT') => new File([content], name, { type: 'application/octet-stream', lastModified: 1 });
 
