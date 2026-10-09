@@ -65,6 +65,14 @@ const PROFILE = flag('--profile');
 const BLOCKED_HOSTS = value('--block', '').split(',').filter(Boolean);
 /** `load` réduit à l'écran de connexion (premier rendu), sans ouvrir de projet. */
 const LOGIN_ONLY = flag('--login-only');
+/**
+ * `--timeline` (scénario load) : chronologie de l'ouverture à froid — octets
+ * par hôte échantillonnés toutes les 250 ms jusqu'à 10 s après « carte
+ * prête », et lignes `[map3d]` de la console (plafond de 12 s avec les
+ * sources encore en chargement) : ce qui est sur le chemin critique de la
+ * carte et ce qui pourrait partir plus tard.
+ */
+const TIMELINE = flag('--timeline');
 
 // ── Contrôles ──────────────────────────────────────────────────────────────
 const failures: string[] = [];
@@ -218,6 +226,113 @@ function hostClass(host: string, origin: string) {
   return 'autres';
 }
 
+// ── Chronologie de l'ouverture (--timeline) ───────────────────────────────
+interface HostTimeline { host: string; bytesBeforeReady: number; bytesAfterReady: number; firstMs: number; lastMs: number }
+interface RequestGroup { kind: string; count: number; bytes: number; lastMs: number; afterReady: number }
+interface TimelineReport { readyMs: number | null; hosts: HostTimeline[]; requests: RequestGroup[]; console: Array<{ ms: number; text: string }> }
+
+/** Famille d'une requête (page et workers dédiés de Mapbox) : chemin seulement, jamais la requête. */
+function requestKind(url: string): string {
+  let parsed: URL;
+  try { parsed = new URL(url); } catch { return 'autre'; }
+  const p = parsed.pathname;
+  if (/mapbox\.com$/.test(parsed.hostname)) {
+    if (/\/styles\/v1\/.*\/sprite/.test(p)) return 'mapbox sprite';
+    if (/\/styles\/v1\//.test(p)) return 'mapbox style';
+    if (/\/fonts\/v1\//.test(p)) return 'mapbox glyphes';
+    if (/mapbox\.satellite/.test(p)) return /@2x/.test(p) ? 'mapbox satellite @2x' : 'mapbox satellite';
+    if (/terrain-dem|mapbox-terrain-dem|\.terrarium|dem/.test(p)) return 'mapbox relief';
+    if (/\.(vector\.pbf|mvt|pbf)$/.test(p) || /\/v4\/.*\.(vector|pbf)/.test(p)) return 'mapbox vecteurs';
+    if (/\.json$/.test(p) || /\/v4\/[^/]+\.json/.test(p)) return 'mapbox tilejson';
+    return 'mapbox autre';
+  }
+  if (parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost') {
+    if (p.startsWith('/assets/')) return 'app scripts / styles';
+    const family = p.split('/')[1] || '/';
+    return `app /${family}`;
+  }
+  return `externe ${parsed.hostname}`;
+}
+
+function startTimeline(page: Page, proxy: { bytesByHost: Map<string, number> }, t0: number) {
+  const baseline = new Map(proxy.bytesByHost);
+  const samples: Array<{ ms: number; bytes: Map<string, number> }> = [];
+  const consoleLines: Array<{ ms: number; text: string }> = [];
+  const finished: Array<{ kind: string; bytes: number; ms: number }> = [];
+  const onFinished = (request: { url(): string; sizes(): Promise<{ responseBodySize: number; responseHeadersSize: number }> }) => {
+    const ms = performance.now() - t0;
+    void request.sizes().then(
+      (sizes) => finished.push({ kind: requestKind(request.url()), bytes: sizes.responseBodySize + sizes.responseHeadersSize, ms }),
+      () => finished.push({ kind: requestKind(request.url()), bytes: 0, ms }),
+    );
+  };
+  page.on('requestfinished', onFinished);
+  const onConsole = (message: { text(): string }) => {
+    const text = message.text();
+    if (/\[map3d\]|\[dem|\[sw|loading cycle/i.test(text)) consoleLines.push({ ms: performance.now() - t0, text: text.slice(0, 240) });
+  };
+  page.on('console', onConsole);
+  const sample = () => {
+    const bytes = new Map<string, number>();
+    for (const [host, total] of proxy.bytesByHost) bytes.set(host, total - (baseline.get(host) ?? 0));
+    samples.push({ ms: performance.now() - t0, bytes });
+  };
+  sample();
+  const timer = setInterval(sample, 250);
+  return {
+    stop(readyMs: number | null): TimelineReport {
+      clearInterval(timer);
+      sample();
+      page.off('console', onConsole);
+      page.off('requestfinished', onFinished);
+      const groups = new Map<string, RequestGroup>();
+      for (const entry of finished) {
+        const group = groups.get(entry.kind) ?? { kind: entry.kind, count: 0, bytes: 0, lastMs: 0, afterReady: 0 };
+        group.count += 1;
+        group.bytes += entry.bytes;
+        group.lastMs = Math.max(group.lastMs, entry.ms);
+        if (readyMs != null && entry.ms > readyMs) group.afterReady += 1;
+        groups.set(entry.kind, group);
+      }
+      const requests = [...groups.values()].sort((a, b) => b.bytes - a.bytes);
+      const hosts = new Set(samples.flatMap((entry) => [...entry.bytes.keys()]));
+      const report: HostTimeline[] = [];
+      for (const host of hosts) {
+        let previous = 0;
+        let firstMs = Number.NaN;
+        let lastMs = Number.NaN;
+        let atReady = 0;
+        for (const entry of samples) {
+          const value = entry.bytes.get(host) ?? 0;
+          if (value > previous) {
+            if (Number.isNaN(firstMs)) firstMs = entry.ms;
+            lastMs = entry.ms;
+          }
+          if (readyMs != null && entry.ms <= readyMs) atReady = value;
+          previous = value;
+        }
+        const total = previous;
+        if (total <= 0) continue;
+        report.push({ host, bytesBeforeReady: readyMs == null ? total : atReady, bytesAfterReady: readyMs == null ? 0 : total - atReady, firstMs, lastMs });
+      }
+      report.sort((a, b) => b.bytesBeforeReady - a.bytesBeforeReady);
+      return { readyMs, hosts: report, requests, console: consoleLines };
+    },
+  };
+}
+
+function printTimeline(label: string, report: TimelineReport) {
+  const kib = (bytes: number) => `${(bytes / 1024).toFixed(0)} Kio`;
+  console.log(`    chronologie ${label} — carte prête à ${ms(report.readyMs as number)}`);
+  for (const host of report.hosts) {
+    console.log(`      ${host.host.padEnd(40)} avant ${kib(host.bytesBeforeReady).padStart(9)} · après ${kib(host.bytesAfterReady).padStart(8)} · de ${ms(host.firstMs)} à ${ms(host.lastMs)}`);
+  }
+  for (const group of report.requests) {
+    console.log(`      requêtes ${group.kind.padEnd(28)} ${String(group.count).padStart(4)} · ${kib(group.bytes).padStart(9)} · dernière à ${ms(group.lastMs)}${group.afterReady ? ` · ${group.afterReady} après « prête »` : ''}`);
+  }
+  for (const line of report.console) console.log(`      console ${ms(line.ms)} : ${line.text}`);
+}
+
 // ── Scénario load ──────────────────────────────────────────────────────────
 async function scenarioLoad(servers: Map<string, { origin: string }>) {
   const project = fixture('200x1');
@@ -270,6 +385,7 @@ async function scenarioLoad(servers: Map<string, { origin: string }>) {
             step(`liste : ${list == null ? 'jamais affichée' : 'affichée'}`);
             row.projectListMs = list == null ? null : list - t0;
             const openedAt = performance.now();
+            const timeline = TIMELINE ? startTimeline(session.page, proxy, openedAt) : null;
             await clickOpen(session.page, project.spec.name);
             const editor = await until(session.page, `!!document.querySelector('.mapboxgl-canvas')`, 120_000);
             step(`éditeur : ${editor == null ? 'jamais monté' : 'monté'}`);
@@ -277,6 +393,17 @@ async function scenarioLoad(servers: Map<string, { origin: string }>) {
             step(`carte : ${ready == null ? 'jamais prête' : 'prête'}`);
             row.editorMs = editor == null ? null : editor - openedAt;
             row.mapReadyMs = ready == null ? null : ready - openedAt;
+            if (timeline) {
+              // Estimation de la connexion par le navigateur (Network Information API) : ce que voit l'app.
+              const connection = await evaluate<{ downlink?: number; effectiveType?: string; rtt?: number } | null>(
+                session.page,
+                'navigator.connection ? { downlink: navigator.connection.downlink, effectiveType: navigator.connection.effectiveType, rtt: navigator.connection.rtt } : null',
+              );
+              console.log(`    connexion estimée par le navigateur : ${connection ? `${connection.effectiveType}, ${connection.downlink} Mbit/s, rtt ${connection.rtt} ms` : 'inconnue'}`);
+              await sleep(10_000);
+              row.timeline = timeline.stop(row.mapReadyMs as number | null);
+              printTimeline(`${path.basename(root)} #${run} ${networkName}`, row.timeline as TimelineReport);
+            }
             const camera = (await evaluate<{ zoom: number }>(session.page, 'window.__rvMapState()')) ?? { zoom: NaN };
             check(`load ${networkName} #${run} : vue enregistrée appliquée`, Math.abs(camera.zoom - project.viewport.zoom) < 0.75, `zoom ${camera.zoom.toFixed(2)} / ${project.viewport.zoom}`);
             const byClass: Record<string, number> = {};
