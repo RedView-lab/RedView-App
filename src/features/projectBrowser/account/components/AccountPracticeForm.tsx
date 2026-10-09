@@ -145,7 +145,7 @@ export function AccountPracticeForm({
       ))}
 
       <div className="rvpb-account-actions">
-        <span className="rvpb-account-inline-status">{isSaving ? t('Enregistrement...') : ' '}</span>
+        <span className="rvpb-account-inline-status">{isSaving ? t('Enregistrement…') : ' '}</span>
         <button type="button" className="rvpb-inline-cta is-danger" onClick={onAddSport}>
           {t('Ajouter un sport')}
         </button>

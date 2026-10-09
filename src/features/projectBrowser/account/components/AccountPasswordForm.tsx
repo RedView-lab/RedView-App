@@ -79,7 +79,7 @@ export function AccountPasswordForm({ value, hasPassword, isSaving, onChange, on
             </span>
           ) : null}
           <button type="submit" className="rvpb-inline-cta is-danger" disabled={isSaving || problem !== null}>
-            {isSaving ? t('Mise a jour...') : t('Changer le mot de passe')}
+            {isSaving ? t('Mise à jour…') : t('Changer le mot de passe')}
           </button>
         </div>
       </form>

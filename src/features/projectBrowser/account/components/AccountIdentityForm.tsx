@@ -39,7 +39,7 @@ export function AccountIdentityForm({
     isSaving || !isDirty || !value.firstName.trim() || !value.lastName.trim();
 
   return (
-    <AccountSection title={t('Coordonnees')}>
+    <AccountSection title={t('Vos coordonnées')}>
       <div className="rvpb-account-fields rvpb-account-fields--two-up">
         <label className="rvpb-account-field">
           <span className="rvpb-account-field__label">{t('First name *')}</span>
@@ -124,7 +124,7 @@ export function AccountIdentityForm({
           {t('Annuler')}
         </button>
         <button type="button" className="rvpb-inline-cta is-danger" onClick={onSave} disabled={isDisabled}>
-          {isSaving ? t('Enregistrement...') : t('Enregistrer')}
+          {isSaving ? t('Enregistrement…') : t('Enregistrer')}
         </button>
       </div>
     </AccountSection>

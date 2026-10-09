@@ -528,7 +528,7 @@ export function useProjectBrowserOverlayState({
     ? formatAccountDisplayName(accountProfile, displayName)
     : displayName || t('Utilisateur');
   const headerMetaLabel = accountLoading
-    ? t('Chargement du compte...')
+    ? t('Chargement du compte…')
     : formatLastConnection(accountProfile?.lastSignInAt ?? null);
   const tierLabel = accountTierLabel(subscriptionState.snapshot, subscriptionState.isLoading);
   const showDemoRail = Boolean(subscriptionState.snapshot) && !hasLiveSubscription(subscriptionState.snapshot);

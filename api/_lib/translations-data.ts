@@ -93,8 +93,8 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Our feedback questionnaire"
   },
   {
-    "fr": "Coordonnees",
-    "en": "Contact details"
+    "fr": "Vos coordonnées",
+    "en": "Your contact details"
   },
   {
     "fr": "Prénom *",
@@ -111,10 +111,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Annuler",
     "en": "Cancel"
-  },
-  {
-    "fr": "Enregistrement...",
-    "en": "Saving..."
   },
   {
     "fr": "Enregistrer",
@@ -177,15 +173,15 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Current password"
   },
   {
-    "fr": "Mise a jour...",
-    "en": "Updating..."
+    "fr": "Mise à jour…",
+    "en": "Updating…"
   },
   {
     "fr": "Changer le mot de passe",
     "en": "Change password"
   },
   {
-    "fr": "Coordonnees enregistrees.",
+    "fr": "Coordonnées enregistrées.",
     "en": "Contact details saved."
   },
   {
@@ -197,12 +193,8 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Unable to save practice details."
   },
   {
-    "fr": "Mot de passe mis a jour.",
+    "fr": "Mot de passe mis à jour.",
     "en": "Password updated."
-  },
-  {
-    "fr": "Impossible de mettre a jour le mot de passe.",
-    "en": "Unable to update the password."
   },
   {
     "fr": "Confirmer le nouveau mot de passe",
@@ -265,8 +257,8 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "This file no longer exists: it may have been deleted from another device."
   },
   {
-    "fr": "Chargement du compte...",
-    "en": "Loading account..."
+    "fr": "Chargement du compte…",
+    "en": "Loading account…"
   },
   {
     "fr": "Aucune information de compte disponible.",

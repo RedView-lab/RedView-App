@@ -160,7 +160,7 @@ export function AccountPanel({
       });
       setNotice({
         tone: 'success',
-        message: t('Coordonnees enregistrees.'),
+        message: t('Coordonnées enregistrées.'),
       });
     } catch (nextError) {
       setNotice({
@@ -183,7 +183,7 @@ export function AccountPanel({
       if (profile && !profile.hasPassword) onProfileUpdated({ ...profile, hasPassword: true });
       setNotice({
         tone: 'success',
-        message: t('Mot de passe mis a jour.'),
+        message: t('Mot de passe mis à jour.'),
       });
     } catch (nextError) {
       setNotice({
@@ -191,7 +191,7 @@ export function AccountPanel({
         message:
           nextError instanceof Error
             ? t(nextError.message)
-            : t('Impossible de mettre a jour le mot de passe.'),
+            : t('Impossible de mettre à jour le mot de passe.'),
       });
     } finally {
       setPasswordSaving(false);
@@ -201,7 +201,7 @@ export function AccountPanel({
   if (isLoading) {
     return (
       <section className="rvpb-account-panel" aria-label={t('Compte')}>
-        <div className="rvpb-empty">{t('Chargement du compte...')}</div>
+        <div className="rvpb-empty">{t('Chargement du compte…')}</div>
       </section>
     );
   }
