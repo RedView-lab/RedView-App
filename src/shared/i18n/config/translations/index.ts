@@ -4,6 +4,7 @@ import { authTranslationPairs } from './auth';
 import { collabTranslationPairs } from './collab';
 import { commentsTranslationPairs } from './comments';
 import { controlPanelTranslationPairs } from './controlPanel';
+import { creditsTranslationPairs } from './credits';
 import { dashboardTranslationPairs } from './dashboard';
 import { fitPredictorTranslationPairs } from './fitPredictor';
 import { globalTranslationPairs } from './global';
@@ -23,6 +24,7 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<AppTranslationPair> = [
   ...authTranslationPairs,
   ...collabTranslationPairs,
   ...commentsTranslationPairs,
+  ...creditsTranslationPairs,
   ...fitPredictorTranslationPairs,
   ...itineraryTranslationPairs,
   ...lidarTranslationPairs,

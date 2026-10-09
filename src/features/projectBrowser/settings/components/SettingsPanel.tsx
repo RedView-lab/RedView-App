@@ -18,6 +18,7 @@ import {
   type AppThemePreference,
 } from '@/shared/lib/appTheme';
 import { LANDING_URL } from '../../lib';
+import { DataSourcesSection } from './DataSourcesSection';
 
 type DisplayMode = AppThemePreference;
 type UnitSetting = 'metric' | 'imperial';
@@ -367,6 +368,10 @@ export function SettingsPanel({ profile }: SettingsPanelProps = {}) {
           </a>
         </article>
       </div>
+
+      <div className="rvpb-divider" />
+
+      <DataSourcesSection />
     </section>
   );
 }

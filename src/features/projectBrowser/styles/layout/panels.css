@@ -298,6 +298,101 @@
   flex: 0 0 auto;
 }
 
+/* Sources des données (attributions et licences) */
+.rvpb-settings-sources {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-bottom: 24px;
+}
+
+.rvpb-settings-sources__title {
+  margin: 0;
+  font-size: var(--rv-font-size-xl);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.rvpb-settings-sources__intro {
+  margin: 0;
+  max-width: 640px;
+  color: rgb(var(--rv-ink) / 0.64);
+  font-size: var(--rv-font-size-lg);
+  line-height: 1.4;
+}
+
+.rvpb-settings-sources__group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rvpb-settings-sources__group-title {
+  margin: 0;
+  font-size: var(--rv-font-size-lg);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.rvpb-settings-sources__list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-radius: 8px;
+  background: light-dark(#fff, rgba(255, 255, 255, 0.04));
+  box-shadow: 0 0 0 1px light-dark(rgb(var(--rv-ink) / 0.06), transparent);
+}
+
+.rvpb-settings-sources__item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, auto);
+  align-items: center;
+  gap: 4px 24px;
+  padding: 10px 12px;
+}
+
+.rvpb-settings-sources__item + .rvpb-settings-sources__item {
+  border-top: 1px solid rgb(var(--rv-ink) / 0.06);
+}
+
+.rvpb-settings-sources__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.rvpb-settings-sources__name {
+  font-size: var(--rv-font-size-lg);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.rvpb-settings-sources__description {
+  color: rgb(var(--rv-ink) / 0.64);
+  font-size: var(--rv-font-size-md);
+  line-height: 1.35;
+}
+
+.rvpb-settings-sources__license {
+  justify-self: end;
+  max-width: 320px;
+  color: rgb(var(--rv-ink) / 0.8);
+  font-size: var(--rv-font-size-md);
+  line-height: 1.35;
+  text-align: right;
+  text-decoration: underline;
+  text-decoration-color: rgb(var(--rv-ink) / 0.24);
+  text-underline-offset: 3px;
+}
+
+.rvpb-settings-sources__license:hover {
+  color: var(--rv-text);
+  text-decoration-color: currentColor;
+}
+
 .rvpb-inline-cta,
 .rvpb-text-link,
 .rvpb-add-row {

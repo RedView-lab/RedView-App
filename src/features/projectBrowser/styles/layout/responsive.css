@@ -107,6 +107,15 @@
     font-size: var(--rv-font-size-display);
   }
 
+  .rvpb-settings-sources__item {
+    grid-template-columns: 1fr;
+  }
+
+  .rvpb-settings-sources__license {
+    justify-self: start;
+    text-align: left;
+  }
+
   .rvpb-input-wrap {
     margin-left: 0;
   }
