@@ -388,9 +388,20 @@
   text-underline-offset: 3px;
 }
 
-.rvpb-settings-sources__license:hover {
+.rvpb-settings-sources__license:hover,
+.rvpb-settings-sources__software:hover {
   color: var(--rv-text);
   text-decoration-color: currentColor;
+}
+
+.rvpb-settings-sources__software {
+  align-self: flex-start;
+  color: rgb(var(--rv-ink) / 0.8);
+  font-size: var(--rv-font-size-md);
+  line-height: 1.35;
+  text-decoration: underline;
+  text-decoration-color: rgb(var(--rv-ink) / 0.24);
+  text-underline-offset: 3px;
 }
 
 .rvpb-inline-cta,

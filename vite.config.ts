@@ -277,6 +277,11 @@ export default defineConfig({
     // GlitchTip puis supprimées de dist/ au build Docker
     // (scripts/build/upload-sourcemaps.mjs) ; server.mjs ne sert jamais un `.map`.
     sourcemap: 'hidden',
+    // Licences des dépendances embarquées dans le bundle (MIT, BSD, Apache,
+    // MPL… demandent leur mention dans toute copie distribuée ; la
+    // minification retire les commentaires) : servies à
+    // /third-party-licenses.txt, liées depuis Réglages → Sources des données.
+    license: { fileName: 'third-party-licenses.txt' },
     chunkSizeWarningLimit: 2500,
     rollupOptions: {
       input: {

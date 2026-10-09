@@ -6125,6 +6125,10 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Public domain"
   },
   {
+    "fr": "Licences des bibliothèques logicielles incluses dans RedView",
+    "en": "Licences of the software libraries included in RedView"
+  },
+  {
     "fr": "© Kartverket, CC BY 4.0",
     "en": "© Kartverket, CC BY 4.0"
   },

@@ -38,7 +38,7 @@ describe('DataSourcesSection', () => {
   it('lists every source with an external licence link that cannot reach the opener', () => {
     rendered = renderComponent(createElement(DataSourcesSection));
     const links = [...rendered.container.querySelectorAll('a')];
-    expect(links).toHaveLength(sources.length);
+    expect(links).toHaveLength(sources.length + 1);
     for (const link of links) {
       expect(link.target).toBe('_blank');
       expect(link.rel).toContain('noreferrer');

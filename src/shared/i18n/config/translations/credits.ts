@@ -39,6 +39,7 @@ export const creditsTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'CC BY 4.0 et conditions du GSI', en: 'CC BY 4.0 and GSI terms of use' },
   { fr: 'AGPL-3.0, données CC BY 4.0', en: 'AGPL-3.0, data CC BY 4.0' },
   { fr: 'Domaine public', en: 'Public domain' },
+  { fr: 'Licences des bibliothèques logicielles incluses dans RedView', en: 'Licences of the software libraries included in RedView' },
   // Licences et mentions identiques dans les deux langues.
   { fr: '© Kartverket, CC BY 4.0', en: '© Kartverket, CC BY 4.0' },
   { fr: '© Instituto Geográfico Nacional, CC BY 4.0', en: '© Instituto Geográfico Nacional, CC BY 4.0' },

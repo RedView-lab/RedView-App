@@ -3,6 +3,9 @@ import { useId } from 'react';
 import { useAppI18n } from '@/shared/i18n';
 import { DATA_SOURCE_GROUPS } from '../lib/dataSources';
 
+/** Écrit au build par Vite (`build.license` de vite.config.ts) : licences des dépendances du bundle. */
+const THIRD_PARTY_LICENSES_URL = '/third-party-licenses.txt';
+
 /** « Sources des données » : attributions et licences des données et services tiers. */
 export function DataSourcesSection() {
   const { t } = useAppI18n();
@@ -34,6 +37,9 @@ export function DataSourcesSection() {
           </ul>
         </div>
       ))}
+      <a className="rvpb-settings-sources__software" href={THIRD_PARTY_LICENSES_URL} target="_blank" rel="noreferrer">
+        {t('Licences des bibliothèques logicielles incluses dans RedView')}
+      </a>
     </section>
   );
 }
