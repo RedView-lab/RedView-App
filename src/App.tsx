@@ -17,11 +17,12 @@ import { useIsMobileDevice } from './shared/hooks/useIsMobileDevice'
 import { useAppI18n } from './shared/i18n'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { appQueryClient } from './shared/services/queryClient'
+import { trackNavigationImport } from './shared/lib/staleBuild'
 import { AppToaster } from './shared/components/AppToaster/AppToaster'
 import { HealthDataConsentHost } from './shared/components/HealthDataConsent/HealthDataConsentHost'
 import './index.css'
 
-const Dashboard = lazy(() => import('./pages/Dashboard'))
+const Dashboard = lazy(() => trackNavigationImport(import('./pages/Dashboard')))
 
 /** 'unreachable' : Appwrite injoignable (timeout / réseau) sans session locale → écran de reprise. */
 type AuthStatus = 'loading' | 'ready' | 'unreachable'

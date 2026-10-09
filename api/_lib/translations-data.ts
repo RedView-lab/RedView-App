@@ -4825,6 +4825,18 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Technical details"
   },
   {
+    "fr": "Chargement interrompu",
+    "en": "Loading interrupted"
+  },
+  {
+    "fr": "Une partie de RedView n'a pas pu être chargée : une nouvelle version vient d'être mise en ligne, ou la connexion est coupée. Rechargez l'application pour continuer.",
+    "en": "Part of RedView could not be loaded: a new version was just released, or the connection is down. Reload the app to continue."
+  },
+  {
+    "fr": "Une nouvelle version de RedView est en ligne. Rechargez la page pour continuer.",
+    "en": "A new version of RedView is live. Reload the page to continue."
+  },
+  {
     "fr": "La facturation se fait désormais directement dans l'app RedView. Reconnectez-vous avec un compte où la démo est activée ou contactez le support si cet accès devrait encore être actif.",
     "en": "Billing now happens directly inside RedView App. Reconnect with a demo-enabled account or contact support if this access should still be active."
   },

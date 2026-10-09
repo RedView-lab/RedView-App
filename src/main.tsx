@@ -8,6 +8,7 @@ import { GlobalErrorBoundary } from './shared/components/GlobalErrorBoundary'
 import { scrubBreadcrumb, scrubErrorEvent } from './shared/lib/errorReportScrub'
 import { initAppTheme } from './shared/lib/appTheme'
 import { initAnalytics } from './shared/lib/analytics'
+import { installStaleBuildRecovery } from './shared/lib/staleBuild'
 import './features/map3d/hooks/useMap/serviceWorker'
 import './shared/styles/typography.css'
 import './shared/styles/theme.css'
@@ -31,6 +32,11 @@ if (sentryDsn && !sentryDsn.includes('placeholder')) {
       'The operation was aborted',
       'NetworkError',
       'Failed to fetch',
+      // Chunk d'un ancien build (Firefox, Safari, CSS ; Chromium = « Failed to
+      // fetch dynamically imported module ») : attendu après chaque déploiement.
+      'error loading dynamically imported module',
+      'Importing a module script failed',
+      'Unable to preload CSS',
       'Load failed',
       'cancelled',
       'Extension context invalidated',
@@ -50,22 +56,9 @@ if (sentryDsn && !sentryDsn.includes('placeholder')) {
   })
 }
 
-// Après un déploiement, les chunks hashés de l'ancien build n'existent plus
-// (404) : un import paresseux échoue. On recharge la page une seule fois pour
-// récupérer le nouvel index.html ; le garde sessionStorage évite les boucles.
-const PRELOAD_ERROR_RELOAD_KEY = 'redview:preload-error-reload-at'
-const PRELOAD_ERROR_RELOAD_GUARD_MS = 60_000
-window.addEventListener('vite:preloadError', (event) => {
-  try {
-    const lastReloadAt = Number(sessionStorage.getItem(PRELOAD_ERROR_RELOAD_KEY) || 0)
-    if (Date.now() - lastReloadAt < PRELOAD_ERROR_RELOAD_GUARD_MS) return
-    sessionStorage.setItem(PRELOAD_ERROR_RELOAD_KEY, String(Date.now()))
-  } catch {
-    return
-  }
-  event.preventDefault()
-  window.location.reload()
-})
+// Onglet d'un ancien build après un déploiement : rechargement ou toast
+// (shared/lib/staleBuild.ts).
+installStaleBuildRecovery()
 
 // Avant le premier rendu : pas de flash du mauvais thème.
 initAppTheme()

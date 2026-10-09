@@ -3,6 +3,7 @@ import { lazy, Suspense, useEffect } from 'react';
 import { useAppI18n } from '@/shared/i18n';
 import { RedViewLogo } from '@/shared/components/RedViewLogo';
 import { trackScreen, type AnalyticsScreen } from '@/shared/lib/analytics';
+import { trackNavigationImport } from '@/shared/lib/staleBuild';
 
 import { AccountPanel } from '../../../account';
 import { SettingsPanel } from '../../../settings';
@@ -20,7 +21,7 @@ import '../../../styles/index.css';
 // chaque utilisateur 4 requêtes et ~250 Kio depuis js.stripe.com, plus ~7 Kio
 // brotli de la coque.
 const BillingActionModal = lazy(() =>
-  import('../../../billing/components/BillingActionModal/BillingActionModal').then((m) => ({ default: m.BillingActionModal })),
+  trackNavigationImport(import('../../../billing/components/BillingActionModal/BillingActionModal')).then((m) => ({ default: m.BillingActionModal })),
 );
 
 const TAB_SCREENS = {

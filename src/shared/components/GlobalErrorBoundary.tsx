@@ -1,6 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import * as Sentry from '@sentry/react';
 import { logger } from '../lib/logger';
+import { isChunkLoadError } from '../lib/staleBuild';
 import { translateAppText } from '../i18n';
 import { RedViewLogo } from './RedViewLogo';
 
@@ -24,6 +25,12 @@ export class GlobalErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
+    // Chunk introuvable (ancien build après un déploiement, ou hors ligne) :
+    // attendu, pas une anomalie à signaler (shared/lib/staleBuild.ts).
+    if (isChunkLoadError(error)) {
+      logger.app.warn('Chunk introuvable, rechargement proposé', { message: error.message });
+      return;
+    }
     logger.app.error('Uncaught error caught by GlobalErrorBoundary', {
       message: error.message,
       stack: error.stack,
@@ -54,6 +61,7 @@ export class GlobalErrorBoundary extends Component<Props, State> {
 
   render(): ReactNode {
     if (this.state.hasError) {
+      const chunkError = isChunkLoadError(this.state.error);
       return (
         <div
           style={{
@@ -99,7 +107,7 @@ export class GlobalErrorBoundary extends Component<Props, State> {
                 margin: '0 0 10px 0',
               }}
             >
-              {translateAppText("Anomalie d'affichage 3D")}
+              {chunkError ? translateAppText('Chargement interrompu') : translateAppText("Anomalie d'affichage 3D")}
             </h1>
 
             <p
@@ -110,9 +118,13 @@ export class GlobalErrorBoundary extends Component<Props, State> {
                 margin: '0 0 24px 0',
               }}
             >
-              {translateAppText(
-                "Une erreur inattendue est survenue dans le moteur graphique ou l'interface. Vous pouvez recharger l'application en toute sécurité.",
-              )}
+              {chunkError
+                ? translateAppText(
+                    "Une partie de RedView n'a pas pu être chargée : une nouvelle version vient d'être mise en ligne, ou la connexion est coupée. Rechargez l'application pour continuer.",
+                  )
+                : translateAppText(
+                    "Une erreur inattendue est survenue dans le moteur graphique ou l'interface. Vous pouvez recharger l'application en toute sécurité.",
+                  )}
             </p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>

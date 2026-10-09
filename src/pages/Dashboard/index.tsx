@@ -14,11 +14,12 @@ import { useDashboardProjectState } from './hooks/useDashboardProjectState';
 import { formatDisplayName } from './lib/utils';
 import { EditorReadyMeter } from './lib/editorReadyMeter';
 import { countBucket, roundTo, trackAnalyticsEvent, trackScreen } from '@/shared/lib/analytics';
+import { trackNavigationImport } from '@/shared/lib/staleBuild';
 import { loadDashboardEditor, prefetchDashboardEditor, prefetchDashboardEditorWhenIdle } from './editorLoader';
 
 // Éditeur 3D chargé à la demande : le gestionnaire de projets s'affiche sans
 // lui (carte, LiDAR, panneaux). Préchargé dès qu'un projet est visé.
-const DashboardEditor = lazy(() => loadDashboardEditor().then((module) => ({ default: module.DashboardEditor })));
+const DashboardEditor = lazy(() => trackNavigationImport(loadDashboardEditor()).then((module) => ({ default: module.DashboardEditor })));
 
 /** Survol d'une carte projet : intention d'ouvrir, l'éditeur est préchargé. */
 function prefetchEditorOnProjectIntent(event: PointerEvent<HTMLElement>) {

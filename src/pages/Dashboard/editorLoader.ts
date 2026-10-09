@@ -10,8 +10,9 @@ let editorModule: Promise<EditorModule> | null = null;
 
 export function loadDashboardEditor(): Promise<EditorModule> {
   editorModule ??= import('./components/DashboardEditor').catch((error: unknown) => {
-    // Échec réseau : la prochaine demande retente (un chunk d'un ancien build
-    // déclenche le rechargement `vite:preloadError` de main.tsx).
+    // Échec réseau : la prochaine demande retente. Un chunk d'un ancien build
+    // recharge la page si l'éditeur est attendu (ouverture), sinon un toast le
+    // propose (préchargement) : shared/lib/staleBuild.ts.
     editorModule = null;
     throw error;
   });
