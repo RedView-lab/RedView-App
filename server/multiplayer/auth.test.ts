@@ -18,7 +18,21 @@ const fake = vi.hoisted(() => ({
   membershipError: 0,
   /** Durée d'un aller-retour vers Appwrite (ms). */
   delayMs: 0,
+  /** Allers-retours en cours, et leur maximum : 2 = ligne et appartenance lues en même temps. */
+  inFlight: 0,
+  maxInFlight: 0,
 }));
+
+/** Un aller-retour simulé vers Appwrite (durée `fake.delayMs`), compté tant qu'il est en cours. */
+async function roundTrip(): Promise<void> {
+  fake.inFlight += 1;
+  fake.maxInFlight = Math.max(fake.maxInFlight, fake.inFlight);
+  try {
+    if (fake.delayMs > 0) await new Promise((resolve) => setTimeout(resolve, fake.delayMs));
+  } finally {
+    fake.inFlight -= 1;
+  }
+}
 
 vi.mock('node-appwrite', async (importActual) => {
   const actual = await importActual<typeof import('node-appwrite')>();
@@ -34,7 +48,7 @@ vi.mock('node-appwrite', async (importActual) => {
   class Teams {
     async listMemberships(teamId: string, queries: string[] = []) {
       fake.membershipCalls += 1;
-      if (fake.delayMs > 0) await new Promise((resolve) => setTimeout(resolve, fake.delayMs));
+      await roundTrip();
       if (fake.membershipError) throw error(fake.membershipError);
       const members = fake.teams.get(teamId);
       if (!members) throw error(404);
@@ -50,7 +64,7 @@ let projectAccess: ProjectAccess | null = { ownerId: 'u1', teamId: null };
 const storage = {
   kind: 'appwrite',
   access: async () => {
-    if (fake.delayMs > 0) await new Promise((resolve) => setTimeout(resolve, fake.delayMs));
+    await roundTrip();
     return projectAccess;
   },
 } as unknown as RoomStorage;
@@ -66,6 +80,8 @@ beforeEach(() => {
   fake.membershipCalls = 0;
   fake.membershipError = 0;
   fake.delayMs = 0;
+  fake.inFlight = 0;
+  fake.maxInFlight = 0;
   projectAccess = { ownerId: 'u1', teamId: null };
 });
 
@@ -133,11 +149,12 @@ describe('serveur temps réel : droits à l’entrée dans une salle', () => {
   it('membre de l’équipe, sans cache : ligne et appartenance lues en même temps (un aller-retour)', async () => {
     projectAccess = { ownerId: 'owner', teamId: 'pproj1' };
     fake.teams.set('pproj1', ['u2']);
-    fake.delayMs = 80;
+    fake.delayMs = 20;
     const auth = authenticator();
-    const started = performance.now();
+    // Compté, pas chronométré : sous la charge de `npm run check`, une mesure
+    // de durée (< 150 ms pour deux appels de 80 ms) échouait sans régression.
     expect(await auth.checkAccess('u2', 'proj1', { fresh: true })).toBe('ok');
-    expect(performance.now() - started).toBeLessThan(150);
+    expect(fake.maxInFlight).toBe(2);
     expect(await auth.checkAccess('u3', 'proj1', { fresh: true })).toBe('forbidden');
   });
 
