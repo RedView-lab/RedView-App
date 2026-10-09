@@ -492,6 +492,9 @@ async function main(): Promise<void> {
     messy.itineraries[0]!.forbiddenZones = [{ id: 'z', points: [{ lat: 1 }] }];
     messy.dashboard = { mapViewport: { center: ['a', 2], zoom: 3, pitch: 0, bearing: 0 }, leftPanelWidth: 'wide' };
     messy.activeMode = 'hack';
+    const messyPoints = (messy.itineraries[0]!.gpxRoute as { points: Array<Record<string, unknown>> }).points;
+    messyPoints[0]!.elevationM = 'abc';
+    messyPoints[1]!.distanceM = { x: 1 };
     const cleaned = await readRedviewFile(await hostile(messy));
     const first = cleaned.project.itineraries[0]!;
     assert(/^#[0-9a-f]{6}$/i.test(first.color), `couleur invalide remplacée (${first.color})`);
@@ -499,6 +502,9 @@ async function main(): Promise<void> {
     assert((first.forbiddenZones ?? []).length === 0, 'zone interdite invalide écartée');
     assert(cleaned.project.dashboard?.mapViewport === undefined && cleaned.project.dashboard?.leftPanelWidth === undefined, 'vue carte / largeurs invalides retirées');
     assert(cleaned.project.activeMode === 'tracage', 'mode actif inconnu ramené à « tracage »');
+    const cleanedPoints = first.gpxRoute!.points;
+    assert(cleanedPoints[0]!.elevationM === undefined && cleanedPoints[1]!.distanceM === undefined, 'altitude / distance non numériques retirées des points');
+    assert(cleanedPoints[2]!.elevationM === messyPoints[2]!.elevationM, 'altitude valide gardée intacte');
 
     const fakeFit = await readRedviewFile(await hostile(buildProject(10), {
       manifest: {

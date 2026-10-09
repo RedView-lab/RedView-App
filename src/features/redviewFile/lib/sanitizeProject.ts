@@ -90,10 +90,19 @@ function sanitizeTimeline(raw: unknown, itineraryIndex: number): TimelineItem[] 
   });
 }
 
+/** Champs numériques d'un point de tracé : lus sans vérification par les calculs (profil, pentes, horaire). */
+const ROUTE_POINT_NUMBER_KEYS = ['elevationM', 'distanceM', 'gradientPct'] as const;
+
 function sanitizeRoutePoints(raw: unknown, where: string): NonNullable<Itinerary['gpxRoute']>['points'] {
   if (!Array.isArray(raw)) throw invalid(`${where}: points is not an array`);
   raw.forEach((point, index) => {
     if (!isLatLon(point)) throw invalid(`${where}: bad point #${index}`);
+    // Une altitude en texte (« abc ») devenait NaN dans le profil : retirée,
+    // le point reste. Les valeurs valides passent intactes (sur place : un
+    // tracé compte jusqu'à des centaines de milliers de points).
+    for (const key of ROUTE_POINT_NUMBER_KEYS) {
+      if (point[key] != null && !isFiniteNumber(point[key])) delete point[key];
+    }
   });
   return raw as NonNullable<Itinerary['gpxRoute']>['points'];
 }
