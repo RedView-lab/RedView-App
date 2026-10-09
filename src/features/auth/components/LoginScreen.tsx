@@ -1,14 +1,10 @@
-import { useState, useEffect, type FormEvent } from 'react'
+import { useState, useEffect, useRef, type FormEvent } from 'react'
 import { trackAnalyticsEvent, trackScreen } from '@/shared/lib/analytics'
 import { authFailureReason, rememberOAuthIntent } from '../lib/authAnalytics'
 import { RedViewLogo } from '@/shared/components/RedViewLogo'
 import { errorMessage as thrownMessage } from '@/shared/lib/errors'
 import { appwriteFailureMessage } from '@/shared/lib/appwriteErrors'
 
-/** Refus d'Appwrite sur un nouveau mot de passe (inscription, réinitialisation). */
-const NEW_PASSWORD_OVERRIDES = {
-  general_argument_invalid: 'Mot de passe refusé : 8 caractères minimum, et pas un mot de passe trop courant.',
-}
 import {
   account,
   AppwriteException,
@@ -34,6 +30,14 @@ import './LoginScreen.css'
 
 // Envoi du code de vérification à 6 chiffres par e-mail lors de l'inscription
 const ENABLE_EMAIL_VERIFICATION = true
+
+/** Refus d'Appwrite sur un nouveau mot de passe (inscription, réinitialisation). */
+const NEW_PASSWORD_OVERRIDES = {
+  general_argument_invalid: 'Mot de passe refusé : 8 caractères minimum, et pas un mot de passe trop courant.',
+}
+
+/** Un code d'inscription vaut 10 min (api/_lib/verificationStore.ts) : marge d'une minute. */
+const SIGNUP_CODE_REUSE_MS = 9 * 60 * 1000
 
 type AuthMode = 'login' | 'signup' | 'forgot-password' | 'reset-password'
 
@@ -81,6 +85,14 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
 
   // États de la fenêtre de vérification
   const [showVerificationModal, setShowVerificationModal] = useState(false)
+  /**
+   * Dernier code d'inscription envoyé (adresse, heure). La pop-in se ferme au
+   * moindre clic à côté : renvoyer le formulaire la rouvre tant que ce code
+   * vaut encore, au lieu d'en redemander un — un inscrit réel a reçu 5 fois
+   * « Veuillez patienter » en 20 s (2026-10-09). « Renvoyer le code » reste
+   * dans la pop-in.
+   */
+  const signupCodeSentRef = useRef<{ email: string; at: number } | null>(null)
 
   // Page vue virtuelle de l'écran affiché (mesure d'audience).
   useEffect(() => {
@@ -228,15 +240,26 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
           // l'utilisateur reçoit un e-mail « compte existant » au lieu du
           // code). Seules les erreurs de validation (400), de quota (429) ou
           // serveur (5xx) arrivent ici en !res.ok.
-          const { ok, data } = await sendVerificationCode(trimmedEmail, trimmedName)
+          const sentBefore = signupCodeSentRef.current
+          if (sentBefore && sentBefore.email === trimmedEmail.toLowerCase() && Date.now() - sentBefore.at < SIGNUP_CODE_REUSE_MS) {
+            setShowVerificationModal(true)
+            setLoading(false)
+            return
+          }
+
+          const { ok, status, data } = await sendVerificationCode(trimmedEmail, trimmedName)
 
           if (!ok) {
-            trackAnalyticsEvent({ name: 'auth_failed', data: { method: 'email', step: 'signup', reason: 'other' } })
+            trackAnalyticsEvent({
+              name: 'auth_failed',
+              data: { method: 'email', step: 'signup', reason: status === 429 ? 'rate_limited' : 'other' },
+            })
             setErrorMessage(data.error || "Impossible d'envoyer le code de vérification.")
             setLoading(false)
             return
           }
 
+          signupCodeSentRef.current = { email: trimmedEmail.toLowerCase(), at: Date.now() }
           setShowVerificationModal(true)
           setLoading(false)
           return
@@ -305,6 +328,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
       if (!ok) {
         return { success: false, error: data.error || 'Impossible de renvoyer le code.' }
       }
+      signupCodeSentRef.current = { email: trimmedEmail.toLowerCase(), at: Date.now() }
       return { success: true }
     } catch (err) {
       return { success: false, error: thrownMessage(err, 'Erreur lors du renvoi du code.') }
