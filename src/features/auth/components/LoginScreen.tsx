@@ -24,6 +24,7 @@ import {
   verifyCodeAndCreateAccount,
 } from './login/authRequests'
 import { LegalLinks, legalPagePath } from '@/features/legal'
+import { TRIAL_DAYS } from '@/features/projectBrowser/lib/billing/plans'
 import { useAppI18n } from '@/shared/i18n'
 import { GoogleIcon } from './login/icons'
 import { PasswordField } from './login/PasswordField'
@@ -386,7 +387,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
                   ? 'Choisissez un nouveau mot de passe sécurisé (min. 8 caractères).'
                   : isLogin
                   ? 'Welcome back! Please enter your details.'
-                  : 'Start your 30-day free trial.'}
+                  : t('Commencez votre essai gratuit de {{days}} jours.', { days: TRIAL_DAYS })}
               </p>
             </div>
 

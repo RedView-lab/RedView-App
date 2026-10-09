@@ -265,8 +265,10 @@
   text-underline-offset: 3px;
 }
 
-/* Liens vers les pages légales, en pied de l'écran de connexion. */
+/* Liens vers les pages légales, en pied de l'écran de connexion (les blocs
+   de l'écran sont ordonnés par `order` : celui-ci passe en dernier). */
 .rv-login-legal-links {
+  order: 99;
   display: flex;
   flex-wrap: wrap;
   justify-content: center;

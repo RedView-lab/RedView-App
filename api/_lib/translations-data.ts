@@ -5317,8 +5317,8 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Welcome back! Please enter your details."
   },
   {
-    "fr": "Commencez votre essai gratuit de 30 jours.",
-    "en": "Start your 30-day free trial."
+    "fr": "Commencez votre essai gratuit de {{days}} jours.",
+    "en": "Start your {{days}}-day free trial."
   },
   {
     "fr": "E-mail de récupération envoyé",

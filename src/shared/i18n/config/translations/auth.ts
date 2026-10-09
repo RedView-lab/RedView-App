@@ -13,7 +13,7 @@ export const authTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'Saisissez votre e-mail pour recevoir le lien de réinitialisation.', en: 'Enter your e-mail to receive the reset link.' },
   { fr: 'Choisissez un nouveau mot de passe sécurisé (min. 8 caractères).', en: 'Choose a new secure password (min. 8 characters).' },
   { fr: 'Bon retour ! Veuillez saisir vos informations.', en: 'Welcome back! Please enter your details.' },
-  { fr: 'Commencez votre essai gratuit de 30 jours.', en: 'Start your 30-day free trial.' },
+  { fr: 'Commencez votre essai gratuit de {{days}} jours.', en: 'Start your {{days}}-day free trial.' },
   // LoginScreen — e-mail de récupération envoyé
   { fr: 'E-mail de récupération envoyé', en: 'Recovery e-mail sent' },
   { fr: 'Un lien de réinitialisation sécurisé a été envoyé à', en: 'A secure reset link has been sent to' },
