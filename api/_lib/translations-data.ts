@@ -7717,6 +7717,14 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Snow cover"
   },
   {
+    "fr": "Hauteur de neige indisponible ici pour le moment : l’analyse Météo-France n’a pas pu être chargée, ou ce secteur est hors de sa couverture.",
+    "en": "Snow depth is unavailable here for now: the Météo-France analysis could not be loaded, or this area is outside its coverage."
+  },
+  {
+    "fr": "Hauteur de neige pas encore disponible : la source Météo-France n’est pas active pour le moment.",
+    "en": "Snow depth is not available yet: the Météo-France source is not active for now."
+  },
+  {
     "fr": "Épaisseur (cm)",
     "en": "Depth (cm)"
   },
