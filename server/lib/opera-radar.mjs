@@ -212,11 +212,27 @@ function frameHeader(frame) {
   return pending;
 }
 
-/** Réflectivité (dBZ) d'une tuile du COG, première bande seulement (la seconde est l'indice de qualité). */
-const decodedTiles = createByteLru({ maxBytes: 64 * 1024 * 1024, sizeOf: (value) => value.byteLength, ttlMs: 26 * 3600_000 });
+/**
+ * Réflectivité d'une tuile du COG (première bande ; la seconde est l'indice
+ * de qualité), sur un octet par pixel : 0 = rien à dessiner (rien détecté,
+ * hors couverture, sous MIN_DBZ), sinon MIN_DBZ + (code − 1) / 4 dBZ, au
+ * quart de dB près jusqu'à ~70 dBZ — 4 fois moins de mémoire qu'en float32,
+ * pour une palette qui sature à 20 mm/h (≈ 46 dBZ).
+ */
+const decodedTiles = createByteLru({ maxBytes: 32 * 1024 * 1024, sizeOf: (value) => value.byteLength, ttlMs: 26 * 3600_000 });
 const tilesInFlight = new Map();
 
-/** @returns {Promise<Float32Array>} */
+/** Code d'un octet d'une réflectivité (dBZ) ; 0 = rien à dessiner. */
+function encodeDbz(dbz) {
+  if (!(dbz >= MIN_DBZ)) return 0;
+  return Math.min(255, Math.round((dbz - MIN_DBZ) * 4) + 1);
+}
+
+function decodeDbz(code) {
+  return MIN_DBZ + (code - 1) / 4;
+}
+
+/** @returns {Promise<Uint8Array>} */
 function cogTile(frame, header, levelIndex, tileIndex) {
   const key = `${frame}|${levelIndex}|${tileIndex}`;
   const cached = decodedTiles.get(key);
@@ -231,8 +247,8 @@ function cogTile(frame, header, levelIndex, tileIndex) {
       const raw = inflateSync(await fetchRange(frameUrl(frame), offset, offset + length - 1), {
         maxOutputLength: pixels * level.samples * 4,
       });
-      const values = new Float32Array(pixels);
-      for (let i = 0; i < pixels; i++) values[i] = raw.readFloatLE(i * level.samples * 4);
+      const values = new Uint8Array(pixels);
+      for (let i = 0; i < pixels; i++) values[i] = encodeDbz(raw.readFloatLE(i * level.samples * 4));
       decodedTiles.set(key, values);
       return values;
     })().finally(() => tilesInFlight.delete(key));
@@ -319,7 +335,7 @@ function levelForZoom(z, latDeg, header) {
  * niveau (ligne × largeur + colonne), ou −1 hors de la grille. Ne dépend que
  * de la tuile et du niveau, donc gardé d'une image à l'autre.
  */
-const pixelMaps = createByteLru({ maxBytes: 48 * 1024 * 1024, sizeOf: (value) => value.byteLength });
+const pixelMaps = createByteLru({ maxBytes: 24 * 1024 * 1024, sizeOf: (value) => value.byteLength });
 
 function sourcePixelMap(z, x, y, levelIndex, header) {
   const key = `${z}/${x}/${y}|${levelIndex}`;
@@ -376,7 +392,7 @@ function encodeRgbaPng(width, height, rgba) {
   ]);
 }
 
-const renderedTiles = createByteLru({ maxBytes: 32 * 1024 * 1024, sizeOf: (value) => value.length, ttlMs: 3 * 3600_000 });
+const renderedTiles = createByteLru({ maxBytes: 24 * 1024 * 1024, sizeOf: (value) => value.length, ttlMs: 3 * 3600_000 });
 
 /**
  * Tuile radar Web Mercator (PNG 512 px) de l'image `frame`, colorée avec la
@@ -417,10 +433,9 @@ export async function renderOperaTile(frame, z, x, y, palette = '') {
     const row = Math.floor(index / level.width);
     const col = index - row * level.width;
     const tile = tiles.get(Math.floor(row / level.tileHeight) * tilesAcross + Math.floor(col / level.tileWidth));
-    const dbz = tile[(row % level.tileHeight) * level.tileWidth + (col % level.tileWidth)];
-    // NaN : couvert mais rien de détecté ; −9 999 000 : hors couverture.
-    if (!(dbz >= MIN_DBZ)) continue;
-    const color = radarColorForRainRate(rainRateFromDbz(dbz), palette);
+    const code = tile[(row % level.tileHeight) * level.tileWidth + (col % level.tileWidth)];
+    if (code === 0) continue;
+    const color = radarColorForRainRate(rainRateFromDbz(decodeDbz(code)), palette);
     if (!color) continue;
     rgba[i * 4] = color.r;
     rgba[i * 4 + 1] = color.g;

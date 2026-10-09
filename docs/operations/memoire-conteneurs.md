@@ -21,11 +21,13 @@ rien tant qu'une limite est posée.
 
 Caches bornés en octets (`server/lib/byte-lru.mjs`), au plus : réponses
 compressées 16 Mio, BRouter 48 Mio, géocodage 4 Mio, Météo-France 32 Mio,
-météo 32 Mio, tuiles Terrarium / pente / altitude 32 + 16 + 16 Mio, soit
-≈ 196 Mio, surtout des `Buffer` hors du tas V8. Avec ~100 Mo de base et les
-corps transitoires (compression d'API jusqu'à 32 Mio, charge de projet
-≤ 30 Mo), le pire cas reste sous ~450 Mo : **768 MiB est suffisant**, marge
-de ~40 %.
+météo 32 Mio, tuiles Terrarium / pente / altitude 32 + 16 + 16 Mio, radar
+OPERA 82 Mio (depuis le 2026-10-09, `server/lib/opera-radar.mjs` : en-têtes
+2 + tuiles décodées sur un octet par pixel 32 + correspondances de pixels 24
++ PNG 24), soit ≈ 278 Mio, surtout des `Buffer` et tableaux typés hors du tas
+V8. Avec ~100 Mo de base et les corps transitoires (compression d'API
+jusqu'à 32 Mio, charge de projet ≤ 30 Mo), le pire cas reste sous ~530 Mo :
+**768 MiB est suffisant**, marge de ~30 %.
 
 ## Budget du temps réel (1,5 GiB)
 
