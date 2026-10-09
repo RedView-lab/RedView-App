@@ -36,26 +36,19 @@ const { runSnowPipeline } = await import('./index');
 
 describe('runSnowPipeline', () => {
   it('échoue dès qu’AROME échoue, sans attendre le contexte ni le relief lointain, et les annule', async () => {
+    // Une promesse rejetée non gérée ferait échouer l'exécution de Vitest.
     const started = performance.now();
-    const unhandled: unknown[] = [];
-    const onUnhandled = (reason: unknown) => { unhandled.push(reason); };
-    process.on('unhandledRejection', onUnhandled);
-    try {
-      await expect(runSnowPipeline({
-        data: new Float32Array(4).fill(10),
-        width: 2,
-        height: 2,
-        bounds: { minX: 950_000, minY: 6_499_000, maxX: 951_000, maxY: 6_500_000 },
-        crs: 'LAMB93',
-        altitudeOffsetM: 1500,
-      })).rejects.toThrow(/HTTP 503/);
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    } finally {
-      process.off('unhandledRejection', onUnhandled);
-    }
+    await expect(runSnowPipeline({
+      data: new Float32Array(4).fill(10),
+      width: 2,
+      height: 2,
+      bounds: { minX: 950_000, minY: 6_499_000, maxX: 951_000, maxY: 6_500_000 },
+      crs: 'LAMB93',
+      altitudeOffsetM: 1500,
+    })).rejects.toThrow(/HTTP 503/);
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(performance.now() - started).toBeLessThan(1000);
     expect(loads.signals).toHaveLength(2);
     expect(loads.signals.every((signal) => signal.aborted)).toBe(true);
-    expect(unhandled).toEqual([]);
   });
 });
