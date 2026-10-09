@@ -69,10 +69,23 @@ describe('api/meteofrance', () => {
     expect(calls('/GetCapabilities')).toHaveLength(2);
   });
 
-  it('refuses a bbox wider than 15°', async () => {
+  it('refuses a bbox wider than 2° (the app asks for 0.8° × 0.6°)', async () => {
     const handler = await loadHandler();
-    const out = await call(handler, { lonMin: '0', latMin: '40', lonMax: '16', latMax: '41' });
+    const out = await call(handler, { lonMin: '6', latMin: '45', lonMax: '8.5', latMax: '45.5' });
     expect(out.status).toBe(400);
     expect(fetchMock).not.toHaveBeenCalled();
+    const app = await call(handler, { lonMin: '6.4', latMin: '45.6', lonMax: '7.2', latMax: '46.2' });
+    expect(app.status).toBe(502); // accepted, then GetCoverage fails in this test
+  });
+
+  it('shares one upstream download between simultaneous requests for the same grid', async () => {
+    const handler = await loadHandler();
+    const query = { lonMin: '6.80', latMin: '45.80', lonMax: '6.95', latMax: '45.95' };
+    const outs = await Promise.all([call(handler, query), call(handler, query), call(handler, query)]);
+    expect(outs.map((out) => out.status)).toEqual([502, 502, 502]);
+    expect(calls('/GetCoverage')).toHaveLength(1);
+    // a failure is not kept
+    await call(handler, query);
+    expect(calls('/GetCoverage')).toHaveLength(2);
   });
 });

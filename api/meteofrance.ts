@@ -310,7 +310,12 @@ function parseGribToGrid(buf: Uint8Array, coverageId: string): SnowGridJson {
 
 // ────────────────────────────── Cache LRU ──────────────────────────────
 
-const MAX_BBOX_SPAN_DEG = 15;
+/**
+ * L'app demande ±0,4° × ±0,3° autour de la scène (`snow/lib/sources/arome.ts`) ;
+ * 2° laissent de la marge. À 15°, une seule requête faisait décoder 2,25 M
+ * cellules GRIB et sérialiser ~20 Mo de JSON sur le fil principal.
+ */
+const MAX_BBOX_SPAN_DEG = 2;
 const CACHE_TTL_MS = 10 * 60 * 1000; // 10 min
 
 // Réponse JSON déjà sérialisée, bornée en octets : une grille de 15° × 15° à
@@ -320,6 +325,23 @@ const gridCache = createByteLru<string>({
   sizeOf: (json) => json.length,
   ttlMs: CACHE_TTL_MS,
 });
+
+/** Grilles en cours de calcul : deux scènes voisines au même moment font un seul appel amont. */
+const inflightGrids = new Map<string, Promise<string>>();
+
+async function computeGridJson(lonMin: number, latMin: number, lonMax: number, latMax: number): Promise<string> {
+  const t0 = Date.now();
+  const { coverageId, timeValue } = await resolveLatestRun();
+  const gribBytes = await downloadCoverage(coverageId, timeValue, lonMin, latMin, lonMax, latMax);
+  const grid = parseGribToGrid(gribBytes, coverageId);
+  const json = JSON.stringify(grid);
+  // Jamais l'emprise : c'est la position de la scène de l'utilisateur.
+  console.log(
+    `[meteofrance] ${coverageId} time=${timeValue} ` +
+      `→ ${grid.width}×${grid.height} unit=${grid.units} factor=${grid.unitToCm} ${Date.now() - t0}ms`,
+  );
+  return json;
+}
 
 // ────────────────────────────── Handler ──────────────────────────────
 
@@ -385,26 +407,19 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   }
 
   try {
-    const t0 = Date.now();
-    const { coverageId, timeValue } = await resolveLatestRun();
-    const gribBytes = await downloadCoverage(
-      coverageId,
-      timeValue,
-      lonMin,
-      latMin,
-      lonMax,
-      latMax,
-    );
-    const grid = parseGribToGrid(gribBytes, coverageId);
-    const elapsed = Date.now() - t0;
-    const json = JSON.stringify(grid);
-    gridCache.set(cacheKey, json);
-
-    // Jamais l'emprise : c'est la position de la scène de l'utilisateur.
-    console.log(
-      `[meteofrance] ${coverageId} time=${timeValue} ` +
-        `→ ${grid.width}×${grid.height} unit=${grid.units} factor=${grid.unitToCm} ${elapsed}ms`,
-    );
+    let pending = inflightGrids.get(cacheKey);
+    if (!pending) {
+      pending = computeGridJson(lonMin, latMin, lonMax, latMax).then((json) => {
+        gridCache.set(cacheKey, json);
+        return json;
+      });
+      const entry = pending;
+      inflightGrids.set(cacheKey, entry);
+      void entry.catch(() => undefined).finally(() => {
+        if (inflightGrids.get(cacheKey) === entry) inflightGrids.delete(cacheKey);
+      });
+    }
+    const json = await pending;
 
     res.setHeader('Cache-Control', 'public, max-age=900, stale-while-revalidate=1800');
     res.setHeader('Content-Type', 'application/json; charset=utf-8');

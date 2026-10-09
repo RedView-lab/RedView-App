@@ -65,7 +65,13 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   res.on('close', onClose);
 
   try {
-    const headers: Record<string, string> = { 'User-Agent': 'RedView/1.0 (+https://redview.tech) LiDAR viewer' };
+    // `identity` : fetch décompresserait un corps compressé par l'amont alors
+    // que Content-Length / Content-Range relayés décrivent les octets compressés
+    // (réponse tronquée ou reprise à un mauvais décalage).
+    const headers: Record<string, string> = {
+      'User-Agent': 'RedView/1.0 (+https://redview.tech) LiDAR viewer',
+      'Accept-Encoding': 'identity',
+    };
     const range = sanitizeRangeHeader(req.headers.range);
     if (range) headers.Range = range;
 

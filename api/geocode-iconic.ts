@@ -3,7 +3,8 @@ import { createByteLru } from '../server/lib/byte-lru.mjs';
 
 const NOMINATIM_ENDPOINT = 'https://nominatim.openstreetmap.org/search';
 const TIMEOUT_MS = 12_000;
-const USER_AGENT = 'RedViewPRODUCTION/1.0 (iconic geocoder proxy)';
+/** La politique de Nominatim demande d'identifier l'application et recommande un contact. */
+const USER_AGENT = 'RedView/1.0 (+https://redview.tech; redview.app@proton.me) place search';
 const MAX_QUERY_LENGTH = 200;
 
 /**
