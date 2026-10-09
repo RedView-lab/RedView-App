@@ -1,5 +1,6 @@
 import { getAppwriteJwt } from '@/shared/services/appwrite';
 import { translateAppText } from '@/shared/i18n';
+import { apiFetch } from '@/shared/lib/apiFetch';
 
 import { logBillingUi, logBillingUiError } from './debug';
 import type {
@@ -56,6 +57,9 @@ async function getAccessToken(fresh = false): Promise<string> {
   return token;
 }
 
+/** Stripe + Appwrite côté serveur : quelques secondes d'habitude. */
+const BILLING_REQUEST_TIMEOUT_MS = 45_000;
+
 async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   logBillingUi('api-request-start', {
     path,
@@ -65,8 +69,9 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
     ...(import.meta.env.DEV ? { body: typeof init?.body === 'string' ? init.body : null } : {}),
   });
 
-  const send = async (fresh: boolean) => fetch(path, {
+  const send = async (fresh: boolean) => apiFetch(path, {
     ...init,
+    timeoutMs: BILLING_REQUEST_TIMEOUT_MS,
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${await getAccessToken(fresh)}`,

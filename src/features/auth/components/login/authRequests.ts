@@ -1,7 +1,13 @@
+import { apiFetch } from '@/shared/lib/apiFetch'
+
 /**
  * Appels à l'API d'authentification (/api/auth/*). Les réponses d'erreur sont
- * renvoyées telles quelles : les messages sont choisis par l'écran.
+ * renvoyées telles quelles : les messages sont choisis par l'écran. Une panne
+ * réseau ou un délai dépassé lève une `ApiNetworkError` (message lisible).
  */
+
+/** Envoi d'un e-mail compris (Resend) : quelques secondes au pire. */
+const AUTH_REQUEST_TIMEOUT_MS = 20_000
 
 interface ApiResult {
   ok: boolean
@@ -10,7 +16,8 @@ interface ApiResult {
 }
 
 async function postJson(url: string, body: unknown): Promise<ApiResult> {
-  const res = await fetch(url, {
+  const res = await apiFetch(url, {
+    timeoutMs: AUTH_REQUEST_TIMEOUT_MS,
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),

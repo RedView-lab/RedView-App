@@ -110,12 +110,10 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
             'Si un compte est associé à cette adresse e-mail, un lien de réinitialisation vous a été envoyé.'
         )
         setResendCooldown(60)
-      } catch {
-        // Anti-énumération défensive : on affiche toujours la carte de confirmation
-        setSuccessMessage(
-          'Si un compte est associé à cette adresse e-mail, un lien de réinitialisation vous a été envoyé.'
-        )
-        setResendCooldown(60)
+      } catch (error) {
+        // Panne réseau (seul cas où la requête lève) : rien n'a été envoyé, et
+        // le dire ne révèle rien sur l'existence du compte.
+        setErrorMessage(thrownMessage(error, "Impossible d'envoyer l'e-mail de réinitialisation."))
       } finally {
         setLoading(false)
       }

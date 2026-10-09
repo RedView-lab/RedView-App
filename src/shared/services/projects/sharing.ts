@@ -1,4 +1,5 @@
 import { translateAppText } from '@/shared/i18n';
+import { apiFetch } from '@/shared/lib/apiFetch';
 import { getAppwriteJwt } from '@/shared/services/appwrite';
 
 /**
@@ -21,11 +22,15 @@ export interface ProjectShareState {
   members: ProjectShareMember[];
 }
 
+/** Le premier partage accorde la lecture fichier par fichier (FIT, miniature). */
+const SHARE_REQUEST_TIMEOUT_MS = 60_000;
+
 async function shareRequest<T>(body: Record<string, unknown>): Promise<T> {
   const send = async (fresh: boolean) => {
     const token = await getAppwriteJwt({ fresh });
     if (!token) throw new Error(translateAppText('Session expirée. Reconnectez-vous pour partager ce projet.'));
-    return fetch('/api/projects/share', {
+    return apiFetch('/api/projects/share', {
+      timeoutMs: SHARE_REQUEST_TIMEOUT_MS,
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify(body),

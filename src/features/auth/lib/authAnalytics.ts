@@ -5,6 +5,7 @@ import {
   type AuthFailureReason,
   type AuthMethod,
 } from '@/shared/lib/analytics';
+import { ApiNetworkError } from '@/shared/lib/apiFetch';
 
 /**
  * Mesure de la connexion Google : la page quitte l'app pour Google puis revient
@@ -77,6 +78,6 @@ export function authFailureReason(error: unknown): AuthFailureReason {
   if (code === 401 || code === 400) return 'credentials';
   if (code === 409) return 'exists';
   if (code === 429) return 'rate_limited';
-  if (error instanceof TypeError || code === 0) return 'network';
+  if (error instanceof TypeError || error instanceof ApiNetworkError || code === 0) return 'network';
   return 'other';
 }

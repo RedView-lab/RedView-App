@@ -7,14 +7,22 @@ import { buildRedviewFileName } from '@/features/redviewFile/lib/format';
 import { translateAppText } from '@/shared/i18n';
 import { countBucket, trackAnalyticsEvent } from '@/shared/lib/analytics';
 import { APP_BUILD_ID } from '@/shared/lib/appCacheEpoch';
+import { apiFetch } from '@/shared/lib/apiFetch';
 import { account, getAppwriteJwt } from '@/shared/services/appwrite';
 import { getProject, listProjectBrowserSnapshot } from '@/shared/services/projects';
+
+/**
+ * La purge efface chaque projet et fichier possédé avant de répondre ; elle
+ * est idempotente et reprenable, donc un délai dépassé se relance sans risque.
+ */
+const DELETE_ACCOUNT_TIMEOUT_MS = 180_000;
 
 async function deleteAccountRequest<T>(body: Record<string, unknown>): Promise<{ status: number; data: T }> {
   const send = async (fresh: boolean) => {
     const token = await getAppwriteJwt({ fresh });
     if (!token) throw new Error(translateAppText('Session expirée. Reconnectez-vous pour supprimer votre compte.'));
-    return fetch('/api/auth/delete-account', {
+    return apiFetch('/api/auth/delete-account', {
+      timeoutMs: DELETE_ACCOUNT_TIMEOUT_MS,
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify(body),

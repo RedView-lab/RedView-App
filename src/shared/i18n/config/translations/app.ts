@@ -26,6 +26,10 @@ export const appTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: "Une partie de RedView n'a pas pu être chargée : une nouvelle version vient d'être mise en ligne, ou la connexion est coupée. Rechargez l'application pour continuer.", en: 'Part of RedView could not be loaded: a new version was just released, or the connection is down. Reload the app to continue.' },
   { fr: 'Une nouvelle version de RedView est en ligne. Rechargez la page pour continuer.', en: 'A new version of RedView is live. Reload the page to continue.' },
 
+  // ── Appels à l'API (shared/lib/apiFetch.ts) ─────────────────────────────
+  { fr: "Le serveur RedView n'a pas répondu à temps. Vérifiez votre connexion puis réessayez.", en: 'The RedView server did not respond in time. Check your connection and try again.' },
+  { fr: 'Impossible de joindre le serveur RedView. Vérifiez votre connexion puis réessayez.', en: 'Cannot reach the RedView server. Check your connection and try again.' },
+
   // ── Paywall ─────────────────────────────────────────────────────────────
   { fr: "La facturation se fait désormais directement dans l'app RedView. Reconnectez-vous avec un compte où la démo est activée ou contactez le support si cet accès devrait encore être actif.", en: 'Billing now happens directly inside RedView App. Reconnect with a demo-enabled account or contact support if this access should still be active.' },
   { fr: "Actualiser l'accès", en: 'Refresh access' },
