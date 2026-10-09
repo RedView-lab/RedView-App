@@ -454,6 +454,12 @@ button.rvi-rythme-figma__card-box.is-open {
   border-color: rgb(var(--rv-ink) / 0.22);
 }
 
+/* Saisie hors bornes (RiderNumberField) : non retenue tant qu'elle l'est. */
+.rvi-rythme-figma__card-box--invalid,
+.rvi-rythme-figma__card-box--invalid:focus-within {
+  border-color: light-dark(#b42318, #f97066);
+}
+
 .rvi-rythme-figma__card-box input {
   width: 100%;
   min-width: 0;

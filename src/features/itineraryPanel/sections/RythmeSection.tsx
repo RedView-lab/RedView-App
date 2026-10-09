@@ -9,6 +9,14 @@ import { CalendarPopover } from '../components/calendar';
 import { IconInfo, IconPlus } from '../components/icons';
 import { IconFigmaCheck, IconFigmaChevronDown, IconTrashFigma } from '../components/iconsFigma';
 import { MAX_FIT_FILES, isCustomRhythmProfile } from '../lib/rhythm/profile';
+import {
+  FTP_RULE,
+  SYSTEM_WEIGHT_RULE,
+  formatRiderNumber,
+  isRiderNumberKey,
+  parseRiderNumber,
+  type RiderNumberRule,
+} from '../lib/rhythm/riderNumber';
 import type { PauseIntervalRow, RhythmState } from '../types';
 import { createDocumentId } from '../lib/project/ids';
 
@@ -174,39 +182,60 @@ function StartTimeSelect({
   );
 }
 
-/** Carte numérique (FTP, poids) : "N/A" quand vide, unité affichée sinon. */
+/**
+ * Carte numérique (FTP, poids) : "N/A" quand vide, unité affichée sinon.
+ * Brouillon local pendant la frappe (« 82, » doit rester affiché) ; seule une
+ * valeur dans les bornes de `rule` est retenue (lib/rhythm/riderNumber.ts).
+ */
 function RiderNumberField({
   label,
   value,
   unit,
+  rule,
   onCommit,
 }: {
   label: string;
   value: number | null;
   unit: string;
+  rule: RiderNumberRule;
   onCommit: (value: number | null) => void;
 }) {
+  const { t, locale } = useAppI18n();
+  const [draft, setDraft] = useState<string | null>(null);
   const hasValue = value !== null && value > 0;
+  const shown = draft ?? (hasValue ? formatRiderNumber(value, rule, locale) : '');
+  const invalid = draft !== null && parseRiderNumber(draft, rule).kind === 'invalid';
+  const hint = invalid
+    ? t('Valeur attendue entre {{min}} et {{max}} {{unit}}', { min: rule.min, max: rule.max, unit })
+    : undefined;
   return (
     <div className="rvi-rythme-figma__col">
       <span className="rvi-rythme-figma__label-title" title={label}>{label}</span>
-      <div className={`rvi-rythme-figma__card-box${hasValue ? ' rvi-rythme-figma__card-box--has-val' : ''}`}>
+      <div
+        className={`rvi-rythme-figma__card-box${hasValue ? ' rvi-rythme-figma__card-box--has-val' : ''}${invalid ? ' rvi-rythme-figma__card-box--invalid' : ''}`}
+      >
         <input
           type="text"
-          inputMode="numeric"
-          pattern="[0-9]*"
-          value={hasValue ? String(value) : ''}
+          inputMode={rule.decimals > 0 ? 'decimal' : 'numeric'}
+          value={shown}
           placeholder="N/A"
           onKeyDown={(e) => {
             if (NUMERIC_NAV_KEYS.includes(e.key) || e.ctrlKey || e.metaKey) return;
-            if (!/^\d$/.test(e.key)) e.preventDefault();
+            if (!isRiderNumberKey(e.key, rule)) e.preventDefault();
           }}
           onChange={(e) => {
-            const cleaned = e.target.value.replace(/\D/g, '');
-            const n = cleaned ? parseInt(cleaned, 10) : NaN;
-            onCommit(Number.isFinite(n) && n > 0 ? n : null);
+            const text = e.target.value;
+            setDraft(text);
+            const parsed = parseRiderNumber(text, rule);
+            if (parsed.kind === 'empty') onCommit(null);
+            else if (parsed.kind === 'value' && parsed.value !== value) onCommit(parsed.value);
           }}
+          // Sortie du champ : la valeur retenue reprend sa forme (une saisie
+          // hors bornes est abandonnée).
+          onBlur={() => setDraft(null)}
           aria-label={label}
+          aria-invalid={invalid ? true : undefined}
+          title={hint}
         />
         {hasValue ? <span className="rvi-rythme-figma__card-unit">{unit}</span> : null}
       </div>
@@ -501,12 +530,14 @@ export function RythmeSection({
                     label={t('FTP')}
                     value={rhythm.ftp}
                     unit="W"
+                    rule={FTP_RULE}
                     onCommit={(v) => onChange?.('ftp', v)}
                   />
                   <RiderNumberField
                     label={t('Poids total')}
                     value={rhythm.systemWeightKg}
                     unit="kg"
+                    rule={SYSTEM_WEIGHT_RULE}
                     onCommit={(v) => onChange?.('systemWeightKg', v)}
                   />
 

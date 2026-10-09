@@ -7205,6 +7205,10 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Intersections"
   },
   {
+    "fr": "Valeur attendue entre {{min}} et {{max}} {{unit}}",
+    "en": "Expected value between {{min}} and {{max}} {{unit}}"
+  },
+  {
     "fr": "LMB : Orbite · RMB : Pan · Scroll : Zoom",
     "en": "LMB: Orbit · RMB: Pan · Scroll: Zoom"
   },

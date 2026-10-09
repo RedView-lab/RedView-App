@@ -214,4 +214,6 @@ export const itineraryTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'Paramètres additionnels', en: 'Additional settings' },
   { fr: 'Bois (protection vent et soleil)', en: 'Woods (shelter from wind and sun)' },
   { fr: 'Intersections', en: 'Intersections' },
+  // Cartes FTP / poids total (lib/rhythm/riderNumber.ts)
+  { fr: 'Valeur attendue entre {{min}} et {{max}} {{unit}}', en: 'Expected value between {{min}} and {{max}} {{unit}}' },
 ];
