@@ -9,6 +9,7 @@
 import type { AccountAgeBucket } from './buckets';
 import type { BeforeSendContext } from './beforeSend';
 import type { AnalyticsEvent } from './events';
+import { isAnalyticsOptedOut } from './optOut';
 import type { AnalyticsData } from './privacy';
 import { ANALYTICS_SCREENS, ANALYTICS_SCREEN_TITLES, type AnalyticsScreen } from './screens';
 
@@ -112,6 +113,10 @@ export function getBeforeSendContext(): BeforeSendContext {
 
 function send(call: () => void): void {
   if (typeof window === 'undefined') return;
+  if (isAnalyticsOptedOut()) {
+    queue.length = 0;
+    return;
+  }
   if (window.umami) {
     try {
       call();

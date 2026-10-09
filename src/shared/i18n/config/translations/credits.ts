@@ -40,6 +40,9 @@ export const creditsTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'AGPL-3.0, données CC BY 4.0', en: 'AGPL-3.0, data CC BY 4.0' },
   { fr: 'Domaine public', en: 'Public domain' },
   { fr: 'Licences des bibliothèques logicielles incluses dans RedView', en: 'Licences of the software libraries included in RedView' },
+  // ── Réglages : mesure d'audience ──────────────────────────────────────────
+  { fr: 'Mesure d’audience', en: 'Audience measurement' },
+  { fr: 'Statistiques de visite anonymes, sans cookie, hébergées par RedView. Désactivées, plus rien n’est mesuré sur cet appareil.', en: 'Anonymous visit statistics, cookie-free, hosted by RedView. When turned off, nothing is measured on this device any more.' },
   // Licences et mentions identiques dans les deux langues.
   { fr: '© Kartverket, CC BY 4.0', en: '© Kartverket, CC BY 4.0' },
   { fr: '© Instituto Geográfico Nacional, CC BY 4.0', en: '© Instituto Geográfico Nacional, CC BY 4.0' },

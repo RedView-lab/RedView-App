@@ -17,6 +17,7 @@ import {
 import { analyticsAttrs } from './index';
 import { EVENT_LABELS, PROPERTY_LABELS, toDisplayData, VALUE_LABELS } from './labels';
 import { releaseTag } from './loader';
+import { isAnalyticsOptedOut, setAnalyticsOptOut } from './optOut';
 import { REDACTED, sanitizeAnalyticsData } from './privacy';
 
 const NOW = Date.UTC(2026, 9, 7, 12);
@@ -208,6 +209,22 @@ describe('file, anti-doublon, contexte', () => {
     expect(track.mock.calls[0]).toEqual(['project_created', { source: 'blank' }]);
     const props = (track.mock.calls[1][0] as (p: Record<string, unknown>) => Record<string, unknown>)({ website: 'w', url: '/x', title: 'y' });
     expect(props).toEqual({ website: 'w', url: '/projets', title: 'Mes projets' });
+  });
+
+  it('mesure refusée sur l’appareil : rien ne part, ni en direct ni depuis la file', () => {
+    vi.stubGlobal('window', {});
+    trackAnalyticsEvent({ name: 'project_created', data: { source: 'blank' } });
+    setAnalyticsOptOut(true);
+    trackScreen('projects');
+    const track = vi.fn();
+    (window as { umami?: unknown }).umami = { track };
+    trackAnalyticsEvent({ name: 'project_created', data: { source: 'import' } });
+    flushAnalyticsQueue();
+    expect(track).not.toHaveBeenCalled();
+    expect(isAnalyticsOptedOut()).toBe(true);
+    setAnalyticsOptOut(false);
+    trackAnalyticsEvent({ name: 'theme_changed', data: { mode: 'dark' } });
+    expect(track).toHaveBeenCalledTimes(1);
   });
 
   it('même événement dans la seconde : un seul envoi ; étranglement par clé', () => {

@@ -1,5 +1,5 @@
-import { trackAnalyticsEvent } from '@/shared/lib/analytics';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { isAnalyticsOptedOut, setAnalyticsOptOut, trackAnalyticsEvent } from '@/shared/lib/analytics';
+import { useEffect, useId, useMemo, useState, type ReactNode } from 'react';
 
 import {
   APP_LOCALE_OPTIONS,
@@ -168,6 +168,10 @@ export type SettingsPanelProps = {
 export function SettingsPanel({ profile }: SettingsPanelProps = {}) {
   const { locale, setLocale, t } = useAppI18n();
   const [settings, setSettings] = useState<SettingsState>(() => readStoredSettings(locale));
+  // Choix de l'appareil, hors des réglages enregistrés : la clé que le tracker relit (analytics/optOut.ts).
+  const [analyticsEnabled, setAnalyticsEnabled] = useState(() => !isAnalyticsOptedOut());
+  const analyticsLabelId = useId();
+  const analyticsHintId = useId();
 
   const languageSelectOptions = useMemo<AccountSelectOption[]>(
     () => APP_LOCALE_OPTIONS.map((option) => ({ ...option })),
@@ -251,6 +255,32 @@ export function SettingsPanel({ profile }: SettingsPanelProps = {}) {
               </button>
             );
           })}
+        </div>
+      </div>
+
+      <div className="rvpb-divider" />
+
+      <div className="rvpb-settings-row">
+        <div className="rvpb-settings-row__label" id={analyticsLabelId}>{t('Mesure d’audience')}</div>
+        <div className="rvpb-settings-row__control rvpb-settings-toggle">
+          <button
+            type="button"
+            role="switch"
+            className={`rvpb-settings-switch${analyticsEnabled ? ' is-on' : ''}`}
+            aria-checked={analyticsEnabled}
+            aria-labelledby={analyticsLabelId}
+            aria-describedby={analyticsHintId}
+            onClick={() => {
+              const next = !analyticsEnabled;
+              setAnalyticsOptOut(!next);
+              setAnalyticsEnabled(next);
+            }}
+          >
+            <span className="rvpb-settings-switch__thumb" />
+          </button>
+          <p id={analyticsHintId} className="rvpb-settings-toggle__hint">
+            {t('Statistiques de visite anonymes, sans cookie, hébergées par RedView. Désactivées, plus rien n’est mesuré sur cet appareil.')}
+          </p>
         </div>
       </div>
 

@@ -26,6 +26,7 @@ export {
 } from './core';
 export type { AnalyticsScreen } from './screens';
 export { initAnalytics } from './loader';
+export { isAnalyticsOptedOut, setAnalyticsOptOut } from './optOut';
 
 /**
  * Attributs d'un bouton mesuré au clic par le tracker (`data-umami-event`),

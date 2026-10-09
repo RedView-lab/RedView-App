@@ -18,6 +18,7 @@ import {
   setAnalyticsSurface,
   type AnalyticsSurface,
 } from './core';
+import { isAnalyticsOptedOut } from './optOut';
 
 const UMAMI_WEBSITE_ID = '794b9933-1d87-4e8c-af69-a09982cc2353';
 const UMAMI_SCRIPT_SRC = '/s/x.js';
@@ -54,6 +55,8 @@ export function initAnalytics({ surface, release }: { surface: AnalyticsSurface;
   if (!import.meta.env.PROD) return;
   const testMode = readTestFlag();
   if (!testMode && !ANALYTICS_HOSTS.includes(window.location.hostname)) return;
+  // Mesure refusée sur cet appareil (Réglages) : le tracker n'est même pas chargé.
+  if (isAnalyticsOptedOut()) return;
 
   window[BEFORE_SEND_GLOBAL] = (type, payload) => prepareUmamiPayload(type, payload, getBeforeSendContext());
   window.addEventListener('pagehide', runAnalyticsPageHideSummaries);

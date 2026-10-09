@@ -8,8 +8,8 @@ import { SettingsPanel } from './SettingsPanel';
 
 /**
  * Réglages : seuls ceux que l'app lit vraiment sont proposés (langue,
- * affichage). Les anciens « Unité de mesure », « Paramètre de carte » et
- * « Réglage » étaient enregistrés mais lus nulle part.
+ * affichage, mesure d'audience). Les anciens « Unité de mesure », « Paramètre
+ * de carte » et « Réglage » étaient enregistrés mais lus nulle part.
  */
 
 let view: RenderedComponent | null = null;
@@ -27,8 +27,20 @@ describe('SettingsPanel', () => {
   it('ne propose plus de réglage sans effet', () => {
     view = renderComponent(createElement(SettingsPanel));
     const labels = [...view.container.querySelectorAll('.rvpb-settings-row__label')].map((node) => node.textContent);
-    expect(labels).toEqual(['Langue', 'Préférence d’affichage']);
-    expect(view.container.querySelector('[role="switch"]')).toBeNull();
+    expect(labels).toEqual(['Langue', 'Préférence d’affichage', 'Mesure d’audience']);
+    expect(view.container.querySelectorAll('[role="switch"]')).toHaveLength(1);
+  });
+
+  it('la mesure d’audience se refuse et se réactive sur l’appareil (clé relue par le tracker)', () => {
+    view = renderComponent(createElement(SettingsPanel));
+    const toggle = view.container.querySelector<HTMLButtonElement>('[role="switch"]')!;
+    expect(toggle.getAttribute('aria-checked')).toBe('true');
+    view.click(toggle);
+    expect(toggle.getAttribute('aria-checked')).toBe('false');
+    expect(window.localStorage.getItem('umami.disabled')).toBe('1');
+    view.click(toggle);
+    expect(toggle.getAttribute('aria-checked')).toBe('true');
+    expect(window.localStorage.getItem('umami.disabled')).toBeNull();
   });
 
   it('les anciennes clés stockées sont lues sans erreur puis abandonnées, le thème et la langue gardés', () => {

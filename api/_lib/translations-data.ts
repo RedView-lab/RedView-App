@@ -6197,6 +6197,14 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Licences of the software libraries included in RedView"
   },
   {
+    "fr": "Mesure d’audience",
+    "en": "Audience measurement"
+  },
+  {
+    "fr": "Statistiques de visite anonymes, sans cookie, hébergées par RedView. Désactivées, plus rien n’est mesuré sur cet appareil.",
+    "en": "Anonymous visit statistics, cookie-free, hosted by RedView. When turned off, nothing is measured on this device any more."
+  },
+  {
     "fr": "© Kartverket, CC BY 4.0",
     "en": "© Kartverket, CC BY 4.0"
   },

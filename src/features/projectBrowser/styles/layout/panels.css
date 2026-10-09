@@ -425,3 +425,67 @@
   gap: 12px;
   flex-wrap: wrap;
 }
+/* Interrupteur des réglages — Figma « _Toggle base » (206:5002 / instance 3026:27097)
+   Pilule fine 32×16 : piste translucide bordée (OFF) / piste rouge #890000 (ON),
+   bouton blanc avec bordure de 1 px (#3F3F3F en OFF, #700000 en ON) et shadow-xs. */
+.rvpb-settings-switch {
+  appearance: none;
+  position: relative;
+  box-sizing: border-box;
+  width: 32px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: 9999px;
+  background: light-dark(rgb(var(--rv-ink) / 0.1), rgba(245, 245, 245, 0.08));
+  box-shadow: inset 0 0 0 1px light-dark(rgb(var(--rv-ink) / 0.06), rgba(233, 234, 235, 0.3));
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color 180ms ease, box-shadow 180ms ease;
+}
+
+.rvpb-settings-switch.is-on {
+  background: #890000;
+  color: var(--rv-on-accent);
+  box-shadow: none;
+}
+
+.rvpb-settings-switch__thumb {
+  position: absolute;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  border: 1px solid light-dark(rgb(var(--rv-ink) / 0.14), #3F3F3F);
+  background: #ffffff;
+  box-shadow: 0px 1px 2px light-dark(rgba(16, 18, 24, 0.16), rgba(10, 13, 18, 0.05));
+  transition: transform 180ms ease, border-color 180ms ease;
+}
+
+.rvpb-settings-switch.is-on .rvpb-settings-switch__thumb {
+  border-color: #700000;
+  transform: translateX(16px);
+}
+
+.rvpb-settings-switch:focus-visible {
+  outline: 2px solid light-dark(#9e77ed, #000000);
+  outline-offset: 3px;
+}
+
+/* Réglage à interrupteur : l'interrupteur, puis ce qu'il change. */
+.rvpb-settings-toggle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 40px;
+}
+
+.rvpb-settings-toggle__hint {
+  margin: 0;
+  max-width: 560px;
+  color: rgb(var(--rv-ink) / 0.64);
+  font-size: var(--rv-font-size-md);
+  line-height: 1.35;
+}
