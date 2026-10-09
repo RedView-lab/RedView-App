@@ -94,6 +94,23 @@ async function clickSelector(session, selector) {
   if (!r) throw new Error(`absent : ${selector}`);
   await click(session, r.x, r.y);
 }
+/**
+ * Libellés du menu « Plus d'actions » du message `index` de la carte ouverte
+ * (menu ouvert puis refermé par le même bouton ; [] s'il n'y a pas de bouton).
+ * Avec `keepOpen`, le menu reste ouvert pour une vérification de plus.
+ */
+async function messageMenuItems(session, index, { keepOpen = false } = {}) {
+  const button = `document.querySelectorAll('[data-rv-comment-card] .rv-comment-message')[${index}]?.querySelector('.rv-comment-icon-button[aria-haspopup="menu"]')`;
+  if (!(await session.evaluate(`!!${button}`))) return [];
+  await session.evaluate(`(${button}.click(), 0)`);
+  await sleep(300);
+  const labels = await session.evaluate(`[...document.querySelectorAll('.rv-dropdown [role="menuitem"]')].map((item) => item.textContent.trim())`);
+  if (!keepOpen) {
+    await session.evaluate(`(${button}.click(), 0)`);
+    await sleep(200);
+  }
+  return labels;
+}
 async function key(session, keyName, { code, modifiers = 0, text } = {}) {
   const params = { key: keyName, code: code ?? keyName, modifiers, windowsVirtualKeyCode: keyName.length === 1 ? keyName.toUpperCase().charCodeAt(0) : keyName === 'Enter' ? 13 : keyName === 'Escape' ? 27 : 0 };
   await session.send('Input.dispatchKeyEvent', { type: 'rawKeyDown', ...params });
@@ -178,7 +195,12 @@ try {
   await waitFor(B, `!!document.querySelector('[data-rv-comment-card="${threadId}"]')`, { timeout: 5000 });
   await sleep(500);
   check(await B.evaluate(`!document.querySelector('[data-rv-comment-pin="${threadId}"].is-unread')`), 'B : ouvrir le fil le marque lu');
-  check(await B.evaluate(`!document.querySelector('.rv-comment-message .rv-comment-icon-button[aria-haspopup="menu"]')`), 'B : pas de Modifier / Supprimer sur le message de A');
+  // Message de quelqu'un d'autre : « Plus d'actions » ne propose que « Signaler » (DSA art. 16, 0858a9d).
+  const othersMenu = await messageMenuItems(B, 0, { keepOpen: true });
+  check(JSON.stringify(othersMenu) === '["Signaler"]', `B : sur le message de A, seulement « Signaler » (${JSON.stringify(othersMenu)})`);
+  check(await B.evaluate(`(document.querySelector('.rv-dropdown a[role="menuitem"]')?.getAttribute('href') ?? '').startsWith('mailto:')`), 'B : « Signaler » ouvre un e-mail prérempli');
+  await B.evaluate(`(document.querySelectorAll('[data-rv-comment-card] .rv-comment-message')[0]?.querySelector('.rv-comment-icon-button[aria-haspopup="menu"]')?.click(), 0)`);
+  await sleep(200);
   await B.evaluate(`document.querySelector('.rv-comment-card__reply textarea').focus()`);
   await B.send('Input.insertText', { text: '@ali' });
   await sleep(300);
@@ -198,6 +220,14 @@ try {
   await sleep(500);
   check(await A.evaluate(`[...document.querySelectorAll('.rv-comments-panel__tag--mention')].length === 1`), 'A : « @ vous » dans la liste');
   await shot(A, '11-alice-unread');
+  // Son propre message : Modifier / Supprimer, jamais « Signaler » ; celui de bob : seulement « Signaler ».
+  await clickSelector(A, '.rv-comments-panel__item');
+  await waitFor(A, `!!document.querySelector('[data-rv-comment-card="${threadId}"]')`, { timeout: 5000 });
+  await sleep(400);
+  const ownMenu = await messageMenuItems(A, 0);
+  check(ownMenu.includes('Modifier') && ownMenu.some((label) => /^Supprimer/.test(label)) && !ownMenu.includes('Signaler'), `A : sur son message, Modifier / Supprimer sans « Signaler » (${JSON.stringify(ownMenu)})`);
+  const bobMenu = await messageMenuItems(A, 1);
+  check(JSON.stringify(bobMenu) === '["Signaler"]', `A : sur le message de bob, seulement « Signaler » (${JSON.stringify(bobMenu)})`);
   await key(A, 'Escape', { code: 'Escape' });
 
   // Annuler (B) : sans effet sur les commentaires.
