@@ -8,7 +8,6 @@ import { sendAccountDeletionCodeEmail, sendVerificationEmail } from './mailer.ts
 interface SecureCodeEntry {
   codeHash: string; // SHA-256(salt:code)
   salt: string;
-  name?: string;
   expiresAt: number;
   attempts: number;
   lastRequestedAt: number;
@@ -261,14 +260,13 @@ export function consumeVerificationRequestQuota(email: string): void {
 }
 
 /** Nouveau code pour `key` (remplace le précédent), rendu en clair pour l'e-mail. */
-function issueCode(key: string, name?: string): string {
+function issueCode(key: string): string {
   const now = Date.now();
   const code = generate6DigitCode();
   const salt = crypto.randomBytes(16).toString('hex');
   setCode(key, {
     codeHash: hashVerificationCode(code, salt),
     salt,
-    name,
     expiresAt: now + CODE_TTL_MS,
     attempts: 0,
     lastRequestedAt: now,
@@ -291,7 +289,7 @@ export function accountDeletionCodeKey(email: string): string {
  * même clé.
  */
 export async function requestAccountDeletionCode(email: string, name?: string): Promise<{ sent: boolean }> {
-  const code = issueCode(accountDeletionCodeKey(email), name);
+  const code = issueCode(accountDeletionCodeKey(email));
   return sendAccountDeletionCodeEmail({ to: normalizeVerificationEmail(email), code, name });
 }
 
@@ -300,17 +298,13 @@ export async function requestAccountDeletionCode(email: string, name?: string): 
  * Le quota doit avoir été consommé au préalable via
  * `consumeVerificationRequestQuota`.
  */
-export async function requestVerificationCode(
-  email: string,
-  name?: string,
-): Promise<{ sent: boolean }> {
+export async function requestVerificationCode(email: string): Promise<{ sent: boolean }> {
   const normalizedEmail = normalizeVerificationEmail(email);
-  const code = issueCode(normalizedEmail, name);
+  const code = issueCode(normalizedEmail);
 
   const mailResult = await sendVerificationEmail({
     to: normalizedEmail,
     code,
-    name,
   });
 
   return { sent: mailResult.sent };

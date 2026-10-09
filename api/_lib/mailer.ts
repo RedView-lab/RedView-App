@@ -4,8 +4,17 @@ type ResendResult = { id?: string; message?: string };
 interface SendVerificationEmailOptions {
   to: string;
   code: string;
-  name?: string;
 }
+
+/**
+ * Salutation des e-mails envoyés avant que la personne ait prouvé posséder
+ * l'adresse (code d'inscription, « compte existant ») : jamais le nom saisi
+ * dans le formulaire. N'importe qui peut déclencher ces e-mails vers
+ * n'importe quelle adresse, et ce nom leur faisait porter 100 caractères de
+ * texte libre (« Bonjour Votre compte est suspendu, appelez le… ») sous
+ * l'expéditeur officiel de RedView.
+ */
+const UNVERIFIED_GREETING = 'Bonjour,';
 
 function escapeHtml(str: string): string {
   return str
@@ -70,11 +79,9 @@ async function sendTransactionalEmail(tag: string, message: { to: string; subjec
 export async function sendVerificationEmail({
   to,
   code,
-  name,
 }: SendVerificationEmailOptions): Promise<{ sent: boolean }> {
   const digits = (code || '').split('');
-  const cleanName = name && name.trim().length > 0 && !name.includes('@') ? escapeHtml(name.trim()) : '';
-  const greeting = cleanName ? `Bonjour ${cleanName},` : 'Bonjour,';
+  const greeting = UNVERIFIED_GREETING;
 
   const html = `
 <!DOCTYPE html>
@@ -210,7 +217,6 @@ export async function sendVerificationEmail({
 
 interface SendAccountExistsEmailOptions {
   to: string;
-  name?: string;
 }
 
 /**
@@ -221,16 +227,14 @@ interface SendAccountExistsEmailOptions {
  */
 export async function sendAccountExistsEmail({
   to,
-  name,
 }: SendAccountExistsEmailOptions): Promise<{ sent: boolean }> {
   const appUrl = (process.env.APP_BASE_URL?.trim() || 'https://app.redview.tech').replace(/\/+$/, '');
   const safeAppUrl = escapeHtml(`${appUrl}/`);
 
-  const cleanName = name && name.trim().length > 0 && !name.includes('@') ? escapeHtml(name.trim()) : '';
-  const greeting = cleanName ? `Bonjour ${cleanName},` : 'Bonjour,';
+  const greeting = UNVERIFIED_GREETING;
   const subject = 'Vous avez déjà un compte RedView';
   const text =
-    `${cleanName ? `Bonjour ${name?.trim()},` : 'Bonjour,'}\n\n` +
+    `${greeting}\n\n` +
     'Une inscription a été demandée avec cette adresse e-mail, mais un compte RedView existe déjà.\n' +
     `Connectez-vous sur ${appUrl}/ ou, si vous avez oublié votre mot de passe, utilisez « Mot de passe oublié ».\n\n` +
     "Si vous n'êtes pas à l'origine de cette demande, vous pouvez ignorer cet e-mail en toute sécurité.\n\n" +

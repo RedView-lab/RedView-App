@@ -10,8 +10,6 @@ import {
   requestVerificationCode,
 } from '../_lib/verificationStore.js';
 
-const MAX_NAME_LENGTH = 100;
-
 // Réponse identique que l'adresse soit libre ou déjà prise (anti-énumération).
 const NEUTRAL_SUCCESS_MESSAGE =
   'Si l’adresse est valide, un code de vérification à 6 chiffres a été envoyé.';
@@ -21,14 +19,13 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  const { email, name } = bodyFields(req);
+  // Le nom saisi n'est plus repris dans l'e-mail (api/_lib/mailer.ts) : il
+  // ne sert qu'à la création du compte (verify-code).
+  const { email } = bodyFields(req);
   const normalizedEmail = parseEmailAddress(email);
   if (!normalizedEmail) {
     return res.status(400).json({ error: 'Une adresse e-mail valide est requise.' });
   }
-
-  const cleanName =
-    typeof name === 'string' && name.trim() ? name.trim().slice(0, MAX_NAME_LENGTH) : undefined;
 
   try {
     // 0. Quotas par e-mail (verrou, cooldown, 5 demandes / heure) — appliqués
@@ -41,10 +38,10 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
 
     if (existing.total > 0) {
       // Pas de 409 : on prévient le propriétaire de la boîte par e-mail.
-      await sendAccountExistsEmail({ to: normalizedEmail, name: cleanName });
+      await sendAccountExistsEmail({ to: normalizedEmail });
     } else {
       // 2. Génère et envoie le code de vérification
-      await requestVerificationCode(normalizedEmail, cleanName);
+      await requestVerificationCode(normalizedEmail);
     }
 
     return res.status(200).json({
