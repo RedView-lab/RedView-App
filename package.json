@@ -79,6 +79,7 @@
     "bench:collab-prod": "node --env-file=.env script-test-bench/collab-e2e/prod-two-accounts.mjs",
     "bench:collab-trace": "node --env-file=.env script-test-bench/collab-e2e/prod-reopen-trace.mjs",
     "bench:server": "tsx script-test-bench/suites/server-api.ts",
+    "bench:api-fuzz": "node script-test-bench/api-fuzz/run.mjs",
     "bench:dashboard": "tsx script-test-bench/dashboard-perf/run.ts",
     "bench:screens": "node script-test-bench/screen-audit/run.mjs",
     "analytics:sync": "tsx scripts/analytics/umami/sync.ts",
