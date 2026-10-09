@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
-import axe from 'axe-core';
 import { act, createElement } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { axeViolations as violations } from '@/shared/test/axe';
 import { renderComponent, type RenderedComponent } from '@/shared/test/renderComponent';
 
 /**
@@ -20,16 +20,6 @@ vi.mock('../lib/emailChange', () => ({
 const { ChangeEmailDialog } = await import('./ChangeEmailDialog');
 const { AccountPasswordForm } = await import('./AccountPasswordForm');
 const { AccountIdentityForm } = await import('./AccountIdentityForm');
-
-const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22a', 'wcag22aa'];
-
-async function violations(root: Element): Promise<string[]> {
-  const result = await axe.run(root, {
-    runOnly: { type: 'tag', values: WCAG_TAGS },
-    rules: { 'color-contrast': { enabled: false } },
-  });
-  return result.violations.map((violation) => `${violation.id}: ${violation.nodes.map((node) => node.target.join(' ')).join(', ')}`);
-}
 
 function type(input: HTMLInputElement, value: string) {
   act(() => {
