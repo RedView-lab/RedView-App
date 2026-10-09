@@ -1,3 +1,4 @@
+import { NewTabHint } from '@/shared/components/NewTabHint';
 import { useAppI18n } from '@/shared/i18n';
 import { LEGAL_PAGES } from '../lib/routes';
 
@@ -12,6 +13,7 @@ export function LegalLinks({ className }: { className?: string }) {
       {LEGAL_PAGES.map((page) => (
         <a key={page.id} href={page.path} target="_blank" rel="noreferrer">
           {t(page.label)}
+          <NewTabHint />
         </a>
       ))}
     </nav>

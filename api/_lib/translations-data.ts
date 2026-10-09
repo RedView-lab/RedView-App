@@ -25,6 +25,10 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Retry"
   },
   {
+    "fr": "(nouvel onglet)",
+    "en": "(opens in a new tab)"
+  },
+  {
     "fr": "Uniquement disponible sur desktop",
     "en": "Only available on desktop"
   },

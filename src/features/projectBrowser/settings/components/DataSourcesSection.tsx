@@ -1,5 +1,6 @@
 import { useId } from 'react';
 
+import { NewTabHint } from '@/shared/components/NewTabHint';
 import { useAppI18n } from '@/shared/i18n';
 import { DATA_SOURCE_GROUPS } from '../lib/dataSources';
 
@@ -31,6 +32,7 @@ export function DataSourcesSection() {
                 </div>
                 <a className="rvpb-settings-sources__license" href={source.href} target="_blank" rel="noreferrer">
                   {t(source.licenseLabel)}
+                  <NewTabHint />
                 </a>
               </li>
             ))}
@@ -39,6 +41,7 @@ export function DataSourcesSection() {
       ))}
       <a className="rvpb-settings-sources__software" href={THIRD_PARTY_LICENSES_URL} target="_blank" rel="noreferrer">
         {t('Licences des bibliothèques logicielles incluses dans RedView')}
+        <NewTabHint />
       </a>
     </section>
   );

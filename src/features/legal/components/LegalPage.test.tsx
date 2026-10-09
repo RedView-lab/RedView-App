@@ -27,10 +27,16 @@ describe('LegalPage', () => {
 });
 
 describe('LegalLinks', () => {
-  it('ouvre chaque page légale dans un nouvel onglet', () => {
+  it('ouvre chaque page légale dans un nouvel onglet, annoncé aux lecteurs d’écran', () => {
     const view = renderComponent(createElement(LegalLinks));
     const links = [...view.container.querySelectorAll('a')];
-    expect(links.map((link) => link.textContent)).toEqual(['Mentions légales', 'Confidentialité', 'Conditions d’utilisation', 'Accessibilité']);
+    expect(links.map((link) => link.textContent)).toEqual([
+      'Mentions légales (nouvel onglet)',
+      'Confidentialité (nouvel onglet)',
+      'Conditions d’utilisation (nouvel onglet)',
+      'Accessibilité (nouvel onglet)',
+    ]);
+    expect(links.every((link) => link.querySelector('.rv-sr-only')?.textContent === '(nouvel onglet)')).toBe(true);
     expect(links.every((link) => link.target === '_blank' && link.rel.includes('noreferrer'))).toBe(true);
     view.unmount();
   });

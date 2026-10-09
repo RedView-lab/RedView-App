@@ -7,6 +7,7 @@ export const globalTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'Connexion au serveur impossible', en: 'Unable to reach the server' },
   { fr: 'Vérifiez votre connexion internet puis réessayez.', en: 'Check your internet connection, then try again.' },
   { fr: 'Réessayer', en: 'Retry' },
+  { fr: '(nouvel onglet)', en: '(opens in a new tab)' },
   { fr: 'Uniquement disponible sur desktop', en: 'Only available on desktop' },
   { fr: "Veuillez ouvrir RedView sur un ordinateur pour accéder à l'application et à la cartographie 3D.", en: 'Please open RedView on a computer to access the app and its 3D maps.' },
   { fr: 'Retour au site', en: 'Back to website' },

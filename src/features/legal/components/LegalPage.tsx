@@ -1,5 +1,6 @@
 import { useEffect, useMemo, type ReactNode } from 'react';
 
+import { NewTabHint } from '@/shared/components/NewTabHint';
 import { RedViewLogo } from '@/shared/components/RedViewLogo';
 import { useAppI18n } from '@/shared/i18n';
 import { ENGLISH_CHROME, englishLegalDocuments } from '../content/en';
@@ -15,9 +16,16 @@ function InlineText({ source }: { source: string }) {
     <>
       {parseInlineLinks(source).map((segment, index) =>
         'href' in segment ? (
-          <a key={index} href={segment.href} {...(segment.href.startsWith('https:') ? { target: '_blank', rel: 'noreferrer' } : {})}>
-            {segment.text}
-          </a>
+          segment.href.startsWith('https:') ? (
+            <a key={index} href={segment.href} target="_blank" rel="noreferrer">
+              {segment.text}
+              <NewTabHint />
+            </a>
+          ) : (
+            <a key={index} href={segment.href}>
+              {segment.text}
+            </a>
+          )
         ) : (
           <span key={index}>{segment.text}</span>
         ),

@@ -19,6 +19,7 @@ import {
 } from '@/shared/lib/appTheme';
 import { LANDING_URL } from '../../lib';
 import { LegalLinks } from '@/features/legal';
+import { NewTabHint } from '@/shared/components/NewTabHint';
 import { DataSourcesSection } from './DataSourcesSection';
 
 type DisplayMode = AppThemePreference;
@@ -301,6 +302,7 @@ export function SettingsPanel({ profile }: SettingsPanelProps = {}) {
           >
             <PlayCircleIcon />
             <span>{t('Notre questionnaire de feedback')}</span>
+            <NewTabHint />
           </a>
         </article>
       </div>
