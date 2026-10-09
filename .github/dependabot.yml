@@ -28,10 +28,14 @@ updates:
         dependency-type: development
         update-types: [minor, patch]
     ignore:
-      # Facturation gelée (décision produit) : aucune montée de version Stripe
-      # tant que le gel n'est pas levé.
+      # Stripe : une majeure du SDK serveur change la version d'API Stripe
+      # (formes des objets lus par le webhook et billing/) et celles des SDK
+      # navigateur le Payment Element ; elles se font à la main avec
+      # `npm run e2e:billing`. Mineures et correctifs suivent le groupe normal.
       - dependency-name: stripe
+        update-types: ["version-update:semver-major"]
       - dependency-name: "@stripe/*"
+        update-types: ["version-update:semver-major"]
       # SDK Appwrite épinglés sur la série du serveur de prod (2.3 : node-appwrite
       # 30, appwrite 28) ; une montée suit celle du serveur
       # (docs/operations/appwrite-sdk.md).

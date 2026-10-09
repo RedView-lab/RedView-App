@@ -128,3 +128,22 @@ jobs:
           echo "${GITLEAKS_SHA256}  gitleaks.tar.gz" | sha256sum -c -
           tar -xzf gitleaks.tar.gz gitleaks
       - run: ./gitleaks git . --redact --no-banner --exit-code 1
+
+  # Vulnérabilités connues (base GitHub Advisory) dans tout l'arbre : les
+  # paquets du bundle navigateur sont des devDependencies (CLAUDE.md), donc
+  # pas de --omit=dev. Seuil « high » : un avis modéré se traite à la PR
+  # Dependabot suivante, un avis élevé ou critique bloque.
+  dependencies-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+
+      # Lit seulement package-lock.json : pas de npm ci.
+      - run: npm audit --audit-level=high
