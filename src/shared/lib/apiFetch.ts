@@ -52,3 +52,24 @@ export async function apiFetch(input: string, init: RequestInit & { timeoutMs: n
     callerSignal?.removeEventListener('abort', relayAbort);
   }
 }
+
+/**
+ * Délai pour un appel qui n'est pas un `fetch` à nous (SDK Appwrite : il n'a
+ * pas d'option de délai). La requête continue en arrière-plan ; l'écran, lui,
+ * reçoit une `ApiNetworkError(timedOut)` lisible au lieu d'attendre sans fin.
+ */
+export function withNetworkTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new ApiNetworkError(true)), timeoutMs);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error: unknown) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}

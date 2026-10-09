@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ApiNetworkError, apiFetch } from './apiFetch';
+import { ApiNetworkError, apiFetch, withNetworkTimeout } from './apiFetch';
 
 /** fetch qui ne répond jamais, mais respecte son signal comme le vrai. */
 function hangingFetch() {
@@ -67,5 +67,30 @@ describe('apiFetch', () => {
     controller.abort();
     await expect(apiFetch('/api/x', { timeoutMs: 20_000, signal: controller.signal })).rejects.toMatchObject({ name: 'AbortError' });
     expect(fetchMock.mock.calls[0][1]?.signal?.aborted).toBe(true);
+  });
+});
+
+describe('withNetworkTimeout', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('un appel qui ne répond jamais finit en ApiNetworkError(timedOut) au délai', async () => {
+    const settled = withNetworkTimeout(new Promise<never>(() => {}), 20_000).then(() => null, (error: unknown) => error);
+    await vi.advanceTimersByTimeAsync(20_000);
+    const error = await settled;
+    expect(error).toBeInstanceOf(ApiNetworkError);
+    expect((error as ApiNetworkError).timedOut).toBe(true);
+  });
+
+  it('résultat et erreur passent tels quels, et le minuteur est rendu', async () => {
+    await expect(withNetworkTimeout(Promise.resolve(42), 1_000)).resolves.toBe(42);
+    const refusal = Object.assign(new Error('Invalid credentials'), { code: 401 });
+    await expect(withNetworkTimeout(Promise.reject(refusal), 1_000)).rejects.toBe(refusal);
+    expect(vi.getTimerCount()).toBe(0);
   });
 });

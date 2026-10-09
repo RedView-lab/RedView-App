@@ -4,6 +4,7 @@ import { authFailureReason, rememberOAuthIntent } from '../lib/authAnalytics'
 import { RedViewLogo } from '@/shared/components/RedViewLogo'
 import { errorMessage as thrownMessage } from '@/shared/lib/errors'
 import { appwriteFailureMessage } from '@/shared/lib/appwriteErrors'
+import { withNetworkTimeout } from '@/shared/lib/apiFetch'
 
 import {
   account,
@@ -38,6 +39,14 @@ const NEW_PASSWORD_OVERRIDES = {
 
 /** Un code d'inscription vaut 10 min (api/_lib/verificationStore.ts) : marge d'une minute. */
 const SIGNUP_CODE_REUSE_MS = 9 * 60 * 1000
+
+/**
+ * Appels Appwrite de l'écran (le SDK n'a pas de délai) : un réseau qui pend
+ * (Wi-Fi captif) laissait le bouton tourner sans fin. Une session créée après
+ * coup est retirée par le `deleteSession('current')` de l'essai suivant.
+ */
+const AUTH_CALL_TIMEOUT_MS = 20_000
+const timed = <T,>(promise: Promise<T>) => withNetworkTimeout(promise, AUTH_CALL_TIMEOUT_MS)
 
 type AuthMode = 'login' | 'signup' | 'forgot-password' | 'reset-password'
 
@@ -169,7 +178,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
       }
 
       try {
-        await account.updateRecovery(userId, secret, password)
+        await timed(account.updateRecovery(userId, secret, password))
         trackAnalyticsEvent({ name: 'password_reset_completed' })
         setSuccessMessage('Votre mot de passe a été réinitialisé avec succès ! Vous pouvez maintenant vous connecter.')
         setMode('login')
@@ -225,7 +234,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
     try {
       // Au cas où une ancienne session serait encore active
       try {
-        await account.deleteSession('current')
+        await timed(account.deleteSession('current'))
       } catch {
         // Ignoré s'il n'y a pas de session active
       }
@@ -266,14 +275,14 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
         }
 
         // Inscription directe (sans code) en attendant la validation DNS
-        await account.create(ID.unique(), trimmedEmail, password, trimmedName)
-        await account.createEmailPasswordSession(trimmedEmail, password)
+        await timed(account.create(ID.unique(), trimmedEmail, password, trimmedName))
+        await timed(account.createEmailPasswordSession(trimmedEmail, password))
       } else {
         // Mode connexion
-        await account.createEmailPasswordSession(trimmedEmail, password)
+        await timed(account.createEmailPasswordSession(trimmedEmail, password))
       }
 
-      const user = await account.get()
+      const user = await timed(account.get())
       saveStoredAppwriteSession({ id: user.$id, email: user.email, name: user.name })
       trackAnalyticsEvent({
         name: mode === 'signup' ? 'signup_completed' : 'login_completed',
@@ -307,8 +316,8 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
       }
 
       // Compte créé avec e-mail vérifié -> ouvre la session
-      await account.createEmailPasswordSession(trimmedEmail, password)
-      const user = await account.get()
+      await timed(account.createEmailPasswordSession(trimmedEmail, password))
+      const user = await timed(account.get())
       saveStoredAppwriteSession({ id: user.$id, email: user.email, name: user.name })
       trackAnalyticsEvent({ name: 'signup_completed', data: { method: 'email' } })
 
