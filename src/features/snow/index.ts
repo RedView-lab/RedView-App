@@ -99,19 +99,38 @@ export async function runSnowPipeline(
 
   progress(0, 'Données neige (AROME, stations, bulletin, météo)…');
   const canUseTiles = terrariumSupported();
-  const [aromeRes, contextRes, farRes] = await Promise.allSettled([
-    fetchAromeSnow(frame.center, signal),
-    fetchSnowContext(frame.center, sceneAltitude, signal),
-    canUseTiles ? farFieldDem(frame, sizeX, sizeY, FAR_MARGIN_M, FAR_CELL_M, signal) : Promise.resolve(null),
+  // Les trois sources partent ensemble, mais sans l'analyse AROME il n'y a pas
+  // de champ de neige : son échec arrête tout de suite les deux autres. Le
+  // contexte (stations, BRA, 60 jours de météo) prend jusqu'à ~16 s à froid
+  // (mesuré en prod le 2026-10-09) : la personne attendait tout ce temps pour
+  // apprendre que la source Météo-France n'était pas disponible.
+  const loads = new AbortController();
+  const forwardAbort = () => loads.abort();
+  signal?.addEventListener('abort', forwardAbort, { once: true });
+  // Rejets pris en charge dès le départ : un échec pendant l'attente d'AROME
+  // n'est jamais une promesse rejetée « non gérée ».
+  const others = Promise.allSettled([
+    fetchSnowContext(frame.center, sceneAltitude, loads.signal),
+    canUseTiles ? farFieldDem(frame, sizeX, sizeY, FAR_MARGIN_M, FAR_CELL_M, loads.signal) : Promise.resolve(null),
   ]);
+  let arome: AromeGrid;
+  let contextRes: Awaited<typeof others>[0];
+  let farRes: Awaited<typeof others>[1];
+  try {
+    try {
+      arome = await fetchAromeSnow(frame.center, loads.signal);
+    } catch (error) {
+      loads.abort();
+      throw error instanceof Error ? error : new Error('snow data unavailable');
+    }
+    [contextRes, farRes] = await others;
+  } finally {
+    signal?.removeEventListener('abort', forwardAbort);
+  }
   if (signal?.aborted) throw new DOMException('aborted', 'AbortError');
 
   const context: SnowContext | null = contextRes.status === 'fulfilled' ? contextRes.value : null;
   if (!context) console.warn('[snow] context unavailable:', contextRes.status === 'rejected' ? contextRes.reason : '');
-  if (aromeRes.status === 'rejected') {
-    throw aromeRes.reason instanceof Error ? aromeRes.reason : new Error('snow data unavailable');
-  }
-  const arome: AromeGrid = aromeRes.value;
   let coarse: CoarseSnowGrid = arome.grid;
 
   progress(25, 'Orographie du modèle…');
