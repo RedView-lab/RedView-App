@@ -102,6 +102,12 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
    * dans la pop-in.
    */
   const signupCodeSentRef = useRef<{ email: string; at: number } | null>(null)
+  /**
+   * Compte déjà créé par verify-code (le code y a été consommé) mais session
+   * pas encore ouverte (réseau) : le nouvel essai ouvre seulement la session,
+   * au lieu de renvoyer un code que le serveur ne connaît plus.
+   */
+  const signupAccountCreatedRef = useRef<string | null>(null)
 
   // Page vue virtuelle de l'écran affiché (mesure d'audience).
   useEffect(() => {
@@ -309,10 +315,13 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
     const trimmedEmail = email.trim()
 
     try {
-      const { ok, data } = await verifyCodeAndCreateAccount(trimmedEmail, code, resolveSignupName(name, trimmedEmail), password)
-      if (!ok) {
-        trackAnalyticsEvent({ name: 'auth_failed', data: { method: 'email', step: 'verification', reason: 'code' } })
-        return { success: false, error: data.error || 'Code invalide.' }
+      if (signupAccountCreatedRef.current !== trimmedEmail.toLowerCase()) {
+        const { ok, data } = await verifyCodeAndCreateAccount(trimmedEmail, code, resolveSignupName(name, trimmedEmail), password)
+        if (!ok) {
+          trackAnalyticsEvent({ name: 'auth_failed', data: { method: 'email', step: 'verification', reason: 'code' } })
+          return { success: false, error: data.error || 'Code invalide.' }
+        }
+        signupAccountCreatedRef.current = trimmedEmail.toLowerCase()
       }
 
       // Compte créé avec e-mail vérifié -> ouvre la session

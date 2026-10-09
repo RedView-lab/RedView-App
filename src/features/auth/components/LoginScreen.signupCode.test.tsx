@@ -13,15 +13,22 @@ import { renderComponent, type RenderedComponent } from '@/shared/test/renderCom
 
 const auth = vi.hoisted(() => ({
   sendVerificationCode: vi.fn(async () => ({ ok: true, status: 200, data: {} })),
+  verifyCodeAndCreateAccount: vi.fn(async () => ({ ok: true, status: 200, data: {} })),
+  createEmailPasswordSession: vi.fn(async () => ({})),
 }));
 vi.mock('./login/authRequests', () => ({
   requestPasswordRecovery: vi.fn(),
   sendVerificationCode: auth.sendVerificationCode,
-  verifyCodeAndCreateAccount: vi.fn(),
+  verifyCodeAndCreateAccount: auth.verifyCodeAndCreateAccount,
   resolveSignupName: (name: string, email: string) => name.trim() || email.split('@')[0] || 'User',
 }));
 vi.mock('@/shared/services/appwrite', () => ({
-  account: { deleteSession: vi.fn(async () => {}), createOAuth2Session: vi.fn() },
+  account: {
+    deleteSession: vi.fn(async () => {}),
+    createOAuth2Session: vi.fn(),
+    createEmailPasswordSession: auth.createEmailPasswordSession,
+    get: vi.fn(async () => ({ $id: 'u1', email: 'rider@example.test', name: 'rider' })),
+  },
   saveStoredAppwriteSession: vi.fn(),
 }));
 vi.mock('@/shared/lib/analytics', () => ({ trackAnalyticsEvent: vi.fn(), trackScreen: vi.fn() }));
@@ -58,9 +65,14 @@ async function submitSignup(email: string) {
   await settle();
 }
 
+const onLogin = vi.fn();
+
 beforeEach(() => {
   auth.sendVerificationCode.mockClear();
-  view = renderComponent(createElement(LoginScreen));
+  auth.verifyCodeAndCreateAccount.mockClear();
+  auth.createEmailPasswordSession.mockReset().mockResolvedValue({});
+  onLogin.mockClear();
+  view = renderComponent(createElement(LoginScreen, { onLogin }));
   const signupTab = [...view.container.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find((tab) => tab.textContent === 'Sign up')!;
   act(() => signupTab.click());
 });
@@ -102,5 +114,23 @@ describe('LoginScreen : code d’inscription', () => {
     await submitSignup('rider@example.test');
     expect(auth.sendVerificationCode).toHaveBeenCalledTimes(2);
     expect(modalOpen()).toBe(true);
+  });
+  it('compte créé mais session pas ouverte (réseau) : le nouvel essai ouvre la session sans renvoyer le code consommé', async () => {
+    await submitSignup('rider@example.test');
+    const digits = [...document.querySelectorAll<HTMLInputElement>('.rv-modal-card input')];
+    expect(digits).toHaveLength(6);
+    auth.createEmailPasswordSession.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    for (const [index, digit] of [...'123456'].entries()) type(digits[index]!, digit);
+    await settle();
+    expect(auth.verifyCodeAndCreateAccount).toHaveBeenCalledTimes(1);
+    expect(onLogin).not.toHaveBeenCalled();
+    expect(document.querySelector('.rv-modal-card')?.textContent).toContain('Impossible de joindre le serveur RedView');
+
+    const verifyButton = [...document.querySelectorAll<HTMLButtonElement>('.rv-modal-card button')].find((node) => node.textContent === 'Vérifier')!;
+    act(() => verifyButton.click());
+    await settle();
+    expect(auth.verifyCodeAndCreateAccount).toHaveBeenCalledTimes(1);
+    expect(auth.createEmailPasswordSession).toHaveBeenCalledTimes(2);
+    expect(onLogin).toHaveBeenCalledWith('rider@example.test');
   });
 });
