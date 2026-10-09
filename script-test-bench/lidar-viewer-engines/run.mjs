@@ -431,6 +431,27 @@ async function runCase(browserName, engine, args, origin, checks, cspReports) {
     }, [cx, cy]);
     changed('molette en lignes (Firefox) : zoom', beforeZoom, await shot('zoom'));
 
+    // 5. Neige sans analyse Météo-France (clé absente : /api/meteofrance en 503) :
+    // la ligne d'état l'explique, l'interrupteur revient sur « off » (eac494d).
+    // Les routes ajoutées après « **/* » passent avant elle.
+    const unavailable = (route) => route.fulfill({ status: 503, contentType: 'application/json', body: '{"error":"Météo-France source not configured"}' });
+    await context.route(`${origin}/api/meteofrance**`, unavailable);
+    await context.route(`${origin}/api/snow-context**`, unavailable);
+    const snowStatusHidden = await page.evaluate(() => document.getElementById('panel-snow-status')?.hidden === true);
+    await page.evaluate(() => document.getElementById('panel-snow-toggle')?.click());
+    const snowStatus = await page.waitForFunction(() => {
+      const status = document.getElementById('panel-snow-status');
+      return status && !status.hidden && status.textContent.trim() ? status.textContent.trim() : null;
+    }, undefined, { timeout: 60_000 }).then((handle) => handle.jsonValue(), () => null);
+    const snowToggleOff = await page.evaluate(() => document.getElementById('panel-snow-toggle')?.checked === false);
+    checks.record(
+      'neige indisponible : ligne d\'état affichée, interrupteur sur « off »',
+      snowStatusHidden && /pas active/.test(snowStatus ?? '') && snowToggleOff
+        && await page.evaluate(() => document.getElementById('panel-snow-status')?.getAttribute('role') === 'status'),
+      snowStatus ? `« ${snowStatus} »` : 'aucun message',
+    );
+    if (auditHere && snowStatus) await auditA11y(page, 'neige-indisponible');
+
     const errors = backend === 'webgl' ? await glErrors() : [];
     checks.record('aucune erreur WebGL (getError)', !errors || errors.length === 0, errors?.join(', ') ?? 'contexte illisible');
     checks.record('aucune erreur de rendu en console', consoleFaults.length === 0, consoleFaults.slice(0, 3).join(' | '));
