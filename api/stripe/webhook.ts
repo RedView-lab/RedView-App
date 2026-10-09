@@ -1,6 +1,7 @@
 import type { ApiRequest, ApiResponse } from '../_lib/types.js';
 import type Stripe from 'stripe';
 
+import { captureServerError } from '../../server/lib/observability.mjs';
 import { createOldestKeyTaker } from '../../server/lib/oldest-key.mjs';
 import {
   activateTrialSubscription,
@@ -250,6 +251,10 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       console.warn(`[stripe/webhook] ${event.type} (${event.id}) refused: ${error.message}`);
     } else {
       console.error(`[stripe/webhook] Error handling ${event.type} (${event.id}):`, error);
+      // Rattrapée ici, elle n'atteindrait jamais GlitchTip : un abonnement
+      // pas synchronisé ou un e-mail pas envoyé doit se voir avant que Stripe
+      // abandonne ses relivraisons.
+      captureServerError(error, { route: 'stripe/webhook', requestId: req.requestId });
       return res.status(500).json({ error: 'Webhook handler failed' });
     }
   }

@@ -3,6 +3,7 @@ import { bodyFields } from '../_lib/http.js';
 import { ID } from 'node-appwrite';
 import { getAppwriteUsers } from '../_lib/appwrite.js';
 import { parseEmailAddress } from '../_lib/email.js';
+import { sendSafeError } from '../_lib/errors.js';
 import {
   checkVerificationCode,
   consumeVerificationCode,
@@ -115,9 +116,6 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       message: 'Compte créé et e-mail vérifié avec succès.',
     });
   } catch (error) {
-    console.error('[verify-code] Error creating user:', error);
-    return res.status(500).json({
-      error: 'Erreur lors de la création du compte. Veuillez réessayer.',
-    });
+    return sendSafeError(res, error, 'Erreur lors de la création du compte. Veuillez réessayer.', 'verify-code');
   }
 }
