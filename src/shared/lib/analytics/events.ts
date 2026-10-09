@@ -9,7 +9,11 @@
 import type { ProjectAgeBucket } from './buckets';
 
 export type AuthMethod = 'email' | 'google';
-export type AuthFailureReason = 'credentials' | 'exists' | 'rate_limited' | 'network' | 'code' | 'other';
+export type AuthFailureReason =
+  | 'credentials' | 'exists' | 'rate_limited' | 'network' | 'network_timeout' | 'code'
+  // Envoi du code d'inscription (send-verification-code) : e-mail non parti (503), adresse refusée (400), autre 5xx.
+  | 'mail_not_sent' | 'invalid_email' | 'server'
+  | 'other';
 export type RouteKind = 'full' | 'patch' | 'extend';
 type RouteFailureReason =
   | 'rate_limited'

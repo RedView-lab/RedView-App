@@ -85,7 +85,7 @@ dans `labels.ts`. Résumé (noms du code) :
 | Domaine | Événement | Propriétés |
 |---|---|---|
 | Compte | `signup_completed`, `login_completed` | `method` email/google (Google : décidé au retour OAuth sur la date d'inscription) |
-| | `auth_failed` | `method`, `step` login/signup/verification/reset, `reason` credentials/exists/rate_limited/network/code/other |
+| | `auth_failed` | `method`, `step` login/signup/verification/reset, `reason` credentials/exists/rate_limited/network/network_timeout/code/mail_not_sent/invalid_email/server/other (envoi du code d’inscription : 503 → mail_not_sent, 400 → invalid_email, autre 5xx → server) |
 | | `password_reset_requested`, `password_reset_completed`, `logout`, `account_data_exported` (`projects`), `account_deleted` | |
 | | `theme_changed` (`mode`), `language_changed` (`language`), `feedback_opened` | |
 | Monétisation | `checkout_started`, `checkout_completed` | `plan` |

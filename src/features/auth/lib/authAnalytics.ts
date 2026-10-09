@@ -78,6 +78,20 @@ export function authFailureReason(error: unknown): AuthFailureReason {
   if (code === 401 || code === 400) return 'credentials';
   if (code === 409) return 'exists';
   if (code === 429) return 'rate_limited';
-  if (error instanceof TypeError || error instanceof ApiNetworkError || code === 0) return 'network';
+  if (error instanceof ApiNetworkError) return error.timedOut ? 'network_timeout' : 'network';
+  if (error instanceof TypeError || code === 0) return 'network';
+  if (typeof code === 'number' && code >= 500) return 'server';
+  return 'other';
+}
+
+/**
+ * Refus de l'envoi du code d'inscription (api/auth/send-verification-code.ts),
+ * par statut HTTP : une vague d'échecs se lit sans les journaux de prod.
+ */
+export function sendCodeFailureReason(status: number): AuthFailureReason {
+  if (status === 429) return 'rate_limited';
+  if (status === 503) return 'mail_not_sent';
+  if (status === 400) return 'invalid_email';
+  if (status >= 500) return 'server';
   return 'other';
 }

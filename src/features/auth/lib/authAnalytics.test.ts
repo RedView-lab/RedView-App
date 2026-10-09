@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { ApiNetworkError } from '@/shared/lib/apiFetch';
 
-import { authFailureReason, resolveOAuthCompletion } from './authAnalytics';
+import { authFailureReason, resolveOAuthCompletion, sendCodeFailureReason } from './authAnalytics';
 
 const NOW = Date.UTC(2026, 9, 7, 12);
 const minutesAgo = (minutes: number) => NOW - minutes * 60_000;
@@ -25,10 +25,21 @@ describe('retour OAuth', () => {
 describe('authFailureReason', () => {
   it('panne réseau, délai dépassé ou erreur HTTP', () => {
     expect(authFailureReason(new TypeError('Failed to fetch'))).toBe('network');
-    expect(authFailureReason(new ApiNetworkError(true))).toBe('network');
+    expect(authFailureReason(new ApiNetworkError(true))).toBe('network_timeout');
     expect(authFailureReason(new ApiNetworkError(false))).toBe('network');
     expect(authFailureReason({ code: 401 })).toBe('credentials');
     expect(authFailureReason({ code: 429 })).toBe('rate_limited');
+    expect(authFailureReason({ code: 503 })).toBe('server');
     expect(authFailureReason(new Error('x'))).toBe('other');
+  });
+});
+
+describe('sendCodeFailureReason', () => {
+  it('chaque refus de l’envoi du code a sa cause', () => {
+    expect(sendCodeFailureReason(429)).toBe('rate_limited');
+    expect(sendCodeFailureReason(503)).toBe('mail_not_sent');
+    expect(sendCodeFailureReason(400)).toBe('invalid_email');
+    expect(sendCodeFailureReason(500)).toBe('server');
+    expect(sendCodeFailureReason(404)).toBe('other');
   });
 });

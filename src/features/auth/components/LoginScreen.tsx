@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, type FormEvent } from 'react'
 import { trackAnalyticsEvent, trackScreen } from '@/shared/lib/analytics'
-import { authFailureReason, rememberOAuthIntent } from '../lib/authAnalytics'
+import { authFailureReason, rememberOAuthIntent, sendCodeFailureReason } from '../lib/authAnalytics'
 import { RedViewLogo } from '@/shared/components/RedViewLogo'
 import { errorMessage as thrownMessage } from '@/shared/lib/errors'
 import { appwriteFailureMessage } from '@/shared/lib/appwriteErrors'
@@ -267,7 +267,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
           if (!ok) {
             trackAnalyticsEvent({
               name: 'auth_failed',
-              data: { method: 'email', step: 'signup', reason: status === 429 ? 'rate_limited' : 'other' },
+              data: { method: 'email', step: 'signup', reason: sendCodeFailureReason(status) },
             })
             setErrorMessage(data.error || "Impossible d'envoyer le code de vérification.")
             setLoading(false)
