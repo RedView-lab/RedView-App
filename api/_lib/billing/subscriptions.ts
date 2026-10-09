@@ -44,6 +44,27 @@ import {
 /** Métadonnée `purpose` des SetupIntents qui ouvrent un essai. */
 export const TRIAL_SETUP_PURPOSE = 'redview_trial';
 
+/**
+ * Opérations d'abonnement en cours, par client Stripe. Sans elles, deux
+ * onglets qui confirment chacun un essai (deux SetupIntents, donc deux clés
+ * d'idempotence) au même instant lisaient tous deux « aucun abonnement » et
+ * en créaient deux : deux prélèvements à la fin de l'essai. Idem pour deux
+ * souscriptions payantes. Un seul serveur d'app : un verrou en mémoire suffit
+ * (l'app et le webhook passent par le même processus).
+ */
+const customerLocks = new Map<string, Promise<unknown>>();
+
+async function withCustomerLock<T>(customerId: string, run: () => Promise<T>): Promise<T> {
+  const previous = customerLocks.get(customerId) ?? Promise.resolve();
+  const current = previous.catch(() => undefined).then(run);
+  customerLocks.set(customerId, current);
+  try {
+    return await current;
+  } finally {
+    if (customerLocks.get(customerId) === current) customerLocks.delete(customerId);
+  }
+}
+
 function customerIdOf(value: string | Stripe.Customer | Stripe.DeletedCustomer | null): string | null {
   if (!value) return null;
   return typeof value === 'string' ? value : value.id;
@@ -152,8 +173,16 @@ export async function startSubscription(
   accountEmail: string | null,
   planId: BillingPlanId,
 ): Promise<SubscriptionStartResult> {
-  const stripe = getStripeServer();
   const customerId = await getOrCreateStripeCustomer(userId, accountEmail);
+  return withCustomerLock(customerId, () => startSubscriptionForCustomer(userId, customerId, planId));
+}
+
+async function startSubscriptionForCustomer(
+  userId: string,
+  customerId: string,
+  planId: BillingPlanId,
+): Promise<SubscriptionStartResult> {
+  const stripe = getStripeServer();
   const [price, subscriptions] = await Promise.all([getPlanPrice(planId), listCustomerSubscriptions(customerId)]);
 
   if (subscriptions.some((subscription) => LIVE_SUBSCRIPTION_STATUSES.has(subscription.status))) {
@@ -216,7 +245,14 @@ function isIdempotencyConflict(error: unknown): boolean {
  * l'app et le webhook peuvent l'appeler tous les deux, dans n'importe quel
  * ordre, et un seul abonnement existe.
  */
-export async function activateTrialSubscription(
+export function activateTrialSubscription(
+  setupIntentId: string,
+  owner: { userId: string; customerId: string },
+): Promise<SubscriptionActionResult> {
+  return withCustomerLock(owner.customerId, () => activateTrialSubscriptionForCustomer(setupIntentId, owner));
+}
+
+async function activateTrialSubscriptionForCustomer(
   setupIntentId: string,
   owner: { userId: string; customerId: string },
 ): Promise<SubscriptionActionResult> {
