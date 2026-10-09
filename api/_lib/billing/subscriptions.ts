@@ -49,10 +49,13 @@ export const TRIAL_SETUP_PURPOSE = 'redview_trial';
  * onglets qui confirment chacun un essai (deux SetupIntents, donc deux clés
  * d'idempotence) au même instant lisaient tous deux « aucun abonnement » et
  * en créaient deux : deux prélèvements à la fin de l'essai. Idem pour deux
- * souscriptions payantes. Un seul serveur d'app : un verrou en mémoire suffit
- * (l'app et le webhook passent par le même processus).
+ * souscriptions payantes. Un seul serveur d'app : un verrou en mémoire suffit.
+ * Sur globalThis : le serveur de dev recharge les modules d'API à chaque
+ * requête, le verrou d'un appel serait perdu pour le suivant (en production,
+ * le build serveur partage ce module entre les routes : splitting d'esbuild).
  */
-const customerLocks = new Map<string, Promise<unknown>>();
+const customerLocks: Map<string, Promise<unknown>> = ((globalThis as { __rvBillingCustomerLocks?: Map<string, Promise<unknown>> })
+  .__rvBillingCustomerLocks ??= new Map());
 
 async function withCustomerLock<T>(customerId: string, run: () => Promise<T>): Promise<T> {
   const previous = customerLocks.get(customerId) ?? Promise.resolve();
