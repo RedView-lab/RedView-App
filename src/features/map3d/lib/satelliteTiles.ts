@@ -60,6 +60,15 @@ function currentConnection(): NetworkInformationLike | undefined {
 
 /** `transformRequest` de la carte du dashboard. */
 export function transformMapboxRequest(url: string, resourceType?: string): { url: string } {
-  if (resourceType !== 'Tile' || !prefersRetinaSatellite(currentConnection())) return { url };
-  return { url: toRetinaSatelliteTileUrl(url) };
+  if (!prefersRetinaSatellite(currentConnection())) return { url };
+  return transformMapboxRequestRetina(url, resourceType);
+}
+
+/**
+ * Tuiles satellite toujours en @2x, quelle que soit la connexion : l'export
+ * vidéo du survol attend chaque tuile avant de rendre une image (aucune course
+ * contre le temps) et dessine à 2× : la netteté prime sur le débit.
+ */
+export function transformMapboxRequestRetina(url: string, resourceType?: string): { url: string } {
+  return resourceType === 'Tile' ? { url: toRetinaSatelliteTileUrl(url) } : { url };
 }

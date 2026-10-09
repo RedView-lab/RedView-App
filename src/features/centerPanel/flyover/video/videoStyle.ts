@@ -1,5 +1,5 @@
 import type { LayerSpecification, Map as MapboxMap, SourceSpecification, StyleSpecification } from 'mapbox-gl';
-import { transformMapboxRequest } from '@/features/map3d';
+import { transformMapboxRequestRetina } from '@/features/map3d';
 import { ANALYSIS_HOVER_SOURCE_ID, ROUTE_HOVER_PREVIEW_SOURCE_ID } from '@/features/itineraryPanel/lib/route-layer';
 import { POI_GPU_SOURCE_ID } from '@/features/poi/lib/poi-markers';
 
@@ -106,12 +106,16 @@ export function cloneLiveStyle(liveMap: MapboxMap): ClonedStyle {
   return { style, customSources: [...customSources.values()], elevatedLineLayers };
 }
 
-/** `@2x` pour le sprite : chargé hors rendu, il suivrait le ratio de l'écran et non celui de la vidéo. */
+/**
+ * `@2x` pour le sprite : chargé hors rendu, il suivrait le ratio de l'écran et
+ * non celui de la vidéo. Tuiles satellite toujours en @2x, même sur une liaison
+ * lente (la carte du dashboard y renonce alors, pas la vidéo).
+ */
 export function videoTransformRequest(pixelRatio: number) {
   return (url: string, resourceType?: string) => {
     if (pixelRatio >= 2 && (resourceType === 'SpriteImage' || resourceType === 'SpriteJSON')) {
       return { url: url.replace(/\/sprite(?!@2x)(?=(\.png|\.json)?(\?|$))(\.png|\.json)?/, '/sprite@2x$3') };
     }
-    return transformMapboxRequest(url, resourceType);
+    return transformMapboxRequestRetina(url, resourceType);
   };
 }

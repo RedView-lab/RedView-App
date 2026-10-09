@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { prefersRetinaSatellite, transformMapboxRequest } from './satelliteTiles';
+import { prefersRetinaSatellite, transformMapboxRequest, transformMapboxRequestRetina } from './satelliteTiles';
 
 const TILE = 'https://api.mapbox.com/v4/mapbox.satellite/15/16823/11738.webp?sku=abc&access_token=pk';
 
@@ -28,6 +28,12 @@ describe('transformMapboxRequest', () => {
     vi.stubGlobal('navigator', { connection: { effectiveType: '4g', downlink: 10 } });
     expect(transformMapboxRequest(TILE, 'Tile').url).toBe(TILE.replace('11738.webp', '11738@2x.webp'));
     vi.stubGlobal('navigator', { connection: { effectiveType: '4g', downlink: 1.6 } });
+    expect(transformMapboxRequest(TILE, 'Tile').url).toBe(TILE);
+  });
+
+  it('l’export vidéo garde le @2x même sur une liaison lente', () => {
+    vi.stubGlobal('navigator', { connection: { saveData: true, effectiveType: '2g', downlink: 0.2 } });
+    expect(transformMapboxRequestRetina(TILE, 'Tile').url).toBe(TILE.replace('11738.webp', '11738@2x.webp'));
     expect(transformMapboxRequest(TILE, 'Tile').url).toBe(TILE);
   });
 
