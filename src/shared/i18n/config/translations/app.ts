@@ -30,6 +30,9 @@ export const appTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: "Le serveur RedView n'a pas répondu à temps. Vérifiez votre connexion puis réessayez.", en: 'The RedView server did not respond in time. Check your connection and try again.' },
   { fr: 'Impossible de joindre le serveur RedView. Vérifiez votre connexion puis réessayez.', en: 'Cannot reach the RedView server. Check your connection and try again.' },
 
+  // ── Sauvegarde : copie locale impossible (useDashboardProjectSync) ──────
+  { fr: "Stockage du navigateur plein : vos dernières modifications ne sont enregistrées ni sur cet appareil ni dans le cloud. Gardez cet onglet ouvert le temps qu'elles partent, ou libérez de l'espace (tuiles LiDAR téléchargées).", en: 'Browser storage is full: your latest changes are saved neither on this device nor in the cloud. Keep this tab open until they are sent, or free up space (downloaded LiDAR tiles).' },
+
   // ── Paywall ─────────────────────────────────────────────────────────────
   { fr: "La facturation se fait désormais directement dans l'app RedView. Reconnectez-vous avec un compte où la démo est activée ou contactez le support si cet accès devrait encore être actif.", en: 'Billing now happens directly inside RedView App. Reconnect with a demo-enabled account or contact support if this access should still be active.' },
   { fr: "Actualiser l'accès", en: 'Refresh access' },

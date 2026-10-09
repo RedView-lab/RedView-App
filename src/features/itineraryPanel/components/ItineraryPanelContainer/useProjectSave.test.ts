@@ -9,6 +9,9 @@ import { renderHook, type RenderedHook } from '@/shared/test/renderHook';
 import type { ItineraryProject } from '../../types';
 import { useProjectSave } from './useProjectSave';
 
+const toast = vi.hoisted(() => ({ error: vi.fn() }));
+vi.mock('@/shared/lib/notify', () => ({ notify: toast }));
+
 /**
  * Bouton Enregistrer et Ctrl/Cmd+S : une seule sauvegarde à la fois,
  * écrasement du cloud seulement sur confirmation après un conflit, statut
@@ -43,6 +46,7 @@ const saved = { savedAt: '2026-10-08T10:00:00.000Z', sizeBytes: 1234 } as Itiner
 
 beforeEach(() => {
   setProjectSyncStatus({ projectId: null, state: 'idle' });
+  toast.error.mockReset();
 });
 
 afterEach(() => {
@@ -165,5 +169,25 @@ describe('statut affiché au repos', () => {
     act(() => setProjectSyncStatus({ projectId: 'p2', state: 'error', message: 'Autre projet' }));
     expect(hook.result.current.displayedSaveStatus).toBe('idle');
     expect(hook.result.current.displayedSaveMessage).toBeNull();
+  });
+});
+
+describe('copie locale impossible (stockage plein)', () => {
+  it('un toast par épisode, seulement pour le projet affiché', () => {
+    render(undefined);
+    const lost = { state: 'error' as const, errorKind: 'offline' as const, message: 'Stockage du navigateur plein : …', localCopyLost: true };
+    act(() => setProjectSyncStatus({ projectId: 'autre', ...lost }));
+    expect(toast.error).not.toHaveBeenCalled();
+
+    act(() => setProjectSyncStatus({ projectId: 'p1', ...lost }));
+    expect(toast.error).toHaveBeenCalledTimes(1);
+    expect(toast.error).toHaveBeenCalledWith('Stockage du navigateur plein : …');
+    // nouvel essai, toujours perdu : pas de second toast
+    act(() => setProjectSyncStatus({ projectId: 'p1', ...lost, errorKind: 'rejected' }));
+    expect(toast.error).toHaveBeenCalledTimes(1);
+
+    act(() => setProjectSyncStatus({ projectId: 'p1', state: 'saved' }));
+    act(() => setProjectSyncStatus({ projectId: 'p1', ...lost }));
+    expect(toast.error).toHaveBeenCalledTimes(2);
   });
 });

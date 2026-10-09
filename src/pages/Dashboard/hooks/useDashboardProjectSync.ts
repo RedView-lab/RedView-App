@@ -3,6 +3,8 @@ import type { Map as MapboxMap } from 'mapbox-gl';
 import type { ItineraryProject } from '@/features/itineraryPanel/types';
 import {
   flushProjectViews,
+  getProjectSyncStatus,
+  isLocalCopyFailing,
   isServerOwnedDocument,
   saveProject,
   saveProjectLocally,
@@ -31,6 +33,13 @@ const AUTOSAVE_DEBOUNCE_MS = 1000;
 const AUTOSAVE_MAX_WAIT_MS = 4000;
 /** Réessais automatiques quand le cloud est injoignable (puis toutes les 60 s). */
 const RETRY_DELAYS_MS = [2_000, 5_000, 15_000, 30_000, 60_000];
+
+/**
+ * Copie locale impossible (stockage plein, IndexedDB indisponible) alors que
+ * le cloud n'a pas confirmé : les modifications n'existent qu'en mémoire.
+ */
+const LOCAL_COPY_LOST_MESSAGE =
+  "Stockage du navigateur plein : vos dernières modifications ne sont enregistrées ni sur cet appareil ni dans le cloud. Gardez cet onglet ouvert le temps qu'elles partent, ou libérez de l'espace (tuiles LiDAR téléchargées).";
 
 type SaveCallback = (error: ProjectCloudError | null) => void;
 
@@ -67,6 +76,8 @@ export function useDashboardProjectSync({
   /** Dernier état envoyé (document + travail local sérialisés). */
   const lastSavedRef = useRef<{ id: string; documentJson: string; workJson: string | null } | null>(null);
   const inFlightRef = useRef<Promise<void> | null>(null);
+  /** Projet dont un état est en cours d'envoi (sorti de `pendingSaveRef`). */
+  const sendingIdRef = useRef<string | null>(null);
   const saveTimerRef = useRef<number | null>(null);
   const firstQueuedAtRef = useRef<number | null>(null);
   const retryTimerRef = useRef<number | null>(null);
@@ -108,6 +119,11 @@ export function useDashboardProjectSync({
     }, delay);
   }, [clearRetryTimer]);
 
+  /** La copie locale a échoué et le cloud n'a rien pris : à dire tout de suite (toast de useProjectSave). */
+  const reportLocalCopyLost = useCallback((id: string, errorKind?: ProjectCloudError['kind']) => {
+    setProjectSyncStatus({ projectId: id, state: 'error', errorKind, message: LOCAL_COPY_LOST_MESSAGE, localCopyLost: true });
+  }, []);
+
   const reportFailure = useCallback(
     (item: PendingSave, error: ProjectCloudError, sizeChars: number) => {
       const status = {
@@ -116,10 +132,12 @@ export function useDashboardProjectSync({
         message: error.message,
       };
       failingIdRef.current = item.id;
+      const localCopyLost = isLocalCopyFailing(item.id);
       switch (error.kind) {
         case 'offline':
           logger.projects.warn('autosave postponed: cloud unreachable', item.id);
-          setProjectSyncStatus({ ...status, state: 'pending-offline' });
+          if (localCopyLost) reportLocalCopyLost(item.id, error.kind);
+          else setProjectSyncStatus({ ...status, state: 'pending-offline' });
           scheduleRetry();
           return;
         case 'conflict':
@@ -128,23 +146,26 @@ export function useDashboardProjectSync({
           // les modifications suivantes restent sur cet appareil (copie `dirty`).
           logger.projects.error(`autosave stopped (${error.kind})`, item.id);
           blockedRef.current = { id: item.id, kind: error.kind };
-          setProjectSyncStatus({ ...status, state: 'error' });
+          if (localCopyLost) reportLocalCopyLost(item.id, error.kind);
+          else setProjectSyncStatus({ ...status, state: 'error' });
           return;
         case 'too-large':
           // Inutile de retenter tant que le projet n'a pas rétréci (le bouton
           // Enregistrer retente quand même).
           logger.projects.error('autosave paused (too-large)', item.id, error);
           blockedRef.current = { id: item.id, kind: 'too-large', sizeChars };
-          setProjectSyncStatus({ ...status, state: 'error' });
+          if (localCopyLost) reportLocalCopyLost(item.id, error.kind);
+          else setProjectSyncStatus({ ...status, state: 'error' });
           return;
         default:
           // unauthorized / rejected : nouvel essai à la prochaine
           // modification, au retour du réseau ou via le bouton Enregistrer.
           logger.projects.error(`autosave failed (${error.kind})`, item.id, error);
-          setProjectSyncStatus({ ...status, state: 'error' });
+          if (localCopyLost) reportLocalCopyLost(item.id, error.kind);
+          else setProjectSyncStatus({ ...status, state: 'error' });
       }
     },
-    [scheduleRetry],
+    [reportLocalCopyLost, scheduleRetry],
   );
 
   /**
@@ -189,8 +210,19 @@ export function useDashboardProjectSync({
     if (!item.force && item.callbacks.length === 0 && stillBlocked) {
       try {
         await saveProjectLocally(item.id, item.project, serialized);
+        // Copie locale revenue : l'indicateur redit pourquoi le cloud est suspendu.
+        if (getProjectSyncStatus().localCopyLost) {
+          setProjectSyncStatus({
+            projectId: item.id,
+            state: 'error',
+            errorKind: blocked.kind,
+            message: new ProjectCloudError(blocked.kind).message,
+          });
+        }
       } catch (error) {
         logger.projects.warn('local-only save failed', error);
+        // Envoi cloud suspendu : rien ne garde ces modifications.
+        reportLocalCopyLost(item.id, blocked.kind);
       }
       return { error: null, sizeChars };
     }
@@ -209,7 +241,7 @@ export function useDashboardProjectSync({
     } catch (error) {
       return { error: toProjectCloudError(error), sizeChars };
     }
-  }, []);
+  }, [reportLocalCopyLost]);
 
   /** Boucle d'envoi unique : traite toujours le dernier état en attente. */
   const runSaveLoop = useCallback(async () => {
@@ -218,7 +250,10 @@ export function useDashboardProjectSync({
       if (!item) return;
       pendingSaveRef.current = null;
 
-      const { error, sizeChars } = await persistOnce(item);
+      sendingIdRef.current = item.id;
+      const { error, sizeChars } = await persistOnce(item).finally(() => {
+        sendingIdRef.current = null;
+      });
       for (const callback of item.callbacks) callback(error);
 
       if (!error) {
@@ -379,6 +414,15 @@ export function useDashboardProjectSync({
       void flushProjectViews();
     };
 
+    // Rien ne garde les modifications en attente (copie locale impossible,
+    // cloud pas encore confirmé) : le navigateur demande confirmation.
+    const warnIfUnsavedEverywhere = (event: BeforeUnloadEvent) => {
+      const unsentId = pendingSaveRef.current?.id ?? sendingIdRef.current;
+      if (!unsentId || !isLocalCopyFailing(unsentId)) return;
+      event.preventDefault();
+      event.returnValue = '';
+    };
+
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') handleUnload();
     };
@@ -391,12 +435,14 @@ export function useDashboardProjectSync({
 
     window.addEventListener('pagehide', handleUnload);
     window.addEventListener('beforeunload', handleUnload);
+    window.addEventListener('beforeunload', warnIfUnsavedEverywhere);
     window.addEventListener('online', handleOnline);
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       window.removeEventListener('pagehide', handleUnload);
       window.removeEventListener('beforeunload', handleUnload);
+      window.removeEventListener('beforeunload', warnIfUnsavedEverywhere);
       window.removeEventListener('online', handleOnline);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       void flushPendingLocally();

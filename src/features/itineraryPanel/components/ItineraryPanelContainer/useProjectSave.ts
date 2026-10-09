@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAppI18n } from '@/shared/i18n';
 import { isProjectCloudError } from '@/shared/services/projects';
 import { useLatestRef } from '@/shared/hooks/useLatestRef';
+import { notify } from '@/shared/lib/notify';
 import { useProjectSyncStatus } from '@/shared/hooks/useProjectSyncStatus';
 import type { ItineraryProject, ProjectSaveStatus } from '../../types';
 
@@ -85,6 +86,14 @@ export function useProjectSave({ projectId, onSaveProject, setProject }: UseProj
     : autosaveStatus?.message
       ? t(autosaveStatus.message)
       : null;
+
+  // Modifications gardées nulle part (stockage plein, cloud pas confirmé) :
+  // l'indicateur ne suffit pas, un toast le dit une fois par épisode.
+  const localCopyLost = autosaveStatus?.localCopyLost === true;
+  const localCopyLostMessage = autosaveStatus?.message;
+  useEffect(() => {
+    if (localCopyLost && localCopyLostMessage) notify.error(localCopyLostMessage);
+  }, [localCopyLost, localCopyLostMessage]);
 
   const handleSaveProjectRef = useLatestRef(handleSaveProject);
   useEffect(() => {

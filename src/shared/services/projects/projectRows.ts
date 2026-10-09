@@ -84,7 +84,7 @@ import { isServerOwnedDocument, isSharedProject, markSharedProject } from './liv
 import { deleteSharedProjectOnServer } from './sharing';
 import type { ItineraryProject, ProjectRow, ProjectRowMeta, ProjectSummary } from './types';
 
-export { saveProjectLocally } from './localCopy';
+export { isLocalCopyFailing, saveProjectLocally } from './localCopy';
 
 /** Au-delà, une lecture cloud est considérée hors-ligne (copie locale servie). */
 const CLOUD_READ_TIMEOUT_MS = 15_000;

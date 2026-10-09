@@ -1,3 +1,4 @@
+import { IDBObjectStore } from 'fake-indexeddb';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createDefaultItinerary, createDefaultProject } from '@/features/itineraryPanel/lib/project/defaultState';
@@ -65,6 +66,28 @@ describe('saveProject', () => {
     const synced = await idb.idbGetProjectMeta(row.id);
     expect(synced?.dirty).toBe(false);
     expect(synced?.cloud_updated_at).toBe(cloudDoc(mock, row.id).$updatedAt);
+  });
+
+  it('stockage plein : la copie locale manquée est signalée, la sauvegarde cloud part quand même', async () => {
+    const { mock, rows, idb } = await load();
+    const row = await rows.createProject('Départ');
+    expect(rows.isLocalCopyFailing(row.id)).toBe(false);
+
+    const put = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(() => {
+      throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+    });
+    try {
+      await rows.saveProject(row.id, project('Stockage plein'));
+      expect(rows.isLocalCopyFailing(row.id)).toBe(true);
+      expect(cloudDoc(mock, row.id).name).toBe('Stockage plein');
+      await expect(rows.saveProjectLocally(row.id, project('Toujours plein'))).rejects.toThrow(/quota/i);
+    } finally {
+      put.mockRestore();
+    }
+
+    await rows.saveProjectLocally(row.id, project('Place libérée'));
+    expect(rows.isLocalCopyFailing(row.id)).toBe(false);
+    expect((await idb.idbGetProject(row.id))?.data.name).toBe('Place libérée');
   });
 
   it('ne renvoie pas un document que le cloud a déjà confirmé', async () => {

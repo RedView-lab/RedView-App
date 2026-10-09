@@ -16,6 +16,18 @@ import type { ItineraryProject, ProjectRow } from './types';
 // confirmation cloud.
 
 /**
+ * Projets dont la dernière copie locale a échoué (stockage de l'origine plein —
+ * les tuiles LiDAR d'OPFS partagent son quota —, IndexedDB indisponible) :
+ * tant que le cloud n'a pas confirmé, leurs modifications n'existent qu'en
+ * mémoire (useDashboardProjectSync le signale et retient la fermeture).
+ */
+const failingLocalCopies = new Set<string>();
+
+export function isLocalCopyFailing(id: string): boolean {
+  return failingLocalCopies.has(id);
+}
+
+/**
  * Écrit la copie locale d'un projet (IndexedDB), sans réseau. Conserve dossier,
  * date de création et version cloud de base de la ligne existante. Renvoie la
  * révision locale écrite.
@@ -50,7 +62,13 @@ export function writeLocalCopy(
       // Projet partagé : l'équipe reste connue hors ligne (ouverture en session).
       team_id: owned?.team_id ?? null,
     };
-    await idbSaveProject(row, serialized);
+    try {
+      await idbSaveProject(row, serialized);
+    } catch (error) {
+      failingLocalCopies.add(id);
+      throw error;
+    }
+    failingLocalCopies.delete(id);
     return revision;
   });
 }

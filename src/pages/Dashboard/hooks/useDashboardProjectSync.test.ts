@@ -20,13 +20,17 @@ const cloud = vi.hoisted(() => ({
   save: vi.fn<(id: string, project: unknown, options?: { force?: boolean }) => Promise<void>>(),
   saveLocally: vi.fn<(id: string, project: unknown) => Promise<void>>(),
   serverOwned: new Set<string>(),
+  /** Copie locale impossible (stockage plein) pour ces projets. */
+  localFailing: new Set<string>(),
 }));
+
 
 vi.mock('@/shared/services/projects', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/shared/services/projects')>()),
   saveProject: cloud.save,
   saveProjectLocally: cloud.saveLocally,
   isServerOwnedDocument: (id: string) => cloud.serverOwned.has(id),
+  isLocalCopyFailing: (id: string) => cloud.localFailing.has(id),
   flushProjectViews: async () => {},
   uploadProjectThumbnail: async () => {},
 }));
@@ -61,6 +65,7 @@ beforeEach(() => {
   cloud.save.mockReset().mockResolvedValue(undefined);
   cloud.saveLocally.mockReset().mockResolvedValue(undefined);
   cloud.serverOwned.clear();
+  cloud.localFailing.clear();
   vi.spyOn(console, 'warn').mockImplementation(() => {});
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
@@ -208,5 +213,65 @@ describe('projet partagé, fermeture, changement de projet', () => {
     await act(async () => { await pending; });
     expect(outcome).toMatchObject({ kind: 'offline' });
     expect(getProjectSyncStatus()).toMatchObject({ projectId: 'p2', state: 'idle' });
+  });
+});
+
+describe('stockage du navigateur plein', () => {
+  /** Le navigateur demanderait-il confirmation avant de fermer l'onglet ? */
+  function closingIsHeldBack(): boolean {
+    const event = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(event);
+    return event.defaultPrevented;
+  }
+
+  it('hors ligne sans copie locale : alerte immédiate, fermeture retenue jusqu’à l’envoi', async () => {
+    const sync = mount();
+    cloud.localFailing.add('p1');
+    cloud.save.mockRejectedValue(new ProjectCloudError('offline'));
+    act(() => sync.queueProjectSave(project('v1')));
+    await advance(1_000);
+    expect(getProjectSyncStatus()).toMatchObject({ projectId: 'p1', state: 'error', localCopyLost: true });
+    expect(getProjectSyncStatus().message).toMatch(/^Stockage du navigateur plein/);
+    expect(closingIsHeldBack()).toBe(true);
+
+    await advance(2_000); // nouvel essai, toujours hors ligne
+    expect(cloudSaves()).toBe(2);
+    expect(getProjectSyncStatus().localCopyLost).toBe(true);
+
+    cloud.save.mockResolvedValue(undefined);
+    await advance(5_000);
+    expect(getProjectSyncStatus().state).toBe('saved');
+    expect(closingIsHeldBack()).toBe(false);
+  });
+
+  it('copie locale qui marche : hors ligne reste « en attente », la fermeture n’est pas retenue', async () => {
+    const sync = mount();
+    cloud.save.mockRejectedValue(new ProjectCloudError('offline'));
+    act(() => sync.queueProjectSave(project('v1')));
+    await advance(1_000);
+    expect(getProjectSyncStatus().state).toBe('pending-offline');
+    expect(getProjectSyncStatus().localCopyLost).toBeUndefined();
+    expect(closingIsHeldBack()).toBe(false);
+  });
+
+  it('cloud suspendu (conflit) puis copie locale impossible, puis revenue : l’indicateur suit', async () => {
+    const sync = mount();
+    cloud.save.mockRejectedValue(new ProjectCloudError('conflict'));
+    act(() => sync.queueProjectSave(project('v1')));
+    await advance(1_000);
+    expect(getProjectSyncStatus()).toMatchObject({ state: 'error', errorKind: 'conflict' });
+
+    cloud.saveLocally.mockRejectedValueOnce(new DOMException('quota', 'QuotaExceededError'));
+    act(() => sync.queueProjectSave(project('v2')));
+    await advance(1_000);
+    expect(getProjectSyncStatus()).toMatchObject({ localCopyLost: true });
+
+    act(() => sync.queueProjectSave(project('v3')));
+    await advance(1_000);
+    expect(getProjectSyncStatus()).toMatchObject({
+      state: 'error',
+      errorKind: 'conflict',
+      message: new ProjectCloudError('conflict').message,
+    });
   });
 });
