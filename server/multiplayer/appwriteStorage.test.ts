@@ -33,6 +33,12 @@ const fake = vi.hoisted(() => ({
   calls: [] as string[],
   /** Durée de chaque appel (ms) : un aller-retour vers Appwrite. */
   delayMs: 0,
+  /**
+   * Allers-retours enchaînés jusqu'ici (horloge logique) : un appel parti
+   * pendant qu'un autre est en cours compte au même niveau. Compté, pas
+   * chronométré : indépendant de la charge de la machine.
+   */
+  roundTrips: 0,
 }));
 
 vi.mock('node-appwrite', async (importActual) => {
@@ -41,7 +47,9 @@ vi.mock('node-appwrite', async (importActual) => {
   const error = (code: number, type = '') => Object.assign(new Error(`appwrite ${code}`), { code, type });
   const gate = async (call: string) => {
     fake.calls.push(call);
+    const startedAt = fake.roundTrips;
     if (fake.delayMs > 0) await new Promise((resolve) => setTimeout(resolve, fake.delayMs));
+    fake.roundTrips = Math.max(fake.roundTrips, startedAt + 1);
     if (fake.proxyNotFound) throw error(404);
   };
   const collection = (id: string) => {
@@ -354,15 +362,15 @@ describe('stockage Appwrite de la salle', () => {
     await host.shutdown();
 
     fake.calls = [];
-    fake.delayMs = 100;
+    fake.delayMs = 20;
+    fake.roundTrips = 0;
     const next = newHost();
-    const started = performance.now();
     const reopened = (await next.open(PROJECT))!;
-    const elapsed = performance.now() - started;
+    const roundTrips = fake.roundTrips;
     expect((reopened.room.state.document().itineraries[1] as { name: string }).name).toBe('Entrée rapide');
     // Ligne (sans `data`) ∥ droits → fichier du point de sauvegarde vérifié → téléchargé ∥ journal :
-    // 3 × 100 ms ; l'ancien chemin en enchaînait 5 (ligne entière, droits, fichier, téléchargement, journal).
-    expect(elapsed).toBeLessThan(450);
+    // 3 allers-retours ; l'ancien chemin en enchaînait 5 (ligne entière, droits, fichier, téléchargement, journal).
+    expect(roundTrips).toBe(3);
     const critical = fake.calls.slice(0, fake.calls.indexOf('getFileDownload') + 1);
     expect(critical.filter((call) => call.startsWith('getDocument:projects:'))).toEqual([
       'getDocument:projects:$id,collab',
