@@ -21,6 +21,7 @@ import {
 } from './server/lib/http-security.mjs';
 import { serveTileFallback, tileFallbackFamily, tileFallbackHitsUpstream } from './server/lib/tile-fallbacks.mjs';
 import { captureServerError, flushServerObservability, initServerObservability } from './server/lib/observability.mjs';
+import { missingProductionEnv } from './server/lib/env-check.mjs';
 import { createRequestLogger, normalizeRoutePath } from './server/lib/request-logging.mjs';
 import { VARIANT_SUFFIX, acceptedEncodings, isCompressible } from './server/lib/static-compression.mjs';
 import { REDVIEW_CSP_HEADER } from './server/lib/csp.mjs';
@@ -587,6 +588,14 @@ if (isMain) {
   server.listen(PORT, '0.0.0.0', () => {
     console.log(`[RedView Server] Running on http://0.0.0.0:${PORT}`);
   });
+  if (process.env.NODE_ENV === 'production') {
+    const missing = missingProductionEnv();
+    if (missing.length > 0) {
+      const detail = missing.map(({ name, feature }) => `${name} (${feature})`).join(', ');
+      console.error(`[RedView Server] Configuration incomplète, fonctions coupées : ${detail}`);
+      captureServerError(new Error(`Configuration incomplète : ${missing.map(({ name }) => name).join(', ')}`), { route: 'startup' });
+    }
+  }
   // Arrêt du conteneur (node en PID 1) : plus de nouvelle connexion, les
   // requêtes en cours finissent (invitation, action de facturation… coupées
   // net, le client ne savait pas si elles avaient abouti), dans une limite
