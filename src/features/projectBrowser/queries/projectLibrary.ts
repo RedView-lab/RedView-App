@@ -79,6 +79,19 @@ function useLibraryCache(userId: string | null) {
   };
 }
 
+/**
+ * Après un échec, la liste est relue : l'état affiché n'est jamais celui
+ * d'avant une action peut-être à moitié faite (dossier supprimé après avoir
+ * détaché une partie de ses projets) ou visant un projet supprimé depuis un
+ * autre onglet (404). `refetchOnWindowFocus` est coupé : sans cela, la liste
+ * restait fausse jusqu'au prochain rafraîchissement.
+ */
+function relistOnError(cache: ReturnType<typeof useLibraryCache>) {
+  return () => {
+    void cache.invalidate();
+  };
+}
+
 export function useCreateProject(userId: string | null) {
   const cache = useLibraryCache(userId);
   return useMutation({
@@ -86,6 +99,7 @@ export function useCreateProject(userId: string | null) {
     // Toujours à la racine : l'utilisateur range ensuite le projet par glisser-déposer.
     mutationFn: () => createProject(undefined, undefined, null),
     onSuccess: (row) => cache.update((snapshot) => prependProjects(snapshot, [rowToSummary(row)])),
+    onError: relistOnError(cache),
     meta: { errorMessage: 'Échec de la création du projet.' },
   });
 }
@@ -96,6 +110,7 @@ export function useCreateFolder(userId: string | null) {
     mutationKey: projectLibraryKeys.mutation('create-folder'),
     mutationFn: (parentFolderId: string | null) => createProjectFolder(undefined, parentFolderId),
     onSuccess: (folder) => cache.update((snapshot) => prependFolder(snapshot, folder)),
+    onError: relistOnError(cache),
     meta: { errorMessage: 'Échec de la création du dossier.' },
   });
 }
@@ -106,6 +121,7 @@ export function useRenameProject(userId: string | null) {
     mutationKey: projectLibraryKeys.mutation('rename-project'),
     mutationFn: ({ id, name }: { id: string; name: string }) => renameProject(id, name),
     onSuccess: (_result, { id, name }) => cache.update((snapshot) => patchProject(snapshot, id, { name })),
+    onError: relistOnError(cache),
     meta: { errorMessage: 'Échec du renommage.' },
   });
 }
@@ -121,6 +137,7 @@ export function useDeleteProject(userId: string | null) {
       void deleteProjectThumbnail(id);
     },
     onSuccess: (_result, { id }) => cache.update((snapshot) => removeProject(snapshot, id)),
+    onError: relistOnError(cache),
     meta: { errorMessage: 'Échec de la suppression.' },
   });
 }
@@ -131,6 +148,7 @@ export function useRenameFolder(userId: string | null) {
     mutationKey: projectLibraryKeys.mutation('rename-folder'),
     mutationFn: ({ id, name }: { id: string; name: string }) => renameProjectFolder(id, name),
     onSuccess: (_result, { id, name }) => cache.update((snapshot) => patchFolder(snapshot, id, { name })),
+    onError: relistOnError(cache),
     meta: { errorMessage: 'Échec du renommage du dossier.' },
   });
 }
@@ -145,6 +163,7 @@ export function useDeleteFolder(userId: string | null) {
       // Le serveur détache les projets et sous-dossiers : relire la liste.
       void cache.invalidate();
     },
+    onError: relistOnError(cache),
     meta: { errorMessage: 'Échec de la suppression du dossier.' },
   });
 }
@@ -158,6 +177,7 @@ export function useMoveProject(userId: string | null) {
       cache.update((snapshot) => patchProject(snapshot, id, { folderId }));
       notify.success(folderId ? 'Projet déplacé dans le dossier.' : 'Projet déplacé à la racine.');
     },
+    onError: relistOnError(cache),
     meta: { errorMessage: 'Impossible de déplacer ce projet.' },
   });
 }
@@ -172,6 +192,7 @@ export function useMoveFolder(userId: string | null) {
       cache.update((snapshot) => patchFolder(snapshot, id, { parentFolderId }));
       notify.success(parentFolderId ? 'Dossier déplacé.' : 'Dossier déplacé à la racine.');
     },
+    onError: relistOnError(cache),
     meta: { errorMessage: 'Impossible de déplacer ce dossier.' },
   });
 }
@@ -186,6 +207,7 @@ export function useDuplicateProject(userId: string | null) {
       cache.update((snapshot) => prependProjects(snapshot, [rowToSummary(row)]));
       notify.success('Projet dupliqué: {{name}}', { name });
     },
+    onError: relistOnError(cache),
     meta: { errorMessage: 'Impossible de dupliquer ce projet.' },
   });
 }
@@ -198,6 +220,7 @@ export function useImportProjects(userId: string | null) {
     mutationFn: ({ files, folderId }: { files: File[]; folderId: string | null }) =>
       importProjectFiles(files, { folderId, siblingNames: projectNamesIn(cache.read(), folderId) }),
     onSuccess: ({ imported }) => cache.update((snapshot) => prependProjects(snapshot, [...imported].reverse())),
+    onError: relistOnError(cache),
     meta: { silentError: true },
   });
 }

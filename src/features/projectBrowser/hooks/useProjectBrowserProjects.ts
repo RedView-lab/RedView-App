@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 
 import { translateAppText } from '@/shared/i18n';
 import { countBucket, trackAnalyticsEvent } from '@/shared/lib/analytics';
+import { appwriteFailureMessage } from '@/shared/lib/appwriteErrors';
 import { readStoredAppwriteSession } from '@/shared/services/appwrite';
 import { notify } from '@/shared/lib/notify';
 import type { ProjectFolderSummary, ProjectSummary } from '@/shared/services/projects';
@@ -207,8 +208,9 @@ export function useProjectBrowserProjects({
     moveFolder: handleMoveFolder,
   });
 
+  // Jamais le message anglais d'une AppwriteException (shared/lib/appwriteErrors.ts).
   const listError = library.error
-    ? translateAppText(library.error.message || 'Impossible de charger les projets.')
+    ? translateAppText(appwriteFailureMessage(library.error, 'Impossible de charger les projets.'))
     : null;
 
   return {
