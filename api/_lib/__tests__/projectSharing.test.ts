@@ -207,6 +207,16 @@ describe('partage d’un projet', () => {
     expect(again.members).toHaveLength(2);
   });
 
+  it('deux invitations lancées ensemble au premier partage : les deux invités restent membres', async () => {
+    // Sans file par projet, la seconde voyait encore « premier partage » et
+    // supprimait l'équipe que la première venait de créer, invité compris.
+    await Promise.all([
+      inviteToProject(owner, PROJECT, 'editor@example.test'),
+      inviteToProject(owner, PROJECT, 'stranger@example.test'),
+    ]);
+    expect(fake.teams.get(TEAM)!.memberships.map((membership) => membership.userId).sort()).toEqual(['editor', 'owner', 'stranger']);
+  });
+
   it('refus : e-mail inconnu, invitation par un éditeur, s’inviter soi-même, e-mail invalide', async () => {
     await rejects(inviteToProject(owner, PROJECT, 'nobody@example.test'), 404);
     await inviteToProject(owner, PROJECT, 'editor@example.test');

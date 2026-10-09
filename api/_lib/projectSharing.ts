@@ -29,6 +29,7 @@ import {
 } from './appwrite.js';
 import { parseEmailAddress } from './email.js';
 import { PublicError } from './errors.js';
+import { createKeyedLock } from './keyedLock.js';
 import { notifyProjectAccessChanged } from './multiplayerNotify.js';
 
 /**
@@ -272,6 +273,15 @@ function fitFileIds(data: unknown): string[] {
  *    document. Ensuite, chaque fichier ajouté en session porte déjà la
  *    lecture de l'équipe, et un nouveau membre l'hérite par son rôle.
  */
+/**
+ * Opérations de partage d'un même projet, l'une après l'autre. Deux
+ * invitations lancées ensemble au premier partage lisaient toutes deux « pas
+ * encore partagé » : la seconde supprimait l'équipe que la première venait de
+ * créer, invité compris (ou échouait en 409 à la recréer). Chaque opération
+ * relit la ligne une fois la précédente terminée.
+ */
+const withProjectLock = createKeyedLock('project-sharing');
+
 async function ensureShared(row: ProjectRowAccess, ownerId: string): Promise<string> {
   const teamId = projectTeamId(row.$id);
   const teams = getAppwriteTeams();
@@ -320,6 +330,10 @@ export async function inviteToProject(user: AuthenticatedUser, projectId: string
   const email = parseEmailAddress(rawEmail);
   if (!email) throw new PublicError('Invalid email', 400);
   if (!inviteLimiter(`invite:${user.id}`, MAX_INVITES_PER_USER)) throw new PublicError('Too many invitations, try again later', 429);
+  return withProjectLock(projectId, () => inviteLocked(user, projectId, email));
+}
+
+async function inviteLocked(user: AuthenticatedUser, projectId: string, email: string): Promise<ShareState> {
   const row = await readProject(projectId);
   const ownerId = await requireOwner(row, user, 'Only the owner can share this project');
   if (user.email && user.email.toLowerCase() === email) throw new PublicError('You already own this project', 400);
@@ -348,6 +362,10 @@ export async function inviteToProject(user: AuthenticatedUser, projectId: string
 
 export async function removeFromProject(user: AuthenticatedUser, projectId: string, memberId: unknown): Promise<ShareState> {
   if (typeof memberId !== 'string' || !APPWRITE_ID_PATTERN.test(memberId)) throw new PublicError('Invalid member', 400);
+  return withProjectLock(projectId, () => removeLocked(user, projectId, memberId));
+}
+
+async function removeLocked(user: AuthenticatedUser, projectId: string, memberId: string): Promise<ShareState> {
   const row = await readProject(projectId);
   await requireOwner(row, user, 'Only the owner can remove an editor');
   if (memberId === user.id) throw new PublicError('The owner cannot be removed', 400);
@@ -365,7 +383,11 @@ export async function removeFromProject(user: AuthenticatedUser, projectId: stri
  * encore ouverte est fermée par le serveur temps réel (4404), prévenu tout de
  * suite. Déjà supprimé : rien à faire.
  */
-export async function deleteSharedProject(user: AuthenticatedUser, projectId: string): Promise<void> {
+export function deleteSharedProject(user: AuthenticatedUser, projectId: string): Promise<void> {
+  return withProjectLock(projectId, () => deleteLocked(user, projectId));
+}
+
+async function deleteLocked(user: AuthenticatedUser, projectId: string): Promise<void> {
   let row: ProjectRowAccess;
   try {
     row = await readProject(projectId);
@@ -424,7 +446,11 @@ async function purgeCollabData(projectId: string): Promise<void> {
   }
 }
 
-export async function leaveProject(user: AuthenticatedUser, projectId: string): Promise<void> {
+export function leaveProject(user: AuthenticatedUser, projectId: string): Promise<void> {
+  return withProjectLock(projectId, () => leaveLocked(user, projectId));
+}
+
+async function leaveLocked(user: AuthenticatedUser, projectId: string): Promise<void> {
   const row = await readProject(projectId);
   if ((await ownerOf(row)) === user.id) throw new PublicError('The owner cannot leave their own project', 400);
   const teamId = projectTeamId(projectId);

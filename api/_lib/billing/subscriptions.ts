@@ -7,6 +7,7 @@ import {
   getAppwriteDatabases,
 } from '../appwrite.js';
 import { PublicError } from '../errors.js';
+import { createKeyedLock } from '../keyedLock.js';
 import { getStripeServer } from '../stripe.js';
 import { getOrCreateStripeCustomer, getStripeCustomerId } from './customers.js';
 import { isBillingPlanId, TRIAL_DAYS, type BillingPlanId } from './plans.js';
@@ -49,24 +50,9 @@ export const TRIAL_SETUP_PURPOSE = 'redview_trial';
  * onglets qui confirment chacun un essai (deux SetupIntents, donc deux clés
  * d'idempotence) au même instant lisaient tous deux « aucun abonnement » et
  * en créaient deux : deux prélèvements à la fin de l'essai. Idem pour deux
- * souscriptions payantes. Un seul serveur d'app : un verrou en mémoire suffit.
- * Sur globalThis : le serveur de dev recharge les modules d'API à chaque
- * requête, le verrou d'un appel serait perdu pour le suivant (en production,
- * le build serveur partage ce module entre les routes : splitting d'esbuild).
+ * souscriptions payantes.
  */
-const customerLocks: Map<string, Promise<unknown>> = ((globalThis as { __rvBillingCustomerLocks?: Map<string, Promise<unknown>> })
-  .__rvBillingCustomerLocks ??= new Map());
-
-async function withCustomerLock<T>(customerId: string, run: () => Promise<T>): Promise<T> {
-  const previous = customerLocks.get(customerId) ?? Promise.resolve();
-  const current = previous.catch(() => undefined).then(run);
-  customerLocks.set(customerId, current);
-  try {
-    return await current;
-  } finally {
-    if (customerLocks.get(customerId) === current) customerLocks.delete(customerId);
-  }
-}
+const withCustomerLock = createKeyedLock('billing-customer');
 
 function customerIdOf(value: string | Stripe.Customer | Stripe.DeletedCustomer | null): string | null {
   if (!value) return null;
