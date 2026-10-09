@@ -206,54 +206,6 @@
   flex-grow: 0;
 }
 
-/* Conteneur de la case à cocher */
-.rv-login-checkbox-label {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  padding: 0px;
-  gap: 8px;
-  cursor: pointer;
-  user-select: none;
-
-  flex: none;
-  order: 0;
-  flex-grow: 1;
-}
-
-/* Base de la case à cocher */
-.rv-login-checkbox {
-  box-sizing: border-box;
-  width: 16px;
-  height: 16px;
-  margin: 0;
-  cursor: pointer;
-
-  border: 1px solid light-dark(rgb(var(--rv-ink) / 0.24), rgba(255, 255, 255, 0.16));
-  border-radius: 4px;
-  background: transparent;
-  accent-color: #890000;
-}
-
-/* Texte de la case à cocher */
-.rv-login-checkbox-text {
-  height: 20px;
-
-  font-family: var(--rv-font-sans);
-  font-style: normal;
-  font-weight: 600;
-  font-size: var(--rv-font-size-lg);
-  line-height: 20px;
-  display: flex;
-  align-items: center;
-
-  color: var(--rv-text);
-
-  flex: none;
-  order: 1;
-  flex-grow: 1;
-}
-
 /* Bouton mot de passe oublié */
 .rv-login-forgot-btn {
   display: flex;
@@ -288,4 +240,43 @@
 
 .rv-login-forgot-btn:hover {
   opacity: 0.8;
+}
+
+/* « Mot de passe oublié » seul sur sa ligne (plus de case « se souvenir de moi », qui n'agissait sur rien). */
+.rv-login-row--end {
+  justify-content: flex-end;
+}
+
+/* Acceptation des CGU et de la politique de confidentialité, sous l'inscription. */
+.rv-login-legal-consent {
+  width: 100%;
+  max-width: 480px;
+  margin: 0;
+  color: rgb(var(--rv-ink) / 0.64);
+  font-size: var(--rv-font-size-sm);
+  line-height: 1.45;
+}
+
+.rv-login-legal-consent a,
+.rv-login-legal-links a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: rgb(var(--rv-ink) / 0.32);
+  text-underline-offset: 3px;
+}
+
+/* Liens vers les pages légales, en pied de l'écran de connexion. */
+.rv-login-legal-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 16px;
+  margin-top: 24px;
+  color: rgb(var(--rv-ink) / 0.56);
+  font-size: var(--rv-font-size-sm);
+}
+
+.rv-login-legal-links a:hover,
+.rv-login-legal-consent a:hover {
+  color: var(--rv-text);
 }

@@ -42,6 +42,7 @@ const NOT_UI_FILES = [
   /[\\/]src[\\/]shared[\\/]test[\\/]/,
   /[\\/]features[\\/]collab[\\/]sim[\\/]/, // données de test du simulateur de co-édition
   /[\\/]features[\\/]lidar[\\/]lib[\\/]japan[\\/]/, // noms de préfectures et de jeux de données (noms propres)
+  /[\\/]features[\\/]legal[\\/]content[\\/]/, // pages légales : texte complet en français ET en anglais, pas de paires (data-rv-no-translate)
   /[\\/]shared[\\/]lib[\\/]analytics[\\/]labels\.ts$/, // Umami labels, plain French on purpose (docs/analytics)
   /[\\/]shared[\\/]i18n[\\/]config[\\/]types\.ts$/, // noms de langues, chacun écrit dans sa propre langue
 ];

@@ -43,6 +43,16 @@ export const creditsTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   // ── Réglages : mesure d'audience ──────────────────────────────────────────
   { fr: 'Mesure d’audience', en: 'Audience measurement' },
   { fr: 'Statistiques de visite anonymes, sans cookie, hébergées par RedView. Désactivées, plus rien n’est mesuré sur cet appareil.', en: 'Anonymous visit statistics, cookie-free, hosted by RedView. When turned off, nothing is measured on this device any more.' },
+  // ── Pages légales (features/legal) : liens et acceptation à l'inscription ───
+  { fr: 'Informations légales', en: 'Legal information' },
+  { fr: 'Mentions légales', en: 'Legal notice' },
+  { fr: 'Confidentialité', en: 'Privacy' },
+  { fr: 'Conditions d’utilisation', en: 'Terms of use' },
+  { fr: 'Accessibilité', en: 'Accessibility' },
+  { fr: 'En créant un compte, vous acceptez les', en: 'By creating an account, you accept the' },
+  { fr: 'conditions d’utilisation', en: 'terms of use' },
+  { fr: 'et la', en: 'and the' },
+  { fr: 'politique de confidentialité', en: 'privacy policy' },
   // Licences et mentions identiques dans les deux langues.
   { fr: '© Kartverket, CC BY 4.0', en: '© Kartverket, CC BY 4.0' },
   { fr: '© Instituto Geográfico Nacional, CC BY 4.0', en: '© Instituto Geográfico Nacional, CC BY 4.0' },

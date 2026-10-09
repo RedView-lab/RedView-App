@@ -20,9 +20,13 @@ import { appQueryClient } from './shared/services/queryClient'
 import { trackNavigationImport } from './shared/lib/staleBuild'
 import { AppToaster } from './shared/components/AppToaster/AppToaster'
 import { HealthDataConsentHost } from './shared/components/HealthDataConsent/HealthDataConsentHost'
+import { resolveLegalPage } from './features/legal'
 import './index.css'
 
 const Dashboard = lazy(() => trackNavigationImport(import('./pages/Dashboard')))
+const LegalPage = lazy(() =>
+  trackNavigationImport(import('./features/legal/components/LegalPage')).then((module) => ({ default: module.LegalPage })),
+)
 
 /** 'unreachable' : Appwrite injoignable (timeout / réseau) sans session locale → écran de reprise. */
 type AuthStatus = 'loading' | 'ready' | 'unreachable'
@@ -244,6 +248,16 @@ function App() {
       screenBeforeNarrowRef.current = null
     }
   }, [showNarrowViewportOverlay])
+
+  // Pages légales publiques : lisibles sans compte et sur tout appareil (mobile compris).
+  const legalPage = resolveLegalPage(pathname)
+  if (legalPage) {
+    return (
+      <Suspense fallback={<BootstrapScreen label={t('Loading...')} />}>
+        <LegalPage page={legalPage} />
+      </Suspense>
+    )
+  }
 
   // Vrai appareil mobile (détecté au chargement) : blocage, l'app n'est pas montée.
   if (isMobile) {

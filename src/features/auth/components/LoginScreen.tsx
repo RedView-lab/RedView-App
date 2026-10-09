@@ -23,6 +23,8 @@ import {
   sendVerificationCode,
   verifyCodeAndCreateAccount,
 } from './login/authRequests'
+import { LegalLinks, legalPagePath } from '@/features/legal'
+import { useAppI18n } from '@/shared/i18n'
 import { GoogleIcon } from './login/icons'
 import { PasswordField } from './login/PasswordField'
 import { RecoveryEmailSent } from './login/RecoveryEmailSent'
@@ -40,12 +42,12 @@ interface LoginScreenProps {
 }
 
 export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tech' }: LoginScreenProps) {
+  const { t } = useAppI18n()
   const [mode, setMode] = useState<AuthMode>('login')
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
-  const [rememberMe, setRememberMe] = useState(false)
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
@@ -552,17 +554,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
 
               {/* Ligne : case à cocher et mot de passe oublié (connexion seulement) */}
               {isLogin && (
-                <div className="rv-login-row">
-                  <label className="rv-login-checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={rememberMe}
-                      onChange={(e) => setRememberMe(e.target.checked)}
-                      className="rv-login-checkbox"
-                    />
-                    <span className="rv-login-checkbox-text">Remember for 30 days</span>
-                  </label>
-
+                <div className="rv-login-row rv-login-row--end">
                   <button
                     type="button"
                     className="rv-login-forgot-btn"
@@ -609,6 +601,16 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
                   </div>
                 )}
               </div>
+
+              {/* Acceptation des CGU (DSA art. 14) : vaut pour l'e-mail comme pour Google. */}
+              {mode === 'signup' && (
+                <p className="rv-login-legal-consent">
+                  {t('En créant un compte, vous acceptez les')}{' '}
+                  <a href={legalPagePath('terms')} target="_blank" rel="noreferrer">{t('conditions d’utilisation')}</a>{' '}
+                  {t('et la')}{' '}
+                  <a href={legalPagePath('privacy')} target="_blank" rel="noreferrer">{t('politique de confidentialité')}</a>.
+                </p>
+              )}
             </form>
             )}
 
@@ -657,6 +659,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
               </button>
             )}
           </div>
+          <LegalLinks className="rv-login-legal-links" />
         </div>
       </main>
         </>

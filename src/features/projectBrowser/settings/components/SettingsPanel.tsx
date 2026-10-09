@@ -18,6 +18,7 @@ import {
   type AppThemePreference,
 } from '@/shared/lib/appTheme';
 import { LANDING_URL } from '../../lib';
+import { LegalLinks } from '@/features/legal';
 import { DataSourcesSection } from './DataSourcesSection';
 
 type DisplayMode = AppThemePreference;
@@ -307,6 +308,8 @@ export function SettingsPanel({ profile }: SettingsPanelProps = {}) {
       <div className="rvpb-divider" />
 
       <DataSourcesSection />
+
+      <LegalLinks className="rvpb-settings-legal-links" />
     </section>
   );
 }

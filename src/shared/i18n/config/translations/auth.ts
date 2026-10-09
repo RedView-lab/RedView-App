@@ -34,7 +34,6 @@ export const authTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'Confirmer le mot de passe', en: 'Confirm password' },
   { fr: 'Confirmez votre mot de passe', en: 'Confirm your password' },
   { fr: 'Les mots de passe ne correspondent pas.', en: 'Passwords do not match.' },
-  { fr: 'Se souvenir de moi pendant 30 jours', en: 'Remember for 30 days' },
   { fr: 'Traitement...', en: 'Processing...' },
   { fr: 'Envoyer le lien de réinitialisation', en: 'Send reset link' },
   { fr: 'Enregistrer le nouveau mot de passe', en: 'Save new password' },

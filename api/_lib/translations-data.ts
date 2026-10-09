@@ -5393,10 +5393,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Passwords do not match."
   },
   {
-    "fr": "Se souvenir de moi pendant 30 jours",
-    "en": "Remember for 30 days"
-  },
-  {
     "fr": "Traitement...",
     "en": "Processing..."
   },
@@ -6271,6 +6267,42 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Statistiques de visite anonymes, sans cookie, hébergées par RedView. Désactivées, plus rien n’est mesuré sur cet appareil.",
     "en": "Anonymous visit statistics, cookie-free, hosted by RedView. When turned off, nothing is measured on this device any more."
+  },
+  {
+    "fr": "Informations légales",
+    "en": "Legal information"
+  },
+  {
+    "fr": "Mentions légales",
+    "en": "Legal notice"
+  },
+  {
+    "fr": "Confidentialité",
+    "en": "Privacy"
+  },
+  {
+    "fr": "Conditions d’utilisation",
+    "en": "Terms of use"
+  },
+  {
+    "fr": "Accessibilité",
+    "en": "Accessibility"
+  },
+  {
+    "fr": "En créant un compte, vous acceptez les",
+    "en": "By creating an account, you accept the"
+  },
+  {
+    "fr": "conditions d’utilisation",
+    "en": "terms of use"
+  },
+  {
+    "fr": "et la",
+    "en": "and the"
+  },
+  {
+    "fr": "politique de confidentialité",
+    "en": "privacy policy"
   },
   {
     "fr": "© Kartverket, CC BY 4.0",
