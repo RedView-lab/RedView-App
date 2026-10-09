@@ -23,7 +23,7 @@ PUBLIC_IP="141.145.220.99"
 SSH=(ssh -i "$KEY" -o StrictHostKeyChecking=accept-new "$HOST")
 STAGE=/tmp/redview-harden
 
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../.."
 
 echo "==> Envoi des fichiers sur le VPS ($STAGE)"
 "${SSH[@]}" "rm -rf $STAGE && mkdir -p $STAGE"

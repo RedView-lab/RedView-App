@@ -30,7 +30,7 @@ done
 KEY="${KEY:-$HOME/.ssh/oracle_brouter.key}"
 HOST="${HOST:-opc@141.145.220.99}"
 
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../.."
 OUT_DIR=script-test-bench/reports/server-perf
 mkdir -p "$OUT_DIR"
 OUT="$OUT_DIR/snapshot-$(date -u +%Y%m%d-%H%M)-$LABEL.md"
