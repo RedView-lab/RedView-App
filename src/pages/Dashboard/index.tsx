@@ -251,11 +251,17 @@ export default function Dashboard({
   const activeItineraryCount = activeProjectInitial?.itineraries?.length ?? 0;
   const handleMapLoadStatusChangeMeasured = useCallback<typeof handleMapLoadStatusChange>((status) => {
     handleMapLoadStatusChange(status);
-    const sample = editorReadyMeter.observe(status?.state, performance.now());
+    const sample = editorReadyMeter.observe(status?.state, performance.now(), status?.cappedWaiting);
     if (sample) {
       trackAnalyticsEvent({
         name: 'editor_ready',
-        data: { ms: roundTo(sample.ms, 100), cold: sample.cold, itineraries: countBucket(activeItineraryCount) },
+        data: {
+          ms: roundTo(sample.ms, 100),
+          cold: sample.cold,
+          itineraries: countBucket(activeItineraryCount),
+          capped: sample.cappedWaiting !== undefined,
+          ...(sample.cappedWaiting ? { waiting: sample.cappedWaiting } : {}),
+        },
       });
     }
   }, [activeItineraryCount, editorReadyMeter, handleMapLoadStatusChange]);

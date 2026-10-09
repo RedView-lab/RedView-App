@@ -1,5 +1,6 @@
 import { unifiedDEMSource } from '../../../lib/sources';
 import { createOverlayStatus } from '../../../lib/overlayStatus';
+import { pendingSourceIds, summarizePendingSources } from '../../../lib/loadingDiagnostics';
 import {
   DEM_ACTIVITY_SETTLE_MS,
   DEM_PASSIVE_REFRESH_COOLDOWN_MS,
@@ -45,7 +46,9 @@ export function attachStatus(ctx: Ctx): void {
         armLoadingDeadline(1_000);
         return;
       }
-      console.warn(`[map3d] loading cycle exceeded ${MAP_LOADING_MAX_MS} ms; reporting ready`);
+      // Ce qui chargeait encore : remonté avec `editor_ready` (statistiques).
+      const cappedWaiting = summarizePendingSources(pendingSourceIds(map));
+      console.warn(`[map3d] loading cycle exceeded ${MAP_LOADING_MAX_MS} ms (${cappedWaiting}); reporting ready`);
       // Volontairement PAS finishDemActivity() : son autoréparation du terrain
       // plat peut déclencher un rechargement, qui relancerait un cycle et
       // bouclerait toutes les 12 s. Le battement de cœur du terrain continue de
@@ -53,15 +56,15 @@ export function attachStatus(ctx: Ctx): void {
       if (st.demTrackingEnabled) {
         fns.clearDemTracking();
         st.hasReportedReadyOnce = true;
-        fns.reportStatus('ready', 100, 'Carte prête');
+        fns.reportStatus('ready', 100, 'Carte prête', { cappedWaiting });
         fns.startTerrainHeartbeat();
       } else {
-        fns.reportStatus('ready', 100, 'Carte prête');
+        fns.reportStatus('ready', 100, 'Carte prête', { cappedWaiting });
       }
     }, delayMs);
   };
 
-  fns.reportStatus = (state, progress, detail) => {
+  fns.reportStatus = (state, progress, detail, extra) => {
     st.lastReportedState = state;
     st.lastReportedProgress = progress;
     if (state === 'loading') {
@@ -81,6 +84,7 @@ export function attachStatus(ctx: Ctx): void {
       progress,
       detail,
       reloadable: Boolean(registerReloadRef.current),
+      ...(extra?.cappedWaiting ? { cappedWaiting: extra.cappedWaiting } : {}),
     }));
   };
 

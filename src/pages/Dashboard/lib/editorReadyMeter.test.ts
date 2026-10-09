@@ -36,4 +36,10 @@ describe('EditorReadyMeter', () => {
     meter.observe('loading', 10);
     expect(meter.observe('ready', 200_000)).toBeNull();
   });
+  it('prête par le plafond de 12 s : les sources encore en chargement accompagnent la mesure', () => {
+    const meter = new EditorReadyMeter();
+    meter.start(0, false);
+    meter.observe('loading', 10);
+    expect(meter.observe('ready', 11_900, 'dem+poi')).toEqual({ ms: 11_900, cold: false, cappedWaiting: 'dem+poi' });
+  });
 });

@@ -11,6 +11,11 @@ export interface OverlayStatusSnapshot {
   reloadable?: boolean;
   nonce?: number;
   updatedAt: number;
+  /**
+   * Carte déclarée prête par le plafond MAP_LOADING_MAX_MS, pas par Mapbox :
+   * catégories des sources encore en chargement (lib/loadingDiagnostics.ts).
+   */
+  cappedWaiting?: string;
 }
 
 export type OverlayStatusReporter = (status: OverlayStatusSnapshot | null) => void;

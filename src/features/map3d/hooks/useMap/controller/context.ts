@@ -47,7 +47,12 @@ export interface CreateMapLifecycleControllerOptions {
 }
 
 export interface MapLifecycleController {
-  reportStatus: (state: 'loading' | 'ready' | 'error', progress: number, detail?: string) => void;
+  reportStatus: (
+    state: 'loading' | 'ready' | 'error',
+    progress: number,
+    detail?: string,
+    extra?: { cappedWaiting?: string },
+  ) => void;
   reloadMapElevation: () => void;
   reloadMapElevationForProfile: () => void;
   prepareStyleChange: (detail?: string) => void;
@@ -60,6 +65,8 @@ type ReportStatusFn = (
   state: 'loading' | 'ready' | 'error',
   progress: number,
   detail?: string,
+  /** `cappedWaiting` : prête par le plafond MAP_LOADING_MAX_MS (lib/loadingDiagnostics.ts). */
+  extra?: { cappedWaiting?: string },
 ) => void;
 
 /** État d'exécution mutable partagé par tous les modules du contrôleur. */

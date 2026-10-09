@@ -301,4 +301,11 @@ describe('libellés lisibles', () => {
       catégorie: 'inconnue',
     });
   });
+  it('plafond de la carte : chaque catégorie encore en chargement est traduite', () => {
+    expect(toDisplayData({ capped: true, waiting: 'dem+poi' })).toEqual({
+      'arrêtée au délai de 12 s': 'oui',
+      'encore en chargement': 'Relief + POI',
+    });
+    expect(toDisplayData({ waiting: 'weather' })).toEqual({ 'encore en chargement': 'Météo' });
+  });
 });

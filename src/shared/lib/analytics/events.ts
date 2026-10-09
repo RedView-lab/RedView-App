@@ -70,7 +70,8 @@ export type AnalyticsEvent =
   | { name: 'folder_created' }
   | { name: 'project_file_exported'; data: { from: 'editor' | 'browser' } }
   | { name: 'project_file_imported'; data: { outcome: 'ok' | 'error'; files: string } }
-  | { name: 'editor_ready'; data: { ms: number; cold: boolean; itineraries: string } }
+  // capped : prête par le plafond de 12 s (MAP_LOADING_MAX_MS), waiting : catégories encore en chargement (« dem+poi »).
+  | { name: 'editor_ready'; data: { ms: number; cold: boolean; itineraries: string; capped: boolean; waiting?: string } }
   // Itinéraires
   | { name: 'itinerary_added'; data: { method: 'blank' | 'gpx' | 'lidar' | 'duplicate' | 'map' | 'poi' } }
   | { name: 'gpx_imported'; data: { format: string; points: string } }

@@ -91,7 +91,7 @@ dans `labels.ts`. Résumé (noms du code) :
 | Monétisation | `checkout_started`, `checkout_completed` | `plan` |
 | Projets | `project_created` (`source` blank/import), `project_opened` (`last_saved`, `shared`), `project_deleted`, `project_duplicated`, `folder_created`, `shared_project_left` | |
 | | `project_file_exported` (`from` editor/browser), `project_file_imported` (`outcome`, `files`) | fichier `.redview` |
-| Perf. perçue | `editor_ready` | `ms` (arrondi 100), `cold` (lien direct, depuis la navigation), `itineraries` — ouverture → première carte 3D prête |
+| Perf. perçue | `editor_ready` | `ms` (arrondi 100), `cold` (lien direct, depuis la navigation), `itineraries`, `capped` (prête par le plafond de 12 s `MAP_LOADING_MAX_MS`, pas par Mapbox), `waiting` (si plafonnée : catégories de sources encore en chargement, « dem+poi », `map3d/lib/loadingDiagnostics.ts`) — ouverture → première carte 3D prête |
 | Itinéraires | `itinerary_added` | `method` blank/gpx/lidar/duplicate/map/poi |
 | | `gpx_imported` | `format`, `points` (tranche) |
 | | `route_calculated` | `kind` full/patch/extend, `distance_km` (10), `elevation_m` (100), `ms` (100), `profile` (préréglage ou `custom`) — 1/15 s par itinéraire et par sorte |

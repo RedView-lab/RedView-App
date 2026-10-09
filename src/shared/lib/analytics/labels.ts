@@ -127,6 +127,8 @@ export const PROPERTY_LABELS: Record<string, string> = {
   anchor: 'forme',
   on: 'sur',
   via: 'déclenché par',
+  capped: 'arrêtée au délai de 12 s',
+  waiting: 'encore en chargement',
 };
 
 const BOOLEAN_LABELS = { true: 'oui', false: 'non' } as const;
@@ -137,6 +139,11 @@ export const VALUE_LABELS: Record<string, Record<string, string>> = {
   plan: { demo: 'Bêta gratuite', monthly: 'Abonnement 1 mois', semiannual: 'Abonnement 6 mois', annual: 'Abonnement 1 an', unknown: 'Inconnue' },
   account_age: { d0: 'Jour de l’inscription', d1_7: 'Première semaine', d8_30: 'Premier mois', d30_plus: 'Plus d’un mois' },
   lang: { fr: 'Français', en: 'Anglais' },
+  // Catégories jointes par « + » (lib/loadingDiagnostics.ts) : chacune est traduite.
+  waiting: {
+    dem: 'Relief', satellite: 'Satellite', basemap: 'Fond de carte', poi: 'POI', weather: 'Météo', route: 'Tracé',
+    slope: 'Pente', altitude: 'Altitude', lidar: 'LiDAR', sunlight: 'Ensoleillement', other: 'Autre', none: 'Rien',
+  },
   language: { fr: 'Français', en: 'Anglais' },
   theme: { light: 'Clair', dark: 'Sombre' },
   mode: { system: 'Comme le système', light: 'Clair', dark: 'Sombre', cover: 'Couverture neigeuse', thickness: 'Épaisseur de neige' },
@@ -274,7 +281,12 @@ export function valueLabel(key: string, value: string | number | boolean): Displ
   // Durées mesurées en millisecondes, affichées en secondes (1 décimale).
   if (key === 'ms' && typeof value === 'number') return Math.round(value / 100) / 10;
   if (typeof value === 'number') return value;
-  return VALUE_LABELS[key]?.[value] ?? value;
+  const table = VALUE_LABELS[key];
+  // Liste de catégories « a+b » (waiting) : chaque partie traduite, « Relief + POI ».
+  if (table && value.includes('+') && !(value in table)) {
+    return value.split('+').map((part) => table[part] ?? part).join(' + ');
+  }
+  return table?.[value] ?? value;
 }
 
 /** Données d'un événement, en clés et valeurs lisibles (après le garde vie privée). */
