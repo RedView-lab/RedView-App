@@ -236,6 +236,11 @@ export function AccountPanel({
         value={identityForm}
         initialValue={createIdentityForm(profile)}
         isSaving={identitySaving}
+        hasPassword={profile.hasPassword}
+        onEmailChanged={(email) => {
+          onProfileUpdated({ ...profile, email });
+          setNotice({ tone: 'success', message: t('Adresse e-mail changée : {{email}}', { email }) });
+        }}
         onChange={setIdentityForm}
         onCancel={() => setIdentityForm(createIdentityForm(profile))}
         onSave={() => {

@@ -217,10 +217,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "You sign in with Google: a password will also let you sign in by e-mail."
   },
   {
-    "fr": "Adresse de connexion du compte : elle ne peut pas être modifiée ici.",
-    "en": "Sign-in address of the account: it cannot be changed here."
-  },
-  {
     "fr": "Mot de passe actuel incorrect.",
     "en": "Incorrect current password."
   },
@@ -1839,6 +1835,78 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Service momentanément indisponible.",
     "en": "Service temporarily unavailable."
+  },
+  {
+    "fr": "Changer d’adresse e-mail",
+    "en": "Change e-mail address"
+  },
+  {
+    "fr": "Nouvelle adresse e-mail",
+    "en": "New e-mail address"
+  },
+  {
+    "fr": "Un code de confirmation sera envoyé à la nouvelle adresse. Votre adresse actuelle sera prévenue du changement.",
+    "en": "A confirmation code will be sent to the new address. Your current address will be told about the change."
+  },
+  {
+    "fr": "Modifier l’adresse",
+    "en": "Edit the address"
+  },
+  {
+    "fr": "Vérification…",
+    "en": "Checking…"
+  },
+  {
+    "fr": "Changer l’adresse",
+    "en": "Change the address"
+  },
+  {
+    "fr": "Adresse de connexion du compte.",
+    "en": "Sign-in address of the account."
+  },
+  {
+    "fr": "Pour changer d’adresse, définissez d’abord un mot de passe (section Mot de passe).",
+    "en": "To change your address, first set a password (Password section)."
+  },
+  {
+    "fr": "Changer d’adresse",
+    "en": "Change address"
+  },
+  {
+    "fr": "Adresse e-mail changée : {{email}}",
+    "en": "E-mail address changed: {{email}}"
+  },
+  {
+    "fr": "Impossible de changer l’adresse e-mail.",
+    "en": "Unable to change the e-mail address."
+  },
+  {
+    "fr": "Définissez d’abord un mot de passe (section Mot de passe ci-dessous) pour pouvoir changer d’adresse.",
+    "en": "First set a password (Password section below) to be able to change your address."
+  },
+  {
+    "fr": "Cette adresse est déjà utilisée par un autre compte.",
+    "en": "This address is already used by another account."
+  },
+  {
+    "fr": "Adresse e-mail invalide.",
+    "en": "Invalid e-mail address."
+  },
+  {
+    "fr": "C’est déjà l’adresse de votre compte.",
+    "en": "This is already your account address."
+  },
+  {
+    "fr": "L’e-mail de confirmation n’a pas pu partir. Réessayez plus tard.",
+    "en": "The confirmation e-mail could not be sent. Try again later."
+  },
+  {
+    "fr": "Le code comporte 6 chiffres.",
+    "en": "The code has 6 digits."
+  },
+  {
+    "fr": "Ce code a été envoyé à une autre adresse. Demandez-en un nouveau.",
+    "en": "This code was sent to another address. Request a new one."
   },
   {
     "fr": "Fonds de carte",

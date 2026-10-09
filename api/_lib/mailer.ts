@@ -429,6 +429,78 @@ export async function sendAccountDeletionCodeEmail({ to, code, name }: { to: str
   return sendTransactionalEmail('ACCOUNT-DELETION', { to, subject, text, html });
 }
 
+/**
+ * Code qui prouve l'accès à la nouvelle adresse d'un compte
+ * (api/auth/change-email.ts). Adresse pas encore vérifiée : comme pour
+ * l'inscription, rien de saisi librement (nom du compte) dans le contenu.
+ */
+export async function sendEmailChangeCodeEmail({ to, code }: { to: string; code: string }): Promise<{ sent: boolean }> {
+  const subject = `${code} : confirmez votre nouvelle adresse RedView`;
+  const text =
+    `${UNVERIFIED_GREETING}\n\n` +
+    `Votre code pour faire de cette adresse celle de votre compte RedView est : ${code}. Il expire dans 10 minutes.\n\n` +
+    "Si vous n'êtes pas à l'origine de cette demande, ignorez ce message : rien ne change.\n\n" +
+    '---\n' +
+    `Your code to make this address the e-mail of your RedView account is ${code} (valid 10 minutes). If you did not request it, ignore this message.`;
+  const digits = code.split('').map((digit) => `
+                  <td style="padding: 0 4px;">
+                    <div class="digit-box" style="width: 44px; height: 56px; line-height: 56px; background-color: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 12px; font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 26px; font-weight: 700; color: #0f172a; text-align: center; display: block;">${escapeHtml(digit)}</div>
+                  </td>`).join('');
+  const html = accountEmailHtml({
+    title: 'Nouvelle adresse e-mail',
+    preheader: `${code} : confirmez votre nouvelle adresse RedView. Valable 10 minutes.`,
+    bodyHtml: `
+              <p class="text-body" style="margin: 0 0 28px; font-size: 14px; line-height: 22px; color: #475569;">
+                ${escapeHtml(UNVERIFIED_GREETING)}<br>
+                Voici le code qui fait de cette adresse celle de votre compte RedView :
+              </p>
+              <table role="presentation" border="0" cellspacing="0" cellpadding="0" align="center" style="margin: 0 auto 24px;">
+                <tr>${digits}
+                </tr>
+              </table>
+              <p class="text-muted" style="margin: 0 0 24px; font-size: 12px; line-height: 18px; color: #94a3b8;">
+                Ce code expire dans 10 minutes. Si vous n'êtes pas à l'origine de cette demande, ignorez ce message : rien ne change.
+              </p>`,
+  });
+  return sendTransactionalEmail('EMAIL-CHANGE-CODE', { to, subject, text, html });
+}
+
+/**
+ * Avis envoyé à l'ANCIENNE adresse une fois le changement fait : une prise de
+ * compte (session volée + mot de passe) ne passe pas inaperçue.
+ */
+export async function sendEmailChangedNoticeEmail({ to, name, newEmail }: { to: string; name?: string; newEmail: string }): Promise<{ sent: boolean }> {
+  const greeting = greetingFor(name);
+  const masked = maskEmail(newEmail);
+  // Expéditeur noreply : sans adresse de contact configurée, on ne promet pas
+  // qu'une réponse sera lue.
+  const support = process.env.SUPPORT_EMAIL?.trim() || null;
+  const alert = support
+    ? `Si vous n'êtes pas à l'origine de ce changement, écrivez sans attendre à ${support} pour que nous bloquions le compte.`
+    : "Si vous n'êtes pas à l'origine de ce changement, contactez sans attendre l'équipe RedView pour qu'elle bloque le compte.";
+  const subject = 'L’adresse de votre compte RedView a changé';
+  const text =
+    `${greeting}\n\n` +
+    `L'adresse e-mail de votre compte RedView est désormais ${masked}. Cette adresse-ci n'y est plus associée.\n\n` +
+    `${alert}\n\n` +
+    '---\n' +
+    `The e-mail address of your RedView account is now ${masked}. If you did not make this change, contact the RedView team right away${support ? ` (${support})` : ''}.`;
+  const html = accountEmailHtml({
+    title: 'Adresse du compte modifiée',
+    preheader: `L'adresse de votre compte RedView est désormais ${masked}.`,
+    bodyHtml: `
+              <p class="text-body" style="margin: 0 0 20px; font-size: 14px; line-height: 22px; color: #475569;">
+                ${escapeHtml(greeting)}<br>
+                L'adresse e-mail de votre compte RedView est désormais <strong>${escapeHtml(masked)}</strong>.
+                Cette adresse-ci n'y est plus associée.
+              </p>
+              <p class="text-muted" style="margin: 0 0 24px; font-size: 12px; line-height: 18px; color: #94a3b8;">
+                ${escapeHtml(alert)}
+              </p>`,
+  });
+  return sendTransactionalEmail('EMAIL-CHANGED', { to, subject, text, html });
+}
+
 /** Accusé de suppression, envoyé une fois le compte effacé. */
 export async function sendAccountDeletedEmail({ to, name }: { to: string; name?: string }): Promise<{ sent: boolean }> {
   const greeting = greetingFor(name);

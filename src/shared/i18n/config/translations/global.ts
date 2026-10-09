@@ -59,7 +59,6 @@ export const globalTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'Saisissez votre mot de passe actuel.', en: 'Enter your current password.' },
   { fr: 'Le nouveau mot de passe doit être différent de l’actuel.', en: 'The new password must differ from the current one.' },
   { fr: 'Vous vous connectez avec Google : un mot de passe vous permettra aussi de vous connecter par e-mail.', en: 'You sign in with Google: a password will also let you sign in by e-mail.' },
-  { fr: 'Adresse de connexion du compte : elle ne peut pas être modifiée ici.', en: 'Sign-in address of the account: it cannot be changed here.' },
   { fr: 'Mot de passe actuel incorrect.', en: 'Incorrect current password.' },
   { fr: 'Ce mot de passe a déjà été utilisé récemment. Choisissez-en un autre.', en: 'This password was used recently. Choose another one.' },
   { fr: 'Le mot de passe ne doit pas reprendre votre nom ni votre adresse e-mail.', en: 'The password must not contain your name or e-mail address.' },

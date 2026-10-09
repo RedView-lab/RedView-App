@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { PublicError } from './errors.js';
-import { sendAccountDeletionCodeEmail, sendVerificationEmail } from './mailer.ts';
+import { sendAccountDeletionCodeEmail, sendEmailChangeCodeEmail, sendVerificationEmail } from './mailer.ts';
 
 interface SecureCodeEntry {
   codeHash: string; // SHA-256(salt:code)
@@ -11,6 +11,12 @@ interface SecureCodeEntry {
   expiresAt: number;
   attempts: number;
   lastRequestedAt: number;
+  /**
+   * Adresse à laquelle le code a été envoyé, quand elle diffère de la clé
+   * (changement d'e-mail : clé = compte, cible = nouvelle adresse). Un code
+   * n'est valable que pour elle.
+   */
+  target?: string;
 }
 
 /**
@@ -260,7 +266,7 @@ export function consumeVerificationRequestQuota(email: string): void {
 }
 
 /** Nouveau code pour `key` (remplace le précédent), rendu en clair pour l'e-mail. */
-function issueCode(key: string): string {
+function issueCode(key: string, target?: string): string {
   const now = Date.now();
   const code = generate6DigitCode();
   const salt = crypto.randomBytes(16).toString('hex');
@@ -270,8 +276,34 @@ function issueCode(key: string): string {
     expiresAt: now + CODE_TTL_MS,
     attempts: 0,
     lastRequestedAt: now,
+    ...(target ? { target: normalizeVerificationEmail(target) } : {}),
   });
   return code;
+}
+
+/**
+ * Compte un échec dans le quota de `key` (verrou 24 h après 10 échecs) ;
+ * vrai si la clé vient d'être verrouillée.
+ */
+function pushFailure(key: string, now: number): boolean {
+  const quota = getQuota(key, now);
+  quota.failures.push(now);
+  const locked = quota.failures.length >= MAX_FAILURES_PER_WINDOW;
+  if (locked) {
+    quota.lockedUntil = now + LOCK_DURATION_MS;
+    deleteCode(key);
+  }
+  saveQuota(key, quota);
+  return locked;
+}
+
+/**
+ * Échec d'une vérification faite à côté du code (mot de passe du changement
+ * d'e-mail) : compté comme un mauvais code, sinon la route servirait à
+ * essayer des mots de passe sans limite.
+ */
+export function recordVerificationFailure(key: string): void {
+  pushFailure(normalizeVerificationEmail(key), Date.now());
 }
 
 /**
@@ -291,6 +323,24 @@ export function accountDeletionCodeKey(email: string): string {
 export async function requestAccountDeletionCode(email: string, name?: string): Promise<{ sent: boolean }> {
   const code = issueCode(accountDeletionCodeKey(email));
   return sendAccountDeletionCodeEmail({ to: normalizeVerificationEmail(email), code, name });
+}
+
+/**
+ * Clé des codes de changement d'e-mail : le compte, pas une adresse (la cible
+ * change d'une demande à l'autre ; demandes et échecs sont comptés par compte).
+ */
+export function emailChangeCodeKey(userId: string): string {
+  return `email-change:${userId}`;
+}
+
+/**
+ * Code qui prouve l'accès à la nouvelle adresse, envoyé à elle et valable
+ * pour elle seule (`checkVerificationCode(clé, code, nouvelleAdresse)`).
+ * Quota consommé au préalable sur `emailChangeCodeKey`.
+ */
+export async function requestEmailChangeCode(userId: string, newEmail: string): Promise<{ sent: boolean }> {
+  const code = issueCode(emailChangeCodeKey(userId), newEmail);
+  return sendEmailChangeCodeEmail({ to: normalizeVerificationEmail(newEmail), code });
 }
 
 /**
@@ -332,7 +382,7 @@ export function consumeVerificationCode(email: string): void {
  * action qui peut échouer après la vérification (création du compte), le
  * code reste valable pour un nouvel essai jusqu'à `consumeVerificationCode`.
  */
-export function checkVerificationCode(email: string, inputCode: string): CodeCheck {
+export function checkVerificationCode(email: string, inputCode: string, target?: string): CodeCheck {
   const normalizedEmail = normalizeVerificationEmail(email);
   const cleanInput = inputCode.trim();
   const now = Date.now();
@@ -359,6 +409,14 @@ export function checkVerificationCode(email: string, inputCode: string): CodeChe
     };
   }
 
+  // Code envoyé à une autre adresse que celle de la confirmation.
+  if (entry.target !== undefined && (target === undefined || entry.target !== normalizeVerificationEmail(target))) {
+    return {
+      valid: false,
+      error: 'Ce code a été envoyé à une autre adresse. Demandez-en un nouveau.',
+    };
+  }
+
   // 5 essais au plus par code, contre la force brute
   if (entry.attempts >= MAX_ATTEMPTS_PER_CODE) {
     deleteCode(normalizedEmail);
@@ -381,14 +439,9 @@ export function checkVerificationCode(email: string, inputCode: string): CodeChe
 
   if (!isMatch) {
     // Compteur cumulatif par e-mail (survit à la suppression du code)
-    quota.failures.push(now);
-    if (quota.failures.length >= MAX_FAILURES_PER_WINDOW) {
-      quota.lockedUntil = now + LOCK_DURATION_MS;
-      saveQuota(normalizedEmail, quota);
-      deleteCode(normalizedEmail);
+    if (pushFailure(normalizedEmail, now)) {
       return { valid: false, error: VERIFICATION_LOCKED_MESSAGE, status: 429 };
     }
-    saveQuota(normalizedEmail, quota);
 
     entry.attempts += 1;
     if (entry.attempts >= MAX_ATTEMPTS_PER_CODE) {
