@@ -204,14 +204,15 @@ async function main() {
   const logLines = [];
   const child = spawn(process.execPath, ['--import', pathToFileURL(path.join(import.meta.dirname, 'block-egress.mjs')).href, path.join(ROOT, 'dist-server/server.mjs')], {
     cwd: ROOT,
-    env: {
+    // Variables absentes de cette plateforme (SystemRoot hors Windows) retirées.
+    env: Object.fromEntries(Object.entries({
       PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, TEMP: process.env.TEMP, TMP: process.env.TMP,
       NODE_ENV: 'production', PORT: String(port), LOG_LEVEL: 'warn',
       BROUTER_UPSTREAM: 'http://127.0.0.1:9', POI_UPSTREAM: 'http://127.0.0.1:9/poi', WEATHER_UPSTREAM: 'http://127.0.0.1:9/weather',
       OPENMETEO_UPSTREAM: 'http://127.0.0.1:9/openmeteo', APPWRITE_ENDPOINT: `http://127.0.0.1:${appwrite.port}/v1`, APPWRITE_PROJECT_ID: 'fuzz',
       APPWRITE_API_KEY: 'fuzz', STRIPE_SECRET_KEY: 'sk_test_fuzz', STRIPE_WEBHOOK_SECRET: 'whsec_fuzz', METEOFRANCE_API_KEY: 'fuzz',
       MULTIPLAYER_INTERNAL_SECRET: 'fuzz', MULTIPLAYER_INTERNAL_URL: 'http://127.0.0.1:9',
-    },
+    }).filter(([, value]) => value !== undefined)),
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let exited = null;

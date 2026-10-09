@@ -42,6 +42,8 @@ const FAST_STEPS = [
 const FULL_STEPS = [
   { id: 'build', script: 'build:vite', label: 'Build de prod (vite build)' },
   { id: 'server', script: 'server:check', label: 'Serveurs de prod bundlés (dist-server, statiques précompressés)' },
+  // ~4 000 requêtes hostiles sur chaque route, sans réseau sortant : aucune 500.
+  { id: 'api-fuzz', script: 'bench:api-fuzz', label: "Robustesse de l'API (entrées hostiles, aucune 500)" },
   { id: 'bundle', script: 'bundle:check', label: 'Chargement initial (budget, éditeur hors chemin critique)' },
   // Navigateur réel sur le build ci-dessus, faux backend : connexion, projet,
   // import et export GPX, cloud, autre appareil, export RGPD, suppression du compte.
