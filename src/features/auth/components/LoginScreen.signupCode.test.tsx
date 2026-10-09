@@ -90,4 +90,17 @@ describe('LoginScreen : code d’inscription', () => {
     await submitSignup('autre@example.test');
     expect(auth.sendVerificationCode).toHaveBeenCalledTimes(2);
   });
+  it('envoi impossible (503 du serveur) : son message s’affiche, pas de pop-in, le nouvel essai redemande un code', async () => {
+    auth.sendVerificationCode.mockResolvedValueOnce({
+      ok: false,
+      status: 503,
+      data: { error: 'L’e-mail n’a pas pu être envoyé. Réessayez dans quelques minutes.' },
+    } as never);
+    await submitSignup('rider@example.test');
+    expect(modalOpen()).toBe(false);
+    expect(view!.container.textContent).toContain('L’e-mail n’a pas pu être envoyé. Réessayez dans quelques minutes.');
+    await submitSignup('rider@example.test');
+    expect(auth.sendVerificationCode).toHaveBeenCalledTimes(2);
+    expect(modalOpen()).toBe(true);
+  });
 });
