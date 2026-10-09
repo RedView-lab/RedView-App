@@ -23,11 +23,10 @@ export function AccountIdentityForm({
 }: AccountIdentityFormProps) {
   const isDirty =
     value.firstName !== initialValue.firstName ||
-    value.lastName !== initialValue.lastName ||
-    value.email !== initialValue.email;
+    value.lastName !== initialValue.lastName;
   const { t } = useAppI18n();
   const isDisabled =
-    isSaving || !isDirty || !value.firstName.trim() || !value.lastName.trim() || !value.email.trim();
+    isSaving || !isDirty || !value.firstName.trim() || !value.lastName.trim();
 
   return (
     <AccountSection title={t('Coordonnees')}>
@@ -71,16 +70,18 @@ export function AccountIdentityForm({
           <span className="rvpb-account-input-icon">
             <SvgV2Icon name="mail-02.svg" size={16} />
           </span>
+          {/* Adresse de connexion : pas modifiable ici (Appwrite exigerait le
+              mot de passe et la marquerait non vérifiée) — elle n'était
+              d'ailleurs jamais enregistrée. */}
           <input
             type="email"
             value={value.email}
-            onChange={(event) =>
-              onChange({
-                ...value,
-                email: event.target.value,
-              })
-            }
+            readOnly
+            aria-describedby="rvpb-account-email-hint"
           />
+        </span>
+        <span id="rvpb-account-email-hint" className="rvpb-account-data-hint">
+          {t('Adresse de connexion du compte : elle ne peut pas être modifiée ici.')}
         </span>
       </label>
 

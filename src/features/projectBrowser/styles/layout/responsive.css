@@ -34,8 +34,7 @@
 
   .rvpb-subscription-section,
   .rvpb-settings-row,
-  .rvpb-account-fields--three-up,
-  .rvpb-account-password-row {
+  .rvpb-account-fields--three-up {
     grid-template-columns: 1fr;
   }
 
@@ -76,7 +75,6 @@
   .rvpb-settings-row,
   .rvpb-account-fields--two-up,
   .rvpb-account-fields--three-up,
-  .rvpb-account-password-row,
   .rvpb-account-data-row {
     grid-template-columns: 1fr;
     gap: 12px;

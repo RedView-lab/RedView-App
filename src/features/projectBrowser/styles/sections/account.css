@@ -40,8 +40,7 @@
   gap: 6px;
 }
 
-.rvpb-account-field__label,
-.rvpb-account-password-label {
+.rvpb-account-field__label {
   color: var(--rv-text);
   font-size: var(--rv-font-size-lg);
   font-weight: 600;
@@ -198,13 +197,6 @@
   min-width: 0;
   color: rgb(var(--rv-ink) / 0.48);
   font-size: var(--rv-font-size-md);
-}
-
-.rvpb-account-password-row {
-  display: grid;
-  grid-template-columns: minmax(180px, 200px) minmax(0, 1fr);
-  gap: 24px 32px;
-  align-items: start;
 }
 
 .rvpb-account-password-form {

@@ -21,6 +21,7 @@ import type {
 } from '../types';
 import { AccountDataForm } from './AccountDataForm';
 import { AccountIdentityForm as AccountIdentitySection } from './AccountIdentityForm';
+import type { AccountPasswordValue } from '../lib/passwordForm';
 import { AccountPasswordForm } from './AccountPasswordForm';
 import { AccountPracticeForm as AccountPracticeSection } from './AccountPracticeForm';
 
@@ -62,6 +63,8 @@ function createPracticeForm(profile: AccountProfile | null): AccountPracticeForm
   };
 }
 
+const EMPTY_PASSWORD: AccountPasswordValue = { current: '', next: '', confirm: '' };
+
 function serializePracticeForm(value: AccountPracticeForm) {
   return JSON.stringify(value);
 }
@@ -75,7 +78,7 @@ export function AccountPanel({
 }: AccountPanelProps) {
   const [identityForm, setIdentityForm] = useState<AccountIdentityForm>(() => createIdentityForm(profile));
   const [practiceForm, setPracticeForm] = useState<AccountPracticeForm>(() => createPracticeForm(profile));
-  const [password, setPassword] = useState('');
+  const [password, setPassword] = useState<AccountPasswordValue>(EMPTY_PASSWORD);
   const [identitySaving, setIdentitySaving] = useState(false);
   const [practiceSaving, setPracticeSaving] = useState(false);
   const [passwordSaving, setPasswordSaving] = useState(false);
@@ -174,8 +177,10 @@ export function AccountPanel({
     setPasswordSaving(true);
     setNotice(null);
     try {
-      await updateAccountPassword(password.trim());
-      setPassword('');
+      await updateAccountPassword(password.next, profile?.hasPassword ? password.current : undefined);
+      setPassword(EMPTY_PASSWORD);
+      // Compte Google : il a maintenant un mot de passe (l'actuel sera demandé la prochaine fois).
+      if (profile && !profile.hasPassword) onProfileUpdated({ ...profile, hasPassword: true });
       setNotice({
         tone: 'success',
         message: t('Mot de passe mis a jour.'),
@@ -264,6 +269,7 @@ export function AccountPanel({
 
       <AccountPasswordForm
         value={password}
+        hasPassword={profile.hasPassword}
         isSaving={passwordSaving}
         onChange={setPassword}
         onSave={() => {

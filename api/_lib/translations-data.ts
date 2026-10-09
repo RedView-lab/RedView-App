@@ -229,6 +229,50 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Unable to update the password."
   },
   {
+    "fr": "Confirmer le nouveau mot de passe",
+    "en": "Confirm the new password"
+  },
+  {
+    "fr": "Saisissez votre mot de passe actuel.",
+    "en": "Enter your current password."
+  },
+  {
+    "fr": "Le nouveau mot de passe doit être différent de l’actuel.",
+    "en": "The new password must differ from the current one."
+  },
+  {
+    "fr": "Vous vous connectez avec Google : un mot de passe vous permettra aussi de vous connecter par e-mail.",
+    "en": "You sign in with Google: a password will also let you sign in by e-mail."
+  },
+  {
+    "fr": "Adresse de connexion du compte : elle ne peut pas être modifiée ici.",
+    "en": "Sign-in address of the account: it cannot be changed here."
+  },
+  {
+    "fr": "Mot de passe actuel incorrect.",
+    "en": "Incorrect current password."
+  },
+  {
+    "fr": "Ce mot de passe a déjà été utilisé récemment. Choisissez-en un autre.",
+    "en": "This password was used recently. Choose another one."
+  },
+  {
+    "fr": "Le mot de passe ne doit pas reprendre votre nom ni votre adresse e-mail.",
+    "en": "The password must not contain your name or e-mail address."
+  },
+  {
+    "fr": "Mot de passe refusé : 8 caractères minimum, et pas un mot de passe trop courant.",
+    "en": "Password rejected: at least 8 characters, and not a common password."
+  },
+  {
+    "fr": "Session expirée. Reconnectez-vous puis réessayez.",
+    "en": "Session expired. Sign in again and retry."
+  },
+  {
+    "fr": "Trop de tentatives. Réessayez dans quelques minutes.",
+    "en": "Too many attempts. Try again in a few minutes."
+  },
+  {
     "fr": "Chargement du compte...",
     "en": "Loading account..."
   },

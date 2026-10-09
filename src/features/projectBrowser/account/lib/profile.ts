@@ -10,7 +10,6 @@ import {
   translateAppText,
 } from '@/shared/i18n';
 import { APP_CACHE_EPOCH_STORAGE_KEY } from '@/shared/lib/appCacheEpoch';
-import { errorMessage } from '@/shared/lib/errors';
 import { clearAnalyticsContext, trackAnalyticsEvent } from '@/shared/lib/analytics';
 import { syncDirtyProjects } from '@/shared/services/projects';
 import { clearProjectStore } from '@/shared/services/storage/idbProjectStore';
@@ -125,6 +124,7 @@ export async function loadAccountProfile(fallbackEmail: string, fallbackDisplayN
     country: readString(metadata.country, DEFAULT_COUNTRY),
     sports: readSports(metadata.sports),
     lastSignInAt: typeof user.accessedAt === 'string' ? user.accessedAt : null,
+    hasPassword: Boolean(user.passwordUpdate),
   };
 }
 
@@ -132,27 +132,21 @@ export async function saveAccountIdentity(form: AccountIdentityForm) {
   const user = await getAppwriteUser();
   if (!user) throw new Error(translateAppText('Session utilisateur introuvable.'));
 
+  // L'adresse e-mail n'est pas modifiable ici (champ en lecture seule) :
+  // Appwrite demanderait le mot de passe et la marquerait non vérifiée.
+  // Un échec est remonté : « Coordonnées enregistrées » ne s'affichait
+  // jusqu'ici même quand rien n'était parti.
   const fullName = `${form.firstName.trim()} ${form.lastName.trim()}`.trim();
-  if (fullName && fullName !== user.name) {
-    try {
-      await account.updateName(fullName);
-    } catch (e) {
-      console.warn('[profile] updateName failed', e);
-    }
-  }
-
-  const currentPrefs = readMetadata(user);
-  const updatedPrefs = {
-    ...currentPrefs,
-    first_name: form.firstName.trim(),
-    last_name: form.lastName.trim(),
-  };
-
   try {
-    return await account.updatePrefs(updatedPrefs);
-  } catch (err) {
-    console.warn('[profile] updatePrefs failed', err);
-    return user;
+    if (fullName && fullName !== user.name) await account.updateName(fullName);
+    return await account.updatePrefs({
+      ...readMetadata(user),
+      first_name: form.firstName.trim(),
+      last_name: form.lastName.trim(),
+    });
+  } catch (error) {
+    console.warn('[profile] saveAccountIdentity failed', error);
+    throw new Error(accountUpdateFailureMessage(error, 'Impossible d’enregistrer le compte.'));
   }
 }
 
@@ -175,11 +169,44 @@ export async function saveAccountPractice(form: AccountPracticeForm) {
   }
 }
 
-export async function updateAccountPassword(password: string) {
+/**
+ * Message d'un échec Appwrite sur le compte, par `type` (stable d'une version
+ * du serveur à l'autre), jamais le message anglais d'Appwrite (il parle à un
+ * développeur : « …by making a request to the User API's… »). Texte source
+ * FR à traduire par l'écran.
+ */
+export function accountUpdateFailureMessage(error: unknown, fallback: string): string {
+  const { code, type } = (typeof error === 'object' && error !== null ? error : {}) as { code?: unknown; type?: unknown };
+  if (error instanceof TypeError || code === 0) {
+    return 'Impossible de joindre le serveur RedView. Vérifiez votre connexion puis réessayez.';
+  }
+  switch (type) {
+    case 'user_invalid_credentials':
+      return 'Mot de passe actuel incorrect.';
+    case 'password_recently_used':
+      return 'Ce mot de passe a déjà été utilisé récemment. Choisissez-en un autre.';
+    case 'password_personal_data':
+      return 'Le mot de passe ne doit pas reprendre votre nom ni votre adresse e-mail.';
+    case 'general_argument_invalid':
+      return 'Mot de passe refusé : 8 caractères minimum, et pas un mot de passe trop courant.';
+    case 'general_rate_limit_exceeded':
+      return 'Trop de tentatives. Réessayez dans quelques minutes.';
+    case 'user_unauthorized':
+    case 'user_blocked':
+    case 'general_unauthorized_scope':
+      return 'Session expirée. Reconnectez-vous puis réessayez.';
+    default:
+      return fallback;
+  }
+}
+
+/** `currentPassword` : exigé par Appwrite quand le compte a déjà un mot de passe. */
+export async function updateAccountPassword(newPassword: string, currentPassword?: string) {
   try {
-    await account.updatePassword(password);
+    await account.updatePassword(newPassword, currentPassword || undefined);
   } catch (error) {
-    throw new Error(errorMessage(error, 'Impossible de mettre à jour le mot de passe.'));
+    console.warn('[profile] updatePassword failed', error);
+    throw new Error(accountUpdateFailureMessage(error, 'Impossible de mettre à jour le mot de passe.'));
   }
 }
 

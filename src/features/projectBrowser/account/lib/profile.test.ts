@@ -1,0 +1,71 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const appwrite = vi.hoisted(() => ({
+  updatePassword: vi.fn<(password: string, oldPassword?: string) => Promise<unknown>>(),
+  updateName: vi.fn<(name: string) => Promise<unknown>>(),
+  updatePrefs: vi.fn<(prefs: Record<string, unknown>) => Promise<unknown>>(),
+  user: { $id: 'u1', name: 'Ada Lovelace', email: 'ada@example.test', prefs: {} } as Record<string, unknown>,
+}));
+
+vi.mock('@/shared/services/appwrite', () => ({
+  account: {
+    updatePassword: appwrite.updatePassword,
+    updateName: appwrite.updateName,
+    updatePrefs: appwrite.updatePrefs,
+  },
+  clearStoredAppwriteSession: () => {},
+  getAppwriteUser: async () => appwrite.user,
+}));
+
+const { accountUpdateFailureMessage, saveAccountIdentity, updateAccountPassword } = await import('./profile');
+
+/** Forme d'une AppwriteException : `code` HTTP + `type` stable. */
+const appwriteError = (code: number, type: string) => Object.assign(new Error('english developer message'), { code, type });
+
+beforeEach(() => {
+  appwrite.updatePassword.mockReset().mockResolvedValue({});
+  appwrite.updateName.mockReset().mockResolvedValue({});
+  appwrite.updatePrefs.mockReset().mockResolvedValue(appwrite.user);
+  vi.spyOn(console, 'warn').mockImplementation(() => {});
+});
+
+describe('updateAccountPassword', () => {
+  it('envoie l’ancien mot de passe quand il est connu (exigé par Appwrite), rien sinon', async () => {
+    await updateAccountPassword('nouveau-123', 'ancien-123');
+    expect(appwrite.updatePassword).toHaveBeenLastCalledWith('nouveau-123', 'ancien-123');
+    await updateAccountPassword('nouveau-123');
+    expect(appwrite.updatePassword).toHaveBeenLastCalledWith('nouveau-123', undefined);
+  });
+
+  it('un refus Appwrite devient un message pour l’utilisateur, jamais le message anglais', async () => {
+    appwrite.updatePassword.mockRejectedValue(appwriteError(401, 'user_invalid_credentials'));
+    await expect(updateAccountPassword('nouveau-123', 'faux')).rejects.toThrow('Mot de passe actuel incorrect.');
+  });
+});
+
+describe('accountUpdateFailureMessage', () => {
+  it('associe chaque type Appwrite connu à un message', () => {
+    const fallback = 'repli';
+    expect(accountUpdateFailureMessage(appwriteError(400, 'password_recently_used'), fallback)).toMatch(/^Ce mot de passe a déjà été utilisé/);
+    expect(accountUpdateFailureMessage(appwriteError(400, 'password_personal_data'), fallback)).toMatch(/^Le mot de passe ne doit pas reprendre/);
+    expect(accountUpdateFailureMessage(appwriteError(400, 'general_argument_invalid'), fallback)).toMatch(/^Mot de passe refusé/);
+    expect(accountUpdateFailureMessage(appwriteError(429, 'general_rate_limit_exceeded'), fallback)).toMatch(/^Trop de tentatives/);
+    expect(accountUpdateFailureMessage(appwriteError(403, 'user_blocked'), fallback)).toMatch(/^Session expirée/);
+    expect(accountUpdateFailureMessage(new TypeError('Failed to fetch'), fallback)).toMatch(/^Impossible de joindre le serveur RedView/);
+    expect(accountUpdateFailureMessage(appwriteError(500, 'general_unknown'), fallback)).toBe(fallback);
+    expect(accountUpdateFailureMessage('nope', fallback)).toBe(fallback);
+  });
+});
+
+describe('saveAccountIdentity', () => {
+  it('enregistre nom et préférences, jamais l’adresse e-mail', async () => {
+    await saveAccountIdentity({ firstName: 'Grace', lastName: 'Hopper', email: 'autre@example.test' });
+    expect(appwrite.updateName).toHaveBeenCalledWith('Grace Hopper');
+    expect(appwrite.updatePrefs).toHaveBeenCalledWith(expect.objectContaining({ first_name: 'Grace', last_name: 'Hopper' }));
+  });
+
+  it('un échec est remonté (plus de « Coordonnées enregistrées » quand rien n’est parti)', async () => {
+    appwrite.updatePrefs.mockRejectedValue(new TypeError('Failed to fetch'));
+    await expect(saveAccountIdentity({ firstName: 'Grace', lastName: 'Hopper', email: '' })).rejects.toThrow(/^Impossible de joindre/);
+  });
+});

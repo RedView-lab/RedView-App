@@ -12,6 +12,11 @@ export type AccountProfile = {
   country: string;
   sports: AccountSportEntry[];
   lastSignInAt: string | null;
+  /**
+   * Le compte a un mot de passe (inscription par e-mail) : Appwrite exige
+   * alors l'ancien pour en poser un nouveau. Faux pour un compte Google.
+   */
+  hasPassword: boolean;
 };
 
 export type AccountIdentityForm = Pick<AccountProfile, 'firstName' | 'lastName' | 'email'>;
