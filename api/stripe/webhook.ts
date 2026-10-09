@@ -48,6 +48,18 @@ function markEventProcessed(eventId: string): void {
   }
 }
 
+/**
+ * E-mail d'abonnement non parti alors que l'envoi est configuré : l'évènement
+ * échoue (500) pour que Stripe le relivre et que l'e-mail reparte. La
+ * confirmation de résiliation et le rappel de reconduction sont dus au client
+ * (art. L.215-1-1 et L.215-1 du Code de la consommation) ; le reste du
+ * traitement est idempotent (upsert). Sans RESEND_API_KEY (développement),
+ * rien ne part de toute façon : pas de relivraison.
+ */
+function ensureEmailSent(result: { sent: boolean }, label: string): void {
+  if (!result.sent && process.env.RESEND_API_KEY) throw new Error(`${label} e-mail not sent`);
+}
+
 function customerIdOf(value: string | Stripe.Customer | Stripe.DeletedCustomer | null): string | null {
   if (!value) return null;
   return typeof value === 'string' ? value : value.id;
@@ -132,7 +144,7 @@ async function handleSubscriptionUpdated(event: Stripe.CustomerSubscriptionUpdat
   const endDate = formatDate(subscription.cancel_at ?? item?.current_period_end);
   const recipient = await emailRecipient(customerIdOf(subscription.customer)!);
   if (!recipient || !endDate) return;
-  await sendSubscriptionCanceledEmail({ ...recipient, planLabel, endDate, manageUrl: billingManageUrl() });
+  ensureEmailSent(await sendSubscriptionCanceledEmail({ ...recipient, planLabel, endDate, manageUrl: billingManageUrl() }), 'Cancellation');
 }
 
 async function handleTrialWillEnd(subscriptionId: string): Promise<void> {
@@ -145,13 +157,13 @@ async function handleTrialWillEnd(subscriptionId: string): Promise<void> {
   const chargeDate = formatDate(subscription.trial_end);
   const recipient = await emailRecipient(customerIdOf(subscription.customer)!);
   if (!recipient || !chargeDate || item?.price.unit_amount == null) return;
-  await sendTrialEndingEmail({
+  ensureEmailSent(await sendTrialEndingEmail({
     ...recipient,
     planLabel,
     amount: formatAmount(item.price.unit_amount, item.price.currency),
     chargeDate,
     manageUrl: billingManageUrl(),
-  });
+  }), 'Trial ending');
 }
 
 /**
@@ -171,13 +183,13 @@ async function handleInvoiceUpcoming(invoice: Stripe.Invoice): Promise<void> {
   const renewalDate = formatDate(item?.current_period_end);
   const recipient = await emailRecipient(customerIdOf(subscription.customer)!);
   if (!recipient || !renewalDate) return;
-  await sendRenewalReminderEmail({
+  ensureEmailSent(await sendRenewalReminderEmail({
     ...recipient,
     planLabel,
     amount: formatAmount(invoice.amount_due, invoice.currency),
     renewalDate,
     manageUrl: billingManageUrl(),
-  });
+  }), 'Renewal reminder');
 }
 
 async function handleInvoiceEvent(invoice: Stripe.Invoice, paid: boolean): Promise<void> {
