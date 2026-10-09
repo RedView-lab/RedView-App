@@ -1761,6 +1761,10 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Subscriptions are temporarily unavailable."
   },
   {
+    "fr": "Le service de paiement est momentanément indisponible. Réessayez dans un instant.",
+    "en": "The payment service is temporarily unavailable. Try again in a moment."
+  },
+  {
     "fr": "Ce moyen de paiement ne correspond pas à votre compte.",
     "en": "This payment setup does not belong to the current user."
   },

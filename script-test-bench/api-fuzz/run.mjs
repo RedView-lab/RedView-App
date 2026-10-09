@@ -11,7 +11,9 @@
  * requête hostile (`__proto__`, tableaux, NaN, chemins `..`, chaînes géantes),
  * chaque paramètre lu par la route avec des valeurs limites, corps JSON
  * invalides ou détournés, champs du corps de mauvais type, jetons d'accès
- * faux ou énormes, plus des chemins statiques et de tuiles hostiles. Une IP
+ * faux ou énormes, plus des chemins statiques et de tuiles hostiles. Un faux
+ * Appwrite local (fake-appwrite.mjs) accepte le jeton `fuzz-jwt` : les routes
+ * authentifiées vont jusqu'à leur propre validation. Une IP
  * différente par requête (`X-Forwarded-For`) pour ne pas mesurer la limite de
  * débit.
  *
@@ -22,7 +24,8 @@
  * (413 puis fermeture ; en production nginx lit le corps avant).
  * Rapport détaillé : script-test-bench/reports/api-fuzz/.
  *
- * Premier passage (2026-10-09, 21 routes) : aucune 500, aucun délai.
+ * Premier passage (2026-10-09, 21 routes, sans faux Appwrite) : aucune 500,
+ * aucun délai.
  */
 import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -30,6 +33,8 @@ import http from 'node:http';
 import net from 'node:net';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+
+import { FUZZ_JWT, startFakeAppwrite } from './fake-appwrite.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '../..');
 const OUT_DIR = path.join(ROOT, 'script-test-bench/reports/api-fuzz');
@@ -132,6 +137,7 @@ function buildCases(routes) {
       cases.push({ route, method, pathname: base + hostileQuery });
       cases.push({ route, method, pathname: `${base}/..%2f..%2fetc%2fpasswd` });
       cases.push({ route, method, pathname: base, headers: { Authorization: 'Bearer x' } });
+      cases.push({ route, method, pathname: base + hostileQuery, headers: { Authorization: `Bearer ${FUZZ_JWT}` } });
       cases.push({ route, method, pathname: base, headers: { Authorization: `Bearer ${'a'.repeat(7000)}` } });
     }
     for (const name of queryNames) {
@@ -145,13 +151,13 @@ function buildCases(routes) {
     for (const method of ['POST', 'PUT', 'DELETE']) {
       for (const body of rawBodies) {
         for (const contentType of ['application/json', 'text/plain']) {
-          cases.push({ route, method, pathname: base, headers: { 'Content-Type': contentType, Authorization: 'Bearer x' }, body });
+          cases.push({ route, method, pathname: base, headers: { 'Content-Type': contentType, Authorization: `Bearer ${FUZZ_JWT}` }, body });
         }
       }
       cases.push({ route, method, pathname: base, headers: { 'Content-Type': 'application/json' }, body: 'a'.repeat(OVERSIZED_BODY_BYTES), oversized: true });
       for (const name of bodyNames) {
         for (const value of BODY_VALUES) {
-          cases.push({ route, method, pathname: base, headers: { 'Content-Type': 'application/json', Authorization: 'Bearer x' }, body: JSON.stringify({ [name]: value, action: value }) });
+          cases.push({ route, method, pathname: base, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${FUZZ_JWT}` }, body: JSON.stringify({ [name]: value, action: value }) });
         }
       }
     }
@@ -159,7 +165,7 @@ function buildCases(routes) {
     for (const action of namesFrom(source, [/case ['"]([\w-]+)['"]/g, /action === ['"]([\w-]+)['"]/g])) {
       for (const value of BODY_VALUES) {
         const fields = Object.fromEntries(bodyNames.map((name) => [name, value]));
-        cases.push({ route, method: 'POST', pathname: base, headers: { 'Content-Type': 'application/json', Authorization: 'Bearer x' }, body: JSON.stringify({ ...fields, action }) });
+        cases.push({ route, method: 'POST', pathname: base, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${FUZZ_JWT}` }, body: JSON.stringify({ ...fields, action }) });
       }
     }
   }
@@ -194,6 +200,7 @@ async function main() {
   const routes = listRoutes(path.join(ROOT, 'api'));
   const cases = buildCases(routes);
   const port = await freePort();
+  const appwrite = await startFakeAppwrite();
   const logLines = [];
   const child = spawn(process.execPath, ['--import', pathToFileURL(path.join(import.meta.dirname, 'block-egress.mjs')).href, path.join(ROOT, 'dist-server/server.mjs')], {
     cwd: ROOT,
@@ -201,7 +208,7 @@ async function main() {
       PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, TEMP: process.env.TEMP, TMP: process.env.TMP,
       NODE_ENV: 'production', PORT: String(port), LOG_LEVEL: 'warn',
       BROUTER_UPSTREAM: 'http://127.0.0.1:9', POI_UPSTREAM: 'http://127.0.0.1:9/poi', WEATHER_UPSTREAM: 'http://127.0.0.1:9/weather',
-      OPENMETEO_UPSTREAM: 'http://127.0.0.1:9/openmeteo', APPWRITE_ENDPOINT: 'http://127.0.0.1:9/v1', APPWRITE_PROJECT_ID: 'fuzz',
+      OPENMETEO_UPSTREAM: 'http://127.0.0.1:9/openmeteo', APPWRITE_ENDPOINT: `http://127.0.0.1:${appwrite.port}/v1`, APPWRITE_PROJECT_ID: 'fuzz',
       APPWRITE_API_KEY: 'fuzz', STRIPE_SECRET_KEY: 'sk_test_fuzz', STRIPE_WEBHOOK_SECRET: 'whsec_fuzz', METEOFRANCE_API_KEY: 'fuzz',
       MULTIPLAYER_INTERNAL_SECRET: 'fuzz', MULTIPLAYER_INTERNAL_URL: 'http://127.0.0.1:9',
     },
@@ -234,6 +241,7 @@ async function main() {
   }));
   const health = exited ? { status: 'arrêté' } : await send(port, { method: 'GET', pathname: '/health' });
   child.kill();
+  appwrite.close();
 
   const byStatus = {};
   for (const result of results) byStatus[result.res.status] = (byStatus[result.res.status] ?? 0) + 1;

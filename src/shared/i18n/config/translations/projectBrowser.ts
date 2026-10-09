@@ -351,6 +351,7 @@ export const projectBrowserTranslationPairs: ReadonlyArray<AppTranslationPair> =
   { fr: 'Impossible de finaliser le paiement.', en: 'Unable to complete the payment.' },
   { fr: 'Ce compte a déjà un abonnement.', en: 'This account already has a subscription.' },
   { fr: 'Les abonnements sont momentanément indisponibles.', en: 'Subscriptions are temporarily unavailable.' },
+  { fr: 'Le service de paiement est momentanément indisponible. Réessayez dans un instant.', en: 'The payment service is temporarily unavailable. Try again in a moment.' },
   { fr: 'Ce moyen de paiement ne correspond pas à votre compte.', en: 'This payment setup does not belong to the current user.' },
   { fr: 'Cette demande ne démarre pas d’abonnement.', en: 'This payment setup does not start a subscription.' },
   { fr: 'Le moyen de paiement n’est pas encore confirmé.', en: 'The payment method is not confirmed yet.' },

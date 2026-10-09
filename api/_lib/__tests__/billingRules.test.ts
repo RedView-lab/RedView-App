@@ -98,4 +98,12 @@ describe('erreurs Stripe', () => {
     const internal = new Error('boom');
     expect(toBillingError(internal)).toBe(internal);
   });
+
+  it('Stripe injoignable, en panne ou qui limite : 503 « réessayez », pas une erreur interne', () => {
+    for (const type of ['StripeConnectionError', 'StripeAPIError', 'StripeRateLimitError']) {
+      const error = toBillingError({ type, message: 'An error occurred with our connection to Stripe.' });
+      expect(error).toBeInstanceOf(PublicError);
+      expect((error as PublicError).status).toBe(503);
+    }
+  });
 });

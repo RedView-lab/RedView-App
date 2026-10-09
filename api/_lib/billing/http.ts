@@ -21,14 +21,22 @@ export function billingManageUrl(): string {
   return `${base.replace(/\/+$/, '')}/?tab=subscription`;
 }
 
+/** Stripe injoignable, en panne ou qui nous limite : rien à corriger chez RedView. */
+const STRIPE_UNAVAILABLE_TYPES = new Set(['StripeConnectionError', 'StripeAPIError', 'StripeRateLimitError']);
+
 /**
  * Erreurs Stripe attendues → réponses claires. Un identifiant inconnu (fourni
  * par le client) n'est pas une panne ; un refus de carte se montre tel quel
- * (Stripe rédige ces messages pour l'utilisateur final). Le reste reste une
- * erreur interne, journalisée et remontée à GlitchTip.
+ * (Stripe rédige ces messages pour l'utilisateur final) ; Stripe injoignable
+ * ou en panne donne 503 (la personne peut réessayer — c'était un 500 « erreur
+ * interne », trouvé par bench:api-fuzz). Le reste reste une erreur interne,
+ * journalisée et remontée à GlitchTip.
  */
 export function toBillingError(error: unknown): unknown {
   const candidate = error as { type?: unknown; code?: unknown; message?: unknown } | null;
+  if (typeof candidate?.type === 'string' && STRIPE_UNAVAILABLE_TYPES.has(candidate.type)) {
+    return new PublicError('The payment service is temporarily unavailable. Try again in a moment.', 503);
+  }
   if (candidate?.type === 'StripeCardError' && typeof candidate.message === 'string') {
     return new PublicError(candidate.message, 402);
   }
