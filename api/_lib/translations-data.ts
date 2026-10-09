@@ -57,36 +57,8 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Language"
   },
   {
-    "fr": "Unité de mesure",
-    "en": "Unit system"
-  },
-  {
-    "fr": "Paramètre de carte",
-    "en": "Map preset"
-  },
-  {
     "fr": "Préférence d’affichage",
     "en": "Display preference"
-  },
-  {
-    "fr": "Réglage",
-    "en": "Setting"
-  },
-  {
-    "fr": "Activer le réglage",
-    "en": "Enable setting"
-  },
-  {
-    "fr": "Mètre",
-    "en": "Meters"
-  },
-  {
-    "fr": "Pieds",
-    "en": "Feet"
-  },
-  {
-    "fr": "Jour (nuit couché de soleil)",
-    "en": "Day (sunset night)"
   },
   {
     "fr": "Nuit",

@@ -21,15 +21,16 @@ import { LANDING_URL } from '../../lib';
 import { DataSourcesSection } from './DataSourcesSection';
 
 type DisplayMode = AppThemePreference;
-type UnitSetting = 'metric' | 'imperial';
-type MapPresetSetting = 'day' | 'night';
-
+/**
+ * Réglages du navigateur. « Unité de mesure », « Paramètre de carte » et
+ * l'interrupteur « Réglage » ont été retirés le 2026-10-09 : enregistrés mais
+ * lus nulle part (les distances sont formatées en km dans ~80 fichiers ; un
+ * vrai mode impérial est un chantier à part). Les anciennes clés stockées sont
+ * ignorées et disparaissent à la prochaine écriture.
+ */
 type SettingsState = {
   language: AppLocale;
-  unit: UnitSetting;
-  mapPreset: MapPresetSetting;
   displayMode: DisplayMode;
-  communityPromptEnabled: boolean;
 };
 
 type SettingsSelectProps = {
@@ -65,29 +66,8 @@ const DISPLAY_OPTION_ASSETS = [
 function createDefaultSettings(language: AppLocale): SettingsState {
   return {
     language,
-    unit: 'metric',
-    mapPreset: 'day',
     displayMode: DEFAULT_APP_THEME_PREFERENCE,
-    communityPromptEnabled: true,
   };
-}
-
-function isUnitSetting(value: unknown): value is UnitSetting {
-  return value === 'metric' || value === 'imperial';
-}
-
-function isMapPresetSetting(value: unknown): value is MapPresetSetting {
-  return value === 'day' || value === 'night';
-}
-
-function resolveStoredUnit(value: unknown): UnitSetting {
-  if (value === 'Pieds' || value === 'imperial') return 'imperial';
-  return 'metric';
-}
-
-function resolveStoredMapPreset(value: unknown): MapPresetSetting {
-  if (value === 'Nuit' || value === 'night') return 'night';
-  return 'day';
 }
 
 function readStoredSettings(fallbackLanguage: AppLocale): SettingsState {
@@ -105,13 +85,7 @@ function readStoredSettings(fallbackLanguage: AppLocale): SettingsState {
 
     return {
       language: resolveAppLocale(parsed.language ?? fallbackLanguage),
-      unit: isUnitSetting(parsed.unit) ? parsed.unit : resolveStoredUnit(parsed.unit),
-      mapPreset: isMapPresetSetting(parsed.mapPreset) ? parsed.mapPreset : resolveStoredMapPreset(parsed.mapPreset),
       displayMode: isAppThemePreference(parsed.displayMode) ? parsed.displayMode : defaults.displayMode,
-      communityPromptEnabled:
-        typeof parsed.communityPromptEnabled === 'boolean'
-          ? parsed.communityPromptEnabled
-          : defaults.communityPromptEnabled,
     };
   } catch {
     return defaults;
@@ -199,20 +173,6 @@ export function SettingsPanel({ profile }: SettingsPanelProps = {}) {
     () => APP_LOCALE_OPTIONS.map((option) => ({ ...option })),
     [],
   );
-  const unitSelectOptions = useMemo<AccountSelectOption[]>(
-    () => [
-      { value: 'metric', label: t('Mètre') },
-      { value: 'imperial', label: t('Pieds') },
-    ],
-    [t],
-  );
-  const mapPresetSelectOptions = useMemo<AccountSelectOption[]>(
-    () => [
-      { value: 'day', label: t('Jour (nuit couché de soleil)') },
-      { value: 'night', label: t('Nuit') },
-    ],
-    [t],
-  );
   const displayOptions = useMemo<DisplayOption[]>(
     () => [
       { ...DISPLAY_OPTION_ASSETS[0], label: t('System preference') },
@@ -262,40 +222,6 @@ export function SettingsPanel({ profile }: SettingsPanelProps = {}) {
         </div>
       </div>
 
-      <div className="rvpb-settings-row">
-        <div className="rvpb-settings-row__label">{t('Unité de mesure')}</div>
-        <div className="rvpb-settings-row__control">
-          <SettingsSelect
-            label={t('Unité de mesure')}
-            value={settings.unit}
-            options={unitSelectOptions}
-            onChange={(unit) =>
-              setSettings((current) => ({
-                ...current,
-                unit: unit === 'imperial' ? 'imperial' : 'metric',
-              }))
-            }
-          />
-        </div>
-      </div>
-
-      <div className="rvpb-settings-row">
-        <div className="rvpb-settings-row__label">{t('Paramètre de carte')}</div>
-        <div className="rvpb-settings-row__control">
-          <SettingsSelect
-            label={t('Paramètre de carte')}
-            value={settings.mapPreset}
-            options={mapPresetSelectOptions}
-            onChange={(mapPreset) =>
-              setSettings((current) => ({
-                ...current,
-                mapPreset: mapPreset === 'night' ? 'night' : 'day',
-              }))
-            }
-          />
-        </div>
-      </div>
-
       <div className="rvpb-divider" />
 
       <div className="rvpb-settings-row rvpb-settings-row--display">
@@ -325,27 +251,6 @@ export function SettingsPanel({ profile }: SettingsPanelProps = {}) {
               </button>
             );
           })}
-        </div>
-      </div>
-
-      <div className="rvpb-settings-row rvpb-settings-row--toggle">
-        <div className="rvpb-settings-row__label">{t('Réglage')}</div>
-        <div className="rvpb-settings-row__control">
-          <button
-            type="button"
-            className={`rvpb-settings-switch${settings.communityPromptEnabled ? ' is-on' : ''}`}
-            role="switch"
-            aria-checked={settings.communityPromptEnabled}
-            aria-label={t('Activer le réglage')}
-            onClick={() =>
-              setSettings((current) => ({
-                ...current,
-                communityPromptEnabled: !current.communityPromptEnabled,
-              }))
-            }
-          >
-            <span className="rvpb-settings-switch__thumb" />
-          </button>
         </div>
       </div>
 
