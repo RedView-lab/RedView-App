@@ -3,6 +3,7 @@ name = "redviewlaz"
 version = "0.1.0"
 edition = "2021"
 description = "Décodeur des chunks COPC du viewer LiDAR RedView (laz-rs, décompression sélective)"
+license-file = "../../LICENSE"
 publish = false
 
 [lib]

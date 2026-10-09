@@ -203,4 +203,4 @@ déploiement.
 
 ## Licence
 
-Projet privé. Aucune licence n'est accordée pour utiliser, copier ou distribuer ce code.
+Logiciel propriétaire, tous droits réservés ([`LICENSE`](LICENSE)) : l'application, les serveurs et les moteurs maison (`redviewalgo`, `redviewlaz`) ne sont sous aucune licence libre. Aucun droit n'est accordé pour utiliser, copier, modifier ou distribuer ce code sans accord écrit. Les dépendances et les sources de données de tiers gardent leur propre licence (`dist/third-party-licenses.txt` au build, Réglages → Sources des données).

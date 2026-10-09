@@ -4,6 +4,7 @@
   "main": "server.js",
   "type": "module",
   "private": true,
+  "license": "UNLICENSED",
   "scripts": {
     "start": "node server.js",
     "ingest": "bash ../poi-ingest/rebuild-poi-db.sh",

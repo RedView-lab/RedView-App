@@ -3,6 +3,8 @@ name = "redviewalgo"
 version = "0.1.0"
 edition = "2021"
 description = "Cycling performance prediction engine — WASM module"
+license-file = "../../LICENSE"
+publish = false
 
 [lib]
 crate-type = ["cdylib", "rlib"]

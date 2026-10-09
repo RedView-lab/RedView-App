@@ -3,6 +3,8 @@
   "type": "module",
   "description": "Cycling performance prediction engine — WASM module",
   "version": "0.1.0",
+  "private": true,
+  "license": "UNLICENSED",
   "files": [
     "redviewalgo_bg.wasm",
     "redviewalgo.js",

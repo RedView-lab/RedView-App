@@ -1,0 +1,45 @@
+RedView — Licence propriétaire
+
+Copyright © 2026 RedView. Tous droits réservés.
+
+Ce dépôt et tout ce qu'il contient sont la propriété exclusive de RedView :
+le code source et compilé de l'application web et du visualiseur LiDAR, des
+serveurs (API, co-édition en temps réel, services hébergés : points d'intérêt,
+météo, routage), des moteurs développés par RedView (moteur de prédiction
+redviewalgo, décodeur LiDAR redviewlaz et leurs modules WebAssembly), ainsi
+que les scripts, bancs d'essai, configurations d'exploitation, documentation,
+éléments graphiques et la marque.
+
+Aucune licence ni aucun droit n'est accordé, expressément ou implicitement,
+pour utiliser, copier, modifier, fusionner, publier, distribuer, céder,
+sous-licencier, vendre, décompiler, désassembler ou reproduire tout ou partie
+de ce dépôt, sauf accord écrit préalable de RedView.
+
+Les composants de tiers inclus ou utilisés restent soumis à leur propre
+licence : dépendances logicielles (liste écrite à chaque build dans
+dist/third-party-licenses.txt) et sources de données (Réglages → Sources des
+données dans l'application ; src/features/projectBrowser/settings/lib/dataSources.ts).
+
+-------------------------------------------------------------------------------
+
+RedView — Proprietary licence
+
+Copyright © 2026 RedView. All rights reserved.
+
+This repository and everything it contains are the exclusive property of
+RedView: the source and compiled code of the web application and the LiDAR
+viewer, of the servers (API, real-time co-editing, hosted services: points of
+interest, weather, routing), of the engines developed by RedView (redviewalgo
+prediction engine, redviewlaz LiDAR decoder and their WebAssembly modules),
+as well as the scripts, benchmarks, operations configuration, documentation,
+graphic assets and the brand.
+
+No licence or right is granted, expressly or by implication, to use, copy,
+modify, merge, publish, distribute, assign, sublicense, sell, decompile,
+disassemble or reproduce all or any part of this repository without the prior
+written consent of RedView.
+
+Third-party components included or used remain subject to their own licences:
+software dependencies (listed at every build in dist/third-party-licenses.txt)
+and data sources (Settings → Data sources in the application;
+src/features/projectBrowser/settings/lib/dataSources.ts).
