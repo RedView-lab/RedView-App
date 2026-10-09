@@ -69,6 +69,16 @@ describe('api/meteofrance', () => {
     expect(calls('/GetCapabilities')).toHaveLength(2);
   });
 
+  it('without an API key: 503 « not configured », no upstream call, one warning only', async () => {
+    vi.stubEnv('METEOFRANCE_API_KEY', '');
+    const handler = await loadHandler();
+    const query = { lonMin: '6.8', latMin: '45.8', lonMax: '6.9', latMax: '45.9' };
+    expect((await call(handler, query)).status).toBe(503);
+    expect((await call(handler, query)).status).toBe(503);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(console.warn).toHaveBeenCalledTimes(1);
+  });
+
   it('refuses a bbox wider than 2° (the app asks for 0.8° × 0.6°)', async () => {
     const handler = await loadHandler();
     const out = await call(handler, { lonMin: '6', latMin: '45', lonMax: '8.5', latMax: '45.5' });

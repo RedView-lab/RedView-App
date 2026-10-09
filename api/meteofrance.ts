@@ -347,6 +347,9 @@ async function computeGridJson(lonMin: number, latMin: number, lonMax: number, l
 
 class BadRequestError extends Error {}
 
+/** Clé absente (facultative, .env.example) : signalée une fois, pas à chaque requête. */
+let missingKeyReported = false;
+
 function parseFloatStrict(v: unknown, name: string): number {
   const n = typeof v === 'string' ? parseFloat(v) : NaN;
   if (!Number.isFinite(n)) throw new BadRequestError(`Missing/invalid query param: ${name}`);
@@ -394,6 +397,14 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   } catch (err) {
     const message = err instanceof BadRequestError ? err.message : 'Invalid bbox';
     return res.status(400).json({ error: message });
+  }
+
+  if (!(process.env.METEOFRANCE_API_KEY ?? '').trim()) {
+    if (!missingKeyReported) {
+      missingKeyReported = true;
+      console.warn('[meteofrance] METEOFRANCE_API_KEY absente : pas d’analyse AROME (le mode neige prend son repli)');
+    }
+    return res.status(503).json({ error: 'Météo-France source not configured' });
   }
 
   const cacheKey = [lonMin, latMin, lonMax, latMax].map((v) => v.toFixed(2)).join(',');
