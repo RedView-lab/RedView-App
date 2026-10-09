@@ -60,7 +60,8 @@ describe('charte des e-mails', () => {
     for (const mail of sent) {
       expect(mail.html).toContain('src="https://app.example.test/brand/redview-email-logo.png"');
       expect(mail.html).toContain('src="https://app.example.test/brand/redview-email-logo-white.png"');
-      expect(mail.html).toContain('alt="RedView"');
+      // Un seul texte alternatif : l'aperçu des messageries affichait « RedView RedView ».
+      expect(mail.html.match(/alt="RedView"/g)).toHaveLength(1);
       expect(mail.html).toContain('href="https://app.example.test/mentions-legales"');
       expect(mail.html).toContain('href="https://app.example.test/confidentialite"');
       expect(mail.html).toContain('href="mailto:redview.app@proton.me"');

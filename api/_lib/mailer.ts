@@ -169,8 +169,10 @@ function emailLayout({ title, preheader, bodyHtml, englishSummary }: {
   englishSummary?: string;
 }): string {
   const appUrl = appBaseUrl();
-  const logo = (file: string, cls: string, extra = '') =>
-    `<img src="${escapeHtml(`${appUrl}/brand/${file}`)}" width="130" height="24" alt="RedView" class="${cls}" style="display: block; width: 130px; height: 24px; border: 0; outline: none; color: ${INK}; font-family: ${FONT_STACK}; font-size: 18px; font-weight: 700;${extra}">`;
+  // Le logo blanc (thème sombre) n'a pas de texte alternatif : sinon l'aperçu
+  // des messageries, qui lit le texte de tout le message, affichait « RedView RedView ».
+  const logo = (file: string, cls: string, extra = '', alt = 'RedView') =>
+    `<img src="${escapeHtml(`${appUrl}/brand/${file}`)}" width="130" height="24" alt="${alt}" class="${cls}" style="display: block; width: 130px; height: 24px; border: 0; outline: none; color: ${INK}; font-family: ${FONT_STACK}; font-size: 18px; font-weight: 700;${extra}">`;
   const link = (href: string, label: string) =>
     `<a href="${escapeHtml(href)}" target="_blank" class="rv-link" style="color: ${INK_60}; text-decoration: underline; text-underline-offset: 2px; white-space: nowrap;">${escapeHtml(label)}</a>`;
   return `
@@ -224,7 +226,7 @@ function emailLayout({ title, preheader, bodyHtml, englishSummary }: {
         <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 440px; width: 100%; border-collapse: separate;">
           <tr>
             <td style="padding: 0 4px 28px;">
-              <a href="${escapeHtml(`${appUrl}/`)}" target="_blank" style="text-decoration: none;">${logo('redview-email-logo.png', 'rv-logo-light')}${logo('redview-email-logo-white.png', 'rv-logo-dark', ' display: none; mso-hide: all;')}</a>
+              <a href="${escapeHtml(`${appUrl}/`)}" target="_blank" style="text-decoration: none;">${logo('redview-email-logo.png', 'rv-logo-light')}${logo('redview-email-logo-white.png', 'rv-logo-dark', ' display: none; mso-hide: all;', '')}</a>
             </td>
           </tr>
           <tr>
