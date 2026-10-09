@@ -34,6 +34,7 @@ documents ci-dessous approfondissent un sujet.
 | Document | Contenu |
 |---|---|
 | [security-runbook.md](operations/security-runbook.md) | Ordre de mise en place du durcissement de sécurité d'octobre 2026 |
+| [violation-de-donnees.md](operations/violation-de-donnees.md) | Violation de données personnelles : contenir, évaluer, notifier la CNIL sous 72 h, informer les personnes, tenir le registre (RGPD art. 33 et 34) |
 | [appwrite-montee.md](operations/appwrite-montee.md) | Montée du serveur Appwrite 1.6.0 → 2.3.0 : chemin, pièges trouvés en répétition, étapes, contrôles, retour arrière |
 | [appwrite-sdk.md](operations/appwrite-sdk.md) | SDK Appwrite épinglés sur la série du serveur de prod (1.6) : versions, vérifications contre la prod, risques |
 | [memoire-conteneurs.md](operations/memoire-conteneurs.md) | Limites mémoire des conteneurs Coolify (app, temps réel, site vitrine) : relevé du 2026-10-08 et proposition |

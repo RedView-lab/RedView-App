@@ -29,6 +29,8 @@ Indiquer :
 
 ## Pour aller plus loin
 
+- Violation de données personnelles (fuite, accès non autorisé, perte) :
+  [`docs/operations/violation-de-donnees.md`](docs/operations/violation-de-donnees.md)
 - Mise en place du durcissement d'octobre 2026 :
   [`docs/operations/security-runbook.md`](docs/operations/security-runbook.md)
 - Modèle de menace de la co-édition en temps réel : section 14 de
