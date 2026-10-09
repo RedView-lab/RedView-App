@@ -577,6 +577,8 @@ async function handleApiRoute(apiRoute, parsedUrl, req, res) {
 export { server };
 
 const isMain = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
+/** Attente des requêtes en cours à l'arrêt ; + 2 s d'envoi à GlitchTip, sous les 10 s de `docker stop`. */
+const SHUTDOWN_DRAIN_MS = 6_000;
 if (isMain) {
   // Slowloris : en-têtes en 20 s max, requête complète en 120 s max
   // (les proxies amont, BRouter compris, ont leurs propres timeouts < 90 s).
@@ -585,10 +587,22 @@ if (isMain) {
   server.listen(PORT, '0.0.0.0', () => {
     console.log(`[RedView Server] Running on http://0.0.0.0:${PORT}`);
   });
-  // Arrêt du conteneur (node en PID 1) : erreurs en attente envoyées avant de sortir.
+  // Arrêt du conteneur (node en PID 1) : plus de nouvelle connexion, les
+  // requêtes en cours finissent (invitation, action de facturation… coupées
+  // net, le client ne savait pas si elles avaient abouti), dans une limite
+  // qui laisse la sortie avant le SIGKILL de Docker (10 s après SIGTERM),
+  // puis les erreurs en attente partent vers GlitchTip.
   process.once('SIGTERM', () => {
-    server.close();
-    void flushServerObservability(2000).finally(() => process.exit(0));
+    const drained = new Promise((resolve) => server.close(resolve));
+    // close() ne ferme que les connexions inactives à cet instant : une
+    // connexion keep-alive qui finit sa réponse ensuite garderait le serveur
+    // ouvert jusqu'à son délai d'inactivité.
+    server.closeIdleConnections();
+    setInterval(() => server.closeIdleConnections(), 100).unref();
+    const deadline = new Promise((resolve) => setTimeout(resolve, SHUTDOWN_DRAIN_MS).unref());
+    void Promise.race([drained, deadline])
+      .then(() => flushServerObservability(2000))
+      .finally(() => process.exit(0));
   });
 }
 
