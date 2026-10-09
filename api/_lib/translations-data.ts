@@ -6289,6 +6289,10 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "© RainViewer"
   },
   {
+    "fr": "RainViewer",
+    "en": "RainViewer"
+  },
+  {
     "fr": "CC BY 4.0",
     "en": "CC BY 4.0"
   },

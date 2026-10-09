@@ -48,6 +48,8 @@ export const creditsTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: '© Instituto Geográfico Nacional, CC BY 4.0', en: '© Instituto Geográfico Nacional, CC BY 4.0' },
   { fr: 'Sourced from LINZ. CC BY 4.0 · imagerie satellite © Maxar Technologies et données Copernicus Sentinel modifiées, sous licence Sinergise Ltd.', en: 'Sourced from LINZ. CC BY 4.0 · satellite imagery © Maxar Technologies and modified Copernicus Sentinel data, licensed by Sinergise Ltd.' },
   { fr: '© RainViewer', en: '© RainViewer' },
+  // Lien d'attribution de la couche radar (useWeatherStyleManager) : nom propre.
+  { fr: 'RainViewer', en: 'RainViewer' },
   { fr: 'CC BY 4.0', en: 'CC BY 4.0' },
   { fr: 'CC0 1.0', en: 'CC0 1.0' },
   { fr: 'MIT', en: 'MIT' },
