@@ -1,5 +1,14 @@
 import type { GpxRoute } from '../types';
-import { parseGpxText } from './gpx-parse';
+import {
+  assertUsablePoints,
+  decodeGpxBytes,
+  GpxParseError,
+  isGpxParseErrorCode,
+  isValidCoordinate,
+  parseGpxText,
+  parseXmlNumber,
+  type GpxParseErrorCode,
+} from './gpx-parse';
 import {
   cleanAndInterpolateElevations,
   isValidElevation,
@@ -13,6 +22,7 @@ interface GpxParseWorkerSuccess {
 interface GpxParseWorkerFailure {
   ok: false;
   message: string;
+  code?: GpxParseErrorCode;
 }
 
 type GpxParseWorkerResponse = GpxParseWorkerSuccess | GpxParseWorkerFailure;
@@ -20,16 +30,22 @@ type GpxParseWorkerResponse = GpxParseWorkerSuccess | GpxParseWorkerFailure;
 /**
  * Analyse un fichier .gpx en une trace légère.
  * Gère à la fois <trkpt> (traces) et <rtept> (routes).
+ *
+ * Un refus motivé du fichier (`GpxParseError` : pas un GPX, aucun point…) est
+ * définitif ; seul un plantage du worker relance l'analyse sur le fil
+ * principal, puis avec DOMParser.
  */
 export async function parseGpxFile(file: File): Promise<GpxRoute> {
   try {
     return await parseGpxFileInWorker(file);
   } catch (error) {
+    if (error instanceof GpxParseError) throw error;
     console.warn('[gpx-loader] worker parse failed, falling back to main thread', error);
-    const text = await file.text();
+    const text = decodeGpxBytes(new Uint8Array(await file.arrayBuffer()));
     try {
       return parseGpxText(text);
     } catch (parseError) {
+      if (parseError instanceof GpxParseError) throw parseError;
       console.warn('[gpx-loader] fast parser failed, falling back to DOMParser', parseError);
       return parseGpxTextWithDomParser(text);
     }
@@ -53,7 +69,7 @@ function parseGpxFileInWorker(file: File): Promise<GpxRoute> {
         resolve(message.route);
         return;
       }
-      reject(new Error(message.message));
+      reject(isGpxParseErrorCode(message.code) ? new GpxParseError(message.code) : new Error(message.message));
     };
 
     worker.onerror = (event) => {
@@ -68,22 +84,17 @@ function parseGpxFileInWorker(file: File): Promise<GpxRoute> {
 function parseGpxTextWithDomParser(text: string): GpxRoute {
   const doc = new DOMParser().parseFromString(text, 'application/xml');
 
-  const parseError = doc.querySelector('parsererror');
-  if (parseError) {
-    throw new Error('Fichier GPX invalide');
+  if (doc.querySelector('parsererror') || doc.documentElement?.localName !== 'gpx') {
+    throw new GpxParseError('not-gpx');
   }
 
   const nameEl = doc.querySelector('trk > name') ?? doc.querySelector('rte > name');
-  const name = nameEl?.textContent?.trim() ?? null;
+  const name = nameEl?.textContent?.trim() || null;
 
   const trkpts = doc.querySelectorAll('trkpt');
   const rtepts = doc.querySelectorAll('rtept');
   const isTrack = trkpts.length > 0;
   const raw = isTrack ? trkpts : rtepts;
-
-  if (raw.length === 0) {
-    throw new Error('Aucun point trouvé dans le GPX');
-  }
 
   const points: GpxRoute['points'] = [];
   // Points qui ouvrent un nouveau segment de trace (cf. GpxRoute.segmentStarts).
@@ -92,9 +103,9 @@ function parseGpxTextWithDomParser(text: string): GpxRoute {
   let distanceM = 0;
 
   for (const element of raw) {
-    const lat = Number.parseFloat(element.getAttribute('lat') ?? '');
-    const lon = Number.parseFloat(element.getAttribute('lon') ?? '');
-    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+    const lat = parseXmlNumber(element.getAttribute('lat'));
+    const lon = parseXmlNumber(element.getAttribute('lon'));
+    if (!isValidCoordinate(lat, lon)) {
       continue;
     }
     if (isTrack && points.length > 0 && element.parentElement !== previousSegment) {
@@ -102,8 +113,7 @@ function parseGpxTextWithDomParser(text: string): GpxRoute {
     }
     previousSegment = element.parentElement;
 
-    const elevationText = element.querySelector('ele')?.textContent?.trim() ?? '';
-    const elevationM = elevationText ? Number.parseFloat(elevationText) : Number.NaN;
+    const elevationM = parseXmlNumber(element.querySelector('ele')?.textContent);
     const nextPoint: GpxRoute['points'][number] = {
       lat,
       lon,
@@ -117,18 +127,16 @@ function parseGpxTextWithDomParser(text: string): GpxRoute {
     points.push(nextPoint);
   }
 
-  if (points.length < 2) {
-    throw new Error('GPX doit contenir au moins 2 points');
-  }
+  assertUsablePoints(points);
 
   const cleanedPoints = cleanAndInterpolateElevations(points);
   const waypoints: NonNullable<GpxRoute['waypoints']> = [];
   for (const element of doc.querySelectorAll('wpt')) {
-    const lat = Number.parseFloat(element.getAttribute('lat') ?? '');
-    const lon = Number.parseFloat(element.getAttribute('lon') ?? '');
-    if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+    const lat = parseXmlNumber(element.getAttribute('lat'));
+    const lon = parseXmlNumber(element.getAttribute('lon'));
+    if (!isValidCoordinate(lat, lon)) continue;
     const childText = (tag: string) => element.querySelector(tag)?.textContent?.trim() || null;
-    const elevationM = Number.parseFloat(childText('ele') ?? '');
+    const elevationM = parseXmlNumber(childText('ele'));
     waypoints.push({
       lat,
       lon,

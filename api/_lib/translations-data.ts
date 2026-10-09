@@ -3705,6 +3705,30 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "GPX file too large (50 MB maximum)."
   },
   {
+    "fr": "Ce fichier n’est pas un GPX lisible.",
+    "en": "This file is not a readable GPX."
+  },
+  {
+    "fr": "Ce GPX ne contient aucun point de trace ni de route.",
+    "en": "This GPX contains no track or route points."
+  },
+  {
+    "fr": "Ce GPX ne contient qu’un seul point : il en faut au moins deux pour tracer un itinéraire.",
+    "en": "This GPX contains only one point: at least two are needed to draw a route."
+  },
+  {
+    "fr": "Tous les points de ce GPX sont au même endroit : il n’y a pas d’itinéraire à tracer.",
+    "en": "All the points in this GPX are at the same place: there is no route to draw."
+  },
+  {
+    "fr": "Ce fichier n’est pas un GPX : choisissez un fichier .gpx.",
+    "en": "This file is not a GPX: choose a .gpx file."
+  },
+  {
+    "fr": "Impossible d’importer ce GPX. Vérifiez le fichier puis réessayez.",
+    "en": "Could not import this GPX. Check the file and try again."
+  },
+  {
     "fr": "{{count}} discontinuité(s) du GPX n’ont pas pu être reliées par le réseau routable : vérifiez le tracé importé.",
     "en": "{{count}} gap(s) in the GPX could not be joined through the routable network: check the imported route."
   },

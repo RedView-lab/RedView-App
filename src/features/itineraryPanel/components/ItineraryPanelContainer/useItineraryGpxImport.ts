@@ -2,6 +2,7 @@ import { trackAnalyticsEvent } from '@/shared/lib/analytics';
 import { useCallback } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { parseGpxFile } from '@/features/poi/lib/gpx-loader';
+import { GpxParseError } from '@/features/poi/lib/gpx-parse';
 import {
   analyzeGpxSurfaces,
   cleanAndInterpolateElevations,
@@ -20,7 +21,6 @@ import { resolveImportedTimelineLabel } from './importedTimelineLabel';
 import { reverseGeocodeSettlement } from '../../lib/geocoding';
 import { buildImportedGpxWaypoints, GPX_IMPORT_WAYPOINT_ID_PREFIX } from './importedGpxWaypoints';
 import { bridgeImportedGpxGaps } from './importedGpxGaps';
-import { translateAppText } from '@/shared/i18n';
 import { notify } from '@/shared/lib/notify';
 
 /** Taille maximale d'un fichier GPX importé (protection mémoire du parseur). */
@@ -28,9 +28,18 @@ const MAX_GPX_IMPORT_BYTES = 50 * 1024 * 1024;
 
 export class GpxFileTooLargeError extends Error {
   constructor() {
-    super(translateAppText('Fichier GPX trop volumineux (50 Mo maximum).'));
+    super('Fichier GPX trop volumineux (50 Mo maximum).');
     this.name = 'GpxFileTooLargeError';
   }
+}
+
+/**
+ * Message à montrer quand un import GPX échoue (texte source, traduit par
+ * `notify`) : la raison quand le fichier est refusé, sinon un message général.
+ */
+export function describeGpxImportError(error: unknown): string {
+  if (error instanceof GpxFileTooLargeError || error instanceof GpxParseError) return error.message;
+  return 'Impossible d’importer ce GPX. Vérifiez le fichier puis réessayez.';
 }
 
 interface UseItineraryGpxImportArgs {

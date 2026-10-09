@@ -3,7 +3,8 @@ import type { Map as MapboxMap } from 'mapbox-gl';
 import { countBucket, trackAnalyticsEvent } from '../../../../shared/lib/analytics';
 import { fitToRoute } from '../../lib/route-layer';
 import type { ItineraryProject } from '../../types';
-import { GpxFileTooLargeError, useItineraryGpxImport } from './useItineraryGpxImport';
+import { notify } from '@/shared/lib/notify';
+import { describeGpxImportError, useItineraryGpxImport } from './useItineraryGpxImport';
 
 interface UseGpxFilePickerOptions {
   map: MapboxMap | null;
@@ -72,17 +73,14 @@ export function useGpxFilePicker({
       e.target.value = '';
       if (!file) return;
       if (!file.name.toLowerCase().endsWith('.gpx')) {
-        console.warn('[ItineraryPanelContainer] Selected file is not a .gpx');
+        notify.error('Ce fichier n’est pas un GPX : choisissez un fichier .gpx.');
         return;
       }
       try {
         await addItineraryFromGpxFile(file);
       } catch (err) {
         console.warn('[ItineraryPanelContainer] GPX import failed', err);
-        if (err instanceof GpxFileTooLargeError) {
-          // Pas de système de toasts dans le panneau d'itinéraire : une alerte native est le retour visible minimal.
-          window.alert(err.message);
-        }
+        notify.error(describeGpxImportError(err));
       }
     },
     [addItineraryFromGpxFile],
