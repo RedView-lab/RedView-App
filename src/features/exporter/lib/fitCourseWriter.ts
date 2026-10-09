@@ -44,6 +44,24 @@ const FLOAT_TYPES = new Set(['float32', 'float64']);
 const HEADER_SIZE = 14;
 const textEncoder = new TextEncoder();
 
+/**
+ * Octets UTF-8 d'une chaîne FIT, bornés à 254 (+ le zéro final = 255) : la
+ * taille d'un champ tient sur un octet. Un nom de parcours ou de point plus
+ * long (≈ 85 caractères non latins, 63 émojis) faisait déborder cet octet et
+ * corrompait tout le fichier. La coupe ne tombe jamais au milieu d'un
+ * caractère.
+ */
+const MAX_FIT_STRING_BYTES = 254;
+
+export function encodeFitString(value: string): Uint8Array {
+  const bytes = textEncoder.encode(value);
+  if (bytes.length <= MAX_FIT_STRING_BYTES) return bytes;
+  let end = MAX_FIT_STRING_BYTES;
+  // Octet de continuation (10xxxxxx) : on recule jusqu'au début du caractère.
+  while (end > 0 && (bytes[end]! & 0xc0) === 0x80) end -= 1;
+  return bytes.subarray(0, end);
+}
+
 interface FieldPlan {
   name: string;
   num: number;
@@ -114,7 +132,7 @@ function buildDefinition(mesgNum: number, mesg: Record<string, unknown>): Defini
     let offset = profile.components.length > 1 ? 0 : profile.offset;
     scale = Array.isArray(scale) ? scale[0]! : scale ?? 1;
     offset = Array.isArray(offset) ? offset[0]! : offset ?? 0;
-    const size = profile.baseType === 'string' ? textEncoder.encode(String(value)).length + 1 : base.size;
+    const size = profile.baseType === 'string' ? encodeFitString(String(value)).length + 1 : base.size;
     fields.push({ name, num: profile.num, size, base, type: profile.type, scale, offset });
   }
   if (fields.length === 0) throw new Error('No valid fields were found in the message');
@@ -163,7 +181,7 @@ export class FitCourseWriter {
     for (const field of definition.fields) {
       const value = encodeValue(mesg[field.name], field);
       if (typeof value === 'string') {
-        const text = textEncoder.encode(value);
+        const text = encodeFitString(value);
         this.reserve(text.length + 1);
         this.bytes.set(text, this.length);
         this.length += text.length;
@@ -198,7 +216,7 @@ export class FitCourseWriter {
     for (const name of Object.keys(mesg)) {
       const value = mesg[name];
       if (value == null) continue;
-      shape += typeof value === 'string' ? `|${name}:${textEncoder.encode(value).length}` : `|${name}`;
+      shape += typeof value === 'string' ? `|${name}:${encodeFitString(value).length}` : `|${name}`;
     }
     let definition = this.shapes.get(shape);
     if (!definition) {

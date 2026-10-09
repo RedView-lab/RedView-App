@@ -3,6 +3,7 @@ import { FEATURE_TO_PANEL_POI, getPoiAutoSortPicks } from '@/features/itineraryP
 import type { Itinerary, TimelineItem } from '@/features/itineraryPanel/types';
 import { POI_LABELS } from '@/features/poi/types';
 import { translateAppText } from '@/shared/i18n/config';
+import { slugFileName } from '@/shared/lib/fileName';
 
 export interface ExportAnchor {
   id: string;
@@ -105,20 +106,9 @@ function roundTo(value: number, digits: number): number {
   return Math.round(value * factor) / factor;
 }
 
-function sanitizeFileName(value: string): string {
-  return value
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-zA-Z0-9._-]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .replace(/-{2,}/g, '-')
-    .toLowerCase() || 'itinerary';
-}
-
 export function buildExportFileName(itinerary: Itinerary, format: string): string {
   const baseName = itinerary.gpxRoute?.name?.trim() || itinerary.name.trim() || 'itinerary';
-  const sanitized = sanitizeFileName(baseName);
-  return `${sanitized}.${format}`;
+  return `${slugFileName(baseName, 'itinerary')}.${format}`;
 }
 
 export function getExportRoutePoints(itinerary: Itinerary): ExportRoutePoint[] {
@@ -328,9 +318,10 @@ export function formatDecimal(value: number, digits: number): string {
 
 export function escapeXml(value: string): string {
   return value
-    // XML 1.0 interdit les caractères de contrôle C0 (hors tab, LF, CR), même échappés.
+    // XML 1.0 interdit les caractères de contrôle C0 (hors tab, LF, CR) et
+    // U+FFFE / U+FFFF, même échappés.
     // eslint-disable-next-line no-control-regex
-    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '')
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\uFFFE\uFFFF]/g, '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')

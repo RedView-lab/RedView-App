@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { longDurationBucket, trackAnalyticsEvent } from '@/shared/lib/analytics';
+import { slugFileName } from '@/shared/lib/fileName';
 import type { FlyoverVideoOrientation } from './config';
 import type { FlyoverVideoPhase, FlyoverVideoRequest } from './renderFlyoverVideo';
 
@@ -63,20 +64,8 @@ export function dismissFlyoverVideoExport(): void {
   if (state.status !== 'running') setState(IDLE);
 }
 
-function sanitizeFileName(value: string): string {
-  return (
-    value
-      .normalize('NFD')
-      .replace(/[̀-ͯ]/g, '')
-      .replace(/[^a-zA-Z0-9._-]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .replace(/-{2,}/g, '-')
-      .toLowerCase() || 'flyover'
-  );
-}
-
 export function flyoverVideoFileName(baseName: string, orientation: FlyoverVideoOrientation): string {
-  return `${sanitizeFileName(baseName)}-flyover-${orientation === 'portrait' ? '9x16' : '16x9'}.mp4`;
+  return `${slugFileName(baseName, 'flyover')}-flyover-${orientation === 'portrait' ? '9x16' : '16x9'}.mp4`;
 }
 
 function downloadBlob(blob: Blob, fileName: string): void {

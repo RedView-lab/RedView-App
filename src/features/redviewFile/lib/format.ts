@@ -143,13 +143,13 @@ export function buildRedviewFileName(projectName: string): string {
     const code = char.codePointAt(0) ?? 0;
     return code < 0x20 || code === 0x7f ? ' ' : char;
   }).join('');
-  const cleaned = withoutControls
+  const spaced = withoutControls
     .replace(/[<>:"/\\|?*]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
-    .replace(/^[.\s]+|[.\s]+$/g, '')
-    .slice(0, 120)
-    .trim();
+    .replace(/^[.\s]+|[.\s]+$/g, '');
+  // 120 caractères entiers : `slice` sur la chaîne pouvait couper un émoji en deux.
+  const cleaned = Array.from(spaced).slice(0, 120).join('').replace(/[.\s]+$/g, '');
   const reserved = /^(con|prn|aux|nul|com\d|lpt\d)$/i;
   const base = !cleaned ? 'projet' : reserved.test(cleaned) ? `${cleaned}-projet` : cleaned;
   return `${base}${REDVIEW_FILE_EXTENSION}`;

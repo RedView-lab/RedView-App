@@ -1,7 +1,7 @@
-import { Encoder, Profile } from '@garmin/fitsdk';
+import { Decoder, Encoder, Profile, Stream } from '@garmin/fitsdk';
 import { describe, expect, it } from 'vitest';
 
-import { FitCourseWriter } from './fitCourseWriter';
+import { FitCourseWriter, encodeFitString } from './fitCourseWriter';
 
 const M = Profile.MesgNum;
 
@@ -89,6 +89,37 @@ describe('FitCourseWriter', () => {
       expect(ours.length).toBe(sdk.length);
       expect(firstDifference(ours, sdk)).toBe(-1);
     }
+  });
+
+  it('noms trop longs pour un champ FIT (> 254 octets) : coupés sur un caractère, fichier toujours lisible', () => {
+    // Le SDK refuse ces messages ; l'écrivain débordait l'octet de taille et corrompait tout le fichier.
+    const longName = '東京ライド'.repeat(30); // 450 octets UTF-8
+    const emojiName = '🚴'.repeat(80); // 320 octets
+    const messages = courseMessages(5, 50).map(([num, mesg]): [number, Record<string, unknown>] => {
+      if (num === M.COURSE) return [num, { ...mesg, name: longName }];
+      if (num === M.COURSE_POINT && mesg.messageIndex === 0) return [num, { ...mesg, name: emojiName }];
+      return [num, mesg];
+    });
+    const decoder = new Decoder(Stream.fromByteArray(Array.from(encodeWithWriter(messages))));
+    expect(decoder.checkIntegrity()).toBe(true);
+    const { messages: decoded, errors } = decoder.read();
+    expect(errors).toEqual([]);
+    const courseName = decoded.courseMesgs?.[0]?.name as string;
+    expect(new TextEncoder().encode(courseName).length).toBeLessThanOrEqual(254);
+    expect(longName.startsWith(courseName)).toBe(true);
+    expect(courseName).not.toContain('\uFFFD');
+    const pointName = decoded.coursePointMesgs?.[0]?.name as string;
+    expect(emojiName.startsWith(pointName)).toBe(true);
+    expect(decoded.recordMesgs?.length).toBe(50);
+    expect(decoded.coursePointMesgs?.length).toBe(40);
+  });
+
+  it('encodeFitString : intact sous la borne, jamais coupé au milieu d’un caractère', () => {
+    expect(encodeFitString('Col du Galibier').length).toBe(15);
+    expect(encodeFitString('a'.repeat(300)).length).toBe(254);
+    // 'é' = 2 octets : 127 × 2 = 254 tient, le 128e est laissé
+    expect(new TextDecoder('utf-8', { fatal: true }).decode(encodeFitString('é'.repeat(200)))).toBe('é'.repeat(127));
+    expect(new TextDecoder('utf-8', { fatal: true }).decode(encodeFitString('x' + '🚴'.repeat(100)))).toBe('x' + '🚴'.repeat(63));
   });
 
   it('refuses a message with no known field, like the SDK', () => {
