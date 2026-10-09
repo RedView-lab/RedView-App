@@ -3,7 +3,9 @@
  *
  * On n'a besoin que de la recherche directe (texte → liste de suggestions) pour
  * les champs de recherche Départ / Fin de l'itinéraire. Pas de recherche
- * inverse, pas de jetons de session — rester petit.
+ * inverse, pas de jetons de session — rester petit. Les lieux emblématiques
+ * d'OpenStreetMap (Nominatim) ne s'ajoutent que sur demande explicite
+ * (`includeLandmarks`).
  */
 
 import { MAPBOX_TOKEN } from '@/features/map3d/lib/mapbox.config';
@@ -19,6 +21,8 @@ export interface GeocodeSuggestion {
   lon: number;
   /** Latitude WGS84. */
   lat: number;
+  /** Fournisseur du résultat : Mapbox, ou OpenStreetMap (lieux emblématiques, attribution ODbL). */
+  source?: 'mapbox' | 'osm';
 }
 
 export interface GeocodeOptions {
@@ -31,6 +35,13 @@ export interface GeocodeOptions {
   /** Filtre de pays ISO-3166, séparés par des virgules, par ex. « fr,be,ch ». */
   countries?: string;
   signal?: AbortSignal;
+  /**
+   * Ajoute les lieux emblématiques d'OpenStreetMap (sommets, cols, sites) via
+   * /api/geocode-iconic, qui relaie l'instance publique de Nominatim. Sa
+   * politique d'usage interdit l'autocomplétion : seulement sur une demande
+   * explicite de l'utilisateur (canSearchLandmarks), jamais à la frappe.
+   */
+  includeLandmarks?: boolean;
 }
 
 export interface ReverseGeocodeOptions {
@@ -121,6 +132,7 @@ function buildForwardCacheKey(query: string, opts: GeocodeOptions): string {
     opts.language ?? 'fr',
     opts.limit ?? 5,
     proximity,
+    opts.includeLandmarks ? 'osm' : 'mapbox',
   ].join('|');
 }
 
@@ -169,7 +181,8 @@ function resolveCountryCodes(countries?: string): string | null {
   return codes.length > 0 ? codes.join(',') : null;
 }
 
-function shouldQueryIconicFallback(query: string): boolean {
+/** Vrai si une recherche des lieux emblématiques (OpenStreetMap) a un sens pour cette saisie. */
+export function canSearchLandmarks(query: string): boolean {
   const normalized = normalizeSearchText(query);
   return normalized.length >= 4 && !/\d/.test(normalized);
 }
@@ -258,7 +271,7 @@ function rankAndMergeSuggestions(
       return left.fullName.localeCompare(right.fullName, 'fr');
     })
     .slice(0, limit)
-    .map(({ id, name, fullName, lon, lat }) => ({ id, name, fullName, lon, lat }));
+    .map(({ id, name, fullName, lon, lat, source }) => ({ id, name, fullName, lon, lat, source }));
 }
 
 async function fetchIconicFallbackPlaces(
@@ -449,7 +462,7 @@ export async function geocodePlaces(
 
   const url = `${ENDPOINT}/${encodeURIComponent(trimmed)}.json?${params.toString()}`;
   const promise = (async () => {
-    const iconicPromise = shouldQueryIconicFallback(trimmed)
+    const iconicPromise = opts.includeLandmarks && canSearchLandmarks(trimmed)
       ? fetchIconicFallbackPlaces(trimmed, {
           ...opts,
           limit: 6,

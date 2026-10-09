@@ -1,4 +1,5 @@
 export {
+  canSearchLandmarks,
   geocodePlaces,
   reverseGeocodeSettlement,
   formatGpsCoordinateLabel,

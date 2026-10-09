@@ -9343,5 +9343,13 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Terminé",
     "en": "Done"
+  },
+  {
+    "fr": "Chercher aussi les sommets, cols et sites (OpenStreetMap)",
+    "en": "Also search peaks, passes and landmarks (OpenStreetMap)"
+  },
+  {
+    "fr": "Sommets, cols et sites : © les contributeurs OpenStreetMap",
+    "en": "Peaks, passes and landmarks: © OpenStreetMap contributors"
   }
 ];

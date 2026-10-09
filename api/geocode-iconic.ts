@@ -7,7 +7,11 @@ const USER_AGENT = 'RedViewPRODUCTION/1.0 (iconic geocoder proxy)';
 const MAX_QUERY_LENGTH = 200;
 
 /**
- * Politique d'usage de nominatim.openstreetmap.org : une requête par seconde
+ * Politique d'usage de nominatim.openstreetmap.org (operations.osmfoundation.org/
+ * policies/nominatim) : pas d'autocomplétion — le client n'appelle cette route
+ * que sur demande explicite de l'utilisateur (PlaceSearchInput, `includeLandmarks`)
+ * et affiche l'attribution OpenStreetMap avec les résultats —, User-Agent qui
+ * identifie l'application, réponses mises en cache, et une requête par seconde
  * au plus pour toute l'application, sinon l'IP du serveur est bloquée. Les
  * appels amont sont donc espacés d'une seconde, toutes requêtes confondues ;
  * une requête qui devrait attendre plus de `MAX_QUEUE_WAIT_MS` répond 503 (le

@@ -74,3 +74,19 @@
 .rvi-place-search__hint--error {
   color: light-dark(#d92d20, #ff8a8a);
 }
+
+/* Recherche des lieux d'OpenStreetMap, sur demande : séparée des suggestions. */
+.rvi-place-search__landmarks {
+  border-top: 1px solid rgb(var(--rv-ink) / 0.08);
+}
+.rvi-place-search__landmarks .rv-dropdown__label {
+  color: rgb(var(--rv-ink) / 0.8);
+}
+
+/* Attribution ODbL des résultats d'OpenStreetMap (politique d'usage de Nominatim). */
+.rvi-place-search__attribution {
+  min-height: 0;
+  padding-block: 6px;
+  font-size: var(--rv-font-size-xs);
+  color: rgb(var(--rv-ink) / 0.6);
+}

@@ -3,6 +3,9 @@
  * autre ligne de timeline liée à un lieu).
  *
  * - Appels au géocodeur Mapbox avec anti-rebond.
+ * - Sommets, cols et sites d'OpenStreetMap (Nominatim) seulement sur demande :
+ *   dernière ligne de la liste. La politique d'usage de Nominatim interdit
+ *   l'autocomplétion, donc jamais à la frappe.
  * - Liste déroulante pilotable au clavier (↑/↓/Entrée/Échap).
  * - Rendue en place dans une TimelineRow — remplace visuellement le texte
  *   indicatif « Rechercher un lieu » sans casser la mise en page de la ligne.
@@ -19,6 +22,7 @@ import {
 import { useHasChanged } from '@/shared/hooks/useHasChanged';
 import { createPortal } from 'react-dom';
 import {
+  canSearchLandmarks,
   geocodePlaces,
   type GeocodeSuggestion,
 } from '../../../lib/geocoding';
@@ -61,6 +65,8 @@ export function PlaceSearchInput({
   const [activeIdx, setActiveIdx] = useState(-1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Saisie pour laquelle l'utilisateur a demandé les lieux d'OpenStreetMap ; une autre saisie l'annule. */
+  const [landmarksFor, setLandmarksFor] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const listId = useId();
   const blurTimerRef = useRef<number | null>(null);
@@ -88,7 +94,16 @@ export function PlaceSearchInput({
     setLoading(false);
   }
 
-  // Recherche avec anti-rebond chaque fois que `text` change.
+  const trimmedText = text.trim();
+  const landmarksRequested = landmarksFor !== null && landmarksFor === trimmedText;
+  const offerLandmarks = !loading && !error && !landmarksRequested && canSearchLandmarks(trimmedText);
+  /** Index de la ligne « Chercher aussi… », juste après les suggestions. */
+  const landmarksOptionIdx = suggestions.length;
+  const lastOptionIdx = offerLandmarks ? landmarksOptionIdx : suggestions.length - 1;
+  const showOsmAttribution = landmarksRequested && !loading && suggestions.some((s) => s.source === 'osm');
+
+  // Recherche avec anti-rebond chaque fois que `text` change (ou que les lieux
+  // d'OpenStreetMap sont demandés pour la saisie en cours).
   useEffect(() => {
     if (!open) return;
     const trimmed = text.trim();
@@ -104,6 +119,7 @@ export function PlaceSearchInput({
         countries,
         signal: ctrl.signal,
         limit: 6,
+        includeLandmarks: landmarksRequested,
       })
         .then((res) => {
           setSuggestions(res);
@@ -119,7 +135,7 @@ export function PlaceSearchInput({
         .finally(() => setLoading(false));
     }, debounceMs);
     return () => window.clearTimeout(handle);
-  }, [text, open, proximity, countries, debounceMs]);
+  }, [text, open, proximity, countries, debounceMs, landmarksRequested]);
 
   useEffect(() => {
     return () => abortRef.current?.abort();
@@ -207,12 +223,15 @@ export function PlaceSearchInput({
     if (ev.key === 'ArrowDown') {
       ev.preventDefault();
       setOpen(true);
-      setActiveIdx((i) => Math.min(i + 1, suggestions.length - 1));
+      setActiveIdx((i) => Math.min(i + 1, lastOptionIdx));
     } else if (ev.key === 'ArrowUp') {
       ev.preventDefault();
       setActiveIdx((i) => Math.max(i - 1, 0));
     } else if (ev.key === 'Enter') {
-      if (open && activeIdx >= 0 && suggestions[activeIdx]) {
+      if (open && offerLandmarks && activeIdx === landmarksOptionIdx) {
+        ev.preventDefault();
+        setLandmarksFor(trimmedText);
+      } else if (open && activeIdx >= 0 && suggestions[activeIdx]) {
         ev.preventDefault();
         commit(suggestions[activeIdx]);
       }
@@ -314,6 +333,25 @@ export function PlaceSearchInput({
                       <span className="rv-dropdown__label">{s.fullName}</span>
                     </div>
                   ))}
+                {offerLandmarks && (
+                  <div
+                    id={`${listId}-opt-${landmarksOptionIdx}`}
+                    role="option"
+                    aria-selected={activeIdx === landmarksOptionIdx}
+                    className={`rv-dropdown__item rv-dropdown__item--no-check rvi-place-search__landmarks${
+                      activeIdx === landmarksOptionIdx ? ' is-active' : ''
+                    }`}
+                    onMouseEnter={() => setActiveIdx(landmarksOptionIdx)}
+                    onClick={() => setLandmarksFor(trimmedText)}
+                  >
+                    <span className="rv-dropdown__label">{t('Chercher aussi les sommets, cols et sites (OpenStreetMap)')}</span>
+                  </div>
+                )}
+                {showOsmAttribution && (
+                  <div className="rvi-place-search__hint rvi-place-search__attribution" role="presentation">
+                    {t('Sommets, cols et sites : © les contributeurs OpenStreetMap')}
+                  </div>
+                )}
               </div>
             </div>
           </div>,

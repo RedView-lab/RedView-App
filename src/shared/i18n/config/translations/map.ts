@@ -204,4 +204,7 @@ export const mapTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'Falaises & lissage', en: 'Cliffs & smoothing' },
   { fr: 'Conservation masse', en: 'Mass conservation' },
   { fr: 'Terminé', en: 'Done' },
+  // ── Recherche de lieu : lieux d'OpenStreetMap sur demande (PlaceSearchInput) ──
+  { fr: 'Chercher aussi les sommets, cols et sites (OpenStreetMap)', en: 'Also search peaks, passes and landmarks (OpenStreetMap)' },
+  { fr: 'Sommets, cols et sites : © les contributeurs OpenStreetMap', en: 'Peaks, passes and landmarks: © OpenStreetMap contributors' },
 ];
