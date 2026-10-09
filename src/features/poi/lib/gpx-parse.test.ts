@@ -151,15 +151,29 @@ describe('parseGpxText — fichiers limites', () => {
   });
 
   it('parses self-closing points in linear time (was quadratic)', () => {
-    const points = Array.from({ length: 40_000 }, (_, i) => `<trkpt lat="${(44 + i * 1e-5).toFixed(5)}" lon="6"/>`);
-    const started = performance.now();
-    const route = parseGpxText(gpx(segment(...points)));
-    expect(route.points).toHaveLength(40_000);
-    // 3,9 s pour 32 000 points avant ; quelques dizaines de ms maintenant.
-    expect(performance.now() - started).toBeLessThan(1_500);
-  });
+    // Rapport de temps entre N et 8N points, pas une durée absolue (le test
+    // tourne en parallèle d'autres étapes) : ×8 en linéaire, ×64 pour
+    // l'ancienne lecture quadratique (3,9 s pour 32 000 points).
+    const build = (count: number) => gpx(segment(
+      Array.from({ length: count }, (_, i) => `<trkpt lat="${(44 + i * 1e-5).toFixed(5)}" lon="6"/>`).join(''),
+    ));
+    const bestOf3 = (text: string) => {
+      let best = Number.POSITIVE_INFINITY;
+      for (let run = 0; run < 3; run += 1) {
+        const started = performance.now();
+        parseGpxText(text);
+        best = Math.min(best, performance.now() - started);
+      }
+      return best;
+    };
+    const small = build(5_000);
+    const large = build(40_000);
+    expect(parseGpxText(large).points).toHaveLength(40_000);
+    const ratio = bestOf3(large) / Math.max(bestOf3(small), 0.5);
+    expect(ratio).toBeLessThan(24);
+  }, 60_000);
 
-  it('parses a 50 MB file within a few seconds', () => {
+  it('parses a 50 MB file', () => {
     const point = (i: number) => `<trkpt lat="${(44 + i * 1e-5).toFixed(6)}" lon="6.000000"><ele>${(100 + (i % 50)).toFixed(1)}</ele><time>2026-07-01T06:00:00Z</time></trkpt>\n`;
     const chunks: string[] = [];
     let size = 0;
@@ -168,11 +182,12 @@ describe('parseGpxText — fichiers limites', () => {
       chunks.push(chunk);
       size += chunk.length;
     }
-    const started = performance.now();
     const route = parseGpxText(gpx(segment(chunks.join(''))));
     expect(route.points.length).toBe(chunks.length);
-    expect(performance.now() - started).toBeLessThan(8_000);
-  }, 30_000);
+    expect(route.points.at(-1)!.elevationM).toBe(100 + ((chunks.length - 1) % 50));
+    // Pas de chrono (la linéarité est vérifiée au-dessus) : un délai large
+    // pour une machine chargée.
+  }, 120_000);
 });
 
 describe('decodeGpxBytes', () => {
