@@ -1,8 +1,9 @@
 import { OPENMETEO_FORECAST_DAYS, OPENMETEO_FORECAST_URL, OPENMETEO_MODEL } from './openMeteoConfig';
 import {
+  addDays,
   formatLocalDateIso,
+  localDateTimeMs,
   parseLocalDateIso,
-  timeToMinutes,
 } from './forecastTime';
 import type { ChartMetricId, RouteChartPoint } from '@/features/centerPanel/components/chart/seriesCommon';
 import { buildRouteContentSignature } from '@/features/itineraryPanel/lib/routes';
@@ -61,10 +62,13 @@ function makeCacheKey(signature: string, startDate: string, startTimeHour: strin
   return `${signature}|${startDate}|${startTimeHour}|${endDate}`;
 }
 
-const DAY_MS = 24 * 3600 * 1000;
-
 function startOfLocalDay(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+/** Départ (ms epoch) : heure murale du jour de départ, midi par défaut ; maintenant si la date est illisible. */
+function departureTimestamp(startDate: string, startTime: string | null | undefined): number {
+  return localDateTimeMs(startDate, startTime || '12:00') ?? Date.now();
 }
 
 /**
@@ -80,9 +84,11 @@ export function resolveRouteWeatherDateRange(
 ): { startDate: string; endDate: string } | null {
   const startDay = parseLocalDateIso(startDate);
   if (!startDay) return null;
-  const lastForecastDay = new Date(startOfLocalDay(now).getTime() + (OPENMETEO_FORECAST_DAYS - 1) * DAY_MS);
+  // Jours de calendrier, pas 24 h × N : un changement d'heure dans l'horizon
+  // plaçait son dernier jour à 23:00 la veille, et un départ ce jour-là hors horizon.
+  const lastForecastDay = addDays(startOfLocalDay(now), OPENMETEO_FORECAST_DAYS - 1);
   if (startDay.getTime() > lastForecastDay.getTime()) return null;
-  const departureMs = startDay.getTime() + timeToMinutes(startTime || '12:00') * 60 * 1000;
+  const departureMs = departureTimestamp(startDate, startTime);
   const durationH = Number.isFinite(rideDurationHours) && rideDurationHours > 0 ? rideDurationHours : 0;
   const arrivalDay = startOfLocalDay(new Date(departureMs + (durationH + 1) * 3600 * 1000));
   const endDay = arrivalDay.getTime() > lastForecastDay.getTime() ? lastForecastDay : arrivalDay;
@@ -299,9 +305,7 @@ export async function fetchRouteWeatherDataset(
       const hasAnyValue = samples.some((sample) => sample.hourly.temperature_2m.some((v) => Number.isFinite(v)));
       if (!hasAnyValue) return null;
 
-      const startDateObj = parseLocalDateIso(startDate) ?? new Date();
-      const startMinutes = timeToMinutes(startTime || '12:00');
-      const departureTimestampMs = startDateObj.getTime() + startMinutes * 60 * 1000;
+      const departureTimestampMs = departureTimestamp(startDate, startTime);
 
       const dataset: RouteWeatherDataset = {
         itineraryId,
@@ -352,10 +356,7 @@ export function getRouteWeatherAtDistanceAndTime(
 
   // 1. Détermination du timestamp cible (utilisant le cache précalculé ou lazy-cache)
   if (dataset.departureTimestampMs === undefined) {
-    dataset.departureTimestampMs = (
-      (parseLocalDateIso(dataset.startDate) ?? new Date()).getTime() +
-      timeToMinutes(dataset.startTime || '12:00') * 60 * 1000
-    );
+    dataset.departureTimestampMs = departureTimestamp(dataset.startDate, dataset.startTime);
   }
   const departureTimestampMs = dataset.departureTimestampMs;
   const targetTimestampMs = departureTimestampMs + elapsedSeconds * 1000;

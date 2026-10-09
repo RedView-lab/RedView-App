@@ -63,6 +63,19 @@ export function parseLocalDateIso(iso: string): Date | null {
   return date;
 }
 
+/**
+ * Instant (ms epoch) de `dateIso` à l'heure murale `time` (HH:MM), dans le
+ * fuseau du navigateur. Jamais « minuit + minutes » en millisecondes : le jour
+ * d'un changement d'heure (25 h en octobre, 23 h en mars), ce calcul décale
+ * d'une heure tout ce qui suit 02:00.
+ */
+export function localDateTimeMs(dateIso: string, time: string): number | null {
+  const day = parseLocalDateIso(dateIso);
+  if (!day) return null;
+  const minutes = timeToMinutes(time);
+  return new Date(day.getFullYear(), day.getMonth(), day.getDate(), Math.floor(minutes / 60), minutes % 60).getTime();
+}
+
 export function timeToMinutes(time: string): number {
   const [hoursText, minutesText] = time.split(':');
   const hours = Number(hoursText || 0);
@@ -77,7 +90,8 @@ export function minutesToTime(totalMinutes: number): string {
   return `${hours}:${minutes}`;
 }
 
-function addDays(date: Date, days: number): Date {
+/** `date` décalée de `days` jours de calendrier (même heure murale, changement d'heure compris). */
+export function addDays(date: Date, days: number): Date {
   const next = new Date(date);
   next.setDate(next.getDate() + days);
   return next;
