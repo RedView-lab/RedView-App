@@ -386,6 +386,13 @@ function accountEmailHtml({ title, preheader, bodyHtml }: { title: string; prehe
   `.trim();
 }
 
+/** Adresse de contact de RedView (aussi dans les mentions légales) ; SUPPORT_EMAIL la remplace. */
+const DEFAULT_SUPPORT_EMAIL = 'redview.app@proton.me';
+
+function supportEmail(): string {
+  return process.env.SUPPORT_EMAIL?.trim() || DEFAULT_SUPPORT_EMAIL;
+}
+
 function greetingFor(name?: string): string {
   const cleanName = name && name.trim().length > 0 && !name.includes('@') ? name.trim() : '';
   return cleanName ? `Bonjour ${cleanName},` : 'Bonjour,';
@@ -472,19 +479,16 @@ export async function sendEmailChangeCodeEmail({ to, code }: { to: string; code:
 export async function sendEmailChangedNoticeEmail({ to, name, newEmail }: { to: string; name?: string; newEmail: string }): Promise<{ sent: boolean }> {
   const greeting = greetingFor(name);
   const masked = maskEmail(newEmail);
-  // Expéditeur noreply : sans adresse de contact configurée, on ne promet pas
-  // qu'une réponse sera lue.
-  const support = process.env.SUPPORT_EMAIL?.trim() || null;
-  const alert = support
-    ? `Si vous n'êtes pas à l'origine de ce changement, écrivez sans attendre à ${support} pour que nous bloquions le compte.`
-    : "Si vous n'êtes pas à l'origine de ce changement, contactez sans attendre l'équipe RedView pour qu'elle bloque le compte.";
+  // Expéditeur noreply : l'avis cite l'adresse de contact de RedView.
+  const support = supportEmail();
+  const alert = `Si vous n'êtes pas à l'origine de ce changement, écrivez sans attendre à ${support} pour que nous bloquions le compte.`;
   const subject = 'L’adresse de votre compte RedView a changé';
   const text =
     `${greeting}\n\n` +
     `L'adresse e-mail de votre compte RedView est désormais ${masked}. Cette adresse-ci n'y est plus associée.\n\n` +
     `${alert}\n\n` +
     '---\n' +
-    `The e-mail address of your RedView account is now ${masked}. If you did not make this change, contact the RedView team right away${support ? ` (${support})` : ''}.`;
+    `The e-mail address of your RedView account is now ${masked}. If you did not make this change, write to ${support} right away.`;
   const html = accountEmailHtml({
     title: 'Adresse du compte modifiée',
     preheader: `L'adresse de votre compte RedView est désormais ${masked}.`,
