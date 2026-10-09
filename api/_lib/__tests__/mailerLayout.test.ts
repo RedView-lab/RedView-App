@@ -59,6 +59,7 @@ describe('charte des e-mails', () => {
     expect(sent).toHaveLength(9);
     for (const mail of sent) {
       expect(mail.html).toContain('src="https://app.example.test/brand/redview-email-logo.png"');
+      expect(mail.html).toContain('src="https://app.example.test/brand/redview-email-logo-white.png"');
       expect(mail.html).toContain('alt="RedView"');
       expect(mail.html).toContain('href="https://app.example.test/mentions-legales"');
       expect(mail.html).toContain('href="https://app.example.test/confidentialite"');
@@ -68,9 +69,10 @@ describe('charte des e-mails', () => {
     }
   });
 
-  it('shows one-time codes as a single copyable block', async () => {
+  it('shows one-time codes in the app’s code boxes, one digit per box', async () => {
     await sendVerificationEmail({ to: 'a@example.test', code: '482913' });
-    expect(sent[0]!.html).toMatch(/class="rv-code"[^>]*>482913<\/td>/);
+    const digits = [...sent[0]!.html.matchAll(/class="rv-digit"[^>]*>(\d)<\/div>/g)].map((match) => match[1]);
+    expect(digits.join('')).toBe('482913');
   });
 
   it('escapes every interpolated value (names, plans, links)', async () => {

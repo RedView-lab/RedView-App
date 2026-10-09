@@ -77,16 +77,20 @@ async function sendTransactionalEmail(tag: string, message: { to: string; subjec
 }
 
 // ─────────────────────────── Charte des e-mails ───────────────────────────
-// Un seul gabarit pour tous les e-mails : en-tête sombre de l'app (#0e0e12,
-// le fond du thème d'origine) avec le logo, filet rouge RedView (#890000),
-// carte blanche lisible, pied de page avec les liens utiles. Tables et styles
-// en ligne (Gmail, Outlook) ; le mode sombre des clients qui le gèrent passe
-// par les classes `rv-*`. Toute valeur interpolée passe par `escapeHtml`.
+// Reprend la DA de l'app (écran de connexion, fenêtre « Vérifiez vos
+// e-mails », VerificationCodeModal.css) : fond gris très clair, logo à
+// l'encre, carte blanche à filet fin (rayon 12 px, sans ombre marquée), titre
+// 18 px Semibold, texte d'accompagnement 14 px à 60 % d'encre, code dans des
+// cases à bord de 2 px (48 px Medium), bouton cramoisi #890000 (rayon 8 px),
+// petits liens soulignés. Le thème sombre suit les mêmes valeurs que l'app
+// (#131313 / #242424) dans les clients qui le gèrent. Tables et styles en
+// ligne (Gmail, Outlook) ; toute valeur interpolée passe par `escapeHtml`.
 
 const BRAND_RED = '#890000';
-const BRAND_DARK = '#0e0e12';
+const INK = '#111114';
+const INK_60 = '#707072'; // encre à 60 % sur blanc (texte d'accompagnement)
+const INK_12 = '#e2e2e3'; // filet de carte : encre à 12 %
 const FONT_STACK = "'Rethink Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
-const MONO_STACK = "ui-monospace, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace";
 
 function appBaseUrl(): string {
   return (process.env.APP_BASE_URL?.trim() || 'https://app.redview.tech').replace(/\/+$/, '');
@@ -98,63 +102,57 @@ function appBaseUrl(): string {
  * s'applique qu'au texte rédigé ici (pas d'attributs dans ces fragments).
  */
 function frenchSpacing(html: string): string {
-  return html.replace(/ ([:;!?»])/g, '&nbsp;$1').replace(/« /g, '«&nbsp;');
+  return html
+    .replace(/ ([:;!?»])/g, '&nbsp;$1')
+    .replace(/« /g, '«&nbsp;')
+    // « e-mail » ne se coupe jamais au tiret.
+    .replace(/\be-mail/g, '<span style="white-space: nowrap;">e-mail</span>');
 }
 
-/** Paragraphe principal (HTML déjà échappé par l'appelant). */
-function paragraphHtml(html: string, marginBottom = 20): string {
+/** Texte d'accompagnement (HTML déjà échappé par l'appelant). */
+function paragraphHtml(html: string, marginBottom = 16): string {
   return `
-              <p class="rv-text" style="margin: 0 0 ${marginBottom}px; font-size: 15px; line-height: 24px; color: #3f3f46;">${frenchSpacing(html)}</p>`;
+              <p class="rv-muted" style="margin: 0 0 ${marginBottom}px; font-size: 14px; line-height: 20px; color: ${INK_60}; text-align: center;">${frenchSpacing(html)}</p>`;
 }
 
-/** Texte secondaire (HTML déjà échappé). */
+/** Petite mention sous le contenu (HTML déjà échappé). */
 function noteHtml(html: string): string {
   return `
-              <p class="rv-muted" style="margin: 0 0 20px; font-size: 13px; line-height: 20px; color: #71717a;">${frenchSpacing(html)}</p>`;
+              <p class="rv-muted" style="margin: 0 0 4px; font-size: 13px; line-height: 20px; color: ${INK_60}; text-align: center;">${frenchSpacing(html)}</p>`;
 }
 
-/** Encadré d'avertissement (sécurité, action irréversible), HTML déjà échappé. */
+/** Bandeau d'alerte de l'app (`.rv-modal-error`), HTML déjà échappé. */
 function calloutHtml(html: string): string {
   return `
-              <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="margin: 0 0 24px; border-collapse: separate;">
+              <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="margin: 0 0 20px; border-collapse: separate;">
                 <tr>
-                  <td class="rv-callout" style="padding: 14px 16px; background-color: #fbf5f5; border-left: 3px solid ${BRAND_RED}; border-radius: 0 8px 8px 0; font-size: 13px; line-height: 20px; color: #52525b;">${frenchSpacing(html)}</td>
+                  <td class="rv-alert" style="padding: 8px 12px; background-color: #fcf1f0; border: 1px solid #f3c8c5; border-radius: 8px; font-size: 13px; line-height: 20px; color: #b42318; text-align: center;">${frenchSpacing(html)}</td>
                 </tr>
               </table>`;
 }
 
-/**
- * Code à usage unique : un seul bloc (sélectionnable et copiable d'un coup,
- * contrairement à des cases séparées), chiffres espacés, durée de validité.
- */
+/** Code à usage unique dans les cases de la fenêtre de vérification de l'app. */
 function codeBlockHtml(code: string, validityHtml: string): string {
+  const cells = code.split('').map((digit, index) => `
+                  <td style="padding: 0 ${index === code.length - 1 ? 0 : 8}px 0 0;">
+                    <div class="rv-digit" style="width: 50px; height: 64px; line-height: 60px; border: 2px solid #c8c8c9; border-radius: 12px; background-color: #ffffff; font-family: ${FONT_STACK}; font-size: 40px; font-weight: 500; letter-spacing: -0.02em; color: ${INK}; text-align: center; box-sizing: border-box;">${escapeHtml(digit)}</div>
+                  </td>`).join('');
   return `
-              <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="margin: 4px 0 12px; border-collapse: separate;">
-                <tr>
-                  <td align="center" class="rv-code" style="padding: 20px 2px 20px 12px; background-color: #f6f6f8; border: 1px solid #e4e4e7; border-radius: 12px; font-family: ${MONO_STACK}; font-size: 34px; line-height: 40px; font-weight: 700; letter-spacing: 10px; color: #111114;">${escapeHtml(code)}</td>
+              <table role="presentation" border="0" cellspacing="0" cellpadding="0" align="center" style="margin: 8px auto 16px; border-collapse: separate;">
+                <tr>${cells}
                 </tr>
               </table>
-              <p class="rv-muted" style="margin: 0 0 28px; font-size: 13px; line-height: 20px; color: #71717a; text-align: center;">${validityHtml}</p>`;
+              <p class="rv-muted" style="margin: 0 0 24px; font-size: 14px; line-height: 20px; color: ${INK_60}; text-align: center;">${frenchSpacing(validityHtml)}</p>`;
 }
 
-/** Bouton d'action (lien absolu). */
+/** Bouton principal de l'app (`.rv-modal-btn-confirm`), pleine largeur. */
 function buttonHtml(url: string, label: string): string {
   return `
-              <table role="presentation" border="0" cellspacing="0" cellpadding="0" style="margin: 4px 0 28px;">
+              <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="margin: 8px 0 20px; border-collapse: separate;">
                 <tr>
-                  <td align="center" bgcolor="${BRAND_RED}" style="border-radius: 10px; background-color: ${BRAND_RED};">
-                    <a href="${escapeHtml(url)}" target="_blank" style="display: inline-block; padding: 13px 26px; font-family: ${FONT_STACK}; font-size: 15px; line-height: 20px; font-weight: 600; color: #ffffff; text-decoration: none; border-radius: 10px;">${escapeHtml(label)}</a>
+                  <td align="center" bgcolor="${BRAND_RED}" style="border-radius: 8px; background-color: ${BRAND_RED};">
+                    <a href="${escapeHtml(url)}" target="_blank" style="display: block; padding: 11px 16px; font-family: ${FONT_STACK}; font-size: 14px; line-height: 20px; font-weight: 500; color: #ffffff; text-decoration: none; border-radius: 8px;">${escapeHtml(label)}</a>
                   </td>
-                </tr>
-              </table>`;
-}
-
-/** Résumé en anglais en bas de carte (les e-mails partent en français). */
-function englishSummaryHtml(text: string): string {
-  return `
-              <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="margin: 8px 0 0;">
-                <tr>
-                  <td class="rv-divider" lang="en" style="border-top: 1px solid #ececef; padding-top: 16px; font-size: 12px; line-height: 18px; color: #8a8a93;">${escapeHtml(text)}</td>
                 </tr>
               </table>`;
 }
@@ -171,9 +169,10 @@ function emailLayout({ title, preheader, bodyHtml, englishSummary }: {
   englishSummary?: string;
 }): string {
   const appUrl = appBaseUrl();
-  const logoUrl = `${appUrl}/brand/redview-email-logo.png`;
+  const logo = (file: string, cls: string, extra = '') =>
+    `<img src="${escapeHtml(`${appUrl}/brand/${file}`)}" width="130" height="24" alt="RedView" class="${cls}" style="display: block; width: 130px; height: 24px; border: 0; outline: none; color: ${INK}; font-family: ${FONT_STACK}; font-size: 18px; font-weight: 700;${extra}">`;
   const link = (href: string, label: string) =>
-    `<a href="${escapeHtml(href)}" target="_blank" class="rv-footer-link" style="color: #52525b; text-decoration: underline;">${escapeHtml(label)}</a>`;
+    `<a href="${escapeHtml(href)}" target="_blank" class="rv-link" style="color: ${INK_60}; text-decoration: underline; text-underline-offset: 2px; white-space: nowrap;">${escapeHtml(label)}</a>`;
   return `
 <!DOCTYPE html>
 <html lang="fr" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
@@ -187,66 +186,67 @@ function emailLayout({ title, preheader, bodyHtml, englishSummary }: {
   <meta name="supported-color-schemes" content="light dark">
   <title>${escapeHtml(title)}</title>
   <!--[if mso]><style>* { font-family: Arial, sans-serif !important; }</style><![endif]-->
+  <!--[if !mso]><!-->
+  <style>
+    @font-face { font-family: 'Rethink Sans'; font-style: normal; font-weight: 400 800; src: url('${escapeHtml(`${appUrl}/brand/fonts/rethink-sans-latin-wght-normal.woff2`)}') format('woff2'); }
+  </style>
+  <!--<![endif]-->
   <style>
     :root { color-scheme: light dark; supported-color-schemes: light dark; }
     body { margin: 0; padding: 0; width: 100% !important; -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; -webkit-font-smoothing: antialiased; }
     table { border-collapse: collapse; mso-table-lspace: 0; mso-table-rspace: 0; }
     img { border: 0; outline: none; text-decoration: none; -ms-interpolation-mode: bicubic; }
-    a { color: ${BRAND_RED}; }
+    .rv-logo-dark { display: none; }
     @media (prefers-color-scheme: dark) {
-      .rv-page { background-color: #070709 !important; }
-      .rv-card { background-color: #16161b !important; border-color: #26262e !important; }
+      .rv-page { background-color: #131313 !important; }
+      .rv-card { background-color: #242424 !important; border-color: #3a3a3a !important; }
       .rv-title { color: #ffffff !important; }
-      .rv-text { color: #d4d4d8 !important; }
-      .rv-text strong { color: #ffffff !important; }
-      .rv-muted { color: #a1a1aa !important; }
-      .rv-code { background-color: #1f1f26 !important; border-color: #33333d !important; color: #ffffff !important; }
-      .rv-callout { background-color: #241517 !important; color: #d4d4d8 !important; }
-      .rv-divider { border-color: #26262e !important; color: #8a8a93 !important; }
-      .rv-footer, .rv-footer-link { color: #8a8a93 !important; }
+      .rv-muted, .rv-link { color: #a7a7a7 !important; }
+      .rv-muted strong { color: #ffffff !important; }
+      .rv-digit { background-color: #2f2f2f !important; border-color: #7c7c7c !important; color: #ffffff !important; }
+      .rv-alert { background-color: #3a2222 !important; border-color: #5c2f2f !important; color: #fca5a5 !important; }
+      .rv-logo-light { display: none !important; }
+      .rv-logo-dark { display: block !important; }
     }
-    @media only screen and (max-width: 520px) {
-      .rv-shell { padding: 20px 10px !important; }
-      .rv-header { padding: 22px 22px !important; }
-      .rv-body { padding: 28px 22px 24px !important; }
-      .rv-code { font-size: 28px !important; letter-spacing: 7px !important; }
+    @media only screen and (max-width: 480px) {
+      .rv-shell { padding: 28px 12px !important; }
+      .rv-body { padding: 24px 18px !important; }
+      .rv-digit { width: 40px !important; height: 54px !important; line-height: 50px !important; font-size: 32px !important; }
     }
   </style>
 </head>
-<body class="rv-page" style="margin: 0; padding: 0; background-color: #f2f2f4; font-family: ${FONT_STACK};">
+<body class="rv-page" style="margin: 0; padding: 0; background-color: #f6f6f6; font-family: ${FONT_STACK};">
   <div style="display: none; font-size: 1px; line-height: 1px; max-height: 0; max-width: 0; opacity: 0; overflow: hidden; mso-hide: all;">${escapeHtml(preheader)}&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</div>
-  <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" class="rv-page" style="background-color: #f2f2f4;">
+  <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" class="rv-page" style="background-color: #f6f6f6;">
     <tr>
       <td align="center" class="rv-shell" style="padding: 40px 16px;">
-        <!--[if mso]><table role="presentation" width="560" align="center" cellspacing="0" cellpadding="0" border="0"><tr><td><![endif]-->
-        <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" class="rv-card" style="max-width: 560px; width: 100%; background-color: #ffffff; border: 1px solid #e4e4e7; border-radius: 16px; overflow: hidden;">
+        <!--[if mso]><table role="presentation" width="440" align="center" cellspacing="0" cellpadding="0" border="0"><tr><td><![endif]-->
+        <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 440px; width: 100%; border-collapse: separate;">
           <tr>
-            <td class="rv-header" bgcolor="${BRAND_DARK}" style="padding: 26px 36px; background-color: ${BRAND_DARK};">
-              <a href="${escapeHtml(`${appUrl}/`)}" target="_blank" style="text-decoration: none;"><img src="${escapeHtml(logoUrl)}" width="130" height="24" alt="RedView" style="display: block; width: 130px; height: 24px; color: #ffffff; font-family: ${FONT_STACK}; font-size: 18px; font-weight: 700;"></a>
+            <td style="padding: 0 4px 28px;">
+              <a href="${escapeHtml(`${appUrl}/`)}" target="_blank" style="text-decoration: none;">${logo('redview-email-logo.png', 'rv-logo-light')}${logo('redview-email-logo-white.png', 'rv-logo-dark', ' display: none; mso-hide: all;')}</a>
             </td>
           </tr>
           <tr>
-            <td bgcolor="${BRAND_RED}" style="height: 3px; line-height: 3px; font-size: 3px; background-color: ${BRAND_RED};">&nbsp;</td>
-          </tr>
-          <tr>
-            <td class="rv-body" style="padding: 36px 36px 30px; text-align: left; font-family: ${FONT_STACK};">
-              <h1 class="rv-title" style="margin: 0 0 16px; font-family: ${FONT_STACK}; font-size: 23px; line-height: 30px; font-weight: 700; letter-spacing: -0.01em; color: #111114;">${escapeHtml(title)}</h1>
-              ${bodyHtml}${englishSummary ? englishSummaryHtml(englishSummary) : ''}
-            </td>
-          </tr>
-        </table>
-        <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 560px; width: 100%;">
-          <tr>
-            <td class="rv-footer" style="padding: 24px 24px 8px; text-align: center; font-family: ${FONT_STACK}; font-size: 12px; line-height: 20px; color: #71717a;">
-              RedView · Planification et analyse d’itinéraires en 3D<br>
-              ${link(`${appUrl}/`, 'Ouvrir RedView')} &nbsp;·&nbsp; ${link(`mailto:${supportEmail()}`, 'Nous contacter')} &nbsp;·&nbsp; ${link(`${appUrl}/confidentialite`, 'Confidentialité')} &nbsp;·&nbsp; ${link(`${appUrl}/mentions-legales`, 'Mentions légales')}
+            <td class="rv-card" style="background-color: #ffffff; border: 1px solid ${INK_12}; border-radius: 12px;">
+              <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td class="rv-body" style="padding: 28px 24px 24px; font-family: ${FONT_STACK};">
+                    <h1 class="rv-title" style="margin: 0 0 6px; font-family: ${FONT_STACK}; font-size: 18px; line-height: 28px; font-weight: 600; color: ${INK}; text-align: center;">${escapeHtml(title)}</h1>
+                    ${bodyHtml}
+                  </td>
+                </tr>
+              </table>
             </td>
           </tr>
           <tr>
-            <td class="rv-footer" style="padding: 0 24px 8px; text-align: center; font-family: ${FONT_STACK}; font-size: 11px; line-height: 17px; color: #a1a1aa;">
-              E-mail automatique lié à votre compte RedView&nbsp;: merci de ne pas y répondre.
+            <td class="rv-muted" style="padding: 20px 8px 0; text-align: center; font-family: ${FONT_STACK}; font-size: 12px; line-height: 18px; color: ${INK_60};">
+              ${link(`${appUrl}/`, 'Ouvrir RedView')} &nbsp;&nbsp; ${link(`mailto:${supportEmail()}`, 'Nous contacter')} &nbsp;&nbsp; ${link(`${appUrl}/confidentialite`, 'Confidentialité')} &nbsp;&nbsp; ${link(`${appUrl}/mentions-legales`, 'Mentions légales')}
             </td>
-          </tr>
+          </tr>${englishSummary ? `
+          <tr>
+            <td class="rv-muted" lang="en" style="padding: 14px 8px 0; text-align: center; font-family: ${FONT_STACK}; font-size: 11px; line-height: 16px; color: #9a9a9b;">${escapeHtml(englishSummary)}</td>
+          </tr>` : ''}
         </table>
         <!--[if mso]></td></tr></table><![endif]-->
       </td>
@@ -269,7 +269,7 @@ function greetingFor(name?: string): string {
   return cleanName ? `Bonjour ${cleanName},` : 'Bonjour,';
 }
 
-const CODE_VALIDITY_HTML = 'Ce code est valable <strong>10 minutes</strong>.';
+const CODE_VALIDITY_HTML = 'Ce code expire dans 10 minutes.';
 
 // ─────────────────────────── Inscription ───────────────────────────
 
