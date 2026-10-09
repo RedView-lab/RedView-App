@@ -28,6 +28,13 @@ import {
 } from './helpers';
 import { createOverlayStatus } from '@/features/map3d';
 
+/**
+ * Crédit exigé par l'API RainViewer (« mention the RainViewer API as a source
+ * of the data … with a link ») : affiché par le contrôle d'attribution de la
+ * carte tant que la couche radar est présente.
+ */
+const RADAR_ATTRIBUTION = '<a href="https://www.rainviewer.com/" target="_blank" rel="noopener noreferrer">RainViewer</a>';
+
 interface UseWeatherStyleManagerArgs {
   map: MapboxMap | null;
   stateRef: React.MutableRefObject<WeatherOverlayState>;
@@ -433,6 +440,7 @@ export function useWeatherStyleManager({
               tileSize: 512,
               minzoom: 0,
               maxzoom: 7,
+              attribution: RADAR_ATTRIBUTION,
             } as never);
           }
         }
@@ -443,6 +451,7 @@ export function useWeatherStyleManager({
           tileSize: 512,
           minzoom: 0,
           maxzoom: 7, // RainViewer plafonne à 7. Mapbox suréchantillonne automatiquement à partir du zoom 8
+          attribution: RADAR_ATTRIBUTION,
         } as never);
       }
 
