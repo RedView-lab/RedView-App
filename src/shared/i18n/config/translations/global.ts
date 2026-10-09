@@ -73,6 +73,12 @@ export const globalTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'Mot de passe refusé : 8 caractères minimum, et pas un mot de passe trop courant.', en: 'Password rejected: at least 8 characters, and not a common password.' },
   { fr: 'Session expirée. Reconnectez-vous puis réessayez.', en: 'Session expired. Sign in again and retry.' },
   { fr: 'Trop de tentatives. Réessayez dans quelques minutes.', en: 'Too many attempts. Try again in a few minutes.' },
+  // Refus d'Appwrite par type (shared/lib/appwriteErrors.ts)
+  { fr: 'Adresse e-mail ou mot de passe incorrect.', en: 'Incorrect e-mail address or password.' },
+  { fr: 'Ce compte est désactivé.', en: 'This account is disabled.' },
+  { fr: 'Action refusée pour ce compte. Reconnectez-vous puis réessayez.', en: 'Action refused for this account. Sign in again and retry.' },
+  { fr: 'Cet élément n’existe plus : il a peut-être été supprimé depuis un autre appareil.', en: 'This item no longer exists: it may have been deleted from another device.' },
+  { fr: 'Ce fichier n’existe plus : il a peut-être été supprimé depuis un autre appareil.', en: 'This file no longer exists: it may have been deleted from another device.' },
   { fr: 'Chargement du compte...', en: 'Loading account...' },
   { fr: 'Aucune information de compte disponible.', en: 'No account information available.' },
   { fr: 'Compte', en: 'Account' },

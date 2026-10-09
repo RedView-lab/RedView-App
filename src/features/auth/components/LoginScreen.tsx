@@ -3,6 +3,12 @@ import { trackAnalyticsEvent, trackScreen } from '@/shared/lib/analytics'
 import { authFailureReason, rememberOAuthIntent } from '../lib/authAnalytics'
 import { RedViewLogo } from '@/shared/components/RedViewLogo'
 import { errorMessage as thrownMessage } from '@/shared/lib/errors'
+import { appwriteFailureMessage } from '@/shared/lib/appwriteErrors'
+
+/** Refus d'Appwrite sur un nouveau mot de passe (inscription, réinitialisation). */
+const NEW_PASSWORD_OVERRIDES = {
+  general_argument_invalid: 'Mot de passe refusé : 8 caractères minimum, et pas un mot de passe trop courant.',
+}
 import {
   account,
   AppwriteException,
@@ -164,7 +170,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
         ) {
           setErrorMessage('Ce lien de réinitialisation a expiré ou est invalide. Veuillez refaire une demande.')
         } else {
-          setErrorMessage(thrownMessage(error, 'Erreur lors de la réinitialisation du mot de passe.'))
+          setErrorMessage(appwriteFailureMessage(error, 'Erreur lors de la réinitialisation du mot de passe.', NEW_PASSWORD_OVERRIDES))
         }
       } finally {
         setLoading(false)
@@ -254,7 +260,11 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
         name: 'auth_failed',
         data: { method: 'email', step: mode === 'signup' ? 'signup' : 'login', reason: authFailureReason(error) },
       })
-      setErrorMessage(thrownMessage(error, 'Authentication failed. Please check your credentials.'))
+      setErrorMessage(appwriteFailureMessage(
+        error,
+        'Authentication failed. Please check your credentials.',
+        mode === 'signup' ? NEW_PASSWORD_OVERRIDES : {},
+      ))
     } finally {
       setLoading(false)
     }
@@ -280,7 +290,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
       onLogin?.(user.email)
       return { success: true }
     } catch (err) {
-      return { success: false, error: thrownMessage(err, 'Erreur lors de la confirmation du compte.') }
+      return { success: false, error: appwriteFailureMessage(err, 'Erreur lors de la confirmation du compte.') }
     }
   }
 
@@ -312,7 +322,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
     } catch (error) {
       trackAnalyticsEvent({ name: 'auth_failed', data: { method: 'google', step: mode === 'signup' ? 'signup' : 'login', reason: authFailureReason(error) } })
       setLoading(false)
-      setErrorMessage(thrownMessage(error, 'Failed to initiate Google OAuth.'))
+      setErrorMessage(appwriteFailureMessage(error, 'Failed to initiate Google OAuth.'))
     }
   }
 

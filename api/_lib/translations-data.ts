@@ -273,6 +273,26 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Too many attempts. Try again in a few minutes."
   },
   {
+    "fr": "Adresse e-mail ou mot de passe incorrect.",
+    "en": "Incorrect e-mail address or password."
+  },
+  {
+    "fr": "Ce compte est désactivé.",
+    "en": "This account is disabled."
+  },
+  {
+    "fr": "Action refusée pour ce compte. Reconnectez-vous puis réessayez.",
+    "en": "Action refused for this account. Sign in again and retry."
+  },
+  {
+    "fr": "Cet élément n’existe plus : il a peut-être été supprimé depuis un autre appareil.",
+    "en": "This item no longer exists: it may have been deleted from another device."
+  },
+  {
+    "fr": "Ce fichier n’existe plus : il a peut-être été supprimé depuis un autre appareil.",
+    "en": "This file no longer exists: it may have been deleted from another device."
+  },
+  {
     "fr": "Chargement du compte...",
     "en": "Loading account..."
   },

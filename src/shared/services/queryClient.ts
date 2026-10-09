@@ -1,5 +1,6 @@
 import { MutationCache, QueryCache, QueryClient } from '@tanstack/react-query';
 
+import { appwriteFailureMessage } from '@/shared/lib/appwriteErrors';
 import { logger } from '@/shared/lib/logger';
 import { notify } from '@/shared/lib/notify';
 
@@ -13,7 +14,8 @@ import { notify } from '@/shared/lib/notify';
  *  - 2 nouvelles tentatives, jamais sur une erreur 4xx (session, droits, validation) ;
  *  - toute mutation en échec affiche un toast, sauf `meta.silentError`
  *    (la mutation gère son retour elle-même). `meta.errorMessage` = repli
- *    quand l'erreur n'a pas de message.
+ *    quand l'erreur n'a pas de message lisible (une AppwriteException d'un
+ *    type inconnu : son message anglais n'est jamais montré).
  */
 declare module '@tanstack/react-query' {
   interface Register {
@@ -47,7 +49,7 @@ function createAppQueryClient(): QueryClient {
       onError: (error, _variables, _context, mutation) => {
         logger.app.warn('mutation failed', { mutationKey: mutation.options.mutationKey, error: errorMessage(error) });
         if (mutation.meta?.silentError) return;
-        notify.error(errorMessage(error) ?? mutation.meta?.errorMessage ?? DEFAULT_ERROR_MESSAGE);
+        notify.error(appwriteFailureMessage(error, mutation.meta?.errorMessage ?? DEFAULT_ERROR_MESSAGE));
       },
     }),
     defaultOptions: {

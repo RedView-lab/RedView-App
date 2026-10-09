@@ -10,6 +10,7 @@ import {
   translateAppText,
 } from '@/shared/i18n';
 import { APP_CACHE_EPOCH_STORAGE_KEY } from '@/shared/lib/appCacheEpoch';
+import { appwriteFailureMessage } from '@/shared/lib/appwriteErrors';
 import { clearAnalyticsContext, trackAnalyticsEvent } from '@/shared/lib/analytics';
 import { syncDirtyProjects } from '@/shared/services/projects';
 import { clearProjectStore } from '@/shared/services/storage/idbProjectStore';
@@ -146,7 +147,7 @@ export async function saveAccountIdentity(form: AccountIdentityForm) {
     });
   } catch (error) {
     console.warn('[profile] saveAccountIdentity failed', error);
-    throw new Error(accountUpdateFailureMessage(error, 'Impossible d’enregistrer le compte.'));
+    throw new Error(appwriteFailureMessage(error, 'Impossible d’enregistrer le compte.'));
   }
 }
 
@@ -169,35 +170,17 @@ export async function saveAccountPractice(form: AccountPracticeForm) {
   }
 }
 
-/**
- * Message d'un échec Appwrite sur le compte, par `type` (stable d'une version
- * du serveur à l'autre), jamais le message anglais d'Appwrite (il parle à un
- * développeur : « …by making a request to the User API's… »). Texte source
- * FR à traduire par l'écran.
- */
+/** Refus d'Appwrite propres au mot de passe (le reste : appwriteFailureMessage). */
+const PASSWORD_FAILURE_OVERRIDES = {
+  user_invalid_credentials: 'Mot de passe actuel incorrect.',
+  general_argument_invalid: 'Mot de passe refusé : 8 caractères minimum, et pas un mot de passe trop courant.',
+  user_unauthorized: 'Session expirée. Reconnectez-vous puis réessayez.',
+  user_blocked: 'Session expirée. Reconnectez-vous puis réessayez.',
+};
+
+/** Message d'un échec du changement de mot de passe (texte source FR, traduit par l'écran). */
 export function accountUpdateFailureMessage(error: unknown, fallback: string): string {
-  const { code, type } = (typeof error === 'object' && error !== null ? error : {}) as { code?: unknown; type?: unknown };
-  if (error instanceof TypeError || code === 0) {
-    return 'Impossible de joindre le serveur RedView. Vérifiez votre connexion puis réessayez.';
-  }
-  switch (type) {
-    case 'user_invalid_credentials':
-      return 'Mot de passe actuel incorrect.';
-    case 'password_recently_used':
-      return 'Ce mot de passe a déjà été utilisé récemment. Choisissez-en un autre.';
-    case 'password_personal_data':
-      return 'Le mot de passe ne doit pas reprendre votre nom ni votre adresse e-mail.';
-    case 'general_argument_invalid':
-      return 'Mot de passe refusé : 8 caractères minimum, et pas un mot de passe trop courant.';
-    case 'general_rate_limit_exceeded':
-      return 'Trop de tentatives. Réessayez dans quelques minutes.';
-    case 'user_unauthorized':
-    case 'user_blocked':
-    case 'general_unauthorized_scope':
-      return 'Session expirée. Reconnectez-vous puis réessayez.';
-    default:
-      return fallback;
-  }
+  return appwriteFailureMessage(error, fallback, PASSWORD_FAILURE_OVERRIDES);
 }
 
 /** `currentPassword` : exigé par Appwrite quand le compte a déjà un mot de passe. */
