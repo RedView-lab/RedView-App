@@ -34,13 +34,13 @@ export interface LegalPublisher {
 }
 
 export const LEGAL_PUBLISHER: LegalPublisher = {
-  name: null,
+  name: 'Victor Bouscavet',
   legalForm: null,
   registration: null,
   vatNumber: null,
   address: null,
   phone: null,
-  publicationDirector: null,
+  publicationDirector: 'Victor Bouscavet, CEO',
   contactEmail: 'redview.app@proton.me',
   host: {
     name: null,
