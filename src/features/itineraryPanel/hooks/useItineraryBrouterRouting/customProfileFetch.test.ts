@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * Délai d'une recherche (customProfileFetch.ts) : devant un proxy qui applique
@@ -42,6 +42,15 @@ const START = { lat: 45.1, lon: 6.1 };
 const END = { lat: 45.15, lon: 6.15 };
 
 describe('recherche avec le profil personnalisé : délai', () => {
+  // Graphe de modules transformé une fois ici, hors du délai de 5 s des tests :
+  // sous la charge de `npm run check` (étapes en parallèle), sa première
+  // transformation dépassait seule ce délai. Chaque test réimporte quand même
+  // des modules neufs (resetModules), réévalués depuis le cache de transformation.
+  beforeAll(async () => {
+    await import('../../lib/brouter');
+    await import('./customProfileFetch');
+  }, 60_000);
+
   beforeEach(() => {
     vi.resetModules();
   });
