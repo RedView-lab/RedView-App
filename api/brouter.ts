@@ -340,8 +340,13 @@ async function handleRouteQuery(
     // corps serait consommé / filtré sur le chemin du retour vers le
     // navigateur (certains CDN retirent les corps 422 en texte brut). Tronqué
     // pour garder des en-têtes petits.
+    // Jamais en cache : sous charge, BRouter tue son calcul le plus ancien
+    // (« operation killed by thread-priority-watchdog »), et le client réessaie
+    // la même URL (client.ts) ; mise en cache par le navigateur, l'erreur lui
+    // était resservie à chaque essai sans rien recalculer. Une erreur
+    // définitive (aucun tracé) n'est de toute façon pas redemandée telle quelle.
     res.setHeader('Content-Type', contentType);
-    res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=300');
+    res.setHeader('Cache-Control', 'no-store');
     res.setHeader('x-brouter-upstream-error', sanitizeHeaderValue(body));
     return res.status(422).send(body);
   }

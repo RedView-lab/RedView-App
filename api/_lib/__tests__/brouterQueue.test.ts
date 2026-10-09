@@ -282,6 +282,21 @@ describe('api/brouter — file d’attente vers BRouter', () => {
     expect(accepted.headers['x-brouter-budget']).toBe('1');
   });
 
+  it('une erreur de BRouter (calcul tué sous charge) n’est jamais mise en cache : un nouvel essai recalcule', async () => {
+    const first = call(handler, route(7));
+    await flush();
+    brouter.inFlight[0]!.finish('error: operation killed by thread-priority-watchdog after 12 seconds', 'text/plain');
+    await first.done;
+    expect(first.status).toBe(422);
+    expect(first.headers['cache-control']).toBe('no-store');
+    const retry = call(handler, route(7));
+    await flush();
+    expect(brouter.inFlight).toHaveLength(1);
+    brouter.inFlight[0]!.finish();
+    await retry.done;
+    expect(retry.status).toBe(200);
+  });
+
   it('une réponse du cache ne passe pas par la file', async () => {
     const first = call(handler, route(1));
     await flush();
