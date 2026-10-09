@@ -133,4 +133,12 @@ describe('LoginScreen : code d’inscription', () => {
     expect(auth.createEmailPasswordSession).toHaveBeenCalledTimes(2);
     expect(onLogin).toHaveBeenCalledWith('rider@example.test');
   });
+  it('consentement : les liens CGU et confidentialité annoncent le nouvel onglet aux lecteurs d’écran', () => {
+    const links = [...view!.container.querySelectorAll<HTMLAnchorElement>('.rv-login-legal-consent a')];
+    expect(links).toHaveLength(2);
+    for (const link of links) {
+      expect(link.target).toBe('_blank');
+      expect(link.querySelector('.rv-sr-only')?.textContent).toBe('(nouvel onglet)');
+    }
+  });
 });

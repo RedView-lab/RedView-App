@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, type FormEvent } from 'react'
 import { trackAnalyticsEvent, trackScreen } from '@/shared/lib/analytics'
 import { authFailureReason, rememberOAuthIntent, sendCodeFailureReason } from '../lib/authAnalytics'
 import { RedViewLogo } from '@/shared/components/RedViewLogo'
+import { NewTabHint } from '@/shared/components/NewTabHint'
 import { errorMessage as thrownMessage } from '@/shared/lib/errors'
 import { appwriteFailureMessage } from '@/shared/lib/appwriteErrors'
 import { withNetworkTimeout } from '@/shared/lib/apiFetch'
@@ -649,9 +650,9 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
               {mode === 'signup' && (
                 <p className="rv-login-legal-consent">
                   {t('En créant un compte, vous acceptez les')}{' '}
-                  <a href={legalPagePath('terms')} target="_blank" rel="noreferrer">{t('conditions d’utilisation')}</a>{' '}
+                  <a href={legalPagePath('terms')} target="_blank" rel="noreferrer">{t('conditions d’utilisation')}<NewTabHint /></a>{' '}
                   {t('et la')}{' '}
-                  <a href={legalPagePath('privacy')} target="_blank" rel="noreferrer">{t('politique de confidentialité')}</a>.
+                  <a href={legalPagePath('privacy')} target="_blank" rel="noreferrer">{t('politique de confidentialité')}<NewTabHint /></a>.
                 </p>
               )}
             </form>
