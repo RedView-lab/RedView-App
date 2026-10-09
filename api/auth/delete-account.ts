@@ -9,6 +9,7 @@ import { sendAccountDeletedEmail } from '../_lib/mailer.js';
 import {
   accountDeletionCodeKey,
   consumeVerificationRequestQuota,
+  releaseVerificationRequest,
   requestAccountDeletionCode,
   validateVerificationCode,
 } from '../_lib/verificationStore.js';
@@ -66,8 +67,15 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     switch (body.action) {
       case 'request-code': {
         consumeVerificationRequestQuota(key);
-        const profile = await getAppwriteUsers().get(user.id);
-        const { sent } = await requestAccountDeletionCode(user.email, profile.name);
+        let sent = false;
+        try {
+          const profile = await getAppwriteUsers().get(user.id);
+          ({ sent } = await requestAccountDeletionCode(user.email, profile.name));
+        } finally {
+          // Rien n'est parti (Appwrite ou e-mail en échec) : la demande n'est
+          // pas décomptée, le nouvel essai n'attend pas 30 s.
+          if (!sent) releaseVerificationRequest(key);
+        }
         if (!sent) throw new PublicError('The confirmation email could not be sent, try again later', 503);
         return res.status(200).json({ sent: true });
       }

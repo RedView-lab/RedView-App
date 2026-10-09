@@ -1,4 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+const captured = vi.hoisted(() => ({ errors: [] as unknown[] }));
+vi.mock('../../../server/lib/observability.mjs', () => ({
+  captureServerError: (error: unknown) => { captured.errors.push(error); },
+}));
+
 import handler from '../../auth/forgot-password';
 import type { ApiRequest, ApiResponse } from '../types';
 
@@ -31,6 +37,7 @@ describe('api/auth/forgot-password', () => {
     vi.stubEnv('APPWRITE_ENDPOINT', 'https://appwrite.test/v1');
     vi.stubEnv('NODE_ENV', 'production');
     vi.spyOn(console, 'error').mockImplementation(() => {});
+    captured.errors.length = 0;
     fetchMock = vi.fn(async () => new Response('{}', { status: 201 }));
     vi.stubGlobal('fetch', fetchMock);
   });
@@ -74,6 +81,23 @@ describe('api/auth/forgot-password', () => {
     await vi.advanceTimersByTimeAsync(300);
     expect((await done).status).toBe(200);
     expect(console.error).toHaveBeenCalledTimes(1);
+    // trop de demandes pour cette adresse : voulu, pas une panne
+    expect(captured.errors).toEqual([]);
+  });
+
+  it('signale à GlitchTip une récupération qu’Appwrite refuse ou n’atteint pas', async () => {
+    fetchMock.mockResolvedValueOnce(new Response('{"type":"general_argument_invalid"}', { status: 400 }));
+    let pending = call({ email: 'rider@example.test' });
+    await vi.advanceTimersByTimeAsync(300);
+    expect((await pending.done).status).toBe(200);
+    fetchMock.mockRejectedValueOnce(new Error('connect ECONNREFUSED'));
+    pending = call({ email: 'rider@example.test' });
+    await vi.advanceTimersByTimeAsync(300);
+    expect((await pending.done).status).toBe(200);
+    expect(captured.errors.map((error) => String(error))).toEqual([
+      'Error: Appwrite recovery HTTP 400',
+      'Error: connect ECONNREFUSED',
+    ]);
   });
 
   it('ne journalise pas une adresse sans compte (404)', async () => {
@@ -82,6 +106,7 @@ describe('api/auth/forgot-password', () => {
     await vi.advanceTimersByTimeAsync(300);
     expect((await done).status).toBe(200);
     expect(console.error).not.toHaveBeenCalled();
+    expect(captured.errors).toEqual([]);
   });
 
   it('refuse une adresse invalide sans appeler Appwrite', async () => {

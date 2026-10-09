@@ -24,6 +24,7 @@ const fakes = await vi.hoisted(async () => {
     customer: null as { stripe_customer_id: string | null; billing_email_mode: string | null } | null,
     stripeUpdate: vi.fn(),
     sentCodes: [] as { to: string; code: string }[],
+    mailDown: false,
     notices: [] as { to: string; newEmail: string }[],
   };
 });
@@ -55,6 +56,7 @@ vi.mock('../../../server/lib/observability.mjs', () => ({ captureServerError: ()
 // Un seul module (importé en .ts par verificationStore, en .js par la route).
 vi.mock('../mailer.ts', () => ({
   sendEmailChangeCodeEmail: vi.fn(async (message: { to: string; code: string }) => {
+    if (fakes.mailDown) return { sent: false };
     fakes.sentCodes.push(message);
     return { sent: true };
   }),
@@ -108,6 +110,7 @@ beforeEach(() => {
   fakes.customer = null;
   fakes.stripeUpdate.mockReset().mockResolvedValue({});
   fakes.notices.length = 0;
+  fakes.mailDown = false;
 });
 
 describe('api/auth/change-email', () => {
@@ -167,6 +170,17 @@ describe('api/auth/change-email', () => {
     expect(late.status).toBe(409);
     const retried = await call({ action: 'confirm', newEmail: 'late@example.test', code, password: 'ancien-mdp' });
     expect(retried.status).toBe(200);
+  });
+
+  it('e-mail du code non parti : 503, et le nouvel essai part tout de suite (demande non décomptée)', async () => {
+    counter += 1;
+    fakes.session.id = `u${counter}`;
+    fakes.mailDown = true;
+    const down = await call({ action: 'request-code', newEmail: 'new@example.test' });
+    expect(down.status).toBe(503);
+    fakes.mailDown = false;
+    const retried = await call({ action: 'request-code', newEmail: 'new@example.test' });
+    expect(retried).toEqual({ status: 200, body: { sent: true } });
   });
 
   it('compte sans mot de passe (Google) : il en définit un d’abord', async () => {

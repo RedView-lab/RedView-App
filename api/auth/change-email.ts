@@ -16,6 +16,7 @@ import {
   emailChangeCodeKey,
   normalizeVerificationEmail,
   recordVerificationFailure,
+  releaseVerificationRequest,
   requestEmailChangeCode,
 } from '../_lib/verificationStore.js';
 
@@ -106,7 +107,12 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         const taken = await users.list([Query.equal('email', newEmail), Query.limit(1)]);
         if (taken.total > 0) throw new PublicError(EMAIL_TAKEN_MESSAGE, 409);
         const { sent } = await requestEmailChangeCode(user.id, newEmail);
-        if (!sent) throw new PublicError('L’e-mail de confirmation n’a pas pu partir. Réessayez plus tard.', 503);
+        if (!sent) {
+          // Rien n'est parti : la demande n'est pas décomptée, le nouvel essai
+          // n'attend pas 30 s.
+          releaseVerificationRequest(key);
+          throw new PublicError('L’e-mail de confirmation n’a pas pu partir. Réessayez plus tard.', 503);
+        }
         return res.status(200).json({ sent: true });
       }
       case 'confirm': {

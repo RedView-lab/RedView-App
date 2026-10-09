@@ -1,4 +1,5 @@
 import type { ApiRequest, ApiResponse } from '../_lib/types.js';
+import { captureServerError } from '../../server/lib/observability.mjs';
 import { getAppwriteEndpoint, getAppwriteProjectId } from '../_lib/appwrite.js';
 import { parseEmailAddress } from '../_lib/email.js';
 import { bodyFields } from '../_lib/http.js';
@@ -42,9 +43,12 @@ function resolveRedirectUrl(raw: unknown): string {
 /**
  * Demande à Appwrite l'e-mail de récupération. Une adresse sans compte
  * répond 404 (attendu, silencieux) ; tout autre échec est journalisé : la
- * personne reçoit la réponse neutre de toute façon.
+ * personne reçoit la réponse neutre de toute façon. Hors 429 (trop de
+ * demandes pour cette adresse, voulu), il part aussi à GlitchTip : personne
+ * ne reçoit plus de lien (URL de redirection refusée par Appwrite, panne,
+ * délai) sans que rien ne le dise.
  */
-async function dispatchRecovery(email: string, redirectUrl: string): Promise<void> {
+async function dispatchRecovery(email: string, redirectUrl: string, requestId?: string): Promise<void> {
   try {
     const response = await fetch(`${getAppwriteEndpoint()}/account/recovery`, {
       method: 'POST',
@@ -58,9 +62,13 @@ async function dispatchRecovery(email: string, redirectUrl: string): Promise<voi
     if (!response.ok && response.status !== 404) {
       const detail = await response.text().catch(() => '');
       console.error(`[forgot-password] Appwrite recovery HTTP ${response.status}:`, detail.slice(0, 200));
+      if (response.status !== 429) {
+        captureServerError(new Error(`Appwrite recovery HTTP ${response.status}`), { route: 'auth/forgot-password', requestId });
+      }
     }
   } catch (error) {
     console.error('[forgot-password] Appwrite recovery request failed:', error);
+    captureServerError(error, { route: 'auth/forgot-password', requestId });
   }
 }
 
@@ -77,7 +85,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
 
   // La demande part sans être attendue : la réponse prend toujours le même
   // temps, qu'Appwrite envoie un e-mail (compte existant) ou réponde 404.
-  void dispatchRecovery(trimmedEmail, resolveRedirectUrl(redirectUrl));
+  void dispatchRecovery(trimmedEmail, resolveRedirectUrl(redirectUrl), req.requestId);
   await new Promise((resolve) => setTimeout(resolve, RESPONSE_DELAY_MS));
 
   // Anti-énumération : même réponse dans tous les cas.
