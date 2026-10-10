@@ -222,12 +222,34 @@ let done = 0;
 let failedJobs = 0;
 const perCategory = new Map();
 
+/**
+ * Relations d'un filtre dans une boîte. Les catégories denses (cimetières :
+ * ~1 400 relations sur la France, avec leur centre) dépassent ce que les
+ * instances publiques calculent en une requête (HTTP 500 / délai) : sur un
+ * échec, la boîte est coupée en 4, jusqu'à 3 niveaux (64 tuiles).
+ */
+async function fetchRelations(filter, [south, west, north, east], depth = 0) {
+  const ql = `[out:json][timeout:170];\nrelation${filter}(${south},${west},${north},${east});\nout center;`;
+  try {
+    return (await overpass(ql)).elements || [];
+  } catch (err) {
+    if (depth >= 3) throw err;
+    const midLat = (south + north) / 2;
+    const midLon = (west + east) / 2;
+    const byId = new Map();
+    for (const tile of [[south, west, midLat, midLon], [south, midLon, midLat, east], [midLat, west, north, midLon], [midLat, midLon, north, east]]) {
+      for (const el of await fetchRelations(filter, tile, depth + 1)) byId.set(el.id, el);
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+    return [...byId.values()];
+  }
+}
+
 for (const job of jobs) {
   done++;
-  const ql = `[out:json][timeout:170];\nrelation${job.filter}(${s},${w},${n},${e});\nout center;`;
-  let data;
+  let elements;
   try {
-    data = await overpass(ql);
+    elements = await fetchRelations(job.filter, [s, w, n, e]);
   } catch (err) {
     console.warn(`\r   ⚠️  ${job.filter} : ${err.message}`);
     failedJobs++;
@@ -236,7 +258,7 @@ for (const job of jobs) {
   }
 
   const rows = [];
-  for (const el of data.elements || []) {
+  for (const el of elements) {
     const center = el.center || (el.lat != null ? { lat: el.lat, lon: el.lon } : null);
     if (!center) continue;
     if (border && !border.contains(center.lon, center.lat)) continue;
