@@ -225,6 +225,34 @@ describe('export FIT pour les pros : convention de nommage, icônes, horaires', 
     expect(course?.sport).toBe('cycling');
     expect(course?.capabilities).toBeDefined();
   });
+
+  it('messages dans l’ordre des parcours Komoot / Garmin Connect : points de parcours mêlés à la trace', () => {
+    const stream: Array<{ num: number; message: Record<string, unknown> }> = [];
+    const decoder = new Decoder(Stream.fromByteArray(Array.from(buildItineraryFitCourse(ultraItinerary(ULTRA_POIS, [ZONZA]), FR))));
+    decoder.read({ mesgListener: (num: number, message: Record<string, unknown>) => stream.push({ num, message }) });
+    const RECORD = 20;
+    const COURSE_POINT = 32;
+    // file_id, course, lap, départ du chrono, …, arrêt du chrono.
+    expect(stream.slice(0, 4).map((entry) => entry.num)).toEqual([0, 31, 19, 21]);
+    expect(stream[3]!.message.eventType).toBe('start');
+    expect(stream.at(-1)!.num).toBe(21);
+    expect(stream.at(-1)!.message.eventType).toBe('stopDisableAll');
+
+    const coursePoints = stream.flatMap((entry, index) => (entry.num === COURSE_POINT ? [index] : []));
+    expect(coursePoints).toHaveLength(points.length);
+    for (const index of coursePoints) {
+      // Juste après le point de la trace où il se trouve (ou un autre point de parcours au même endroit).
+      let previous = index - 1;
+      while (stream[previous]!.num === COURSE_POINT) previous -= 1;
+      expect(stream[previous]!.num).toBe(RECORD);
+      expect(stream[previous]!.message.distance).toBe(stream[index]!.message.distance);
+      expect((stream[previous]!.message.timestamp as Date).getTime()).toBe((stream[index]!.message.timestamp as Date).getTime());
+    }
+    expect(coursePoints.map((index) => stream[index]!.message.messageIndex)).toEqual(points.map((_, k) => k));
+
+    const timestamps = stream.slice(3).map((entry) => (entry.message.timestamp as Date).getTime());
+    expect(timestamps).toEqual([...timestamps].sort((a, b) => a - b));
+  });
 });
 
 describe('export FIT : pauses, langue, périmètre', () => {

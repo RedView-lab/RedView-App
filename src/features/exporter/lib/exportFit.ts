@@ -70,8 +70,8 @@ function buildFitRecordMessages(
   });
 }
 
-/** Point du parcours le plus proche d'une distance (les distances des points sont croissantes). */
-function findNearestRecordMessage(distanceM: number, records: FitRecord[]): FitRecord {
+/** Indice du point du parcours le plus proche d'une distance (les distances des points sont croissantes). */
+function findNearestRecordIndex(distanceM: number, records: FitRecord[]): number {
   let lo = 0;
   let hi = records.length - 1;
   while (lo < hi) {
@@ -79,9 +79,8 @@ function findNearestRecordMessage(distanceM: number, records: FitRecord[]): FitR
     if (records[mid]!.distance < distanceM) lo = mid + 1;
     else hi = mid;
   }
-  const after = records[lo]!;
-  const before = records[Math.max(0, lo - 1)]!;
-  return Math.abs(before.distance - distanceM) <= Math.abs(after.distance - distanceM) ? before : after;
+  const before = Math.max(0, lo - 1);
+  return Math.abs(records[before]!.distance - distanceM) <= Math.abs(records[lo]!.distance - distanceM) ? before : lo;
 }
 
 /** D+ / D− du parcours : ceux affichés par la synthèse, sinon recalculés sur la trace exportée. */
@@ -161,23 +160,30 @@ export function buildItineraryFitCourse(itinerary: Itinerary, options?: ExportOp
     eventType: 'start',
   });
 
-  for (const record of recordMessages) {
+  // Chaque point de parcours suit le point de la trace où il se trouve :
+  // ordre chronologique, comme les parcours FIT de Komoot / Garmin Connect
+  // (le format admet aussi tous les points de parcours après la trace).
+  const coursePointsByRecord = new Map<number, Array<(typeof anchors)[number]>>();
+  for (const anchor of anchors) {
+    const recordIndex = findNearestRecordIndex(anchor.distanceM, recordMessages);
+    coursePointsByRecord.set(recordIndex, [...(coursePointsByRecord.get(recordIndex) ?? []), anchor]);
+  }
+  let messageIndex = 0;
+  recordMessages.forEach((record, recordIndex) => {
     encoder.write(Profile.MesgNum.RECORD, record);
-  }
-
-  for (let index = 0; index < anchors.length; index += 1) {
-    const anchor = anchors[index]!;
-    const linkedRecord = findNearestRecordMessage(anchor.distanceM, recordMessages);
-    encoder.write(Profile.MesgNum.COURSE_POINT, {
-      messageIndex: index,
-      timestamp: linkedRecord.timestamp,
-      name: anchor.gpsName,
-      type: coursePointType(anchor),
-      positionLat: linkedRecord.positionLat,
-      positionLong: linkedRecord.positionLong,
-      distance: linkedRecord.distance,
-    });
-  }
+    for (const anchor of coursePointsByRecord.get(recordIndex) ?? []) {
+      encoder.write(Profile.MesgNum.COURSE_POINT, {
+        messageIndex,
+        timestamp: record.timestamp,
+        name: anchor.gpsName,
+        type: coursePointType(anchor),
+        positionLat: record.positionLat,
+        positionLong: record.positionLong,
+        distance: record.distance,
+      });
+      messageIndex += 1;
+    }
+  });
 
   encoder.write(Profile.MesgNum.EVENT, {
     timestamp: lastRecord.timestamp,
