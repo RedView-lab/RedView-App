@@ -48,7 +48,12 @@ function releaseAwsFetchSlot() {
   }
 }
 
-async function fetchAWSTerrainTile(z, x, y) {
+// `outcome` (facultatif) dit pourquoi la tuile manque quand la fonction rend
+// null : `missing` n'est vrai que sur un 404 / 410, la seule absence que S3
+// confirme. Toute autre erreur (5xx, 429, 403, délai de 6 s, coupure réseau,
+// décodage) est passagère : l'appelant ne doit pas la garder comme un trou
+// (cache négatif d'une heure, B5-1 de l'audit du 2026-10-10).
+async function fetchAWSTerrainTile(z, x, y, outcome) {
   // Plafonné au zoom natif — au-delà de z14, AWS renvoie 404. Le GPU de
   // Mapbox GL suréchantillonne à partir de la tuile parente.
   const fetchZ = Math.min(z, AWS_TERRAIN_MAXZOOM);
@@ -74,6 +79,7 @@ async function fetchAWSTerrainTile(z, x, y) {
 
     if (!res.ok) {
       releaseSlot();
+      if (outcome && (res.status === 404 || res.status === 410)) outcome.missing = true;
       if (DEBUG) {
         console.warn(
           `[sw-dem][aws] %c FAIL %c ${z}/${x}/${y}${clamped ? ` (clamped→${fetchZ}/${fetchX}/${fetchY})` : ''} — HTTP ${res.status}, ${dt}ms`,

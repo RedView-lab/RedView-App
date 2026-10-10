@@ -536,8 +536,9 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile, options 
       (considerSpain && (spainHadSomeData || spainTransientFailure));
     const skipMapboxHighZoomLiDAR = lidarRegionEngaged;
     const allowGlobalFallbackTile = !globalHighZoomParentMesh && !skipMapboxHighZoomLiDAR;
+    const awsOutcome = { missing: false };
     if (!pngBlob && allowGlobalFallbackTile) {
-      pngBlob = await fetchAWSTerrainTile(z, x, y);
+      pngBlob = await fetchAWSTerrainTile(z, x, y, awsOutcome);
       if (pngBlob) demSource = 'aws-terrarium';
     }
 
@@ -582,7 +583,10 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile, options 
 
     // 6. Rien n'a marché — 204 avec un TTL court pour les échecs passagers.
     if (!pngBlob) {
-      const isConfirmedEmpty = globalHighZoomParentMesh || (!tileIsInFrance && !inSwitzerland && !inNorway && !considerSpain);
+      // Hors des régions LiDAR, seul un 404 de Terrarium confirme l'absence :
+      // un échec passager (5xx, 429, délai, réseau) reste réessayable.
+      const isConfirmedEmpty = globalHighZoomParentMesh
+        || (!tileIsInFrance && !inSwitzerland && !inNorway && !considerSpain && awsOutcome.missing);
       const ttl = isConfirmedEmpty ? NEGATIVE_TTL_CONFIRMED : NEGATIVE_TTL_PIPELINE;
       const reason = globalHighZoomParentMesh
         ? 'global-parent-mesh'
@@ -592,7 +596,9 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile, options 
             : (inNorway
                 ? 'norway-pending-highzoom'
                 : (considerSpain ? 'spain-pending-highzoom' : 'swiss-pending-highzoom')))
-        : ((tileIsInFrance || inSwitzerland || inNorway || considerSpain) ? 'pipeline-error' : 'no-coverage');
+        : ((tileIsInFrance || inSwitzerland || inNorway || considerSpain)
+            ? 'pipeline-error'
+            : (awsOutcome.missing ? 'no-coverage' : 'aws-transient'));
       if (upgradePending && upgradePending.length) {
         scheduleBackgroundUpgrade(cache, cacheKey, z, x, y, upgradePending, upgradeSourceHint, demProfile);
       }

@@ -25,7 +25,12 @@
 // Tampon de cache — modifié à chaque changement qui invalide le cache, pour que
 // le navigateur détecte une différence d'octets dans ce fichier et déclenche
 // install→activate→purge.
-// Actuel : dem-tiles-v54-rgb-up-rle / radar-v4-opera / dem-negative-v30 / slope-tiles-v3-rle / vhr-tiles-v1 / altitude-stale-v1 / contour-tiles-v2
+// Actuel : dem-tiles-v54-rgb-up-rle / radar-v4-opera / dem-negative-v31-aws-404 / slope-tiles-v3-rle / vhr-tiles-v1 / altitude-stale-v1 / contour-tiles-v2
+// 2026-10-10 dem-negative-v31-aws-404 : hors des régions LiDAR, seule une tuile
+// que Terrarium déclare absente (404 / 410) est gardée 1 h en cache négatif ; un
+// échec passager (5xx, 429, délai, réseau) n'est plus pris pour une absence
+// (`fetchAWSTerrainTile(…, outcome)`). Aucun nom de cache ne change : les
+// entrées négatives existantes expirent d'elles-mêmes en moins d'une heure.
 // 2026-10-10 contour-tiles-v2 : /contour-tiles — courbes de niveau vectorielles
 // (MVT, processing/contours.js, runtime/contour-handler.js), isolignes exactes
 // de la surface que Mapbox dessine : un sommet par pixel de la tuile DEM du
