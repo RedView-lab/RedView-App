@@ -169,11 +169,40 @@ export function formatOpeningIntervals(intervals: readonly OpeningInterval[], lo
     .join(',');
 }
 
-/** Horaires déjà écrits à la main dans un nom (`7-19`, `8h30-12h`, `24h`, « fermé »). */
-const HANDWRITTEN_HOURS = /(?:^|[^\d])\d{1,2}(?:[.:h]\d{2}|h)?\s*[-–]\s*\d{1,2}(?:[.:h]\d{2}|h)?(?!\d)|\b24\s*h\b|\b24\/7\b|ferm[ée]|closed/i;
+/** Mots d'horaires écrits à la main (`24h`, `24/7`, « fermé »). */
+const HANDWRITTEN_HOURS_WORDS = /\b24\s*h\b|\b24\/7\b|ferm[ée]|closed/i;
+/** Plage `7-19`, `8h30-12h`, `22.30-2` : heure de début, heure de fin. */
+const HANDWRITTEN_RANGE = /(?:^|[^\d])(\d{1,2})(?:[.:h](\d{2})|h)?\s*[-–]\s*(\d{1,2})(?:[.:h](\d{2})|h)?(?!\d)/gi;
+/**
+ * Mot qui fait d'une plage de nombres une adresse, une route ou des
+ * kilomètres (« 12-14 rue … », « Route 7-9 », « D 9-10 ») : pas des horaires.
+ */
+const ADDRESS_BEFORE = /(?:^|[\s,(])(?:km|pk|route|rte|rn|rd|n|d|a|ch|chemin|lot|lots|no|n°|nº|bis)\.?\s*$/i;
+const ADDRESS_AFTER = /^\s*(?:bis|ter|rue|r\.|av\.?|avenue|bd|boulevard|chemin|ch\.|route|rte|place|pl\.|allée|impasse|imp\.|quai|cours|passage|km)\b/i;
 
+function isPlausibleHourRange(match: RegExpExecArray, name: string): boolean {
+  const start = Number(match[1]) * 60 + Number(match[2] ?? 0);
+  const end = Number(match[3]) * 60 + Number(match[4] ?? 0);
+  if (Number(match[1]) > 24 || Number(match[3]) > 24 || Number(match[2] ?? 0) > 59 || Number(match[4] ?? 0) > 59) return false;
+  // Fin après le début, ou après minuit (bar 22-2) ; jamais une plage vide.
+  if (!(end > start || end <= 6 * 60)) return false;
+  // Le motif commence par le caractère qui précède la plage (sauf en tête du nom).
+  const rangeStart = match.index + (/^\d/.test(match[0]) ? 0 : 1);
+  return !ADDRESS_BEFORE.test(name.slice(0, rangeStart)) && !ADDRESS_AFTER.test(name.slice(match.index + match[0].length));
+}
+
+/**
+ * Horaires déjà écrits à la main dans un nom (`7-19`, `8h30-12h`, `24h`,
+ * « fermé ») : l'export n'en ajoute pas d'autres. Une adresse ou une plage de
+ * kilomètres (« 12-14 rue », « Km 120-125 », « Route 7-9 ») n'en est pas une.
+ */
 export function hasHandwrittenHours(name: string): boolean {
-  return HANDWRITTEN_HOURS.test(name);
+  if (HANDWRITTEN_HOURS_WORDS.test(name)) return true;
+  HANDWRITTEN_RANGE.lastIndex = 0;
+  for (let match = HANDWRITTEN_RANGE.exec(name); match; match = HANDWRITTEN_RANGE.exec(name)) {
+    if (isPlausibleHourRange(match, name)) return true;
+  }
+  return false;
 }
 
 function cleanName(name: string | null | undefined): string {

@@ -62,6 +62,17 @@ describe('convention de nommage GPS', () => {
     expect(buildGpsPoiName({ ...bakery, editedName: '7-19_Dupont' }, 'fr')).toBe('BOU_D03_7-19_Dupont');
   });
 
+  it('une adresse ou une plage de kilomètres dans le nom saisi ne passe pas pour des horaires (B2-2)', () => {
+    for (const name of ['Dupont 7-19', '8h30-12h Dupont', 'Dupont 22-2', 'Fermé lundi', 'Dupont 24h']) {
+      expect(hasHandwrittenHours(name), name).toBe(true);
+    }
+    for (const name of ['Boulangerie 12-14 rue', 'Km 120-125', 'Route 7-9', 'Dupont, D 9-10', 'Lot 3-5 av. Foch']) {
+      expect(hasHandwrittenHours(name), name).toBe(false);
+    }
+    const bakery = poi({ featureCategory: 'bakery', side: 'left', lateralM: 3, openingIntervals: [{ start: h(7), end: h(19) }] });
+    expect(buildGpsPoiName({ ...bakery, editedName: 'Boulangerie 12-14 rue' }, 'fr')).toBe('BOU_G03_7-19_Boulangerie 12-14 rue');
+  });
+
   it('« 24h » seulement pour un commerce', () => {
     const always = [{ start: 0, end: h(24) }];
     expect(buildGpsPoiName(poi({ featureCategory: 'drinking_water', openingIntervals: always }), 'fr')).toBe('EAU_G10');
