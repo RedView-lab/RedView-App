@@ -101,10 +101,11 @@ export const TIMELINE_COLUMNS: TimelineColumnDef[] = [
     shortLabel: 'Heure',
     defaultOn: false,
     align: 'right',
-    minWidth: 72,
+    minWidth: 88,
+    // Pauses planifiées comprises, comme l'agenda et l'export GPS.
     getCell: (ctx) => ({
-      display: fmtClock(ctx.elapsedS, ctx.reference),
-      sortKey: ctx.elapsedS,
+      display: fmtClock(ctx.scheduledS, ctx.reference),
+      sortKey: ctx.scheduledS,
     }),
   },
   {

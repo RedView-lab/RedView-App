@@ -1,7 +1,9 @@
 import type { PredictionPoint, PredictionResult } from '@/features/fitPredictor';
 import type { SportDiscipline } from '@/shared/lib/discipline';
+import { translateAppText } from '@/shared/i18n/config';
 import { formatSpeedOrPace, kmhToPaceSecPerKm } from '@/shared/lib/pace';
 import type { StartReference } from './TimelineTimelineView/types';
+import { formatDayLabel } from './TimelineTimelineView/utils';
 
 const DASH = '—';
 
@@ -23,18 +25,35 @@ export function fmtSeconds(s: number | null | undefined): string {
   return `${sec}s`;
 }
 
-export function fmtClock(elapsedS: number | null, reference: StartReference): string {
-  if (elapsedS == null || !Number.isFinite(elapsedS)) return DASH;
+const MS_PER_DAY = 86_400_000;
+
+function calendarDayOffset(from: Date, to: Date): number {
+  const start = new Date(from.getFullYear(), from.getMonth(), from.getDate()).getTime();
+  const end = new Date(to.getFullYear(), to.getMonth(), to.getDate()).getTime();
+  return Math.round((end - start) / MS_PER_DAY);
+}
+
+/**
+ * Heure de passage (`scheduledS` : secondes depuis le départ, pauses
+ * comprises) : « 14:05 » le jour du départ, puis précédée du jour — « Dim
+ * 07:40 » avec une date de départ, « J2 07:40 » sans. Sur un ultra de
+ * plusieurs jours, une heure seule ne dit pas quand on passe.
+ */
+export function fmtClock(scheduledS: number | null, reference: StartReference): string {
+  if (scheduledS == null || !Number.isFinite(scheduledS)) return DASH;
   if (!reference.reference) {
-    const totalMin = Math.round(elapsedS / 60);
+    const totalMin = Math.round(scheduledS / 60);
     const h = Math.floor(totalMin / 60);
     const m = totalMin % 60;
     return `+${h}h${String(m).padStart(2, '0')}`;
   }
-  const date = new Date(reference.reference.getTime() + elapsedS * 1000);
-  const hh = String(date.getHours()).padStart(2, '0');
-  const mm = String(date.getMinutes()).padStart(2, '0');
-  return `${hh}:${mm}`;
+  const date = new Date(reference.reference.getTime() + scheduledS * 1000);
+  const time = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+  const dayOffset = calendarDayOffset(reference.reference, date);
+  if (dayOffset <= 0) return time;
+  return reference.hasRealDate
+    ? `${formatDayLabel(date)} ${time}`
+    : translateAppText('J{{day}} {{time}}', { day: dayOffset + 1, time });
 }
 
 /** Clé de tri d'une cellule de vitesse : la vitesse à vélo, l'allure (s/km) en trail / course. */

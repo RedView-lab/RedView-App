@@ -39,6 +39,7 @@ import {
 } from './timelineTableSettingsState';
 import { buildScheduledTimelineState, parseStartReference } from './TimelineTimelineView/utils';
 import { indexPoiAutoSortPicks, keepsTimelineItemWithPoiAutoSort } from '../../lib/schedule/poiAutoSort';
+import { buildPauseAwareSchedule } from '../../lib/schedule/pauseAwareSchedule';
 
 interface TimelinePanelProps {
   items: TimelineItem[];
@@ -231,6 +232,14 @@ export function TimelinePanel({
       }));
   }, [deduplicatedItems, prediction, rhythm, view]);
 
+  // Pauses planifiées pour l'heure de passage du tableau. Les mêmes `items` /
+  // `rhythm` que l'itinéraire : le mémo de l'horaire (partagé avec le survol
+  // du graphique, à chaque image) ne se recalcule pas.
+  const sheetStopAnchors = useMemo(
+    () => (view === 'sheet' ? buildPauseAwareSchedule({ timeline: items, rhythm }, prediction)?.stopAnchors ?? [] : []),
+    [items, prediction, rhythm, view],
+  );
+
   const visibleSheetItems = useMemo(() => {
     const picks = poiAutoSortPicks ? indexPoiAutoSortPicks(poiAutoSortPicks) : null;
     return buildSheetItemsWithIntervalPauses(deduplicatedItems, intervalPauseSheetItems)
@@ -309,6 +318,7 @@ export function TimelinePanel({
               prediction={prediction}
               discipline={discipline}
               gpsNames={gpsNames}
+              stopAnchors={sheetStopAnchors}
               columns={resolvedTableSettings.columns}
               sort={resolvedTableSettings.sort}
               onChangeSort={(next) =>

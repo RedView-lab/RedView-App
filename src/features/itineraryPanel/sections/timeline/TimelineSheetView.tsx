@@ -56,6 +56,8 @@ interface TimelineSheetViewProps {
   weatherDataset?: RouteWeatherDataset | null;
   /** Nom GPS de chaque ligne de POI (colonne « Nom GPS »), calculé seulement quand elle est affichée. */
   gpsNames?: ReadonlyMap<string, string> | null;
+  /** Pauses planifiées : la colonne « Heure de passage » les compte. */
+  stopAnchors?: ReadonlyArray<{ rideElapsedSeconds: number; durationMin: number }>;
   columns: Record<TimelineColumnId, boolean>;
   sort: TimelineTableSortState | null;
   onChangeSort: (next: TimelineTableSortState | null) => void;
@@ -85,6 +87,7 @@ export function TimelineSheetView({
   discipline = 'bike',
   weatherDataset,
   gpsNames,
+  stopAnchors,
   columns,
   sort,
   onChangeSort,
@@ -141,11 +144,12 @@ export function TimelineSheetView({
         weatherDataset,
         discipline,
         gpsName: gpsNames?.get(item.id) ?? null,
+        stopAnchors,
       });
       const cells = visibleColumns.map((col) => col.getCell(ctx));
       return { item, ctx, cells };
     });
-  }, [discipline, gpsNames, items, prediction, rhythm, visibleColumns, weatherDataset]);
+  }, [discipline, gpsNames, items, prediction, rhythm, stopAnchors, visibleColumns, weatherDataset]);
 
   const sortedRows: PreparedRow[] = useMemo(() => {
     if (!sort) return preparedRows;

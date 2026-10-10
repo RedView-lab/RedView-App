@@ -29,11 +29,14 @@ export interface PauseAwareSchedule {
  */
 const scheduleCache = new WeakMap<
   PredictionResult,
-  { timeline: Itinerary['timeline']; rhythm: Itinerary['rhythm']; value: PauseAwareSchedule | null }
+  { timeline: Itinerary['timeline']; rhythm: Itinerary['rhythm'] | undefined; value: PauseAwareSchedule | null }
 >();
 
+/** Ce que l'horaire lit d'un itinéraire : ses lignes (pauses, favoris) et son Rythme. */
+type ScheduleSource = { timeline: Itinerary['timeline']; rhythm?: Itinerary['rhythm'] };
+
 export function buildPauseAwareSchedule(
-  itinerary: Itinerary,
+  itinerary: ScheduleSource,
   prediction: PredictionResult | null | undefined,
 ): PauseAwareSchedule | null {
   if (!prediction || prediction.points.length < 2) return null;
@@ -48,7 +51,7 @@ export function buildPauseAwareSchedule(
 }
 
 function computePauseAwareSchedule(
-  itinerary: Itinerary,
+  itinerary: ScheduleSource,
   prediction: PredictionResult,
 ): PauseAwareSchedule | null {
   const reference = parseStartReference(itinerary.rhythm);

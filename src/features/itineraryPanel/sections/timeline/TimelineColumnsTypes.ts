@@ -46,7 +46,10 @@ export interface TimelineColumnContext {
   prediction: PredictionResult | null | undefined;
   rhythm: RhythmState | undefined;
   reference: StartReference;
+  /** Temps de roulage prédit depuis le départ (sans les pauses). */
   elapsedS: number | null;
+  /** Heure de passage en secondes depuis le départ, pauses planifiées comprises. */
+  scheduledS: number | null;
   elapsedPrevS: number | null;
   elapsedNextS: number | null;
   point: PredictionPoint | null;
@@ -94,4 +97,6 @@ export interface BuildContextArgs {
   /** Discipline de l'itinéraire, utilisée quand il n'y a pas encore de prédiction. */
   discipline?: SportDiscipline;
   gpsName?: string | null;
+  /** Pauses planifiées (agenda) : l'heure de passage les compte. */
+  stopAnchors?: ReadonlyArray<{ rideElapsedSeconds: number; durationMin: number }>;
 }

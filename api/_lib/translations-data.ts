@@ -2433,6 +2433,10 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Start date: not set"
   },
   {
+    "fr": "J{{day}} {{time}}",
+    "en": "D{{day}} {{time}}"
+  },
+  {
     "fr": "Heure de départ",
     "en": "Start time"
   },

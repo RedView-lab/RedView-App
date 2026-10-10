@@ -6,6 +6,7 @@
  * et calculer la valeur de sa cellule.
  */
 
+import { projectRideElapsedSecondsToScheduledSeconds } from '@/features/itineraryPanel/lib/schedule/pauseAwareSchedule';
 import { elapsedSecondsAtDistance } from '@/features/itineraryPanel/lib/schedule/predictionElapsed';
 import { getRouteWeatherAtDistanceAndTime } from '@/features/weather';
 import { resolvePredictionDiscipline } from '@/shared/lib/discipline';
@@ -58,6 +59,9 @@ export function buildTimelineColumnContext(args: BuildContextArgs): TimelineColu
       ? resolvePredictionDiscipline(args.prediction)
       : args.discipline ?? 'bike',
     elapsedS: effectiveElapsedS,
+    scheduledS: effectiveElapsedS != null
+      ? projectRideElapsedSecondsToScheduledSeconds(effectiveElapsedS, args.stopAnchors ?? [])
+      : null,
     elapsedPrevS,
     elapsedNextS,
     point,

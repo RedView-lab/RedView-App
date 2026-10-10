@@ -11,6 +11,8 @@ export const dashboardTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'Destination', en: 'Destination' },
   { fr: 'Date de départ', en: 'Start date' },
   { fr: 'Date de départ : à choisir', en: 'Start date: not set' },
+  // Heure de passage de la feuille de route, jour du parcours sans date de départ
+  { fr: 'J{{day}} {{time}}', en: 'D{{day}} {{time}}' },
   { fr: 'Heure de départ', en: 'Start time' },
   { fr: 'Départ :', en: 'Start:' },
   { fr: 'Heure :', en: 'Time:' },
