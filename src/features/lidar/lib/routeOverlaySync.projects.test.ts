@@ -69,6 +69,21 @@ describe('visualiseur LiDAR et onglets de plusieurs projets', () => {
     expect(toPyrenees).toEqual([]);
   });
 
+  it('deux onglets sur le même projet : un seul applique les traces du visualiseur, l’autre prend le relais (C2-1)', async () => {
+    const first = await tab('alpes');
+    const second = await tab('alpes');
+    const releaseFirst = first.claimLidarRouteTaker('alpes');
+    const releaseSecond = second.claimLidarRouteTaker('alpes');
+    await settle();
+    expect([first.isLidarRouteTaker(), second.isLidarRouteTaker()]).toEqual([true, false]);
+
+    // Premier onglet fermé (projet quitté) : le second applique désormais.
+    releaseFirst();
+    await settle();
+    expect([first.isLidarRouteTaker(), second.isLidarRouteTaker()]).toEqual([false, true]);
+    releaseSecond();
+  });
+
   it('le visualiseur n’affiche que les traces de son projet ; l’URL l’ouvre sur le projet de l’onglet', async () => {
     const pyrenees = await tab('pyrenees');
     const viewer = await tab('alpes');

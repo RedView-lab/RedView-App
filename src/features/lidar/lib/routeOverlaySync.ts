@@ -36,6 +36,45 @@ export function getLidarRouteSyncProject(): string | null {
   return syncProjectId;
 }
 
+/**
+ * Onglet de l'app qui applique les messages du visualiseur pour ce projet.
+ * Deux onglets ouverts sur le même projet ajoutaient chacun la trace créée ou
+ * copiée dans le visualiseur : un doublon dans le projet, et chez tous les
+ * éditeurs s'il est partagé (C2-1). Un verrou Web Locks par projet, tenu tant
+ * que l'onglet a le projet ouvert : le suivant le reprend quand il se ferme.
+ * Sans Web Locks : chaque onglet applique, comme avant.
+ */
+let routeTaker = false;
+
+export function claimLidarRouteTaker(projectId: string): () => void {
+  const locks = globalThis.navigator?.locks;
+  if (!locks) {
+    routeTaker = true;
+    return () => {
+      routeTaker = false;
+    };
+  }
+  const abort = new AbortController();
+  let release: (() => void) | null = null;
+  locks
+    .request(`redview:lidar-route-taker:${projectId}`, { signal: abort.signal }, () => {
+      routeTaker = true;
+      return new Promise<void>((resolve) => {
+        release = resolve;
+      });
+    })
+    .catch(() => undefined);
+  return () => {
+    routeTaker = false;
+    abort.abort();
+    release?.();
+  };
+}
+
+export function isLidarRouteTaker(): boolean {
+  return routeTaker;
+}
+
 function storageKey(): string {
   return syncProjectId ? `${LIDAR_ROUTE_OVERLAY_STORAGE_KEY}:${syncProjectId}` : LIDAR_ROUTE_OVERLAY_STORAGE_KEY;
 }

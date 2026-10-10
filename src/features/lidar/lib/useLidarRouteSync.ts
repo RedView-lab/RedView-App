@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react';
 import {
+  claimLidarRouteTaker,
+  isLidarRouteTaker,
   setLidarRouteSyncProject,
   subscribeToLidarRouteOverlay,
   syncLidarRouteOverlay,
@@ -41,7 +43,12 @@ export function useLidarRouteSync({
   // 0) Projet de la page (déclaré avant les publications ci-dessous, qui le portent).
   useEffect(() => {
     setLidarRouteSyncProject(projectId);
-    return () => setLidarRouteSyncProject(null);
+    // Un seul onglet par projet applique les messages du visualiseur (C2-1).
+    const releaseTaker = projectId ? claimLidarRouteTaker(projectId) : null;
+    return () => {
+      releaseTaker?.();
+      setLidarRouteSyncProject(null);
+    };
   }, [projectId]);
 
   // 1) Synchro sortante : quand les itinéraires changent dans RedView, pousser vers la couche LiDAR
@@ -56,7 +63,7 @@ export function useLidarRouteSync({
   useEffect(() => {
     const unsubscribe = subscribeToLidarRouteOverlay((msg: LidarRouteSyncMessage) => {
       if ('type' in msg) {
-        if (msg.source !== 'lidar_viewer') return;
+        if (msg.source !== 'lidar_viewer' || !isLidarRouteTaker()) return;
 
         if (msg.type === 'UPDATE_ROUTE_POINTS') {
           handlersRef.current.onLidarRouteEdit?.(msg.routeId, msg.points, msg.actionName);
