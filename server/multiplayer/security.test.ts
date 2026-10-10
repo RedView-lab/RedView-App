@@ -305,6 +305,24 @@ describe('serveur temps réel : jeton et droits pendant la session', () => {
     expect(replay.status).toBe(400);
   });
 
+  it('une IP qui inonde la route de révocation ne bloque pas les vraies révocations (quota par IP, A6-1)', async () => {
+    const bob = await join('tok-bob', 'b1');
+    const attempt = (forwardedFor: string, body: string, signature: string) => fetch(`http://127.0.0.1:${port}/multiplayer/internal/access-changed`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-redview-signature': signature, 'x-forwarded-for': forwardedFor },
+      body,
+    });
+    let limited = false;
+    for (let index = 0; index < 320 && !limited; index += 1) {
+      limited = (await attempt('203.0.113.9', '{}', '0'.repeat(64))).status === 429;
+    }
+    expect(limited).toBe(true);
+    access.set('bob', 'forbidden');
+    const body = JSON.stringify({ projectId: PROJECT, ts: Date.now() });
+    expect((await attempt('198.51.100.20', body, createHmac('sha256', SECRET).update(body).digest('hex'))).status).toBe(204);
+    expect(await bob.closed).toBe(4403);
+  });
+
   it('sans secret configuré, la route de révocation n’existe pas', async () => {
     await server!.shutdown();
     await start({ internalSecret: undefined });

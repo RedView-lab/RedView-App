@@ -57,6 +57,13 @@ export interface AuthOptions {
 }
 
 const TOKEN_CACHE_MS = 60_000;
+/**
+ * Utilisateurs dont un jeton a été vérifié récemment : seuls eux ont droit à
+ * la lecture anticipée de leurs droits (`claimedUserId`). Un jeton forgé
+ * (bonne forme, signature fausse) déclenchait sinon des lectures Appwrite et
+ * vidait le cache d'accès d'un projet choisi par l'appelant (A6-2).
+ */
+const VERIFIED_USER_MS = 24 * 3600_000;
 const MEMBERSHIP_CACHE_MS = 10_000;
 const DEV_TOKEN = /^dev:([A-Za-z0-9_-]{1,64})$/;
 /** Forme d'un JWT (trois parties base64url) : un jeton qui ne l'a pas n'est même pas présenté à Appwrite. */
@@ -96,6 +103,8 @@ export function createAuthenticator(options: AuthOptions): Authenticator {
   const memberships = new Map<string, { member: boolean; at: number }>();
   const oldestToken = createOldestKeyTaker(tokens);
   const oldestMembership = createOldestKeyTaker(memberships);
+  const verifiedUsers = new Map<string, number>();
+  const oldestVerifiedUser = createOldestKeyTaker(verifiedUsers);
   const admin = options.appwrite
     ? new Client().setEndpoint(options.appwrite.endpoint).setProject(options.appwrite.projectId).setKey(options.appwrite.apiKey)
     : null;
@@ -128,6 +137,11 @@ export function createAuthenticator(options: AuthOptions): Authenticator {
     }
     tokens.set(token, { identity, at: Date.now() });
     if (tokens.size > 10_000) tokens.delete(oldestToken()!);
+    if (identity) {
+      verifiedUsers.delete(identity.userId);
+      verifiedUsers.set(identity.userId, Date.now());
+      if (verifiedUsers.size > 10_000) verifiedUsers.delete(oldestVerifiedUser()!);
+    }
     return identity;
   }
 
@@ -159,7 +173,9 @@ export function createAuthenticator(options: AuthOptions): Authenticator {
       // Jeton déjà refusé (gardé en cache) : rien à préparer.
       const cached = tokens.get(token);
       if (cached && cached.identity === null && Date.now() - cached.at < TOKEN_CACHE_MS) return null;
-      return claimedJwtUser(token);
+      const claimed = claimedJwtUser(token);
+      const verifiedAt = claimed ? verifiedUsers.get(claimed) : undefined;
+      return verifiedAt !== undefined && Date.now() - verifiedAt < VERIFIED_USER_MS ? claimed : null;
     },
 
     async checkAccess(userId: string, projectId: string, { fresh = false } = {}): Promise<AccessResult> {

@@ -133,6 +133,10 @@ describe('serveur temps réel : jeton', () => {
 describe('serveur temps réel : droits à l’entrée dans une salle', () => {
   it('utilisateur déclaré par le jeton : lu sans vérification, rien pour un jeton illisible ou déjà refusé', async () => {
     const auth = authenticator();
+    // Utilisateur jamais vérifié : pas de lecture anticipée (jeton forgé, A6-2).
+    expect(auth.claimedUserId!(jwt('a0', 2_000_000_000, 'u7'))).toBeNull();
+    fake.outcomes = [{ userId: 'u7' }];
+    expect(await auth.verifyToken(jwt('a1', 2_000_000_000, 'u7'))).toMatchObject({ userId: 'u7' });
     expect(auth.claimedUserId!(jwt('a', 2_000_000_000, 'u7'))).toBe('u7');
     expect(auth.claimedUserId!(jwt('b', 2_000_000_000, '../u7'))).toBeNull();
     expect(auth.claimedUserId!(jwt('c', 2_000_000_000, 42))).toBeNull();
@@ -142,7 +146,7 @@ describe('serveur temps réel : droits à l’entrée dans une salle', () => {
     fake.outcomes = [{ code: 401 }];
     expect(await auth.verifyToken(refused)).toBeNull();
     expect(auth.claimedUserId!(refused)).toBeNull();
-    expect(fake.calls).toBe(1);
+    expect(fake.calls).toBe(2);
     expect(authenticator({ devAuth: true }).claimedUserId!('dev:u9')).toBe('u9');
   });
 

@@ -210,7 +210,7 @@ export function createMultiplayerServer(options: MultiplayerServerOptions): Mult
       return;
     }
     if (req.method === 'POST' && route === '/internal/access-changed' && options.internalSecret) {
-      handleAccessChanged(req, res, options.internalSecret);
+      handleAccessChanged(req, res, options.internalSecret, rateLimitKeyForIp(getClientIp(req)));
       return;
     }
     res.writeHead(404).end();
@@ -222,8 +222,12 @@ export function createMultiplayerServer(options: MultiplayerServerOptions): Mult
    * connexions du projet revérifient leurs droits tout de suite — un message
    * rejoué ou forgé ne peut rien faire d'autre.
    */
-  function handleAccessChanged(req: http.IncomingMessage, res: http.ServerResponse, secret: string): void {
-    if (!allowInternal('internal')) {
+  function handleAccessChanged(req: http.IncomingMessage, res: http.ServerResponse, secret: string, ip: string): void {
+    // Quota par IP : la route est joignable depuis l'extérieur (nginx relaie
+    // tout /multiplayer/) et un seul seau pour tout le monde laissait une IP
+    // quelconque, à coups de corps invalides, faire refuser en 429 les vraies
+    // révocations de l'API de partage (A6-1).
+    if (!allowInternal(ip)) {
       res.writeHead(429).end();
       return;
     }
