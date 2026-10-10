@@ -4,7 +4,7 @@ import type { BrouterRoute } from '../brouter';
 const { sampleTerrainElevationsAtPoints } = vi.hoisted(() => ({ sampleTerrainElevationsAtPoints: vi.fn() }));
 vi.mock('./terrainTiles', () => ({ sampleTerrainElevationsAtPoints }));
 
-import { refineRouteProfileWithIgnAltimetry } from './profile';
+import { refineRouteProfileWithIgnAltimetry } from './profileRefinement';
 
 /** Route de 2 km vers le nord, un sommet tous les ~111 m, un seul message à l'arrivée. */
 function buildRoute(): BrouterRoute {

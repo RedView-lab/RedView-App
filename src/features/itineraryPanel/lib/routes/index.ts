@@ -3,7 +3,6 @@ export {
   normalizeImportedRoutePoints,
   buildImportedRouteMetrics,
   createImportedTimeline,
-  refineImportedRoutePointsWithIgnAltimetry,
 } from './imported-route';
 export {
   haversineRouteDistanceM,

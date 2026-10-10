@@ -13,9 +13,9 @@ import {
   buildRouteGeometrySignature,
   createImportedTimeline,
   normalizeImportedRoutePoints,
-  refineImportedRoutePointsWithIgnAltimetry,
   simplifyPointsByQuality,
 } from '../../lib/routes';
+import { refineImportedRoutePointsWithIgnAltimetry } from '../../lib/routes/imported-route-altimetry';
 import { createDefaultAnalysisPanelState, createImportedPoiState } from '../../lib/project';
 import type { GpxQualityMode, Itinerary, ItineraryProject, TimelineItem } from '../../types';
 import { resolveImportedTimelineLabel } from './importedTimelineLabel';

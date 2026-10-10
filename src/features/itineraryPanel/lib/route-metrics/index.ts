@@ -18,10 +18,10 @@ export {
 export {
   extractRouteProfileFromBrouter,
   extractRouteProfileFromPoints,
-  refineRouteProfileWithIgnAltimetry,
   
   
 } from './profile';
+export { refineRouteProfileWithIgnAltimetry } from './profileRefinement';
 
 export {
   analyzeGpxSurfaces,

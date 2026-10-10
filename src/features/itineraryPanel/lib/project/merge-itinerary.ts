@@ -9,7 +9,10 @@ import {
   buildImportedRouteMetrics,
   normalizeImportedRoutePoints,
 } from '../routes';
-import { formatGpsCoordinateLabel } from '../geocoding';
+// Module concret, pas le barrel : le gestionnaire de projets charge ce fichier,
+// et le géocodeur (requêtes partagées créées au chargement) n'a rien à faire
+// sur son chemin critique.
+import { formatGpsCoordinateLabel } from '../geocoding/coordinateLabel';
 import type {
   Itinerary,
   ItineraryForbiddenZone,

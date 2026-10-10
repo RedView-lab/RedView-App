@@ -33,8 +33,7 @@ vi.mock('@/features/poi/lib/gpx-loader', () => ({
 vi.mock('./importedGpxGaps', () => ({
   bridgeImportedGpxGaps: async (route: unknown) => ({ route, bridged: 0, unbridged: 0 }),
 }));
-vi.mock('../../lib/routes', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../lib/routes')>()),
+vi.mock('../../lib/routes/imported-route-altimetry', () => ({
   refineImportedRoutePointsWithIgnAltimetry: async () => null,
 }));
 vi.mock('../../lib/route-metrics', async (importOriginal) => ({

@@ -9,7 +9,6 @@ import { cleanAndInterpolateElevations } from '../route-metrics/elevationSanitiz
 import { computeRouteElevationMetrics, computeRouteSurfaceMetricsFromPoints } from '../route-metrics/metrics';
 import { extractRouteProfileFromPoints } from '../route-metrics/profile';
 import type { RouteProfilePoint } from '../route-metrics/types';
-import { sampleTerrainElevationsAtPoints } from '../route-metrics/terrainTiles';
 import type { Itinerary, ItineraryMetrics, TimelineItem } from '../../types';
 
 const EARTH_RADIUS_M = 6_371_008.8;
@@ -71,29 +70,6 @@ function buildDistanceOnlyRoutePoints(
 
 interface NormalizeImportedRoutePointsOptions {
   includeGradient?: boolean;
-}
-
-export async function refineImportedRoutePointsWithIgnAltimetry(
-  points: NonNullable<Itinerary['gpxRoute']>['points'],
-  signal?: AbortSignal,
-): Promise<NonNullable<Itinerary['gpxRoute']>['points'] | null> {
-  if (points.length < 2) return null;
-
-  const elevations = await sampleTerrainElevationsAtPoints(points, signal);
-  let coverage = 0;
-  const refined = points.map((point, index) => {
-    const elevation = elevations[index];
-    if (elevation != null && Number.isFinite(elevation)) {
-      coverage += 1;
-      return {
-        ...point,
-        elevationM: elevation,
-      };
-    }
-    return point;
-  });
-
-  return coverage / points.length >= 0.6 ? cleanAndInterpolateElevations(refined) : null;
 }
 
 export function normalizeImportedRoutePoints(
