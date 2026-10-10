@@ -90,10 +90,25 @@ export function deleteUnsynced(clientId: string): Promise<void> {
  * même appareil (non envoyées : ce serait son travail perdu, B3-3).
  */
 export async function deleteUnsyncedOfUser(userId: string): Promise<void> {
+  // L'ouvrir créerait la base sur un appareil qui ne l'a jamais eue.
+  const known = await indexedDB.databases?.().catch(() => null);
+  if (known && !known.some((database) => database.name === DB_NAME)) return;
   const records = await run('readonly', (store) => store.getAll() as IDBRequest<UnsyncedRecord[]>);
   for (const record of records) {
     if (record.userId === userId) await deleteUnsynced(record.clientId);
   }
+  // Plus rien d'un autre compte : la base entière part, comme avant.
+  if (records.every((record) => record.userId === userId)) await dropDatabase();
+}
+
+async function dropDatabase(): Promise<void> {
+  const pending = dbPromise;
+  dbPromise = null;
+  (await pending?.catch(() => null))?.close();
+  await new Promise<void>((resolve) => {
+    const request = indexedDB.deleteDatabase(DB_NAME);
+    request.onsuccess = request.onerror = request.onblocked = () => resolve();
+  });
 }
 
 function listUnsynced(projectId: string): Promise<UnsyncedRecord[]> {
