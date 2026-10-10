@@ -87,6 +87,12 @@ RUN node scripts/build/check-route-imports.mjs dist-server/api
 ARG SOURCE_COMMIT=""
 ENV SOURCE_COMMIT=${SOURCE_COMMIT}
 
+# Codes de vérification et verrous anti-force brute (api/_lib/verificationStore.ts) :
+# monter ici un volume persistant (Coolify → Storages, destination /app/data),
+# sinon chaque déploiement les efface.
+ENV REDVIEW_AUTH_STORE_DIR=/app/data
+RUN mkdir -p /app/data && chown redview:nodejs /app/data && chmod 700 /app/data
+
 USER redview
 
 EXPOSE 3000

@@ -34,14 +34,14 @@ interface Captured {
   body: { error?: string; success?: boolean } | undefined;
 }
 
-async function verify(email: string, code: string, password = 'correct horse battery'): Promise<Captured> {
+async function verify(email: string, code: string, password = 'correct horse battery', ip = '198.51.100.1'): Promise<Captured> {
   const captured: Captured = { status: 200, body: undefined };
   const res = {
     status(code: number) { captured.status = code; return res; },
     setHeader() { return res; },
     json(data: Captured['body']) { captured.body = data; return res; },
   } as unknown as ApiResponse;
-  const req = { method: 'POST', query: {}, headers: {}, body: { email, code, password, name: 'Alex' } } as unknown as ApiRequest;
+  const req = { method: 'POST', query: {}, headers: {}, socket: { remoteAddress: ip }, body: { email, code, password, name: 'Alex' } } as unknown as ApiRequest;
   await handler(req, res);
   return captured;
 }
@@ -108,5 +108,23 @@ describe('api/auth/verify-code', () => {
     const out = await verify(email, code);
     expect(out.status).toBe(200);
     expect(out.body?.success).toBe(true);
+  });
+
+  it('un tiers qui tape de mauvais codes ne bloque pas l’inscription du vrai titulaire depuis une autre IP (A1-4)', async () => {
+    const { email } = await issueCode();
+    const wrong = (code: string) => (code === '000000' ? '111111' : '000000');
+    // 10 échecs depuis l'IP de l'attaquant (deux codes de 5 essais) : son couple adresse + IP est verrouillé.
+    let last: Captured | null = null;
+    for (let round = 0; round < 2; round += 1) {
+      await requestVerificationCode(email);
+      const code = sentCodes.at(-1)!;
+      for (let attempt = 0; attempt < 5; attempt += 1) last = await verify(email, wrong(code), undefined, '203.0.113.66');
+    }
+    expect(last?.status).toBe(429);
+    // Le titulaire, depuis chez lui : un nouveau code passe.
+    await requestVerificationCode(email);
+    const ok = await verify(email, sentCodes.at(-1)!, undefined, '198.51.100.7');
+    expect(ok.status).toBe(200);
+    expect(users.create).toHaveBeenCalledTimes(1);
   });
 });

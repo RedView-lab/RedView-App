@@ -53,15 +53,43 @@ const REQUEST_WINDOW_MS = 60 * 60 * 1000; // 1 h glissante
 const MAX_REQUESTS_PER_WINDOW = 5;
 const FAILURE_WINDOW_MS = 24 * 60 * 60 * 1000; // 24 h glissantes
 const MAX_FAILURES_PER_WINDOW = 10;
+/**
+ * Avec une portée (l'IP de l'inscription), le verrou de 10 échecs ne vise que
+ * le couple adresse + IP : un tiers ne bloque plus 24 h l'inscription de
+ * quelqu'un d'autre en tapant de mauvais codes (A1-4). L'adresse seule reste
+ * verrouillée à 50 échecs, toutes IP confondues : la force brute d'un code à
+ * 6 chiffres reste bornée (≤ 50 essais / 24 h).
+ */
+const MAX_FAILURES_PER_ADDRESS = 50;
 const LOCK_DURATION_MS = 24 * 60 * 60 * 1000;
 const FLUSH_DEBOUNCE_MS = 250;
+
+export const VERIFICATION_COOLDOWN_MESSAGE = 'Veuillez patienter quelques secondes avant de redemander un code.';
 
 export const VERIFICATION_LOCKED_MESSAGE =
   'Trop de tentatives pour cette adresse e-mail. Veuillez réessayer plus tard.';
 
 // ────────────────────────────── Persistance ──────────────────────────────
 
-const STORE_FILE = path.join(os.tmpdir(), 'redview_auth_verification_vault.json');
+/**
+ * Dossier du magasin : `REDVIEW_AUTH_STORE_DIR` (prod : un volume persistant,
+ * /app/data dans l'image), sinon le dossier temporaire. Dans /tmp, chaque
+ * déploiement effaçait les codes en cours (« Aucun code trouvé ») et
+ * remettait à zéro compteurs d'échecs et verrous de 24 h (A13-1).
+ */
+function storeDir(): string {
+  const configured = process.env.REDVIEW_AUTH_STORE_DIR?.trim();
+  if (!configured) return os.tmpdir();
+  try {
+    fs.mkdirSync(configured, { recursive: true, mode: 0o700 });
+    return configured;
+  } catch (error) {
+    console.warn('[verificationStore] REDVIEW_AUTH_STORE_DIR unusable, falling back to tmp:', error);
+    return os.tmpdir();
+  }
+}
+
+const STORE_FILE = path.join(storeDir(), 'redview_auth_verification_vault.json');
 
 function hashVerificationCode(code: string, salt: string): string {
   return crypto.createHash('sha256').update(`${salt}:${code}`).digest('hex');
@@ -250,8 +278,10 @@ export function consumeVerificationRequestQuota(email: string): void {
 
   const lastRequestAt = quota.requests.length > 0 ? Math.max(...quota.requests) : 0;
   if (lastRequestAt && now - lastRequestAt < REQUEST_COOLDOWN_MS) {
-    const waitSec = Math.ceil((REQUEST_COOLDOWN_MS - (now - lastRequestAt)) / 1000);
-    throw new PublicError(`Veuillez patienter ${waitSec}s avant de redemander un code.`, 429);
+    // Texte fixe : un nombre variable ne se traduisait jamais (le traducteur
+    // de l'app ne reconnaît que des textes entiers, A14-3) ; l'écran affiche
+    // déjà son propre compte à rebours de renvoi.
+    throw new PublicError(VERIFICATION_COOLDOWN_MESSAGE, 429);
   }
 
   if (quota.requests.length >= MAX_REQUESTS_PER_WINDOW) {
@@ -299,16 +329,21 @@ function issueCode(key: string, target?: string): string {
  * Compte un échec dans le quota de `key` (verrou 24 h après 10 échecs) ;
  * vrai si la clé vient d'être verrouillée.
  */
-function pushFailure(key: string, now: number): boolean {
+function pushFailure(key: string, now: number, max = MAX_FAILURES_PER_WINDOW, codeKey = key): boolean {
   const quota = getQuota(key, now);
   quota.failures.push(now);
-  const locked = quota.failures.length >= MAX_FAILURES_PER_WINDOW;
+  const locked = quota.failures.length >= max;
   if (locked) {
     quota.lockedUntil = now + LOCK_DURATION_MS;
-    deleteCode(key);
+    deleteCode(codeKey);
   }
   saveQuota(key, quota);
   return locked;
+}
+
+/** Clé de quota du couple adresse + portée (IP). */
+function scopedKey(key: string, scope: string): string {
+  return `${key}#${scope}`;
 }
 
 /**
@@ -414,13 +449,16 @@ export function consumeVerificationCode(email: string): void {
  * action qui peut échouer après la vérification (création du compte), le
  * code reste valable pour un nouvel essai jusqu'à `consumeVerificationCode`.
  */
-export function checkVerificationCode(email: string, inputCode: string, target?: string): CodeCheck {
+export function checkVerificationCode(email: string, inputCode: string, target?: string, failureScope?: string): CodeCheck {
   const normalizedEmail = normalizeVerificationEmail(email);
   const cleanInput = inputCode.trim();
   const now = Date.now();
   const quota = getQuota(normalizedEmail, now);
 
   if (quota.lockedUntil > now) {
+    return { valid: false, error: VERIFICATION_LOCKED_MESSAGE, status: 429 };
+  }
+  if (failureScope && getQuota(scopedKey(normalizedEmail, failureScope), now).lockedUntil > now) {
     return { valid: false, error: VERIFICATION_LOCKED_MESSAGE, status: 429 };
   }
 
@@ -470,8 +508,18 @@ export function checkVerificationCode(email: string, inputCode: string, target?:
     crypto.timingSafeEqual(expectedBuf, inputBuf);
 
   if (!isMatch) {
-    // Compteur cumulatif par e-mail (survit à la suppression du code)
-    if (pushFailure(normalizedEmail, now)) {
+    // Compteur cumulatif par e-mail (survit à la suppression du code) ; avec
+    // une portée, le verrou court vise le couple adresse + IP.
+    let locked: boolean;
+    if (failureScope) {
+      // Les deux compteurs avancent à chaque échec.
+      const scopeLocked = pushFailure(scopedKey(normalizedEmail, failureScope), now, MAX_FAILURES_PER_WINDOW, normalizedEmail);
+      const addressLocked = pushFailure(normalizedEmail, now, MAX_FAILURES_PER_ADDRESS);
+      locked = scopeLocked || addressLocked;
+    } else {
+      locked = pushFailure(normalizedEmail, now);
+    }
+    if (locked) {
       return { valid: false, error: VERIFICATION_LOCKED_MESSAGE, status: 429 };
     }
 

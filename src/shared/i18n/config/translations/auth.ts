@@ -85,6 +85,7 @@ export const authTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'Le code a expiré. Veuillez en redemander un nouveau.', en: 'The code has expired. Please request a new one.' },
   { fr: 'Trop de tentatives incorrectes. Le code a été invalidé par sécurité. Veuillez en demander un nouveau.', en: 'Too many incorrect attempts. The code was invalidated for security. Please request a new one.' },
   { fr: 'Code invalide. Nombre maximal d’essais atteint, code invalidé.', en: 'Invalid code. Maximum number of attempts reached, code invalidated.' },
+  { fr: 'Veuillez patienter quelques secondes avant de redemander un code.', en: 'Please wait a few seconds before requesting a new code.' },
   // `Code invalide (${n} essai(s) restant(s)).` : n de 1 à 4 (5 essais par code)
   { fr: 'Code invalide (4 essai(s) restant(s)).', en: 'Invalid code (4 attempts left).' },
   { fr: 'Code invalide (3 essai(s) restant(s)).', en: 'Invalid code (3 attempts left).' },

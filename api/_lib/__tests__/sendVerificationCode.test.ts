@@ -19,6 +19,7 @@ vi.mock('node:os', async (importActual) => {
 vi.mock('../appwrite.js', () => ({ getAppwriteUsers: () => users }));
 
 const { default: handler } = await import('../../auth/send-verification-code');
+const { VERIFICATION_COOLDOWN_MESSAGE } = await import('../verificationStore');
 
 /** Texte libre qu'un tiers glisserait dans un e-mail officiel adressé à sa cible. */
 const INJECTED_NAME = 'Votre compte est suspendu, appelez le 01 23 45 67 89';
@@ -32,11 +33,13 @@ interface SentEmail {
 
 let sent: SentEmail[] = [];
 
+let lastBody: { error?: string } | undefined;
+
 async function requestCode(email: string, name: string): Promise<number> {
   let status = 200;
   const res = {
     status(code: number) { status = code; return res; },
-    json() { return res; },
+    json(body: { error?: string }) { lastBody = body; return res; },
   } as unknown as ApiResponse;
   await handler({ method: 'POST', body: { email, name } } as unknown as ApiRequest, res);
   return status;
@@ -90,5 +93,14 @@ describe('send-verification-code', () => {
     expect(await requestCode(email, 'Nom')).toBe(503);
     // Sans remboursement de la demande, le second essai tomberait sur le délai de 30 s (429).
     expect(await requestCode(email, 'Nom')).toBe(503);
+  });
+
+  it('second code demandé dans les 30 s : 429 avec un texte fixe, que l’app sait traduire (A14-3)', async () => {
+    users.list.mockResolvedValue({ total: 0, users: [] });
+    expect(await requestCode('cooldown@example.com', 'Nom')).toBe(200);
+    expect(await requestCode('cooldown@example.com', 'Nom')).toBe(429);
+    expect(lastBody?.error).toBe(VERIFICATION_COOLDOWN_MESSAGE);
+    const { authTranslationPairs } = await import('../../../src/shared/i18n/config/translations/auth');
+    expect(authTranslationPairs.some((pair) => pair.fr === VERIFICATION_COOLDOWN_MESSAGE)).toBe(true);
   });
 });

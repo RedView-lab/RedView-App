@@ -1,6 +1,7 @@
 import type { ApiRequest, ApiResponse } from '../_lib/types.js';
 import { bodyFields } from '../_lib/http.js';
 import { ID } from 'node-appwrite';
+import { getClientIp, rateLimitKeyForIp } from '../../server/lib/http-security.mjs';
 import { getAppwriteUsers } from '../_lib/appwrite.js';
 import { parseEmailAddress } from '../_lib/email.js';
 import { sendSafeError } from '../_lib/errors.js';
@@ -50,7 +51,9 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
 
   // 1. Valide le code (consommé seulement une fois le compte créé : un échec
   //    d'Appwrite plus bas le laisse utilisable pour un nouvel essai)
-  const validation = checkVerificationCode(normalizedEmail, trimmedCode);
+  // Échecs comptés aussi par IP : un tiers ne verrouille que son propre couple
+  // adresse + IP, pas l'inscription du vrai titulaire (A1-4).
+  const validation = checkVerificationCode(normalizedEmail, trimmedCode, undefined, rateLimitKeyForIp(getClientIp(req)));
   if (!validation.valid) {
     return res
       .status(validation.status ?? 400)
