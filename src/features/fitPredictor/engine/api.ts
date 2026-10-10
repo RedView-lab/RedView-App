@@ -46,6 +46,9 @@ export class FitPredictionCancelledError extends Error {
   }
 }
 
+/** Panique du moteur Rust : message lisible plutôt que « unreachable » (traduit par le DOM). */
+const ENGINE_PANIC_MESSAGE = 'Le moteur de prédiction a rencontré une erreur interne : relancez le calcul.';
+
 export function createFitPredictionEngine() {
   let idCounter = 0;
   // Le worker est mono-thread et `predict()` est synchrone : une seule
@@ -72,7 +75,14 @@ export function createFitPredictionEngine() {
     }
 
     const done = settleInFlight()!;
-    if (message.type === 'error') {
+    if (message.type === 'error' && message.fatal) {
+      // Panique du moteur : ce worker s'est fermé, un neuf servira la suite.
+      const failed = worker;
+      worker = null;
+      failed?.terminate();
+      console.warn('[fitPredictor] engine panic, worker replaced:', message.message);
+      done.entry.reject(new Error(ENGINE_PANIC_MESSAGE));
+    } else if (message.type === 'error') {
       done.entry.reject(new Error(message.message));
     } else {
       done.entry.resolve(message.data);

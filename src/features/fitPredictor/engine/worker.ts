@@ -110,7 +110,12 @@ self.onmessage = async (event: MessageEvent<FitWorkerRequest>) => {
     }
   } catch (error: unknown) {
     const messageText = error instanceof Error ? error.message : String(error);
-    respond({ _id: message._id, type: 'error', message: messageText });
+    // Panique Rust (`unreachable`) : l'instance WASM n'est plus fiable (emprunts
+    // RefCell restés pris, état global à moitié écrit). Le worker répond puis se
+    // ferme ; api.ts en crée un neuf (et une instance neuve) au calcul suivant.
+    const fatal = error instanceof WebAssembly.RuntimeError;
+    respond({ _id: message._id, type: 'error', message: messageText, ...(fatal ? { fatal } : {}) });
+    if (fatal) self.close();
   }
 };
 

@@ -57,4 +57,5 @@ export const fitPredictorTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'N/D', en: 'N/A' },
   // Moteur (worker)
   { fr: 'Le moteur de prédiction a planté', en: 'Prediction worker crashed' },
+  { fr: 'Le moteur de prédiction a rencontré une erreur interne : relancez le calcul.', en: 'The prediction engine hit an internal error: run the calculation again.' },
 ];

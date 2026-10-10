@@ -321,4 +321,9 @@ export type FitWorkerResponse =
   | (WorkerMessageBase & {
       type: 'error';
       message: string;
+      /**
+       * Trap WASM (panique Rust, `panic = abort` en wasm32) : l'instance est
+       * dans un état indéfini, le worker se ferme et sera remplacé.
+       */
+      fatal?: boolean;
     });
