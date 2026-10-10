@@ -43,7 +43,7 @@ export function isPointPanelOpen(target?: EventTarget | null): boolean {
     return true;
   }
 
-  // 3. Right-click context menu on map
+  // 3. Menu contextuel (clic droit) de la carte
   const contextMenu = document.querySelector('.rv-map-context-menu');
   if (contextMenu instanceof HTMLElement && contextMenu.offsetParent !== null) {
     return true;
@@ -122,7 +122,7 @@ export function closeMarkerPopupOnSecondClick(
 const DOM_MARKER_SELECTOR = '.mapboxgl-marker, .rv-poi-marker, .rv-checkpoint-marker';
 
 /**
- * True quand l'événement (DOM, ou `MapMouseEvent` via `originalEvent`) part
+ * Vrai quand l'événement (DOM, ou `MapMouseEvent` via `originalEvent`) part
  * d'un marqueur DOM. Mapbox émet quand même ses événements de couche
  * (`map.on('click', layerId)`) si un symbole se trouve sous le marqueur : un
  * waypoint posé sur un POI ouvrait ainsi son panneau ET celui du POI.
