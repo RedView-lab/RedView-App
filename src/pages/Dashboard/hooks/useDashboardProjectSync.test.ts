@@ -199,7 +199,24 @@ describe('projet partagé, fermeture, changement de projet', () => {
     const sync = mount();
     act(() => sync.queueProjectSave(project('avant fermeture')));
     await act(async () => { window.dispatchEvent(new Event('pagehide')); });
-    expect(cloud.saveLocally).toHaveBeenCalledWith('p1', expect.objectContaining({ name: 'avant fermeture' }));
+    expect(cloud.saveLocally).toHaveBeenCalledWith('p1', expect.objectContaining({ name: 'avant fermeture' }), undefined, undefined);
+  });
+
+  it('session expirée : la copie locale du démontage est faite pour le compte qui a modifié, session déjà oubliée (B3-4)', async () => {
+    const appwrite = await import('@/shared/services/appwrite');
+    appwrite.saveStoredAppwriteSession({ id: 'user-A' });
+    const sync = mount();
+    act(() => sync.queueProjectSave(project('juste avant l’expiration')));
+    // App.tsx oublie la session avant de démonter le Dashboard.
+    appwrite.clearStoredAppwriteSession();
+    act(() => { hook?.unmount(); hook = null; });
+    await act(async () => {});
+    expect(cloud.saveLocally).toHaveBeenCalledWith(
+      'p1',
+      expect.objectContaining({ name: 'juste avant l’expiration' }),
+      undefined,
+      'user-A',
+    );
   });
 
   it('changer de projet abandonne l’envoi en attente : une sauvegarde explicite reçoit une erreur, rien ne part', async () => {

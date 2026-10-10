@@ -106,8 +106,14 @@ export async function saveProjectLocally(
   id: string,
   project: ItineraryProject,
   serialized?: SerializedProject,
+  /**
+   * Compte qui a fait les modifications, quand la session a pu être oubliée
+   * entre-temps (session expirée : App.tsx la vide avant de démonter le
+   * Dashboard, B3-4). Sans lui : le compte de la session courante.
+   */
+  ownerId?: string,
 ): Promise<void> {
-  const userId = await getCurrentUserId();
+  const userId = ownerId ?? await getCurrentUserId();
   const stored = serialized ?? serializeProjectForStorage(project);
   const localOnly = isLocalFallbackUser(userId) || id.startsWith('local-') || isServerOwnedDocument(id);
   await writeLocalCopy(id, project, userId, stored, utf8ByteLength(stored.documentJson), !localOnly);

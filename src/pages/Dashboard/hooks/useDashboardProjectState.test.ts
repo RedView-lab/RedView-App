@@ -194,7 +194,7 @@ describe('ouverture', () => {
     await act(async () => { await state().openProject('p1'); });
     act(() => state().handleProjectChange('p1', { ...state().activeProjectInitial!, name: 'Un modifié' }));
     await act(async () => { await state().openProject('p2'); });
-    expect(services.saveLocally).toHaveBeenCalledWith('p1', expect.objectContaining({ name: 'Un modifié' }));
+    expect(services.saveLocally).toHaveBeenCalledWith('p1', expect.objectContaining({ name: 'Un modifié' }), undefined, undefined);
     expect(services.calls.indexOf('save:p1:Un modifié')).toBeLessThan(services.calls.indexOf('get:p2'));
   });
 });

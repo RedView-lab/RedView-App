@@ -174,6 +174,20 @@ describe('saveProject', () => {
   });
 });
 
+describe('session expirée (B3-4)', () => {
+  it('la copie locale d’un compte dont la session vient d’être oubliée est gardée, à resynchroniser', async () => {
+    const { mock, rows, idb } = await load();
+    const row = await rows.createProject('Avant expiration');
+    (await import('@/shared/services/appwrite')).clearStoredAppwriteSession();
+    mock.accountGetMode = 'unauthorized';
+    await rows.saveProjectLocally(row.id, project('Dernière modification'), undefined, ME);
+    const stored = await idb.idbGetProject(row.id);
+    expect(stored?.data.name).toBe('Dernière modification');
+    expect(stored?.dirty).toBe(true);
+    expect(stored?.user_id).toBe(ME);
+  });
+});
+
 describe('nom de projet au-delà des 255 caractères de l’attribut (D3-3)', () => {
   // Nom collé depuis une description : 300 caractères, émojis compris (comptés en points de code par Appwrite).
   const longName = `${'Tour du Mont-Blanc en autonomie '.repeat(9)}🏔️🚴`;

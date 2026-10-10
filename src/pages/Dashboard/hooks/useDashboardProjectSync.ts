@@ -18,6 +18,7 @@ import {
 import { replaceProjectLocation } from '@/shared/lib/projectLocation';
 import { captureMapThumbnail } from '@/shared/lib/mapThumbnail';
 import { idbSaveThumbnail } from '@/shared/services/storage/idbProjectStore';
+import { getSessionUserIdSync } from '@/shared/services/appwrite';
 
 import { logger } from '@/shared/lib/logger';
 
@@ -50,6 +51,12 @@ interface PendingSave {
   force?: boolean;
   /** Sauvegardes explicites en attente du résultat de cet envoi. */
   callbacks: SaveCallback[];
+  /**
+   * Compte de la session au moment de la modification : la copie locale du
+   * démontage est faite pour lui même si la session expirée vient d'être
+   * oubliée (App.tsx la vide avant de démonter le Dashboard, B3-4).
+   */
+  ownerId?: string;
 }
 
 interface UseDashboardProjectSyncArgs {
@@ -194,7 +201,7 @@ export function useDashboardProjectSync({
     // ici, copie locale seulement (même pour une sauvegarde explicite).
     if (isServerOwnedDocument(item.id)) {
       try {
-        await saveProjectLocally(item.id, item.project, serialized);
+        await saveProjectLocally(item.id, item.project, serialized, item.ownerId);
       } catch (error) {
         logger.projects.warn('local-only save failed (live session)', error);
       }
@@ -209,7 +216,7 @@ export function useDashboardProjectSync({
     // (bouton Enregistrer) retente le cloud pour afficher l'erreur à jour.
     if (!item.force && item.callbacks.length === 0 && stillBlocked) {
       try {
-        await saveProjectLocally(item.id, item.project, serialized);
+        await saveProjectLocally(item.id, item.project, serialized, item.ownerId);
         // Copie locale revenue : l'indicateur redit pourquoi le cloud est suspendu.
         if (getProjectSyncStatus().localCopyLost) {
           setProjectSyncStatus({
@@ -307,7 +314,7 @@ export function useDashboardProjectSync({
     const item = pendingSaveRef.current;
     if (!item) return;
     try {
-      await saveProjectLocally(item.id, item.project);
+      await saveProjectLocally(item.id, item.project, undefined, item.ownerId);
     } catch (error) {
       logger.projects.warn('local flush failed', error);
     }
@@ -321,6 +328,7 @@ export function useDashboardProjectSync({
       project,
       force: force || carried?.force === true,
       callbacks: carried ? carried.callbacks : [],
+      ownerId: getSessionUserIdSync() ?? carried?.ownerId,
     };
     pendingSaveRef.current = next;
     return next;
