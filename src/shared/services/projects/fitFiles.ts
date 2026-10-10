@@ -100,6 +100,24 @@ export function isFitFileOwnedBy(permissions: readonly string[] | undefined, use
 }
 
 /**
+ * Fichiers .fit (identifiants du bucket) dont `userId` est propriétaire,
+ * parmi `paths`. Un fichier absent (404) n'en fait pas partie ; toute autre
+ * erreur remonte (export : pas de fichier incomplet en silence).
+ */
+export async function ownedFitFilePaths(paths: readonly string[], userId: string): Promise<Set<string>> {
+  const owned = new Set<string>();
+  await Promise.all([...new Set(paths)].map(async (path) => {
+    try {
+      const file = await storage.getFile(FIT_FILES_BUCKET_ID, path);
+      if (isFitFileOwnedBy(file.$permissions, userId)) owned.add(path);
+    } catch (error) {
+      if ((error as { code?: number } | null)?.code !== 404) throw error;
+    }
+  }));
+  return owned;
+}
+
+/**
  * Efface tous les fichiers FIT dont le compte connecté est propriétaire, y
  * compris ceux qu'aucun projet ne référence plus (retrait du consentement aux
  * données de santé). Les fichiers d'autres éditeurs, lisibles dans un projet
@@ -108,21 +126,31 @@ export function isFitFileOwnedBy(permissions: readonly string[] | undefined, use
  * Renvoie le nombre de fichiers effacés et ceux qui ont échoué.
  */
 export async function deleteOwnedFitFiles(): Promise<{ deleted: number; failed: number }> {
+  const owned = (await listOwnedFitFiles()).map((file) => file.id);
+  const failed = await deleteFitUploads(owned.map((path) => ({ path }) as ItineraryFitUpload));
+  return { deleted: owned.length - failed.length, failed: failed.length };
+}
+
+/**
+ * Tous les fichiers FIT dont le compte connecté est propriétaire (ceux de ses
+ * projets, ceux déposés dans les projets partagés d'autres personnes, les
+ * orphelins), avec leur nom : purge du consentement et export « Vos données ».
+ */
+export async function listOwnedFitFiles(): Promise<Array<{ id: string; name: string }>> {
   const userId = await getCurrentUserId();
   if (!userId) throw new Error('Session utilisateur introuvable.');
-  const owned: string[] = [];
+  const owned: Array<{ id: string; name: string }> = [];
   let cursor: string | null = null;
   for (let page = 0; page < OWNED_FILES_MAX_PAGES; page += 1) {
-    const list: { files: Array<{ $id: string; $permissions: string[] }> } = await storage.listFiles(FIT_FILES_BUCKET_ID, [
+    const list: { files: Array<{ $id: string; $permissions: string[]; name: string }> } = await storage.listFiles(FIT_FILES_BUCKET_ID, [
       Query.limit(OWNED_FILES_PAGE_SIZE),
       ...(cursor ? [Query.cursorAfter(cursor)] : []),
     ]);
-    for (const file of list.files) if (isFitFileOwnedBy(file.$permissions, userId)) owned.push(file.$id);
+    for (const file of list.files) if (isFitFileOwnedBy(file.$permissions, userId)) owned.push({ id: file.$id, name: file.name });
     if (list.files.length < OWNED_FILES_PAGE_SIZE) break;
     cursor = list.files[list.files.length - 1]!.$id;
   }
-  const failed = await deleteFitUploads(owned.map((path) => ({ path }) as ItineraryFitUpload));
-  return { deleted: owned.length - failed.length, failed: failed.length };
+  return owned;
 }
 
 /**

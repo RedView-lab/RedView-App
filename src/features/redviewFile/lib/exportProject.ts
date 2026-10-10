@@ -12,7 +12,10 @@ import { deserializeLegacyFitUploads } from '@/features/itineraryPanel/lib/sched
 import type { ItineraryFitUpload, ItineraryProject } from '@/features/itineraryPanel/types';
 import { APP_BUILD_ID } from '@/shared/lib/appCacheEpoch';
 import { logger } from '@/shared/lib/logger';
-import { downloadProjectItineraryFitFileEntries, loadProjectThumbnailBlob } from '@/shared/services/projects';
+import { downloadProjectItineraryFitFileEntries, loadProjectThumbnailBlob, ownedFitFilePaths } from '@/shared/services/projects';
+import { getCurrentUserId } from '@/shared/services/projects/auth';
+
+import { anonymizeOtherCommentAuthors } from './anonymizeComments';
 
 import { withEffectiveControlPanel } from './effectiveControlPanel';
 import { RedviewFileError } from './errors';
@@ -40,6 +43,8 @@ export interface RedviewExportResult {
   fitFileCount: number;
   /** Fichiers .fit supprimés du stockage : absents du fichier exporté. */
   missingFitFiles: string[];
+  /** Fichiers .fit d'autres membres (projet partagé) : laissés de côté. */
+  withheldFitFileCount: number;
 }
 
 async function toBytes(blob: Blob): Promise<Uint8Array<ArrayBuffer>> {
@@ -117,11 +122,49 @@ function collectRoutingProfiles(project: ItineraryProject): RedviewContent['rout
     .filter((profile) => used.has(profile.id));
 }
 
-export async function buildRedviewFile(source: RedviewExportSource): Promise<{ blob: Blob; fitFileCount: number; missingFitFiles: string[] }> {
+/**
+ * Ce qui appartient à d'autres personnes ne part pas dans le fichier (G2-1) :
+ * les .fit d'un autre membre d'un projet partagé (traces GPS, fréquence
+ * cardiaque : données de santé, art. 9 RGPD) sont retirés du projet exporté,
+ * et les auteurs des commentaires autres que l'expéditeur sont pseudonymisés.
+ * Un .fit hérité (base64 dans le document) n'a pas de propriétaire connu : il
+ * fait partie du document et part avec lui, comme avant.
+ */
+async function withoutOthersData(project: ItineraryProject): Promise<{ project: ItineraryProject; withheld: number }> {
+  let userId: string | null = null;
+  try {
+    userId = await getCurrentUserId();
+  } catch {
+    userId = null;
+  }
+  const paths = project.itineraries.flatMap((itinerary) =>
+    (itinerary.fitUploads ?? []).map((upload) => upload.path).filter((path): path is string => typeof path === 'string' && path.length > 0));
+  const owned = userId && paths.length > 0 ? await ownedFitFilePaths(paths, userId) : new Set<string>();
+  let withheld = 0;
+  const itineraries = project.itineraries.map((itinerary) => {
+    const uploads = itinerary.fitUploads;
+    if (!uploads || uploads.length === 0) return itinerary;
+    const kept = uploads.filter((upload) => !upload.path || owned.has(upload.path));
+    withheld += uploads.length - kept.length;
+    return kept.length === uploads.length ? itinerary : { ...itinerary, fitUploads: kept };
+  });
+  return {
+    project: { ...project, itineraries, comments: anonymizeOtherCommentAuthors(project.comments, userId) },
+    withheld,
+  };
+}
+
+export async function buildRedviewFile(source: RedviewExportSource): Promise<{
+  blob: Blob;
+  fitFileCount: number;
+  missingFitFiles: string[];
+  withheldFitFileCount: number;
+}> {
   // Les états du projet sont immuables (ProjectStore, instantané du Dashboard) :
   // pas de copie profonde, coûteuse sur un gros projet. Le travail en attente
   // de cet appareil (routage pas encore appliqué) ne part pas dans le fichier.
-  const project = withEffectiveControlPanel(stripLocalWork(source.project));
+  const { project: ownProject, withheld } = await withoutOthersData(stripLocalWork(source.project));
+  const project = withEffectiveControlPanel(ownProject);
   const [{ files, missing }, thumbnail] = await Promise.all([
     collectFitFiles(project),
     collectThumbnail(source),
@@ -131,7 +174,7 @@ export async function buildRedviewFile(source: RedviewExportSource): Promise<{ b
     { build: APP_BUILD_ID },
   );
   if (missing.length > 0) logger.projects.warn('redview export: FIT files missing from storage', missing);
-  return { blob, fitFileCount: files.length, missingFitFiles: missing };
+  return { blob, fitFileCount: files.length, missingFitFiles: missing, withheldFitFileCount: withheld };
 }
 
 /**
@@ -153,8 +196,8 @@ export function downloadBlob(blob: Blob, fileName: string): void {
 }
 
 export async function exportProjectAsRedview(source: RedviewExportSource): Promise<RedviewExportResult> {
-  const { blob, fitFileCount, missingFitFiles } = await buildRedviewFile(source);
+  const { blob, fitFileCount, missingFitFiles, withheldFitFileCount } = await buildRedviewFile(source);
   const fileName = buildRedviewFileName(source.project.name);
   downloadBlob(blob, fileName);
-  return { fileName, sizeBytes: blob.size, fitFileCount, missingFitFiles };
+  return { fileName, sizeBytes: blob.size, fitFileCount, missingFitFiles, withheldFitFileCount };
 }

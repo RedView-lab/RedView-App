@@ -202,10 +202,14 @@ export const ExporterPanel = memo(function ExporterPanel({
     const thumbnail = await captureMapThumbnail(map).catch(() => null);
     const result = await exportProjectAsRedview({ project, projectId, thumbnail });
     trackAnalyticsEvent({ name: 'project_file_exported', data: { from: 'editor' } });
-    const exported = t('Projet exporté : {{file}}', { file: result.fileName });
-    return result.missingFitFiles.length > 0
-      ? `${exported} ${t('{{count}} fichier(s) .fit supprimé(s) du stockage non inclus.', { count: result.missingFitFiles.length })}`
-      : exported;
+    const parts = [t('Projet exporté : {{file}}', { file: result.fileName })];
+    if (result.missingFitFiles.length > 0) {
+      parts.push(t('{{count}} fichier(s) .fit supprimé(s) du stockage non inclus.', { count: result.missingFitFiles.length }));
+    }
+    if (result.withheldFitFileCount > 0) {
+      parts.push(t('{{count}} fichier(s) .fit d’autres membres non inclus.', { count: result.withheldFitFileCount }));
+    }
+    return parts.join(' ');
   };
 
   /** Lance le rendu (long) en arrière-plan ; son avancement s'affiche sous le bouton. */

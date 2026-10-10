@@ -386,6 +386,9 @@ export const projectBrowserTranslationPairs: ReadonlyArray<AppTranslationPair> =
   // Retrait d'un éditeur (ShareProjectDialog)
   { fr: 'Retirer {{name}} du projet ?', en: 'Remove {{name}} from the project?' },
   { fr: 'Sa session sur ce projet se ferme tout de suite. Vous pourrez l’inviter à nouveau.', en: 'Their session on this project closes immediately. You can invite them again.' },
+  // Export .redview (redviewFile/lib/exportProject.ts, anonymizeComments.ts)
+  { fr: 'Éditeur {{n}}', en: 'Editor {{n}}' },
+  { fr: '{{count}} fichier(s) .fit d’autres membres non inclus.', en: '{{count}} .fit file(s) from other members not included.' },
   // Déconnexion (profile.ts signOutAccount)
   { fr: 'Déconnexion impossible : vérifiez votre connexion, puis réessayez.', en: 'Could not sign out: check your connection, then try again.' },
   // Changement d'adresse e-mail (ChangeEmailDialog, api/auth/change-email.ts)
