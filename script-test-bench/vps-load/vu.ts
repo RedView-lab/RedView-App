@@ -195,16 +195,15 @@ export class VirtualUser {
     return ms;
   }
 
-  /** Appel Appwrite chronométré ; l'erreur est notée (sauf un 404 attendu) puis relancée. */
-  private async aw<T>(name: string, run: () => Promise<T>, { expect404 = false } = {}): Promise<T> {
+  /** Appel Appwrite chronométré ; l'erreur est notée puis relancée. */
+  private async aw<T>(name: string, run: () => Promise<T>): Promise<T> {
     const t0 = performance.now();
     try {
       const result = await run();
       this.record(name, t0, true);
       return result;
     } catch (error) {
-      const expected = expect404 && error instanceof AppwriteException && error.code === 404;
-      this.record(name, t0, expected, expected ? undefined : errorWhy(error));
+      this.record(name, t0, false, errorWhy(error));
       throw error;
     }
   }
@@ -306,22 +305,16 @@ export class VirtualUser {
   async openProject(projectId: string, name = 'ux.ouverture-projet'): Promise<boolean> {
     const t0 = performance.now();
     try {
-      const viewId = projectViewDocumentId(projectId, this.spec.session.userId);
       await Promise.all([
         this.aw('aw.projects.get', () => this.databases.getDocument(DATABASE_ID, 'projects', projectId)),
-        this.aw('aw.views.get', () => this.databases.getDocument(DATABASE_ID, 'project_views', viewId), { expect404: true }).then(
-          () => {
-            this.viewCreated = true;
-          },
-          async (error) => {
-            if (!(error instanceof AppwriteException) || error.code !== 404) throw error;
-            await this.aw('aw.views.list', () => this.databases.listDocuments(DATABASE_ID, 'project_views', [
-              Query.equal('project_id', projectId),
-              Query.equal('user_id', this.spec.session.userId),
-              Query.limit(10),
-            ]));
-          },
-        ),
+        // Comme projectViews.ts : la vue est retrouvée par requête (liste vide = pas encore de vue).
+        this.aw('aw.views.list', () => this.databases.listDocuments(DATABASE_ID, 'project_views', [
+          Query.equal('project_id', projectId),
+          Query.equal('user_id', this.spec.session.userId),
+          Query.limit(10),
+        ])).then((list) => {
+          if (list.documents.length > 0) this.viewCreated = true;
+        }),
         this.aw('aw.thumbnails.list', () => this.storage.listFiles('project-thumbnails', [Query.equal('$id', [projectId]), Query.limit(1)])),
       ]);
       this.record(name, t0, true);

@@ -30,7 +30,7 @@ import {
   type IdbProjectViewEntry,
 } from '@/shared/services/storage/idbProjectStore';
 
-import { isOwnDocument, loadAccessQueries } from './access';
+import { loadAccessQueries } from './access';
 import { getCachedCurrentUserIdSync, isLocalFallbackUser } from './auth';
 import { enqueue, withTimeout } from './projectSession';
 import type { CloudViewDoc } from './accessQueries';
@@ -63,6 +63,14 @@ const pendingViews = new Map<string, PendingView>();
 const cloudViewQueues = new Map<string, Promise<unknown>>();
 /** JSON de la dernière vue connue (lue ou enregistrée), par `${ownerId}:${projectId}`. */
 const lastKnownViews = new Map<string, string>();
+/**
+ * Mon document de vue cloud, par `${ownerId}:${projectId}` : son id (trouvé à
+ * la lecture ou écrit ici), null s'il n'existe pas, pas d'entrée si on ne sait
+ * pas (lecture échouée, projet tout juste créé). Une écriture va droit au bon
+ * appel : un `updateDocument` à l'aveugle répondait 404 à chaque projet encore
+ * sans vue, en rouge dans la console, avant le `createDocument`.
+ */
+const cloudViewIds = new Map<string, string | null>();
 let cloudViewsUnavailable = false;
 
 function viewKey(ownerId: string, projectId: string): string {
@@ -141,23 +149,19 @@ function parseCloudView(doc: { data?: unknown; project_id?: unknown; user_id?: u
 }
 
 /**
- * Mon document de vue d'un projet : celui de l'id déterministe s'il est bien
- * à moi (`isOwnDocument`), sinon celui que je retrouve par requête (id pris
- * par un collaborateur : accessQueries.ts).
+ * Mon document de vue d'un projet, retrouvé par requête (`project_id` +
+ * `user_id`, gardé seulement s'il est bien à moi : `isOwnDocument`) — à l'id
+ * déterministe, ou ailleurs si un collaborateur a pris cet id
+ * (accessQueries.ts). Une liste vide répond 200 : un `getDocument` sur l'id
+ * déterministe répondait 404 à chaque projet encore sans vue.
  */
 async function findOwnCloudView(projectId: string, ownerId: string): Promise<CloudViewDoc | null> {
-  try {
-    const doc = (await databases.getDocument(
-      APPWRITE_DATABASE_ID,
-      PROJECT_VIEWS_COLLECTION_ID,
-      projectViewDocumentId(projectId, ownerId),
-    )) as unknown as CloudViewDoc;
-    if (isOwnDocument(doc, ownerId)) return doc;
-  } catch (error) {
-    const code = errorCode(error);
-    if (code !== 404 && code !== 401) throw error;
-  }
-  return (await loadAccessQueries()).listOwnCloudView(projectId, ownerId);
+  const doc = await (await loadAccessQueries()).listOwnCloudView(projectId, ownerId);
+  const key = viewKey(ownerId, projectId);
+  if (doc) cloudViewIds.set(key, doc.$id);
+  // Un id écrit entre-temps par cette session (écriture en cours) reste le bon.
+  else if (!cloudViewIds.has(key)) cloudViewIds.set(key, null);
+  return doc;
 }
 
 async function upsertCloudView(record: StoredProjectView, createOnly: boolean): Promise<void> {
@@ -170,10 +174,13 @@ async function upsertCloudView(record: StoredProjectView, createOnly: boolean): 
     });
     return;
   }
-  const documentId = projectViewDocumentId(record.projectId, record.ownerId);
-  if (!createOnly) {
+  const key = viewKey(record.ownerId, record.projectId);
+  const knownId = cloudViewIds.get(key);
+  if (typeof knownId === 'string') {
+    // Une vraie vue existe : l'amorce ne la remplace jamais.
+    if (createOnly) return;
     try {
-      await databases.updateDocument(APPWRITE_DATABASE_ID, PROJECT_VIEWS_COLLECTION_ID, documentId, { data });
+      await databases.updateDocument(APPWRITE_DATABASE_ID, PROJECT_VIEWS_COLLECTION_ID, knownId, { data });
       return;
     } catch (error) {
       if (isMissingCollection(error)) {
@@ -181,8 +188,12 @@ async function upsertCloudView(record: StoredProjectView, createOnly: boolean): 
         return;
       }
       if (errorCode(error) !== 404) throw error;
+      cloudViewIds.delete(key); // effacée ailleurs : recréée ci-dessous
     }
   }
+  // Vue absente du cloud, ou inconnue (projet tout juste créé, importé ou
+  // dupliqué ; lecture échouée) : création, et un 409 si elle existait.
+  const documentId = projectViewDocumentId(record.projectId, record.ownerId);
   try {
     await databases.createDocument(
       APPWRITE_DATABASE_ID,
@@ -195,6 +206,7 @@ async function upsertCloudView(record: StoredProjectView, createOnly: boolean): 
         Permission.delete(Role.user(record.ownerId)),
       ],
     );
+    cloudViewIds.set(key, documentId);
   } catch (error) {
     if (isMissingCollection(error)) {
       markCloudViewsUnavailable(error);
@@ -204,7 +216,10 @@ async function upsertCloudView(record: StoredProjectView, createOnly: boolean): 
     // s'efface), ou id pris par un autre compte (accessQueries.ts).
     if (errorCode(error) !== 409) throw error;
     if (createOnly) return;
-    await (await loadAccessQueries()).writeConflictedCloudView(documentId, record.projectId, record.ownerId, data);
+    cloudViewIds.set(
+      key,
+      await (await loadAccessQueries()).writeConflictedCloudView(documentId, record.projectId, record.ownerId, data),
+    );
   }
 }
 
@@ -404,13 +419,16 @@ export async function deleteProjectView(projectId: string): Promise<void> {
   lastKnownViews.delete(viewKey(ownerId, projectId));
   if (ownerId === ANONYMOUS_OWNER || isCloudless(projectId, ownerId) || cloudViewsUnavailable) return;
   await enqueue(cloudViewQueues, projectId, async () => {
+    const key = viewKey(ownerId, projectId);
     try {
-      await databases.deleteDocument(
-        APPWRITE_DATABASE_ID,
-        PROJECT_VIEWS_COLLECTION_ID,
-        projectViewDocumentId(projectId, ownerId),
-      );
+      // Id connu, sinon retrouvé : pas de suppression à l'aveugle (404 sans vue).
+      const documentId = cloudViewIds.has(key)
+        ? cloudViewIds.get(key)
+        : (await findOwnCloudView(projectId, ownerId))?.$id;
+      if (documentId) await databases.deleteDocument(APPWRITE_DATABASE_ID, PROJECT_VIEWS_COLLECTION_ID, documentId);
+      cloudViewIds.set(key, null);
     } catch (error) {
+      cloudViewIds.delete(key);
       if (isMissingCollection(error)) markCloudViewsUnavailable(error);
       else if (errorCode(error) !== 404) logger.projects.warn('Cloud project view not deleted', error);
     }

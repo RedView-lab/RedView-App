@@ -6,6 +6,7 @@ import {
 import { bootstrapAwsFallback } from './styleBootstrapFallback';
 import { waitForStyleReadiness } from './styleBootstrapReadiness';
 import { bootstrapUnifiedDem } from './styleBootstrapUnified';
+import { logger } from '@/shared/lib/logger';
 
 const supportsStandardLightPreset = (visualFamily: Ctx['getActiveVisualFamily'] extends never ? never : ReturnType<Ctx['getActiveVisualFamily']>): boolean => (
   visualFamily === 'mapbox-standard-v3'
@@ -70,7 +71,7 @@ export function attachStyleBootstrap(ctx: Ctx): void {
 
   fns.bootstrapCurrentStyle = async (): Promise<boolean> => {
     const runId = ++st.styleBootstrapRunId;
-    console.info('[map3d] bootstrapCurrentStyle:start', {
+    logger.map3d.info('bootstrapCurrentStyle:start', {
       runId,
       visualFamily: getActiveVisualFamily(),
       terrainContract: getActiveTerrainContract(),

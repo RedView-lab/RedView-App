@@ -138,6 +138,7 @@ export async function migrateFromLocalStorageIfNeeded(): Promise<void> {
       // Jamais par-dessus une ligne existante : la clé héritée n'est pas
       // effacée, et la remettre à chaque chargement écrasait la copie locale
       // à jour (modifications non synchronisées comprises) par une ancienne.
+      let imported = 0;
       for (const p of legacyProjects) {
         if (!p?.id) continue;
         const existing = store.getKey(p.id);
@@ -147,6 +148,7 @@ export async function migrateFromLocalStorageIfNeeded(): Promise<void> {
           store.put(toMeta(legacy));
           const content = contentOf(legacy);
           if (content) contents.put(content);
+          imported += 1;
         };
       }
 
@@ -154,7 +156,9 @@ export async function migrateFromLocalStorageIfNeeded(): Promise<void> {
         tx.oncomplete = () => resolve();
         tx.onerror = () => reject(tx.error);
       });
-      console.info(`[idbProjectStore] Migrated ${legacyProjects.length} projects from localStorage to IndexedDB`);
+      // La clé restant en place, ce passage a lieu à chaque chargement : seul un
+      // vrai import est signalé (« Migrated N » s'affichait à chaque fois).
+      if (imported > 0) console.info(`[idbProjectStore] Migrated ${imported} projects from localStorage to IndexedDB`);
     }
   } catch (error) {
     console.warn('[idbProjectStore] Migration from localStorage failed (non-fatal)', error);

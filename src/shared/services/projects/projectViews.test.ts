@@ -118,6 +118,59 @@ describe('readProjectView', () => {
   });
 });
 
+describe('aucune requête qui répond 404 (rouge dans la console)', () => {
+  const viewCalls = (calls: string[]) => calls.filter((call) => call.endsWith(':project_views'));
+
+  it('projet ouvert sans vue : une liste vide, puis création, puis mises à jour', async () => {
+    const { mock, views } = await load();
+    expect(await views.readProjectView('p1')).toBeNull();
+    await views.saveProjectViewNow('p1', view('a'));
+    await views.saveProjectViewNow('p1', view('b'));
+    expect(viewCalls(mock.calls)).toEqual([
+      'listDocuments:project_views',
+      'createDocument:project_views',
+      'updateDocument:project_views',
+    ]);
+  });
+
+  it('projet ouvert avec une vue : mise à jour de celle trouvée, à son id', async () => {
+    const { mock, otherDevice, views, docId } = await load();
+    await otherDevice.createDocument('db', 'project_views', docId('p1'), {
+      project_id: 'p1', user_id: ME, data: JSON.stringify({ updatedAt: '2026-10-01T00:00:00.000Z', view: view('ailleurs') }),
+    }, [`read("user:${ME}")`, `update("user:${ME}")`, `delete("user:${ME}")`]);
+    mock.calls = [];
+    expect((await views.readProjectView('p1'))?.view.activeItineraryId).toBe('ailleurs');
+    await views.saveProjectViewNow('p1', view('ici'));
+    expect(viewCalls(mock.calls)).toEqual(['listDocuments:project_views', 'updateDocument:project_views']);
+    expect(storedView(mock.col('project_views').get(docId('p1'))?.data).activeItineraryId).toBe('ici');
+  });
+
+  it('projet tout juste créé (vue jamais lue) : création directe ; sa suppression retrouve la vue', async () => {
+    const { mock, views, docId } = await load();
+    await views.saveProjectViewNow('p1', view('a'));
+    expect(viewCalls(mock.calls)).toEqual(['createDocument:project_views']);
+
+    mock.calls = [];
+    await views.deleteProjectView('p2'); // jamais lue ni écrite, absente du cloud
+    expect(viewCalls(mock.calls)).toEqual(['listDocuments:project_views']);
+    await views.deleteProjectView('p1');
+    expect(mock.col('project_views').has(docId('p1'))).toBe(false);
+  });
+
+  it('vue créée entre-temps par un autre appareil : le 409 la met à jour', async () => {
+    const { mock, otherDevice, views, docId } = await load();
+    expect(await views.readProjectView('p1')).toBeNull();
+    await otherDevice.createDocument('db', 'project_views', docId('p1'), {
+      project_id: 'p1', user_id: ME, data: JSON.stringify({ updatedAt: '2026-10-01T00:00:00.000Z', view: view('ailleurs') }),
+    }, [`read("user:${ME}")`, `update("user:${ME}")`, `delete("user:${ME}")`]);
+    await views.saveProjectViewNow('p1', view('ici'));
+    expect(storedView(mock.col('project_views').get(docId('p1'))?.data).activeItineraryId).toBe('ici');
+    mock.calls = [];
+    await views.saveProjectViewNow('p1', view('encore'));
+    expect(viewCalls(mock.calls)).toEqual(['updateDocument:project_views']);
+  });
+});
+
 describe('amorçage, collection absente, suppression', () => {
   it('une vue d’amorçage (ancien format) ne remplace jamais une vue cloud existante', async () => {
     const { mock, views, docId } = await load();

@@ -109,11 +109,11 @@ export class Client {
   setProject() {
     return this;
   }
-  /** Seul usage : téléchargement d'un fichier de bucket (URL de Storage.getFileDownload). */
+  /** Seul usage : téléchargement d'un fichier de bucket (URL de Storage.getFileDownload / getFileView). */
   async call(method: string, url: URL, _headers?: unknown, _params?: unknown, responseType?: string) {
     __mock.calls.push(`client.call:${method}`);
     if (__mock.dbNetworkDown) throw new TypeError('Failed to fetch');
-    const match = /\/storage\/buckets\/[^/]+\/files\/([^/]+)\/download/.exec(url.pathname);
+    const match = /\/storage\/buckets\/[^/]+\/files\/([^/]+)\/(?:download|view)/.exec(url.pathname);
     const file = match ? __mock.files.get(match[1]) : undefined;
     if (!file) throw new AppwriteException('The requested file could not be found.', 404, 'storage_file_not_found');
     const bytes = file.bytes.slice();
@@ -232,6 +232,9 @@ export class Storage {
   }
   getFileDownload(bucket: string, fileId: string) {
     return `https://appwrite.mock/v1/storage/buckets/${bucket}/files/${fileId}/download`;
+  }
+  getFileView(bucket: string, fileId: string) {
+    return `https://appwrite.mock/v1/storage/buckets/${bucket}/files/${fileId}/view`;
   }
   async listFiles(bucket: string, queries: string[] = []) {
     netCheck(`listFiles:${bucket}`);

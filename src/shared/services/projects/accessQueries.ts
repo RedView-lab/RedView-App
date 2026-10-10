@@ -133,12 +133,12 @@ export async function listOwnCloudView(projectId: string, ownerId: string): Prom
  * Écrit ma vue quand sa création à l'id déterministe a répondu 409 : créée
  * entre-temps par un autre de mes onglets ou appareils (mise à jour), ou id
  * pris par un autre compte (introuvable pour moi) — elle vit alors ailleurs :
- * dans celle retrouvée, ou créée à un id aléatoire.
+ * dans celle retrouvée, ou créée à un id aléatoire. Renvoie l'id écrit.
  */
-export async function writeConflictedCloudView(documentId: string, projectId: string, ownerId: string, data: string): Promise<void> {
+export async function writeConflictedCloudView(documentId: string, projectId: string, ownerId: string, data: string): Promise<string> {
   try {
     await databases.updateDocument(APPWRITE_DATABASE_ID, PROJECT_VIEWS_COLLECTION_ID, documentId, { data });
-    return;
+    return documentId;
   } catch (error) {
     const code = (error as { code?: unknown } | null)?.code;
     if (code !== 404 && code !== 401) throw error;
@@ -146,9 +146,9 @@ export async function writeConflictedCloudView(documentId: string, projectId: st
   const own = await listOwnCloudView(projectId, ownerId);
   if (own) {
     await databases.updateDocument(APPWRITE_DATABASE_ID, PROJECT_VIEWS_COLLECTION_ID, own.$id, { data });
-    return;
+    return own.$id;
   }
-  await databases.createDocument(
+  const created = await databases.createDocument(
     APPWRITE_DATABASE_ID,
     PROJECT_VIEWS_COLLECTION_ID,
     ID.unique(),
@@ -159,4 +159,5 @@ export async function writeConflictedCloudView(documentId: string, projectId: st
       Permission.delete(Role.user(ownerId)),
     ],
   );
+  return created.$id;
 }

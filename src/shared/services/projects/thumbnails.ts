@@ -44,9 +44,7 @@ export async function uploadProjectThumbnail(projectId: string, blob: Blob): Pro
     const mime = blob.type || 'image/webp';
     const ext = mime.includes('webp') ? 'webp' : 'jpg';
     const file = new File([blob], `${fileId}.${ext}`, { type: mime });
-
-    await storage.deleteFile(THUMBNAILS_BUCKET_ID, fileId).catch(() => {});
-    await storage.createFile(
+    const create = () => storage.createFile(
       THUMBNAILS_BUCKET_ID,
       fileId,
       file,
@@ -57,9 +55,48 @@ export async function uploadProjectThumbnail(projectId: string, blob: Blob): Pro
         ...(teamId ? [Permission.read(Role.team(teamId))] : []),
       ],
     );
+
+    // Le contenu d'un fichier Appwrite ne se remplace pas : l'ancienne
+    // miniature est supprimée, mais seulement si elle existe (un premier envoi
+    // répondait 404 à la suppression). Existence inconnue (liste échouée) :
+    // suppression tentée comme avant.
+    if (await cloudThumbnailExists(fileId).catch(() => true)) {
+      await storage.deleteFile(THUMBNAILS_BUCKET_ID, fileId).catch(() => {});
+    }
+    knownCloudThumbnails.set(fileId, false);
+    try {
+      await create();
+    } catch (error) {
+      // Envoyée entre-temps par un autre onglet / appareil : remplacée.
+      if (errorCode(error) !== 409) throw error;
+      await storage.deleteFile(THUMBNAILS_BUCKET_ID, fileId);
+      await create();
+    }
+    knownCloudThumbnails.set(fileId, true);
   } catch (error) {
     console.debug('[projects] uploadProjectThumbnail cloud skip (saved locally)', error);
   }
+}
+
+function errorCode(error: unknown): number | null {
+  const code = (error as { code?: unknown } | null)?.code;
+  return typeof code === 'number' ? code : null;
+}
+
+/**
+ * Miniatures cloud dont l'existence est connue (id de fichier → existe) :
+ * listes du navigateur de projets, envois et suppressions de cette session.
+ * Sert à ne jamais viser un fichier absent (404 en rouge dans la console).
+ */
+const knownCloudThumbnails = new Map<string, boolean>();
+
+/** La miniature existe-t-elle dans le cloud ? Liste (200) si on ne le sait pas ; une erreur remonte. */
+async function cloudThumbnailExists(fileId: string): Promise<boolean> {
+  const known = knownCloudThumbnails.get(fileId);
+  if (known !== undefined) return known;
+  const existing = await listExistingCloudThumbnailIds([fileId]);
+  if (!existing) throw new Error('Cloud thumbnail list failed');
+  return existing.has(fileId);
 }
 
 /** Nombre maximal de téléchargements de miniatures cloud simultanés. */
@@ -105,6 +142,7 @@ async function listExistingCloudThumbnailIds(fileIds: string[]): Promise<Set<str
         Query.limit(chunk.length),
       ]);
       for (const file of res.files) existing.add(file.$id);
+      for (const id of chunk) knownCloudThumbnails.set(id, existing.has(id));
     }
     return existing;
   } catch (error) {
@@ -113,7 +151,12 @@ async function listExistingCloudThumbnailIds(fileIds: string[]): Promise<Set<str
   }
 }
 
-/** Miniature d'un projet : IndexedDB d'abord (instantané, hors-ligne), puis cloud. */
+/**
+ * Miniature d'un projet : IndexedDB d'abord (instantané, hors-ligne), puis
+ * cloud. `cloudIds` : miniatures cloud existantes déjà listées (null : liste
+ * échouée, téléchargement tenté) ; sans elles, l'existence est vérifiée avant
+ * de télécharger (un projet sans miniature répondait 404).
+ */
 export async function loadProjectThumbnailBlob(
   projectId: string,
   cloudIds?: Set<string> | null,
@@ -126,7 +169,11 @@ export async function loadProjectThumbnailBlob(
   }
 
   if (projectId.startsWith('local-')) return null;
-  if (cloudIds && !cloudIds.has(safeThumbnailFileId(projectId))) return null;
+  const fileId = safeThumbnailFileId(projectId);
+  const exists = cloudIds === undefined
+    ? await cloudThumbnailExists(fileId).catch(() => true)
+    : cloudIds === null || cloudIds.has(fileId);
+  if (!exists) return null;
 
   try {
     const cloudBlob = await fetchCloudThumbnailBlob(projectId);
@@ -185,10 +232,18 @@ export async function duplicateProjectThumbnail(
 }
 
 export async function deleteProjectThumbnail(projectId: string): Promise<void> {
+  if (projectId.startsWith('local-')) return;
+  const fileId = safeThumbnailFileId(projectId);
   try {
-    const fileId = safeThumbnailFileId(projectId);
+    // Projet sans miniature cloud : rien à supprimer (la suppression répondait 404).
+    if (!(await cloudThumbnailExists(fileId))) return;
     await storage.deleteFile(THUMBNAILS_BUCKET_ID, fileId);
+    knownCloudThumbnails.set(fileId, false);
   } catch (error) {
+    if (errorCode(error) === 404) {
+      knownCloudThumbnails.set(fileId, false);
+      return;
+    }
     console.warn('[projects] deleteProjectThumbnail failed', error);
   }
 }

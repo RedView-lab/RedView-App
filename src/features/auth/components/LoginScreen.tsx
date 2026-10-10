@@ -44,10 +44,28 @@ const SIGNUP_CODE_REUSE_MS = 9 * 60 * 1000
 /**
  * Appels Appwrite de l'écran (le SDK n'a pas de délai) : un réseau qui pend
  * (Wi-Fi captif) laissait le bouton tourner sans fin. Une session créée après
- * coup est retirée par le `deleteSession('current')` de l'essai suivant.
+ * coup est fermée par l'essai suivant (`openEmailSession`).
  */
 const AUTH_CALL_TIMEOUT_MS = 20_000
 const timed = <T,>(promise: Promise<T>) => withNetworkTimeout(promise, AUTH_CALL_TIMEOUT_MS)
+
+/**
+ * Ouvre une session e-mail + mot de passe. Appwrite refuse d'en créer une
+ * tant qu'une autre est active (`user_session_already_exists` : compte resté
+ * connecté, session créée après le délai d'un essai précédent) : elle est alors
+ * fermée, puis la création réessayée. Jamais de fermeture à l'aveugle avant :
+ * sans session (le cas normal sur cet écran), elle répondait 401, en rouge dans
+ * la console à chaque connexion.
+ */
+async function openEmailSession(email: string, password: string): Promise<void> {
+  try {
+    await timed(account.createEmailPasswordSession(email, password))
+  } catch (error) {
+    if ((error as { type?: unknown } | null)?.type !== 'user_session_already_exists') throw error
+    await timed(account.deleteSession('current'))
+    await timed(account.createEmailPasswordSession(email, password))
+  }
+}
 
 type AuthMode = 'login' | 'signup' | 'forgot-password' | 'reset-password'
 
@@ -239,13 +257,6 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
     }
 
     try {
-      // Au cas où une ancienne session serait encore active
-      try {
-        await timed(account.deleteSession('current'))
-      } catch {
-        // Ignoré s'il n'y a pas de session active
-      }
-
       if (mode === 'signup') {
         const trimmedName = resolveSignupName(name, trimmedEmail)
 
@@ -283,10 +294,10 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
 
         // Inscription directe (sans code) en attendant la validation DNS
         await timed(account.create(ID.unique(), trimmedEmail, password, trimmedName))
-        await timed(account.createEmailPasswordSession(trimmedEmail, password))
+        await openEmailSession(trimmedEmail, password)
       } else {
         // Mode connexion
-        await timed(account.createEmailPasswordSession(trimmedEmail, password))
+        await openEmailSession(trimmedEmail, password)
       }
 
       const user = await timed(account.get())
@@ -326,7 +337,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
       }
 
       // Compte créé avec e-mail vérifié -> ouvre la session
-      await timed(account.createEmailPasswordSession(trimmedEmail, password))
+      await openEmailSession(trimmedEmail, password)
       const user = await timed(account.get())
       saveStoredAppwriteSession({ id: user.$id, email: user.email, name: user.name })
       trackAnalyticsEvent({ name: 'signup_completed', data: { method: 'email' } })

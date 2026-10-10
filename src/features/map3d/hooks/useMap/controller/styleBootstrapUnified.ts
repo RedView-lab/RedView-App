@@ -8,6 +8,7 @@ import {
   setVisibleTimeout,
   type VisibleTimer,
 } from './visibleClock';
+import { logger } from '@/shared/lib/logger';
 
 interface BootstrapUnifiedDemOptions {
   ctx: Ctx;
@@ -30,7 +31,7 @@ export function bootstrapUnifiedDem({
   const st = ctx.state;
 
   fns.ensureTrackingListeners();
-  console.info('[map3d] bootstrapCurrentStyle:branch', {
+  logger.map3d.info('bootstrapCurrentStyle:branch', {
     runId,
     branch: 'unified-dem',
     hasSwController: !!navigator.serviceWorker?.controller,

@@ -149,13 +149,19 @@ describe('idbProjectStore', () => {
       { ...meta('kept'), data: project('Ancienne version') },
     ]));
     const kept = project('Version à jour');
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {});
     const first = await loadStore();
     await first.idbSaveProject({ ...meta('kept'), data: kept });
+    expect(info).toHaveBeenCalledWith('[idbProjectStore] Migrated 2 projects from localStorage to IndexedDB');
 
+    info.mockClear();
     const store = await loadStore();
     expect(documentOf(await store.idbGetProject('legacy'))).toBe(serializeProjectForStorage(legacy).documentJson);
     expect((await store.idbGetProject('kept'))?.data.name).toBe('Version à jour');
     expect(await store.idbGetProjectMeta('legacy')).toEqual(meta('legacy'));
+    // La clé héritée reste : le passage suivant n'importe rien et ne le dit pas.
+    expect(info).not.toHaveBeenCalled();
+    info.mockRestore();
   });
 
   it('deleting a project also deletes its thumbnail and view', async () => {
