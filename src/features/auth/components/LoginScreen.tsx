@@ -27,7 +27,7 @@ import { useAppI18n } from '@/shared/i18n'
 import { GoogleIcon } from './login/icons'
 import { PasswordField } from './login/PasswordField'
 import { RecoveryEmailSent } from './login/RecoveryEmailSent'
-import { useAuthUrlParams } from './login/useAuthUrlParams'
+import { OAUTH_FAILURE_PARAM, useAuthUrlParams } from './login/useAuthUrlParams'
 import './LoginScreen.css'
 
 // Envoi du code de vérification à 6 chiffres par e-mail lors de l'inscription
@@ -371,10 +371,12 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
     // Issue (inscription ou connexion) décidée au retour d'OAuth : authAnalytics.ts.
     rememberOAuthIntent('google')
     try {
+      // Échec : un paramètre à nous, lu par useAuthUrlParams (Appwrite y
+      // ajoute son `error` JSON, jamais affiché tel quel).
       account.createOAuth2Session(
         OAuthProvider.Google,
         window.location.origin,
-        window.location.origin,
+        `${window.location.origin}/?${OAUTH_FAILURE_PARAM}=failed`,
       )
     } catch (error) {
       trackAnalyticsEvent({ name: 'auth_failed', data: { method: 'google', step: mode === 'signup' ? 'signup' : 'login', reason: authFailureReason(error) } })

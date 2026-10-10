@@ -58,6 +58,7 @@ export const authTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'Veuillez confirmer votre mot de passe.', en: 'Please confirm your password.' },
   { fr: "Impossible d'envoyer le code de vérification.", en: 'Unable to send the verification code.' },
   { fr: 'Impossible de lancer la connexion Google.', en: 'Failed to initiate Google OAuth.' },
+  { fr: 'La connexion avec Google a échoué. Réessayez.', en: 'Google sign-in failed. Please try again.' },
   { fr: 'Code invalide.', en: 'Invalid code.' },
   { fr: 'Erreur lors de la confirmation du compte.', en: 'Error while confirming the account.' },
   { fr: 'Impossible de renvoyer le code.', en: 'Unable to resend the code.' },
