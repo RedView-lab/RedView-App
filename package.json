@@ -117,7 +117,7 @@
     "@garmin/fitsdk": "^21.201.0",
     "@mapbox/mapbox-gl-draw": "^1.5.1",
     "@photostructure/tz-lookup": "^11.7.0",
-    "@sentry/react": "^10.75.1",
+    "@sentry/react": "^11.4.0",
     "@stripe/react-stripe-js": "^3.7.0",
     "@stripe/stripe-js": "^5.4.0",
     "@tanstack/react-query": "^5.104.1",
