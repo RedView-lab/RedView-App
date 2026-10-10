@@ -6,6 +6,7 @@ import {
 } from '../../lib/schedule';
 import { projectDistanceAlongRouteM, roundDistanceKm, routeDistancesM } from '../../lib/routes';
 import type { ItineraryProject, TimelineItem } from '../../types';
+import { routePatchBoundaryDistanceM } from '../../hooks/useItineraryBrouterRoutingShared/routeGeometry';
 import { mergePoiFeatureFavorites } from './poiFeatureUtils';
 
 /**
@@ -79,7 +80,10 @@ export function applyCorridorComplete(
     .filter((row) => row.kind === 'poi' && isUserMarkedPoiRow(row) && !foundIds.has(row.osmId))
     .map((row) => {
       if (row.lat == null || row.lon == null) return row;
-      const distanceM = projectDistanceAlongRouteM({ lat: row.lat, lon: row.lon }, route, cumulativeM);
+      // Son kilométrage choisit le passage sur un aller-retour (cf. routePatchBoundaryDistanceM).
+      const distanceM = row.distanceKm != null && Number.isFinite(row.distanceKm)
+        ? routePatchBoundaryDistanceM({ lat: row.lat, lon: row.lon, kind: 'waypoint', distanceM: row.distanceKm * 1_000 }, route, cumulativeM)
+        : projectDistanceAlongRouteM({ lat: row.lat, lon: row.lon }, route, cumulativeM);
       return distanceM == null ? row : { ...row, distanceKm: roundDistanceKm(distanceM) };
     });
   const keptIds = new Set(keptRows.map((row) => row.osmId).filter((id): id is number => id != null));

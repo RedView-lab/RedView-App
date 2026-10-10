@@ -76,6 +76,19 @@ describe('applyCorridorComplete', () => {
     expect(poiRows(next)[0]).toMatchObject({ favorite: true, durationMin: 360, label: 'Nuit ici (réservé)', distanceKm: 20 });
   });
 
+  it('keeps a favourite on its own pass of an out-and-back (4c relecture)', () => {
+    const before = project([], []);
+    // Aller 20 km puis retour : le km 30 est au même endroit que le km 10.
+    const outAndBack = Array.from({ length: 41 }, (_, index) => ({ ...at(index <= 20 ? index : 40 - index), distanceM: index * 1_000 }));
+    before.itineraries[0]!.gpxRoute = { name: null, points: outAndBack, source: 'brouter' };
+    const hotelOnReturn = { ...hotelRow, distanceKm: 30, ...at(10, 80) };
+    before.itineraries[0]!.timeline.splice(1, 0, hotelOnReturn);
+
+    const next = applyCorridorComplete(before, before.itineraries[0]!.id, [], outAndBack);
+
+    expect(poiRows(next)[0]).toMatchObject({ osmId: 1, distanceKm: 30 });
+  });
+
   it('drops an old auto-sort favourite the search no longer returns', () => {
     const autoRow = { ...plainRow, favorite: true, favoriteSource: 'auto' as const };
     const before = project([autoRow], []);

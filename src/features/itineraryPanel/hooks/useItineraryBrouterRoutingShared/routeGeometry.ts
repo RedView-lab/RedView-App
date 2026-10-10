@@ -103,7 +103,15 @@ export function routePatchBoundaryDistanceM(
       patchPoint.distanceM + toleranceM,
       patchPoint.distanceM,
     );
-    if (near) return near.alongM;
+    if (!near) return projectPointAlongRoute(patchPoint, routePoints, routeDistances)?.distanceM ?? null;
+    // Kilométrage périmé au-delà de sa fenêtre (tracé remplacé entre la saisie
+    // et le dépôt, km d'une ligne pas encore recalculé) : le meilleur segment
+    // de la fenêtre peut être à des km du point. Seulement s'il vaut le
+    // meilleur passage de tout le tracé.
+    const global = projectPointAlongRoute(patchPoint, routePoints, routeDistances);
+    if (!global) return near.alongM;
+    const globalOffsetM = haversineRouteDistanceM(patchPoint, global);
+    return near.offsetM <= globalOffsetM + SAME_PASS_OFFSET_SLACK_M ? near.alongM : global.distanceM;
   }
   return projectPointAlongRoute(patchPoint, routePoints, routeDistances)?.distanceM ?? null;
 }

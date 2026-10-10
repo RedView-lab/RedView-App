@@ -18,6 +18,7 @@ import {
   widenUnjoinedRoutePatchWindow,
 } from './routePatchWindow';
 import type { RoutePoints } from './types';
+import { getRoutePointDistances, routePatchBoundaryDistanceM } from './routeGeometry';
 
 const KM_PER_DEGREE = (12_742 * Math.PI) / 360;
 
@@ -276,6 +277,21 @@ describe('replaceRouteSegment', () => {
     };
 
     expect(replaceRouteSegment(base, patch, replacement)).toBeNull();
+  });
+});
+
+describe('routePatchBoundaryDistanceM', () => {
+  it('falls back to the global projection when the remembered km is stale beyond its window (4c relecture)', () => {
+    const base = meridianRoute([20]);
+    // Point au km 15, kilométrage mémorisé périmé (km 2) : la fenêtre ±(5 km + 2 %) ne le contient pas.
+    const bound = { lat: base[15]!.lat, lon: base[15]!.lon, kind: 'waypoint' as const, distanceM: 2_000 };
+    expect(routePatchBoundaryDistanceM(bound, base, getRoutePointDistances(base))).toBeCloseTo(15_000, -1);
+  });
+
+  it('keeps the remembered pass of an out-and-back when it is right', () => {
+    const base = fineMeridianRoute([5_000, -5_000]);
+    const bound = { lat: base[72]!.lat, lon: base[72]!.lon, kind: 'waypoint' as const, distanceM: 7_200 };
+    expect(routePatchBoundaryDistanceM(bound, base, getRoutePointDistances(base))).toBeCloseTo(7_200, -1);
   });
 });
 
