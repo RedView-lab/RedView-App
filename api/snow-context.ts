@@ -25,7 +25,7 @@ import { createInterface } from 'node:readline';
 import type { ApiRequest, ApiResponse } from './_lib/types.js';
 import { OPENMETEO_DEFAULT_MODEL, OPENMETEO_MAX_HISTORY_DAYS, openMeteoUpstream } from './_lib/openMeteo.js';
 import { BRA_MASSIFS } from './_lib/snow/braMassifs.js';
-import { createOldestKeyTaker } from '../server/lib/oldest-key.mjs';
+import { createByteLru, type ByteLru } from '../server/lib/byte-lru.mjs';
 
 const FETCH_TIMEOUT_MS = 20_000;
 const MF_PARSE_BUDGET_MS = 45_000;
@@ -74,58 +74,42 @@ async function fetchWithTimeout(url: string, init: RequestInit = {}, timeoutMs =
   }
 }
 
+/** Taille (caractères ≈ octets) du JSON d'une valeur ; une `Map` comptée par ses paires (`JSON.stringify` en ferait « {} »). */
+function jsonSize(value: unknown): number {
+  const serializable = value instanceof Map ? [...value] : value ?? null;
+  return JSON.stringify(serializable)?.length ?? 0;
+}
+
 /**
- * Petit cache à durée de vie qui partage aussi les promesses en cours, borné
- * en entrées ET en octets (CLAUDE.md : tout cache serveur en mémoire a un
- * budget en octets ; la taille d'une valeur n'est connue qu'une fois
- * résolue, mesurée sur son JSON).
+ * Cache à durée de vie qui partage aussi les promesses en cours : les valeurs
+ * résolues vont dans une LRU bornée en octets (server/lib/byte-lru.mjs, règle
+ * de CLAUDE.md), les chargements en cours dans une `Map` à part, vidée à leur
+ * fin. Un échec n'est pas mis en cache.
  */
 class TtlCache<T> {
-  private readonly map = new Map<string, { value: Promise<T>; expiresAt: number; bytes: number }>();
-  private readonly takeOldestKey = createOldestKeyTaker(this.map);
-  private readonly ttlMs: number;
-  private readonly maxEntries: number;
-  private readonly maxBytes: number;
-  private bytes = 0;
+  private readonly values: ByteLru<{ value: T }>;
+  private readonly loading = new Map<string, Promise<T>>();
 
-  constructor(ttlMs: number, maxEntries: number, maxBytes: number) {
-    this.ttlMs = ttlMs;
-    this.maxEntries = maxEntries;
-    this.maxBytes = maxBytes;
-  }
-
-  private drop(key: string): void {
-    const entry = this.map.get(key);
-    if (!entry) return;
-    this.bytes -= entry.bytes;
-    this.map.delete(key);
-  }
-
-  private evictOldest(): boolean {
-    const oldest = this.takeOldestKey();
-    if (oldest === undefined) return false;
-    this.drop(oldest);
-    return true;
+  constructor(ttlMs: number, maxBytes: number) {
+    // Une seule entrée peut occuper tout le budget (caches à clé unique : SLF, liste des fichiers).
+    this.values = createByteLru<{ value: T }>({ maxBytes, maxEntryBytes: maxBytes, ttlMs, sizeOf: (entry) => jsonSize(entry.value) });
   }
 
   get(key: string, load: () => Promise<T>): Promise<T> {
-    const hit = this.map.get(key);
-    if (hit && hit.expiresAt > Date.now()) return hit.value;
-    if (hit) this.drop(key);
-    while (this.map.size >= this.maxEntries && this.evictOldest());
+    const hit = this.values.get(key);
+    if (hit) return Promise.resolve(hit.value);
+    const pending = this.loading.get(key);
+    if (pending) return pending;
     const value = load();
-    const entry = { value, expiresAt: Date.now() + this.ttlMs, bytes: 0 };
-    this.map.set(key, entry);
+    this.loading.set(key, value);
     value.then(
       (resolved) => {
-        if (this.map.get(key) !== entry) return;
-        entry.bytes = key.length + (JSON.stringify(resolved ?? null)?.length ?? 0);
-        this.bytes += entry.bytes;
-        if (entry.bytes > this.maxBytes) { this.drop(key); return; }
-        while (this.bytes > this.maxBytes && this.evictOldest());
+        if (this.loading.get(key) === value) this.loading.delete(key);
+        this.values.set(key, { value: resolved });
       },
-      // Un échec n'est pas mis en cache.
-      () => { if (this.map.get(key) === entry) this.drop(key); },
+      () => {
+        if (this.loading.get(key) === value) this.loading.delete(key);
+      },
     );
     return value;
   }
@@ -151,8 +135,8 @@ const SLF_BASE = 'https://measurement-api.slf.ch/public/api/imis';
 interface SlfStation { code: string; label: string; lon: number; lat: number; elevation: number; type: string }
 interface SlfMeasurement { station_code: string; measure_date: string; HS: number | null }
 
-const slfStationsCache = new TtlCache<SlfStation[]>(24 * HOUR_MS, 1, 4 * 1024 * 1024);
-const slfMeasurementsCache = new TtlCache<SlfMeasurement[]>(20 * 60_000, 1, 16 * 1024 * 1024);
+const slfStationsCache = new TtlCache<SlfStation[]>(24 * HOUR_MS, 4 * 1024 * 1024);
+const slfMeasurementsCache = new TtlCache<SlfMeasurement[]>(20 * 60_000, 16 * 1024 * 1024);
 
 function nearSwitzerland(lat: number, lon: number, radiusKm: number): boolean {
   const m = radiusKm / 100;
@@ -217,14 +201,14 @@ export function isAllowedMfFileUrl(raw: string): boolean {
   }
 }
 
-const mfFilesCache = new TtlCache<Map<string, string>>(24 * HOUR_MS, 1, 1024 * 1024);
+const mfFilesCache = new TtlCache<Map<string, string>>(24 * HOUR_MS, 1024 * 1024);
 // Toute la France tient dans le cache (~100 fichiers départementaux, quelques
 // Ko de stations chacun) : une IP qui fait tourner ses coordonnées ne peut
 // plus vider le cache et faire relire un fichier à chaque requête (A11-1).
 // Chaque département est relu au plus une fois par durée de vie.
-const mfDeptCache = new TtlCache<MfStation[]>(3 * HOUR_MS, 128, 8 * 1024 * 1024);
+const mfDeptCache = new TtlCache<MfStation[]>(3 * HOUR_MS, 8 * 1024 * 1024);
 const mfParseQueue = createSerialQueue();
-const deptLookupCache = new TtlCache<string | null>(30 * 24 * HOUR_MS, 2000, 512 * 1024);
+const deptLookupCache = new TtlCache<string | null>(30 * 24 * HOUR_MS, 512 * 1024);
 
 /** Code de fichier départemental d'un point (la Corse est « 20 » dans ces fichiers), null hors de France. */
 function departmentAt(lat: number, lon: number): Promise<string | null> {
@@ -352,7 +336,7 @@ interface BraOut {
   limitSouthM: number | null;
 }
 
-const braCache = new TtlCache<BraOut | null>(3 * HOUR_MS, 64, 1024 * 1024);
+const braCache = new TtlCache<BraOut | null>(3 * HOUR_MS, 1024 * 1024);
 
 function pointInRing(lon: number, lat: number, ring: Array<[number, number]>): boolean {
   let inside = false;
@@ -436,7 +420,7 @@ interface WeatherOut {
   windDirDeg: number[];
 }
 
-const weatherCache = new TtlCache<WeatherOut>(HOUR_MS, 128, 24 * 1024 * 1024);
+const weatherCache = new TtlCache<WeatherOut>(HOUR_MS, 24 * 1024 * 1024);
 
 /** Open-Meteo auto-hébergé du VPS (api/_lib/openMeteo.ts), sans autre source. */
 async function openMeteo(pathAndQuery: string): Promise<unknown> {
