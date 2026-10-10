@@ -432,7 +432,8 @@ async function main() {
         if (body.action === 'confirm' && body.code === DELETION_CODE && body.confirm === 'delete-my-account') {
           appwrite.state.loggedIn = false; // compte supprimé : la session n'existe plus
           callsWhileSignedIn = appwrite.state.calls.length;
-          return route.fulfill({ status: 200, contentType: 'application/json', body: '{"deleted":true}' });
+          // Comme la vraie route : 202 dès le blocage, purge en tâche de fond (A14-1).
+          return route.fulfill({ status: 202, contentType: 'application/json', body: '{"deleted":false,"pending":true}' });
         }
         return route.fulfill({ status: 400, contentType: 'application/json', body: '{"error":"Invalid code"}' });
       });
@@ -446,7 +447,7 @@ async function main() {
       await send.click();
       await dialog.getByRole('textbox', { name: 'Code reçu par e-mail' }).fill(DELETION_CODE);
       await dialog.getByRole('button', { name: 'Supprimer définitivement' }).click();
-      await p.getByText('Votre compte et vos données ont été supprimés.', { exact: false }).waitFor({ timeout: 15_000 });
+      await p.getByText('Votre compte est désactivé.', { exact: false }).waitFor({ timeout: 15_000 });
       check(requests.length === 2 && requests[0].action === 'request-code' && requests[1].action === 'confirm', `appels inattendus : ${JSON.stringify(requests)}`);
       check(requests.every((request) => request.authorization === 'Bearer fake-jwt'), 'appel sans JWT');
       // Rechargement automatique (4 s) : retour à l'écran de connexion, rien du compte sur l'appareil.

@@ -226,7 +226,13 @@ async function leaveSharedProjects(userId: string): Promise<number> {
   return left;
 }
 
-/** Étape 5 : fichiers du compte dans un bucket (parcours complet : les orphelins aussi). */
+/**
+ * Étape 5 : fichiers du compte dans un bucket (parcours complet : les orphelins
+ * aussi). Appwrite ne filtre pas les fichiers par `$permissions`, et une liste
+ * vue par le compte (JWT) n'est plus possible une fois celui-ci bloqué : le
+ * parcours reste entier, mais il tourne en tâche de fond, hors du délai de la
+ * requête (A14-1).
+ */
 async function deleteOwnedFiles(bucketId: string, userId: string): Promise<number> {
   const storage = getAppwriteStorage();
   const owned: string[] = [];
@@ -266,10 +272,15 @@ async function deleteUserRows(userId: string): Promise<{ views: number; folders:
 }
 
 /**
- * Supprime le compte `userId` et ses données. Idempotent ; un compte déjà
- * supprimé ne fait que compléter le registre.
+ * Étape 1 seule : la suppression est inscrite au registre et le compte bloqué.
+ * La route y répond tout de suite (202) puis purge en tâche de fond : la purge
+ * complète parcourt les trois buckets et chaque projet possédé, et dépasserait
+ * le délai du nginx de l'hôte (60 s) sur un service qui a grandi (A14-1). Une
+ * fois cette étape faite, le compte ne peut plus rien écrire et la reprise
+ * (`deleteAccount`, scripts/appwrite/account-deletions.ts --resume) part du
+ * registre.
  */
-export async function deleteAccount(userId: string): Promise<AccountDeletionSummary> {
+export async function beginAccountDeletion(userId: string): Promise<{ exists: boolean }> {
   const users = getAppwriteUsers();
   let exists = true;
   try {
@@ -278,9 +289,18 @@ export async function deleteAccount(userId: string): Promise<AccountDeletionSumm
     if (errorCode(error) !== 404) throw error;
     exists = false;
   }
-
   await recordDeletion(userId, 'pending');
   if (exists) await blockAccount(userId);
+  return { exists };
+}
+
+/**
+ * Supprime le compte `userId` et ses données. Idempotent ; un compte déjà
+ * supprimé ne fait que compléter le registre.
+ */
+export async function deleteAccount(userId: string): Promise<AccountDeletionSummary> {
+  const users = getAppwriteUsers();
+  const { exists } = await beginAccountDeletion(userId);
   const billingDeleted = await deleteBilling(userId);
   const projects = await deleteOwnedProjects(userId);
   const sharedProjectsLeft = exists ? await leaveSharedProjects(userId) : 0;

@@ -1,7 +1,7 @@
 import type { ApiRequest, ApiResponse } from '../_lib/types.js';
 
 import { captureServerError } from '../../server/lib/observability.mjs';
-import { deleteAccount } from '../_lib/accountDeletion.js';
+import { beginAccountDeletion, deleteAccount } from '../_lib/accountDeletion.js';
 import { getAppwriteUsers, requireAuthenticatedUser } from '../_lib/appwrite.js';
 import { PublicError, sendSafeError } from '../_lib/errors.js';
 import { readJsonBody, sendMethodNotAllowed } from '../_lib/http.js';
@@ -17,8 +17,9 @@ import {
 /**
  * Suppression du compte connecté (RGPD, art. 17) — POST JSON `{ action, … }` :
  *  - `request-code` : envoie un code à 6 chiffres à l'adresse du compte ;
- *  - `confirm` `{ code, confirm: 'delete-my-account' }` : vérifie le code puis
- *    supprime le compte et toutes ses données (api/_lib/accountDeletion.ts),
+ *  - `confirm` `{ code, confirm: 'delete-my-account' }` : vérifie le code,
+ *    bloque le compte et inscrit la suppression au registre, répond 202, puis
+ *    supprime toutes ses données en tâche de fond (api/_lib/accountDeletion.ts)
  *    et envoie un accusé de suppression.
  *
  * Le code prouve l'accès à la boîte du compte : une session volée (onglet
@@ -38,20 +39,30 @@ const CODE_PATTERN = /^\d{6}$/;
 /** Reprises d'une purge interrompue, dans ce processus ; ensuite scripts/appwrite/account-deletions.ts --resume. */
 const RETRY_DELAYS_MS = [30_000, 2 * 60_000, 10 * 60_000];
 
+/**
+ * Purge complète après la réponse (A14-1) : elle parcourt les trois buckets et
+ * chaque projet possédé, ce qui dépasserait le délai du nginx de l'hôte (60 s)
+ * sur un gros compte. L'accusé part quand elle est finie.
+ */
+function purgeInBackground(userId: string, email: string, name: string, attempt = 0): void {
+  deleteAccount(userId).then(
+    // Sans bloquer : le compte est supprimé même si l'accusé ne part pas.
+    () => { void sendAccountDeletedEmail({ to: email, name }); },
+    (error: unknown) => {
+      console.error('[auth/delete-account] purge interrompue, reprise programmée', userId, error);
+      captureServerError(error, { route: 'auth/delete-account' });
+      finishDeletionLater(userId, email, name, attempt);
+    },
+  );
+}
+
 function finishDeletionLater(userId: string, email: string, name: string, attempt = 0): void {
   const delay = RETRY_DELAYS_MS[attempt];
   if (delay === undefined) {
     console.error('[auth/delete-account] suppression toujours incomplète : scripts/appwrite/account-deletions.ts --resume', userId);
     return;
   }
-  const timer = setTimeout(() => {
-    deleteAccount(userId)
-      .then(() => sendAccountDeletedEmail({ to: email, name }))
-      .catch((error: unknown) => {
-        captureServerError(error, { route: 'auth/delete-account' });
-        finishDeletionLater(userId, email, name, attempt + 1);
-      });
-  }, delay);
+  const timer = setTimeout(() => purgeInBackground(userId, email, name, attempt + 1), delay);
   timer.unref?.();
 }
 
@@ -86,20 +97,12 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         const validation = validateVerificationCode(key, code);
         if (!validation.valid) throw new PublicError(validation.error || 'Invalid code', validation.status ?? 400);
         const profile = await getAppwriteUsers().get(user.id);
-        let summary;
-        try {
-          summary = await deleteAccount(user.id);
-        } catch (error) {
-          // Le compte est déjà bloqué : la personne ne peut plus relancer.
-          // La purge, idempotente, reprend ici puis par le script d'admin.
-          console.error('[auth/delete-account] purge interrompue, reprise programmée', user.id, error);
-          captureServerError(error, { route: 'auth/delete-account', requestId: req.requestId });
-          finishDeletionLater(user.id, user.email, profile.name);
-          return res.status(202).json({ deleted: false, pending: true });
-        }
-        // Après coup et sans bloquer : le compte est supprimé même si l'accusé ne part pas.
-        void sendAccountDeletedEmail({ to: user.email, name: profile.name });
-        return res.status(200).json({ deleted: true, summary });
+        // Bloqué et inscrit au registre avant de répondre : plus aucune session
+        // ne peut écrire, et une panne du processus est reprise par le script
+        // d'admin. Une erreur ici laisse le compte intact : la personne réessaie.
+        await beginAccountDeletion(user.id);
+        purgeInBackground(user.id, user.email, profile.name);
+        return res.status(202).json({ deleted: false, pending: true });
       }
       default:
         throw new PublicError('Unknown action', 400);
