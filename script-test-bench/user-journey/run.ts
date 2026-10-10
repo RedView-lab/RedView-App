@@ -123,12 +123,23 @@ async function auditA11y(page: Page, screen: string) {
 
 /** Messages d'erreur de la console (ressources en échec exclues) : affichés en cas d'échec, pour le diagnostic. */
 const consoleErrors: string[] = [];
+/**
+ * Erreurs et avertissements de la console, ressources en échec comprises (avec
+ * leur URL), joints au rapport : ce que l'utilisateur verrait dans sa console.
+ * Les services du VPS coupés ici (503) en ajoutent qui n'existent pas en prod.
+ */
+const consoleLog: string[] = [];
 
 function pageWatch(page: Page, label: string, errors: string[]) {
   page.on('pageerror', (error) => errors.push(`[${label}] ${error.message}`));
   page.on('console', (message) => {
-    if (message.type() === 'error' && !message.text().startsWith('Failed to load resource')) {
-      consoleErrors.push(`[${label}] ${message.text().slice(0, 400)}`);
+    const type = message.type();
+    if (type !== 'error' && type !== 'warning') return;
+    const text = message.text();
+    const where = text.startsWith('Failed to load resource') ? ` ${message.location().url}` : '';
+    consoleLog.push(`[${label}] ${type} ${text.slice(0, 400)}${where}`);
+    if (type === 'error' && !text.startsWith('Failed to load resource')) {
+      consoleErrors.push(`[${label}] ${text.slice(0, 400)}`);
     }
   });
 }
@@ -556,7 +567,7 @@ async function main() {
     if (!argv.includes('--keep')) fs.rmSync(workDir, { recursive: true, force: true });
   }
 
-  const report = { date: new Date().toISOString(), channel: CHANNEL, ok: !failed, steps: results, analytics: analyticsSent, a11y: a11yFindings, appwriteCalls };
+  const report = { date: new Date().toISOString(), channel: CHANNEL, ok: !failed, steps: results, analytics: analyticsSent, a11y: a11yFindings, appwriteCalls, console: consoleLog };
   fs.writeFileSync(path.join(REPORT_DIR, `user-journey-${report.date.replace(/[:.]/g, '-')}.json`), JSON.stringify(report, null, 2));
   console.log(failed ? `\nParcours en échec (capture : ${path.relative(REPO, path.join(REPORT_DIR, 'failure.png'))})` : '\nParcours principal : OK');
   process.exitCode = failed ? 1 : 0;
