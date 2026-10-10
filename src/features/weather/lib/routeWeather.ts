@@ -53,10 +53,80 @@ export interface RouteWeatherValues {
 // ── Cache et requêtes en vol ─────────────────────────────────────────
 
 const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+/**
+ * Prévisions indisponibles (erreur HTTP ou réseau) gardées une minute : chaque
+ * modification du projet relance le chargement (useRouteWeather), et sans elles
+ * la même requête repartait à chaque fois vers un service en panne.
+ */
+const UNAVAILABLE_TTL_MS = 60 * 1000;
+/** Une entrée par tracé × départ : une longue session d'édition en crée des centaines (~30 Ko chacune). */
+const MAX_CACHE_ENTRIES = 48;
 /** Vitesse de repli pour estimer la durée de sortie sans prédiction. */
 const FALLBACK_RIDE_SPEED_KMH = 20;
-const weatherCache = new Map<string, RouteWeatherDataset>();
-const inFlightRequests = new Map<string, Promise<RouteWeatherDataset | null>>();
+
+/** `dataset` null : prévisions indisponibles (réponse vide hors du domaine du modèle, ou erreur). */
+interface WeatherCacheEntry {
+  dataset: RouteWeatherDataset | null;
+  expiresAt: number;
+}
+
+const weatherCache = new Map<string, WeatherCacheEntry>();
+
+function cacheWeather(key: string, dataset: RouteWeatherDataset | null, ttlMs: number): void {
+  const now = Date.now();
+  for (const [cachedKey, entry] of weatherCache) {
+    if (entry.expiresAt <= now) weatherCache.delete(cachedKey);
+  }
+  weatherCache.delete(key);
+  weatherCache.set(key, { dataset, expiresAt: now + ttlMs });
+  while (weatherCache.size > MAX_CACHE_ENTRIES) {
+    const oldest = weatherCache.keys().next().value;
+    if (oldest === undefined) break;
+    weatherCache.delete(oldest);
+  }
+}
+
+/**
+ * Requête partagée par tous les appelants d'une même clé. Elle n'est annulée
+ * que quand tous l'ont abandonnée : liée au signal du premier, elle finissait
+ * en `null` pour l'appelant suivant — l'effet relancé à chaque modification du
+ * projet annule le précédent, reprenait sa requête en vol et affichait
+ * « prévisions indisponibles » jusqu'à la modification suivante.
+ */
+interface InFlightWeather {
+  promise: Promise<RouteWeatherDataset | null>;
+  controller: AbortController;
+  waiters: number;
+}
+
+const inFlightRequests = new Map<string, InFlightWeather>();
+
+/** Résultat de la requête partagée pour un appelant ; null dès que son `signal` est annulé. */
+function awaitSharedRequest(
+  key: string,
+  request: InFlightWeather,
+  signal: AbortSignal | undefined,
+): Promise<RouteWeatherDataset | null> {
+  if (signal?.aborted) return Promise.resolve(null);
+  request.waiters += 1;
+  if (!signal) return request.promise;
+  return new Promise((resolve) => {
+    const leave = () => {
+      resolve(null);
+      request.waiters -= 1;
+      if (request.waiters > 0) return;
+      // Plus personne ne l'attend : annulée, et retirée tout de suite pour
+      // qu'un nouvel appelant reparte d'une requête neuve.
+      if (inFlightRequests.get(key) === request) inFlightRequests.delete(key);
+      request.controller.abort();
+    };
+    signal.addEventListener('abort', leave, { once: true });
+    void request.promise.then((dataset) => {
+      signal.removeEventListener('abort', leave);
+      resolve(dataset);
+    });
+  });
+}
 
 function makeCacheKey(signature: string, startDate: string, startTimeHour: string, endDate: string): string {
   return `${signature}|${startDate}|${startTimeHour}|${endDate}`;
@@ -197,14 +267,15 @@ export async function fetchRouteWeatherDataset(
   const cacheKey = makeCacheKey(signature, startDate, hourPrefix, range.endDate);
 
   const cached = weatherCache.get(cacheKey);
-  if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
-    return cached;
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.dataset;
   }
 
   const inFlight = inFlightRequests.get(cacheKey);
-  if (inFlight) return inFlight;
+  if (inFlight) return awaitSharedRequest(cacheKey, inFlight, signal);
 
-  const promise = (async () => {
+  const controller = new AbortController();
+  const promise = (async (): Promise<RouteWeatherDataset | null> => {
     try {
       const lats = sampledStations.map((s) => s.lat.toFixed(4)).join(',');
       const lngs = sampledStations.map((s) => s.lng.toFixed(4)).join(',');
@@ -219,7 +290,7 @@ export async function fetchRouteWeatherDataset(
         `&models=${OPENMETEO_MODEL}`;
 
       const response = await fetch(url, {
-        signal,
+        signal: controller.signal,
         headers: { Accept: 'application/json' },
       });
 
@@ -303,7 +374,11 @@ export async function fetchRouteWeatherDataset(
       }
 
       const hasAnyValue = samples.some((sample) => sample.hourly.temperature_2m.some((v) => Number.isFinite(v)));
-      if (!hasAnyValue) return null;
+      if (!hasAnyValue) {
+        // Tracé hors du domaine du modèle : la réponse ne changera pas d'ici l'expiration.
+        cacheWeather(cacheKey, null, CACHE_TTL_MS);
+        return null;
+      }
 
       const departureTimestampMs = departureTimestamp(startDate, startTime);
 
@@ -317,21 +392,24 @@ export async function fetchRouteWeatherDataset(
         fetchedAt: Date.now(),
       };
 
-      weatherCache.set(cacheKey, dataset);
+      cacheWeather(cacheKey, dataset, CACHE_TTL_MS);
       return dataset;
     } catch (err) {
-      if (err instanceof DOMException && err.name === 'AbortError') {
+      if (controller.signal.aborted) {
         return null;
       }
       console.warn('[routeWeather] Failed to fetch route weather forecast:', err);
+      cacheWeather(cacheKey, null, UNAVAILABLE_TTL_MS);
       return null;
-    } finally {
-      inFlightRequests.delete(cacheKey);
     }
   })();
 
-  inFlightRequests.set(cacheKey, promise);
-  return promise;
+  const request: InFlightWeather = { promise, controller, waiters: 0 };
+  inFlightRequests.set(cacheKey, request);
+  void promise.finally(() => {
+    if (inFlightRequests.get(cacheKey) === request) inFlightRequests.delete(cacheKey);
+  });
+  return awaitSharedRequest(cacheKey, request, signal);
 }
 
 // ── Interpolation Spatio-Temporelle ──────────────────────────────────

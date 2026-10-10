@@ -154,4 +154,91 @@ describe('fetchRouteWeatherDataset', () => {
     expect(await fetchRouteWeatherDataset('it-2', route(5), '2026-10-06', '08:00')).toBeNull();
     expect(warn).toHaveBeenCalled();
   });
+
+  /** Réponse valide pour `stations` stations (3 heures). */
+  function forecast(stations: number, temperature: number | null = 6) {
+    const time = hours(3);
+    const row = (v: number | null) => [v, v, v];
+    return Array.from({ length: stations }, () => ({
+      latitude: 45,
+      longitude: 6,
+      hourly: {
+        time,
+        temperature_2m: row(temperature),
+        apparent_temperature: row(temperature),
+        precipitation: row(0),
+        wind_speed_10m: row(10),
+        cloud_cover: row(0),
+        relative_humidity_2m: row(50),
+        sunshine_duration: row(3600),
+      },
+    }));
+  }
+
+  /** fetch qui répond au tour suivant et honore l'annulation, comme le vrai. */
+  function stubAbortableOpenMeteo() {
+    const fetchMock = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => new Promise<Response>((resolve, reject) => {
+      const timer = setTimeout(() => resolve(new Response(JSON.stringify(forecast(3)), { status: 200 })), 0);
+      init?.signal?.addEventListener('abort', () => {
+        clearTimeout(timer);
+        reject(new DOMException('Aborted', 'AbortError'));
+      });
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    return fetchMock;
+  }
+
+  it('a request dropped by its caller never gives null to the next one (effect re-run on each edit)', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(NOW);
+    const fetchMock = stubAbortableOpenMeteo();
+    const points = route(4, 400);
+    const previous = new AbortController();
+    const dropped = fetchRouteWeatherDataset('it-3', points, '2026-10-06', '08:00', previous.signal);
+    previous.abort(); // nettoyage de l'effet précédent
+    const current = fetchRouteWeatherDataset('it-3', points, '2026-10-06', '08:00', new AbortController().signal);
+    expect(await dropped).toBeNull();
+    expect((await current)?.samples).toHaveLength(3);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[0][1]?.signal?.aborted).toBe(true);
+  });
+
+  it('shares one request between live callers and keeps it while one still waits', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(NOW);
+    const fetchMock = stubAbortableOpenMeteo();
+    const points = route(4, 250);
+    const left = new AbortController();
+    const first = fetchRouteWeatherDataset('it-4', points, '2026-10-06', '08:00', left.signal);
+    const second = fetchRouteWeatherDataset('it-4', points, '2026-10-06', '08:00', new AbortController().signal);
+    left.abort();
+    expect(await first).toBeNull();
+    expect((await second)?.samples).toHaveLength(3);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][1]?.signal?.aborted).toBe(false);
+  });
+
+  it('keeps a failure one minute instead of asking a down service again on every edit', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(NOW);
+    const fetchMock = stubOpenMeteo(503, { error: true });
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const points = route(4, 200);
+    expect(await fetchRouteWeatherDataset('it-5', points, '2026-10-06', '08:00')).toBeNull();
+    expect(await fetchRouteWeatherDataset('it-5', points, '2026-10-06', '08:00')).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    vi.setSystemTime(NOW.getTime() + 61_000);
+    await fetchRouteWeatherDataset('it-5', points, '2026-10-06', '08:00');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps an empty forecast (route outside the model domain) like a real one', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(NOW);
+    const fetchMock = stubOpenMeteo(200, forecast(3, null));
+    const points = route(4, 100);
+    expect(await fetchRouteWeatherDataset('it-6', points, '2026-10-06', '08:00')).toBeNull();
+    expect(await fetchRouteWeatherDataset('it-6', points, '2026-10-06', '08:00')).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
 });
