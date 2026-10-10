@@ -31,6 +31,7 @@ import {
 } from '@/shared/services/appwrite';
 import { translateAppText } from '@/shared/i18n/config';
 import { logger } from '@/shared/lib/logger';
+import { clampProjectName, PROJECT_NAME_MAX_LENGTH } from '@/shared/lib/projectName';
 import {
   idbDeleteProject,
   idbGetProject,
@@ -218,7 +219,10 @@ function conflictCopyName(name: string, origin: 'local' | 'remote'): string {
   const suffix = origin === 'local'
     ? translateAppText('copie locale non synchronisée')
     : translateAppText('version d’un autre appareil');
-  return `${name || 'Untitled'} (${suffix})`;
+  // Le suffixe reste lisible : c'est le nom d'origine qui est coupé (D3-3).
+  const suffixPart = ` (${suffix})`;
+  const base = clampProjectName(name || 'Untitled');
+  return `${Array.from(base).slice(0, Math.max(1, PROJECT_NAME_MAX_LENGTH - Array.from(suffixPart).length)).join('')}${suffixPart}`;
 }
 
 /** Duplique la version cloud actuelle d'un projet (sans la décompresser) avant de l'écraser. */
@@ -431,7 +435,9 @@ export async function createProject(
   const userId = await getCurrentUserId();
   const isDev = isLocalFallbackUser(userId);
   const baseProject: ItineraryProject = initialData ?? createDefaultProject();
-  const finalProject: ItineraryProject = name ? { ...baseProject, name } : baseProject;
+  // Nom collé depuis une description, copie « (importé) », « (copie) »… : jamais au-delà de l'attribut `name` (D3-3).
+  const finalName = clampProjectName(name || baseProject.name);
+  const finalProject: ItineraryProject = finalName !== baseProject.name ? { ...baseProject, name: finalName } : baseProject;
 
   if (!isDev) {
     let uploaded: string | null = null;
@@ -596,7 +602,7 @@ export async function saveProject(
       }
 
       const fields = {
-        name: project.name,
+        name: clampProjectName(project.name),
         size_bytes: cloud.sizeBytes,
         privacy: project.privacy ?? 'private',
       };
@@ -683,7 +689,7 @@ function advanceBaseIfCurrent(
  * lecture (`data.name` est aligné au chargement et réécrit à la sauvegarde).
  */
 export async function renameProject(id: string, name: string): Promise<void> {
-  const trimmed = name.trim();
+  const trimmed = clampProjectName(name.trim());
   if (!trimmed) throw new Error('Project name cannot be empty');
 
   const userId = await getCurrentUserId();

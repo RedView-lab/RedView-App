@@ -104,6 +104,14 @@ function netCheck(op: string) {
 }
 
 function validate(data: Doc) {
+  // `name` (projets, dossiers) : attribut de 255 caractères, comptés en points de code comme Appwrite.
+  if (typeof data.name === 'string' && Array.from(data.name).length > 255) {
+    throw new AppwriteException(
+      'Invalid document structure: Attribute "name" has invalid format. Value must be a valid string and no longer than 255 chars',
+      400,
+      'document_invalid_structure',
+    );
+  }
   if (typeof data.data === 'string' && data.data.length > __mock.proxyMaxChars) {
     __mock.proxyRejections += 1;
     throw new AppwriteException('<html>502 Bad Gateway</html>', 502, '');

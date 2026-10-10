@@ -37,6 +37,9 @@ export const PROJECT_CLOUD_ERROR_MESSAGES: Record<ProjectCloudErrorKind, string>
   unreadable: 'Les données de ce projet dans le cloud sont illisibles : il n’a pas été ouvert, pour ne pas les écraser.',
 };
 
+/** Refus de l'attribut `name` (plus de 255 caractères). */
+export const PROJECT_NAME_REJECTED_MESSAGE = 'Le serveur a refusé le nom du projet : 255 caractères au maximum.';
+
 export class ProjectCloudError extends Error {
   readonly kind: ProjectCloudErrorKind;
   /** Code HTTP Appwrite (0 si erreur réseau). */
@@ -106,8 +109,21 @@ export function toProjectCloudError(error: unknown): ProjectCloudError {
   if (code === 409 && /document_update_conflict/.test(readErrorText(error))) {
     return new ProjectCloudError('conflict', { status: code, cause: error });
   }
-  if (code === 400 && /no longer than|too large|size/i.test(readErrorText(error))) {
-    return new ProjectCloudError('too-large', { status: code, cause: error });
+  if (code === 400) {
+    const text = readErrorText(error);
+    // Refus d'un attribut nommé autre que la charge `data` (le nom, 255 caractères) :
+    // jamais « projet trop volumineux », qui faisait chercher du côté de la taille (D3-3).
+    const attribute = /attribute "([^"]+)"/i.exec(text)?.[1];
+    if (attribute && attribute !== 'data') {
+      return new ProjectCloudError('rejected', {
+        status: code,
+        cause: error,
+        message: attribute === 'name' ? PROJECT_NAME_REJECTED_MESSAGE : undefined,
+      });
+    }
+    if (/no longer than|too large|size/i.test(text)) {
+      return new ProjectCloudError('too-large', { status: code, cause: error });
+    }
   }
   return new ProjectCloudError('rejected', { status: code, cause: error });
 }

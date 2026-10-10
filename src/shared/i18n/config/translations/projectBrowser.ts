@@ -167,6 +167,7 @@ export const projectBrowserTranslationPairs: ReadonlyArray<AppTranslationPair> =
   { fr: 'Ce projet a été modifié sur un autre appareil.', en: 'This project was modified on another device.' },
   { fr: 'Ce projet a été supprimé.', en: 'This project has been deleted.' },
   { fr: 'Le serveur a refusé l’enregistrement du projet.', en: 'The server rejected the project save.' },
+  { fr: 'Le serveur a refusé le nom du projet : 255 caractères au maximum.', en: 'The server rejected the project name: 255 characters at most.' },
   { fr: 'Les données de ce projet dans le cloud sont illisibles : il n’a pas été ouvert, pour ne pas les écraser.', en: 'This project’s cloud data is unreadable: it was not opened, so that it is not overwritten.' },
   { fr: 'Connexion au cloud impossible : le projet n’a pas pu être ouvert. Réessayez une fois en ligne.', en: 'Cannot reach the cloud: the project could not be opened. Try again once online.' },
   { fr: 'Impossible d’ouvrir ce projet.', en: 'Unable to open this project.' },

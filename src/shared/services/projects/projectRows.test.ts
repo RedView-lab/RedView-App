@@ -174,6 +174,37 @@ describe('saveProject', () => {
   });
 });
 
+describe('nom de projet au-delà des 255 caractères de l’attribut (D3-3)', () => {
+  // Nom collé depuis une description : 300 caractères, émojis compris (comptés en points de code par Appwrite).
+  const longName = `${'Tour du Mont-Blanc en autonomie '.repeat(9)}🏔️🚴`;
+
+  it('création, sauvegarde et renommage enregistrent le nom coupé à 255 caractères au lieu d’échouer', async () => {
+    const { mock, rows } = await load();
+    expect(Array.from(longName).length).toBeGreaterThan(255);
+    const row = await rows.createProject(longName);
+    const clipped = Array.from(longName).slice(0, 255).join('');
+    expect(cloudDoc(mock, row.id).name).toBe(clipped);
+
+    await rows.saveProject(row.id, project(`${longName} v2`));
+    expect(cloudDoc(mock, row.id).name).toBe(Array.from(`${longName} v2`).slice(0, 255).join(''));
+
+    await rows.renameProject(row.id, `Renommé ${longName}`);
+    expect(Array.from(String(cloudDoc(mock, row.id).name))).toHaveLength(255);
+  });
+
+  it('un refus du serveur sur le nom n’est pas pris pour un projet trop volumineux', async () => {
+    const { toProjectCloudError } = await import('./errors');
+    const refusal = (attribute: string, max: number) => Object.assign(
+      new Error(`Invalid document structure: Attribute "${attribute}" has invalid format. Value must be a valid string and no longer than ${max} chars`),
+      { code: 400, type: 'document_invalid_structure' },
+    );
+    const nameError = toProjectCloudError(refusal('name', 255));
+    expect(nameError.kind).toBe('rejected');
+    expect(nameError.message).toMatch(/nom du projet/);
+    expect(toProjectCloudError(refusal('data', 12_000_000)).kind).toBe('too-large');
+  });
+});
+
 describe('deux onglets ou deux appareils qui enregistrent en même temps', () => {
   const payloadFiles = (mock: MockSdk['__mock'], id: string) =>
     [...mock.files.entries()].filter(([, file]) => file.name === `${id}.json.gz`).map(([fileId]) => fileId);

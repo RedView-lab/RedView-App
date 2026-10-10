@@ -12,6 +12,7 @@ import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
 import { useAppI18n } from '@/shared/i18n';
 import { projectAgeBucket, trackAnalyticsEvent } from '@/shared/lib/analytics';
 import { confirmDialog, promptDialog } from '@/shared/lib/appDialog';
+import { PROJECT_NAME_MAX_LENGTH } from '@/shared/lib/projectName';
 import type { ProjectFolderSummary, ProjectSummary } from '@/shared/services/projects';
 
 import { useFileDropImport } from '../../hooks/useFileDropImport';
@@ -200,6 +201,7 @@ export function ProjectsPanel({
       title: t('Renommer le projet'),
       label: t('Nom du projet'),
       initialValue: project.name,
+      maxLength: PROJECT_NAME_MAX_LENGTH,
       confirmLabel: t('Renommer'),
     });
     if (!nextName || nextName === project.name) return;
@@ -211,6 +213,7 @@ export function ProjectsPanel({
       title: t('Renommer le dossier'),
       label: t('Nom du dossier'),
       initialValue: folder.name,
+      maxLength: PROJECT_NAME_MAX_LENGTH,
       confirmLabel: t('Renommer'),
     });
     if (!nextName || nextName === folder.name) return;

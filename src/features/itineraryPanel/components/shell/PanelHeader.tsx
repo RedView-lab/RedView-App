@@ -7,6 +7,7 @@ import {
 } from '../icons';
 import { UserAvatarStack, type StackPerson } from '@/shared/components/UserAvatar/UserAvatar';
 import { useAppI18n } from '@/shared/i18n';
+import { PROJECT_NAME_MAX_LENGTH } from '@/shared/lib/projectName';
 import type { CollaboratorAction, ProjectCollaborator, ProjectSaveStatus, ProjectSessionStatus } from '../../types';
 import { CollaboratorMenu } from './CollaboratorMenu';
 
@@ -184,6 +185,7 @@ export function PanelHeader({
             className="rvi-header__title"
             value={title}
             onChange={(e) => onRename?.(e.target.value)}
+            maxLength={PROJECT_NAME_MAX_LENGTH}
             placeholder={t('Nouveau projet')}
             aria-label={t('Nom du projet')}
           />

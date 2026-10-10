@@ -9,6 +9,7 @@ import {
   Role,
 } from '@/shared/services/appwrite';
 import { logger } from '@/shared/lib/logger';
+import { clampProjectName } from '@/shared/lib/projectName';
 
 import { isOwnDocument } from './access';
 import { getCurrentUserId, isLocalFallbackUser, isOwnedBy, toCloudFailure } from './auth';
@@ -116,7 +117,7 @@ export async function createProjectFolder(
   parentFolderId?: string | null,
   privacy: ProjectPrivacy = 'private',
 ): Promise<ProjectFolderSummary> {
-  const trimmed = name.trim();
+  const trimmed = clampProjectName(name.trim());
   if (!trimmed) throw new Error('Folder name cannot be empty');
 
   const userId = await getCurrentUserId();
@@ -165,7 +166,7 @@ export async function createProjectFolder(
 }
 
 export async function renameProjectFolder(id: string, name: string): Promise<void> {
-  const trimmed = name.trim();
+  const trimmed = clampProjectName(name.trim());
   if (!trimmed) throw new Error('Folder name cannot be empty');
 
   const userId = await getCurrentUserId();
