@@ -383,6 +383,9 @@ export const projectBrowserTranslationPairs: ReadonlyArray<AppTranslationPair> =
   { fr: 'Stripe a bien confirmé, mais l’activation n’a pas encore pu être vérifiée. Elle se terminera automatiquement : vous pouvez réessayer ou fermer cette page.', en: 'Stripe confirmed, but the activation could not be verified yet. It will complete automatically: you can try again or close this page.' },
   { fr: 'Réessayer l’activation', en: 'Retry activation' },
   { fr: 'Mettez d’abord à jour votre moyen de paiement pour changer de formule.', en: 'Update your payment method first to change plans.' },
+  // Retrait d'un éditeur (ShareProjectDialog)
+  { fr: 'Retirer {{name}} du projet ?', en: 'Remove {{name}} from the project?' },
+  { fr: 'Sa session sur ce projet se ferme tout de suite. Vous pourrez l’inviter à nouveau.', en: 'Their session on this project closes immediately. You can invite them again.' },
   // Déconnexion (profile.ts signOutAccount)
   { fr: 'Déconnexion impossible : vérifiez votre connexion, puis réessayez.', en: 'Could not sign out: check your connection, then try again.' },
   // Changement d'adresse e-mail (ChangeEmailDialog, api/auth/change-email.ts)

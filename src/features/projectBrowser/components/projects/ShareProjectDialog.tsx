@@ -108,6 +108,16 @@ export function ShareProjectDialog({
     }
   };
 
+  /** Retirer un éditeur coupe sa session en pleine édition : confirmé d'abord, comme le départ (A14-4). */
+  const removeMember = async (memberId: string, label: string) => {
+    const confirmed = await confirmDialog({
+      title: t('Retirer {{name}} du projet ?', { name: label }),
+      message: t('Sa session sur ce projet se ferme tout de suite. Vous pourrez l’inviter à nouveau.'),
+      confirmLabel: t('Retirer l’accès'),
+    });
+    if (confirmed) remove.mutate({ id: projectId, memberId });
+  };
+
   const leaveProject = async () => {
     if (!(await confirmDialog(leaveProjectDialog(t, projectName)))) return;
     try {
@@ -217,7 +227,7 @@ export function ShareProjectDialog({
                           aria-label={t('Retirer l’accès à {{name}}', { name: label })}
                           title={t('Retirer l’accès')}
                           disabled={remove.isPending}
-                          onClick={() => remove.mutate({ id: projectId, memberId: member.userId })}
+                          onClick={() => { void removeMember(member.userId, label); }}
                         >
                           <IconClose size={14} />
                         </button>
