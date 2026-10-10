@@ -26,6 +26,7 @@ import { createRequestLogger, normalizeRoutePath } from './server/lib/request-lo
 import { VARIANT_SUFFIX, acceptedEncodings, isCompressible } from './server/lib/static-compression.mjs';
 import { REDVIEW_CSP_HEADER } from './server/lib/csp.mjs';
 import { createAppwriteStorageGuard } from './server/lib/storage-guard.mjs';
+import { apiRateBucket } from './server/lib/api-rate-buckets.mjs';
 import { resolveLegacyAssetPath } from './server/lib/legacy-asset-paths.mjs';
 import { API_COMPRESS_SYNC_MAX_BYTES, compressApiBody, compressApiBodySync, pickApiEncoding, withVary } from './server/lib/api-compression.mjs';
 
@@ -104,34 +105,11 @@ export { REDVIEW_CSP_HEADER };
 
 // Rate limiting en mémoire (fenêtre d'une minute, Map bornée).
 const hitRateLimit = createRateLimiter({ windowMs: 60 * 1000 });
-const MAX_AUTH_REQUESTS = 15;
-const MAX_API_REQUESTS = 120;
-// Tuiles/méta météo du VPS (/api/weather/*) : un balayage de 24 h × 5 couches
-// avec préchargement fait ~145 requêtes ; bucket dédié pour ne pas épuiser
-// celui de BRouter/POI.
-const MAX_WEATHER_REQUESTS = 600;
 // Fallbacks de tuiles (SW inactif) : généreux, mais chaque requête déclenche
 // des fetchs upstream, donc pas illimité. Quota par famille (radar, slope,
 // altitude) ; /dem-tiles et les préchargements `?pf=1` ne sont pas comptés.
 const MAX_TILE_REQUESTS = 600;
-// Proxy LiDAR (/api/pointcloud) : un fichier par dalle (Pays-Bas) ou par
-// morceau de bande (Flandre, ≤ 10 par cellule), plus les reprises Range ;
-// bucket dédié pour qu'une série de téléchargements n'épuise pas le quota
-// général (BRouter, POI…).
-const MAX_POINTCLOUD_REQUESTS = 120;
-// Actions de facturation (POST /api/billing/*) : chaque souscription crée des
-// objets chez Stripe ; un parcours complet en fait moins de 10. Les lectures
-// (GET overview) restent sur le quota général.
-const MAX_BILLING_REQUESTS = 30;
-// Webhook Stripe : Stripe livre en rafales depuis quelques IP (horloges de
-// test, relivraisons) ; un 429 retarderait les e-mails d'abonnement.
-const MAX_STRIPE_WEBHOOK_REQUESTS = 600;
-// Neige (/api/snow-context, /api/meteofrance) : un passage du mode neige fait
-// un appel de chaque. Chaque lieu nouveau coûte des lectures de fichiers
-// départementaux (CPU) et un appel sur la clé Météo-France partagée : quota
-// propre, pour qu'une IP ne puisse ni saturer le processus ni vider le quota
-// amont de tout le monde (A11-1, A5-1).
-const MAX_SNOW_REQUESTS = 20;
+// Seaux des routes /api : server/lib/api-rate-buckets.mjs.
 
 function checkRateLimit(req, bucket, max) {
   const ipKey = rateLimitKeyForIp(getClientIp(req));
@@ -272,27 +250,8 @@ const server = http.createServer(async (req, res) => {
     if (pathname.startsWith('/api/')) {
       const apiRoute = resolveApiRoute(API_DIR, pathname, API_ROUTE_OPTIONS);
       req.redviewRoute = normalizeRoutePath(pathname, apiRoute?.route);
-      // Le bucket est choisi d'après la route RÉSOLUE : un chemin détourné ne
-      // peut plus atteindre `auth/*` en passant par le quota général.
-      const isAuth = apiRoute?.isAuth ?? false;
-      const isWeather = apiRoute?.route === 'weather';
-      const isPointcloud = apiRoute?.route === 'pointcloud';
-      const isBilling = req.method !== 'GET' && (apiRoute?.route.startsWith('billing/') ?? false);
-      const isStripeWebhook = apiRoute?.route === 'stripe/webhook';
-      const isSnow = apiRoute?.route === 'snow-context' || apiRoute?.route === 'meteofrance';
-      const [bucket, max] = isAuth
-        ? ['auth', MAX_AUTH_REQUESTS]
-        : isWeather
-          ? ['weather', MAX_WEATHER_REQUESTS]
-          : isPointcloud
-            ? ['pointcloud', MAX_POINTCLOUD_REQUESTS]
-            : isBilling
-              ? ['billing', MAX_BILLING_REQUESTS]
-              : isStripeWebhook
-                ? ['stripe-webhook', MAX_STRIPE_WEBHOOK_REQUESTS]
-                : isSnow
-                  ? ['snow', MAX_SNOW_REQUESTS]
-                  : ['general', MAX_API_REQUESTS];
+      // Seau choisi d'après la route RÉSOLUE (server/lib/api-rate-buckets.mjs).
+      const [bucket, max] = apiRateBucket(apiRoute, req.method);
       if (!checkRateLimit(req, bucket, max)) {
         return sendTooManyRequests(res);
       }
