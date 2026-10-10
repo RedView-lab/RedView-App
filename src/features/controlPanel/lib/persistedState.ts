@@ -1,5 +1,6 @@
 import type { LabelCategory } from '@/features/labels/types';
 import { LABEL_CATEGORIES } from '@/features/labels/lib/label-config';
+import { DEFAULT_BASEMAP_ID } from './basemaps';
 import type { AnalysisZone } from '@/features/analysisZone';
 import type { PersistedAltitudeBreakpoints } from '@/features/altitude/lib/altitude-persist';
 import type { AltitudeState } from '@/features/altitude/types';
@@ -153,7 +154,11 @@ export function createDefaultControlPanelPersistedState(): ControlPanelPersisted
 
   return {
     sectionsOpen: { ...DEFAULT_SECTIONS_OPEN },
-    basemapId: 'satellite',
+    // Le même défaut que la carte (useDashboardBasemap) : « 'satellite' » ici
+    // et « standard » là-bas faisaient afficher Satellite coché sur une carte
+    // Standard pour tout projet sans vue enregistrée (projet neuf, autre
+    // appareil), et un clic sur Satellite ne changeait rien.
+    basemapId: DEFAULT_BASEMAP_ID,
     basemap3dQuality: 'fast-30m',
     mapEnvironment: 'day',
     toggles: {
