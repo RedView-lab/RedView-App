@@ -15,7 +15,7 @@ async function loadHandler(): Promise<Handler> {
   return (await import('../../geocode-iconic')).default as Handler;
 }
 
-function call(handler: Handler, query: Record<string, string>): Promise<Captured> {
+function call(handler: Handler, query: Record<string, string>, socket: { remoteAddress?: string; destroyed?: boolean } = {}): Promise<Captured> {
   const captured: Captured = { status: 200, headers: {}, body: undefined };
   const res = {
     status(code: number) { captured.status = code; return res; },
@@ -24,7 +24,7 @@ function call(handler: Handler, query: Record<string, string>): Promise<Captured
     send(data: unknown) { captured.body = Buffer.isBuffer(data) ? JSON.parse(data.toString('utf-8')) : data; return res; },
     end() { return res; },
   } as unknown as ApiResponse;
-  const req = { method: 'GET', query, headers: {} } as unknown as ApiRequest;
+  const req = { method: 'GET', query, headers: {}, socket } as unknown as ApiRequest;
   return Promise.resolve(handler(req, res)).then(() => captured);
 }
 
@@ -109,5 +109,37 @@ describe('api/geocode-iconic', () => {
     expect((await call(handler, { q: 'a' })).status).toBe(400);
     expect((await call(handler, { q: 'x'.repeat(201) })).status).toBe(400);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('quota par IP des recherches qui partent chez Nominatim : une IP ne monopolise plus le créneau de toute l’app (A5-2)', async () => {
+    const handler = await loadHandler();
+    const attacker = { remoteAddress: '203.0.113.5' };
+    let limited: Captured | null = null;
+    for (let index = 0; index < 12; index += 1) {
+      const pending = call(handler, { q: `Sommet ${index}` }, attacker);
+      await vi.advanceTimersByTimeAsync(1_000);
+      const out = await pending;
+      if (out.status === 429) { limited = out; break; }
+    }
+    expect(limited?.status).toBe(429);
+    const other = call(handler, { q: 'Mont Blanc' }, { remoteAddress: '198.51.100.8' });
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect((await other).status).toBe(200);
+  });
+
+  it('client parti pendant l’attente : son créneau est rendu à la file', async () => {
+    const handler = await loadHandler();
+    await call(handler, { q: 'Mont Blanc' });
+    const gone = { remoteAddress: '198.51.100.9', destroyed: false };
+    const leaving = call(handler, { q: 'Cervin' }, gone);
+    gone.destroyed = true;
+    await vi.advanceTimersByTimeAsync(1_000);
+    await leaving;
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    // Le créneau rendu sert tout de suite à la recherche suivante.
+    const next = call(handler, { q: 'Eiger' });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect((await next).status).toBe(200);
   });
 });

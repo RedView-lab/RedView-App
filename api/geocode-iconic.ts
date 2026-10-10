@@ -1,5 +1,6 @@
 import type { ApiRequest, ApiResponse } from './_lib/types.js';
 import { createByteLru } from '../server/lib/byte-lru.mjs';
+import { createRateLimiter, getClientIp, rateLimitKeyForIp } from '../server/lib/http-security.mjs';
 
 const NOMINATIM_ENDPOINT = 'https://nominatim.openstreetmap.org/search';
 const TIMEOUT_MS = 12_000;
@@ -21,6 +22,16 @@ const MAX_QUERY_LENGTH = 200;
 const UPSTREAM_INTERVAL_MS = 1_000;
 const MAX_QUEUE_WAIT_MS = 2_000;
 let nextUpstreamSlotAt = 0;
+
+/**
+ * Recherches qui partent chez Nominatim (le cache n'est pas compté), par IP et
+ * par minute : une IP qui enchaînait les recherches distinctes dans son quota
+ * général occupait le créneau unique de toute l'app, et tous les autres
+ * recevaient 503 (A5-2). Une recherche est faite à la demande explicite de
+ * l'utilisateur : quelques-unes par minute suffisent.
+ */
+const MAX_UPSTREAM_PER_IP_PER_MINUTE = 10;
+const allowUpstreamForIp = createRateLimiter({ windowMs: 60_000, maxKeys: 20_000 });
 
 /** Réponses gardées une journée : les mêmes saisies reviennent d'un utilisateur à l'autre. */
 const responseCache = createByteLru<Buffer>({
@@ -61,13 +72,21 @@ function previewText(value: string, maxLength = 180): string {
   return compact.length > maxLength ? `${compact.slice(0, maxLength)}...` : compact;
 }
 
-/** Réserve le prochain créneau amont : attente en ms, ou `null` si elle dépasserait `MAX_QUEUE_WAIT_MS`. */
+/** Réserve le prochain créneau amont : son heure, ou `null` si l'attente dépasserait `MAX_QUEUE_WAIT_MS`. */
 function reserveUpstreamSlot(now: number): number | null {
   const slotAt = Math.max(now, nextUpstreamSlotAt);
-  const waitMs = slotAt - now;
-  if (waitMs > MAX_QUEUE_WAIT_MS) return null;
+  if (slotAt - now > MAX_QUEUE_WAIT_MS) return null;
   nextUpstreamSlotAt = slotAt + UPSTREAM_INTERVAL_MS;
-  return waitMs;
+  return slotAt;
+}
+
+/**
+ * Rend un créneau réservé mais jamais utilisé (client parti pendant
+ * l'attente), s'il est encore le dernier de la file : sinon il était perdu,
+ * et la file des autres s'allongeait d'une seconde pour rien.
+ */
+function releaseUpstreamSlot(slotAt: number): void {
+  if (nextUpstreamSlotAt === slotAt + UPSTREAM_INTERVAL_MS) nextUpstreamSlotAt = slotAt;
 }
 
 async function fetchWithTimeout(target: string): Promise<Response> {
@@ -121,14 +140,22 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   const cached = responseCache.get(cacheKey);
   if (cached) return sendResults(res, cached, 'hit');
 
-  const waitMs = reserveUpstreamSlot(Date.now());
-  if (waitMs === null) {
+  if (!allowUpstreamForIp(`geocode-iconic:${rateLimitKeyForIp(getClientIp(req))}`, MAX_UPSTREAM_PER_IP_PER_MINUTE)) {
+    res.setHeader('Retry-After', '60');
+    return res.status(429).json({ error: 'Too many place searches, try again in a minute' });
+  }
+  const now = Date.now();
+  const slotAt = reserveUpstreamSlot(now);
+  if (slotAt === null) {
     res.setHeader('Retry-After', '2');
     return res.status(503).json({ error: 'Iconic geocoder busy' });
   }
-  if (waitMs > 0) await new Promise((resolve) => setTimeout(resolve, waitMs));
-  // Saisie remplacée pendant l'attente : le client a fermé la requête.
-  if (req.socket?.destroyed) return;
+  if (slotAt > now) await new Promise((resolve) => setTimeout(resolve, slotAt - now));
+  // Saisie remplacée pendant l'attente : le client a fermé la requête ; son créneau est rendu.
+  if (req.socket?.destroyed) {
+    releaseUpstreamSlot(slotAt);
+    return;
+  }
 
   try {
     const upstream = await fetchWithTimeout(`${NOMINATIM_ENDPOINT}?${cacheKey}`);
