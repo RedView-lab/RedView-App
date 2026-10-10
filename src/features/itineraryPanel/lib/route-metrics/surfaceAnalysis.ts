@@ -1,4 +1,4 @@
-import { fetchBrouterRoute, isBrouterRateLimitError } from '../brouter';
+import { fetchBrouterRoute, isBrouterBusyError, isBrouterRateLimitError } from '../brouter';
 import { parseMessages } from './parser';
 import { isOffroadSurface, isPavedSurface } from './surface';
 import type { RoutePointInput, RouteSurfaceMetrics, Surface } from './types';
@@ -243,7 +243,7 @@ function createRequestLimiter(limit: number): RequestLimiter {
 interface ChunkFetchContext {
   signal: AbortSignal;
   limit: RequestLimiter;
-  /** Posé au premier 429 : plus aucune requête ne part ensuite. */
+  /** Posé au premier 429 ou à la première file BRouter saturée : plus aucune requête ne part ensuite. */
   stopError: Error | null;
 }
 
@@ -311,8 +311,10 @@ async function fetchChunkSurfaces(
     return intervals;
   } catch (error) {
     if (signal.aborted || context.stopError) throw context.stopError ?? error;
-    // Quota atteint : scinder ou réessayer ne ferait qu'aggraver le 429.
-    if (isBrouterRateLimitError(error)) {
+    // Quota atteint, ou file BRouter saturée (503 déjà réessayé par le client) :
+    // scinder le tronçon multipliait les requêtes vers un serveur plein —
+    // jamais d'escalade sur ces deux refus.
+    if (isBrouterRateLimitError(error) || isBrouterBusyError(error)) {
       context.stopError = error;
       throw error;
     }
@@ -438,8 +440,8 @@ export async function analyzeGpxSurfaces(
   let completedChunks = 0;
   const totalChunks = chunks.length;
 
-  // Signal interne : annule les requêtes en vol dès le premier 429 (et suit
-  // l'annulation demandée par l'appelant).
+  // Signal interne : annule les requêtes en vol dès le premier 429 ou la
+  // première file saturée (et suit l'annulation demandée par l'appelant).
   const controller = new AbortController();
   const externalSignal = options?.signal;
   const forwardAbort = () => controller.abort(externalSignal?.reason);
@@ -476,7 +478,7 @@ export async function analyzeGpxSurfaces(
   } catch (error) {
     if (context.stopError) {
       // Avertissement non bloquant : l'import continue sans revêtements.
-      console.warn('[gpx-surface-analyzer] BRouter rate limit reached, surface analysis stopped.', context.stopError);
+      console.warn('[gpx-surface-analyzer] BRouter rate limit reached or queue full, surface analysis stopped.', context.stopError);
       throw context.stopError;
     }
     throw error;

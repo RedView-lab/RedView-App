@@ -10,13 +10,14 @@ import {
 } from '../../lib/route-metrics';
 import {
   buildImportedRouteMetrics,
+  buildRouteGeometrySignature,
   createImportedTimeline,
   normalizeImportedRoutePoints,
   refineImportedRoutePointsWithIgnAltimetry,
   simplifyPointsByQuality,
 } from '../../lib/routes';
 import { createDefaultAnalysisPanelState, createImportedPoiState } from '../../lib/project';
-import type { GpxQualityMode, Itinerary, ItineraryProject } from '../../types';
+import type { GpxQualityMode, Itinerary, ItineraryProject, TimelineItem } from '../../types';
 import { resolveImportedTimelineLabel } from './importedTimelineLabel';
 import { reverseGeocodeSettlement } from '../../lib/geocoding';
 import { buildImportedGpxWaypoints, GPX_IMPORT_WAYPOINT_ID_PREFIX } from './importedGpxWaypoints';
@@ -72,119 +73,76 @@ export function useItineraryGpxImport({
   onImportStateChange,
   onItineraryImported,
 }: UseItineraryGpxImportArgs) {
-  const hydrateImportedTimelineEndpoints = useCallback(
-    async (
-      itineraryId: string,
-      points: NonNullable<Itinerary['gpxRoute']>['points'],
-    ) => {
-      const startPoint = points[0];
-      const endPoint = points[points.length - 1] ?? startPoint;
-      if (!startPoint) return;
-
-      const [startLabel, endLabel] = await Promise.all([
-        resolveImportedTimelineLabel(startPoint.lon, startPoint.lat),
-        resolveImportedTimelineLabel(endPoint.lon, endPoint.lat),
-      ]);
-
+  /**
+   * Remplace les libellés de l'import (coordonnées GPS) par les noms de lieux
+   * résolus en arrière-plan, seulement sur les lignes que l'utilisateur n'a ni
+   * déplacées ni renommées entre-temps : sa modification gagne toujours (le
+   * départ / l'arrivée reprenaient les coordonnées de l'import).
+   */
+  const applyResolvedNames = useCallback(
+    (itineraryId: string, resolved: ReadonlyArray<{ item: TimelineItem; name: string | null }>) => {
+      const byId = new Map(resolved.filter((entry) => entry.name).map((entry) => [entry.item.id, entry]));
+      if (byId.size === 0) return;
       setProject((projectState) => {
-        const targetItinerary = projectState.itineraries.find((it) => it.id === itineraryId);
-        if (!targetItinerary) return projectState;
-
-        const updatedTimeline = targetItinerary.timeline.map((item) => {
-          if (item.kind === 'start') {
-            return {
-              ...item,
-              label: startLabel,
-              lat: startPoint.lat,
-              lon: startPoint.lon,
-            };
-          }
-          if (item.kind === 'end') {
-            return {
-              ...item,
-              label: endLabel,
-              lat: endPoint.lat,
-              lon: endPoint.lon,
-            };
-          }
-          return item;
-        });
-
-        return {
-          ...projectState,
-          itineraries: projectState.itineraries.map((itinerary) =>
-            itinerary.id === itineraryId ? { ...itinerary, timeline: updatedTimeline } : itinerary,
-          ),
-        };
-      });
-
-      // Résolution asynchrone des toponymes des points de passage intermédiaires
-      try {
-        setProject((projectState) => {
-          const target = projectState.itineraries.find((it) => it.id === itineraryId);
-          if (!target) return projectState;
-          // Les points de passage nommés dans le GPX gardent leur nom.
-          const waypointItems = target.timeline.filter(
-            (item) =>
-              item.kind === 'waypoint'
-              && item.lat != null
-              && item.lon != null
-              && !item.id.startsWith(GPX_IMPORT_WAYPOINT_ID_PREFIX),
-          );
-          if (waypointItems.length === 0) return projectState;
-
-          void Promise.all(
-            waypointItems.map(async (wp) => {
-              try {
-                const settlement = await reverseGeocodeSettlement(wp.lon!, wp.lat!, {
-                  maxDistanceMeters: 1500,
-                });
-                return { id: wp.id, name: settlement?.name?.trim() || null };
-              } catch {
-                return { id: wp.id, name: null };
-              }
-            }),
-          ).then((results) => {
-            const namedMap = new Map(
-              results.filter((r) => r.name).map((r) => [r.id, r.name!]),
-            );
-            if (namedMap.size === 0) return;
-
-            setProject((latestState) => ({
-              ...latestState,
-              itineraries: latestState.itineraries.map((itinerary) => {
-                if (itinerary.id !== itineraryId) return itinerary;
-                return {
-                  ...itinerary,
-                  timeline: itinerary.timeline.map((item) => {
-                    const placeName = namedMap.get(item.id);
-                    if (placeName) {
-                      return { ...item, label: placeName };
-                    }
-                    return item;
-                  }),
-                };
-              }),
-            }));
+        let changed = false;
+        const itineraries = projectState.itineraries.map((itinerary) => {
+          if (itinerary.id !== itineraryId) return itinerary;
+          const timeline = itinerary.timeline.map((item) => {
+            const entry = byId.get(item.id);
+            if (!entry) return item;
+            const imported = entry.item;
+            if (item.kind !== imported.kind || item.label !== imported.label || item.lat !== imported.lat || item.lon !== imported.lon) {
+              return item;
+            }
+            changed = true;
+            return { ...item, label: entry.name! };
           });
-
-          return projectState;
+          return changed ? { ...itinerary, timeline } : itinerary;
         });
-      } catch (err) {
-        console.warn('[useItineraryGpxImport] Failed to resolve waypoint settlements:', err);
-      }
+        return changed ? { ...projectState, itineraries } : projectState;
+      });
     },
     [setProject],
   );
 
+  const hydrateImportedTimelineNames = useCallback(
+    async (itineraryId: string, importedTimeline: Itinerary['timeline']) => {
+      const located = importedTimeline.filter((item) => item.lat != null && item.lon != null);
+      const endpoints = located.filter((item) => item.kind === 'start' || item.kind === 'end');
+      // Les points de passage nommés dans le GPX gardent leur nom.
+      const waypoints = located.filter(
+        (item) => item.kind === 'waypoint' && !item.id.startsWith(GPX_IMPORT_WAYPOINT_ID_PREFIX),
+      );
+
+      // Départ / arrivée d'abord, sans attendre les points de passage.
+      applyResolvedNames(itineraryId, await Promise.all(endpoints.map(async (item) => ({
+        item,
+        name: await resolveImportedTimelineLabel(item.lon!, item.lat!),
+      }))));
+
+      applyResolvedNames(itineraryId, await Promise.all(waypoints.map(async (item) => {
+        try {
+          const settlement = await reverseGeocodeSettlement(item.lon!, item.lat!, { maxDistanceMeters: 1500 });
+          return { item, name: settlement?.name?.trim() || null };
+        } catch {
+          return { item, name: null };
+        }
+      })));
+    },
+    [applyResolvedNames],
+  );
+
+  /**
+   * Revêtements de la trace importée (BRouter, plusieurs dizaines de secondes
+   * sur un ultra), reportés sur la trace COURANTE et seulement si sa géométrie
+   * est celle analysée : remplacer les points par ceux de l'import effaçait
+   * toute modification faite pendant l'analyse (tracé déplacé, rogné ou
+   * rerouté, altitudes affinées, qualité de simplification changée).
+   */
   const enrichImportedRouteSurfaces = useCallback(
-    async (
-      itineraryId: string,
-      storedPoints: NonNullable<Itinerary['gpxRoute']>['points'],
-      quality: GpxQualityMode = 'default',
-      qualityPointsPerKm?: number | null,
-    ) => {
+    async (itineraryId: string, storedPoints: NonNullable<Itinerary['gpxRoute']>['points']) => {
       try {
+        const analyzedGeometry = buildRouteGeometrySignature(storedPoints);
         const result = await analyzeGpxSurfaces(storedPoints);
         const hasSurfaces =
           result.metrics != null ||
@@ -192,19 +150,27 @@ export function useItineraryGpxImport({
 
         if (!hasSurfaces) return;
 
-        const enrichedStoredPoints = normalizeImportedRoutePoints(result.points, { includeGradient: false });
-        const enrichedSimplifiedPoints = normalizeImportedRoutePoints(
-          simplifyPointsByQuality(enrichedStoredPoints, quality, qualityPointsPerKm),
-        );
-        const surfaceMetrics =
-          result.metrics ?? computeRouteSurfaceMetricsFromPoints(enrichedStoredPoints);
-
-        setProject((projectState) => ({
-          ...projectState,
-          itineraries: projectState.itineraries.map((itinerary) => {
+        setProject((projectState) => {
+          let changed = false;
+          const itineraries = projectState.itineraries.map((itinerary) => {
             if (itinerary.id !== itineraryId) return itinerary;
             const currentRoute = itinerary.gpxRoute;
-            if (!currentRoute) return itinerary;
+            const currentPoints = currentRoute?.originalPoints;
+            if (!currentRoute || !currentPoints || buildRouteGeometrySignature(currentPoints) !== analyzedGeometry) {
+              return itinerary;
+            }
+
+            // Même géométrie, donc mêmes points dans le même ordre que l'analyse.
+            const enrichedStoredPoints = normalizeImportedRoutePoints(
+              currentPoints.map((point, index) => ({ ...point, surface: result.points[index]?.surface ?? point.surface })),
+              { includeGradient: false },
+            );
+            const enrichedSimplifiedPoints = normalizeImportedRoutePoints(
+              simplifyPointsByQuality(enrichedStoredPoints, currentRoute.gpxQuality ?? 'default', currentRoute.gpxQualityPointsPerKm),
+            );
+            const surfaceMetrics =
+              result.metrics ?? computeRouteSurfaceMetricsFromPoints(enrichedStoredPoints);
+            changed = true;
 
             return {
               ...itinerary,
@@ -223,8 +189,9 @@ export function useItineraryGpxImport({
                   : itinerary.metrics?.offroadPercent,
               },
             };
-          }),
-        }));
+          });
+          return changed ? { ...projectState, itineraries } : projectState;
+        });
       } catch (error) {
         console.warn('[useItineraryGpxImport] Failed to enrich surfaces for imported GPX:', error);
       }
@@ -323,8 +290,8 @@ export function useItineraryGpxImport({
 
           setPendingCorridorFor(id);
           onItineraryImported?.(id, simplifiedPoints.map((point) => [point.lon, point.lat]));
-          void hydrateImportedTimelineEndpoints(id, simplifiedPoints);
-          void enrichImportedRouteSurfaces(id, storedPoints, quality);
+          void hydrateImportedTimelineNames(id, timeline);
+          void enrichImportedRouteSurfaces(id, storedPoints);
         }
       } finally {
         onImportStateChange?.(null);
@@ -333,7 +300,7 @@ export function useItineraryGpxImport({
     [
       addItinerary,
       enrichImportedRouteSurfaces,
-      hydrateImportedTimelineEndpoints,
+      hydrateImportedTimelineNames,
       onImportStateChange,
       onItineraryImported,
       setPendingCorridorFor,
@@ -341,10 +308,6 @@ export function useItineraryGpxImport({
     ],
   );
 
-  return {
-    addItineraryFromGpxFile,
-    enrichImportedRouteSurfaces,
-    hydrateImportedTimelineEndpoints,
-  };
+  return { addItineraryFromGpxFile };
 }
 
