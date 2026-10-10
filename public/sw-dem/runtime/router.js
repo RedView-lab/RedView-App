@@ -111,6 +111,8 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(noTileResponseRouter('invalid-coords'));
     return;
   }
+  // Passe d'éviction des caches de tuiles au repos (cache-budget.js).
+  if (tileMatch) noteMapTileRequest();
 
   const demMatch = url.pathname.match(/^\/dem-tiles\/(\d+)\/(\d+)\/(\d+)$/);
   if (demMatch) {

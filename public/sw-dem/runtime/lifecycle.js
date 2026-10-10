@@ -340,27 +340,15 @@ self.addEventListener('message', (e) => {
     // Le niveau chaud est devant CacheStorage : sans cela, le rechargement qui
     // suit (listeners.ts) récupérait la tuile de pente d'avant la mise à niveau.
     for (const [tx, ty] of slopeTiles) slopeHotDeleteTile(z, tx, ty);
-    const altitudeTilePath = `/altitude-tiles/${z}/${x}/${y}`;
+    // Suppression directe des URL connues : `ignoreSearch` couvre toutes les
+    // variantes de requête d'une tuile (`res`, profil, source, `zone`). Parcourir
+    // `keys()` coûtait un temps proportionnel au nombre de tuiles en cache, à
+    // chaque tuile DEM améliorée (B5-2).
     Promise.all([
-      caches.open(SLOPE_CACHE_NAME).then((cache) => cache.keys().then((keys) => {
-        return Promise.all(keys
-          .filter((req) => {
-            try {
-              const path = new URL(req.url).pathname;
-              return slopeTiles.some(([tx, ty]) => path === `/slope-tiles/${z}/${tx}/${ty}`);
-            }
-            catch { return false; }
-          })
-          .map((req) => cache.delete(req)));
-      })),
-      caches.open(ALTITUDE_CACHE_NAME).then((cache) => cache.keys().then((keys) => {
-        return Promise.all(keys
-          .filter((req) => {
-            try { return new URL(req.url).pathname === altitudeTilePath; }
-            catch { return false; }
-          })
-          .map((req) => cache.delete(req)));
-      })),
+      caches.open(SLOPE_CACHE_NAME).then((cache) => Promise.all(slopeTiles.map(([tx, ty]) =>
+        cache.delete(new Request(`/slope-tiles/${z}/${tx}/${ty}`), { ignoreSearch: true })))),
+      caches.open(ALTITUDE_CACHE_NAME).then((cache) =>
+        cache.delete(new Request(`/altitude-tiles/${z}/${x}/${y}`), { ignoreSearch: true })),
     ]).catch(() => { /* au mieux */ });
     return;
   }
