@@ -146,7 +146,13 @@ async function withoutOthersData(project: ItineraryProject): Promise<{ project: 
     if (!uploads || uploads.length === 0) return itinerary;
     const kept = uploads.filter((upload) => !upload.path || owned.has(upload.path));
     withheld += uploads.length - kept.length;
-    return kept.length === uploads.length ? itinerary : { ...itinerary, fitUploads: kept };
+    if (kept.length === uploads.length) return itinerary;
+    // Le rapport de calibration décrit les sorties de ces .fit (distances,
+    // heures, vitesses par pente) : il ne part pas non plus.
+    const prediction = itinerary.prediction?.calibration
+      ? { ...itinerary.prediction, calibration: undefined }
+      : itinerary.prediction;
+    return { ...itinerary, fitUploads: kept, prediction };
   });
   return {
     project: { ...project, itineraries, comments: anonymizeOtherCommentAuthors(project.comments, userId) },

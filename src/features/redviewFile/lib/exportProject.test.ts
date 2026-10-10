@@ -21,6 +21,7 @@ const { readRedviewFile } = await import('./readRedviewFile');
 function sharedProject(): ItineraryProject {
   const itinerary = {
     ...createDefaultItinerary(1),
+    prediction: { calibration: { rides: [{ name: 'sortie-bob', distanceKm: 120 }] } } as unknown as ItineraryProject['itineraries'][number]['prediction'],
     fitUploads: [
       { name: 'sortie-alice.fit', type: 'application/octet-stream', lastModified: 1, size: FIT_BYTES.length, path: 'mine-1' },
       { name: 'sortie-bob.fit', type: 'application/octet-stream', lastModified: 2, size: FIT_BYTES.length, path: 'bob-1' },
@@ -51,6 +52,7 @@ describe('export .redview d’un projet partagé (G2-1)', () => {
     expect(read.fitFiles.map((file) => file.name)).toEqual(['sortie-alice.fit']);
     const json = JSON.stringify(read.project);
     expect(json).not.toContain('sortie-bob');
+    expect(read.project.itineraries[0].prediction?.calibration).toBeUndefined();
     expect(json).not.toContain('Bob Martin');
     expect(json).not.toContain('"bob"');
     expect(read.project.comments?.[0].messages[0]).toMatchObject({ authorId: 'editor-2', authorName: 'Éditeur 2' });
