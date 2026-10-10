@@ -102,8 +102,8 @@
     "node-appwrite": "30.0.0",
     "pino": "^10.4.0",
     "pino-http": "^11.0.0",
-    "stripe": "^22.0.1",
-    "ws": "8.21.0"
+    "stripe": "^22.6.2",
+    "ws": "8.22.0"
   },
   "overrides": {
     "protocol-buffers-schema": "3.6.1",
