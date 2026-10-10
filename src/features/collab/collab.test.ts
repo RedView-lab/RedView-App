@@ -288,6 +288,29 @@ describe('client : synchro et annuler par éditeur', () => {
     expect(a.canUndo()).toBe(false);
   });
 
+  it('résultat calculé après la modification d’un autre éditeur : jamais rattaché à une étape sans lien (C1-2)', () => {
+    const { clients: [a, b], settle } = directSetup(['a', 'b']);
+    // A renomme l'itinéraire ; plus tard, B déplace ses points ; A (bail repris) calcule le tracé.
+    a.pushLocalDocument(mapIt(a.getDocument(), 'it-1', (it) => ({ ...it, name: 'Renommé par A' })), 'step');
+    settle();
+    b.pushLocalDocument(mapIt(b.getDocument(), 'it-1', (it) => ({ ...it, timeline: it.timeline.slice(0, 3) })), 'step');
+    settle();
+    const routedByB = mapIt(a.getDocument(), 'it-1', (it) => ({
+      ...it,
+      gpxRoute: { ...it.gpxRoute!, points: it.gpxRoute!.points.slice(0, 100), routedInputsKey: 'apres-b' },
+    }));
+    a.pushLocalDocument(routedByB, 'background');
+    settle();
+
+    a.undo();
+    settle();
+    const after = itineraryOf(a.getDocument(), 'it-1');
+    expect(after.name).not.toBe('Renommé par A');
+    // Le tracé de B reste : il correspond à ses points.
+    expect(after.gpxRoute?.routedInputsKey).toBe('apres-b');
+    expect(same(a.getDocument(), b.getDocument())).toBe(true);
+  });
+
   it('son propre tracé revient sans segments (leanEcho) : les autres les reçoivent, tous ont le même document', () => {
     const { clients: [a, b, c], settle, room, received } = directSetup(['a', 'b', 'c'], sampleDocument(300), { oldClients: ['c'] });
     const routed = mapIt(a.getDocument(), 'it-1', (it) => ({

@@ -154,7 +154,7 @@ export class CollabClient implements ProjectCollabLink {
       : { applied: [], inverse: [] };
     this.materializer.adopt(this.engine.visible, next);
     if (applied.length === 0) return;
-    if (sendable) this.history.record(change, applied, inverse, this.clock.now());
+    if (sendable) this.history.record(change, applied, inverse, this.clock.now(), this.engine.visible);
     this.afterLocalChange();
   }
 
@@ -376,7 +376,7 @@ export class CollabClient implements ProjectCollabLink {
       const { applied, inverse } = this.engine.applyLocal(ops, blobs, { sendable });
       if (applied.length === 0) continue;
       appliedAny = true;
-      if (sendable) this.history.record(change, applied, inverse, now);
+      if (sendable) this.history.record(change, applied, inverse, now, this.engine.visible);
     }
     this.document = this.materializer.materialize(this.engine.visible);
     if (appliedAny) this.afterLocalChange();

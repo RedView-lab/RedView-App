@@ -3,7 +3,8 @@ import { deepEqual } from '@/features/itineraryPanel/lib/project/deepEqual';
 
 import type { ObjectStore } from '../model/objects';
 import type { Op } from '../model/ops';
-import { itineraryIdOf } from '../model/paths';
+import { decodePath, itineraryIdOf, itineraryObjectId } from '../model/paths';
+import { DERIVED_INPUTS } from '../schema';
 
 /**
  * Annuler / rétablir d'un éditeur, côté client comme chez Figma : chaque
@@ -39,6 +40,8 @@ interface Step {
   writes: Map<string, Write>;
   /** Position laissée par l'étape, par objet. */
   positions: Map<string, string>;
+  /** Objets supprimés par l'étape. */
+  deletions: Set<string>;
   itineraries: Set<string>;
   coalescable: boolean;
   at: number;
@@ -49,7 +52,7 @@ type ApplyLocal = (ops: Op[]) => { applied: Op[]; inverse: Op[] };
 const propKey = (id: string, key: string) => `${id}\u0000${key}`;
 
 function buildStep(ops: readonly Op[], inverse: Op[], coalescable: boolean, at: number): Step {
-  const step: Step = { inverse, writes: new Map(), positions: new Map(), itineraries: new Set(), coalescable, at };
+  const step: Step = { inverse, writes: new Map(), positions: new Map(), deletions: new Set(), itineraries: new Set(), coalescable, at };
   recordWrites(step, ops);
   return step;
 }
@@ -65,11 +68,13 @@ function recordWrites(step: Step, ops: readonly Op[]): void {
       case 'c':
         for (const [key, value] of op.props) step.writes.set(propKey(op.id, key), { present: true, value });
         step.positions.set(op.id, op.pos);
+        step.deletions.delete(op.id);
         break;
       case 'm':
         step.positions.set(op.id, op.pos);
         break;
       case 'd': {
+        step.deletions.add(op.id);
         // Objet supprimé : sa recréation remet ses propriétés sans condition.
         const prefix = `${op.id}/`;
         for (const key of [...step.writes.keys()]) {
@@ -110,6 +115,49 @@ function compactInverse(ops: readonly Op[]): Op[] {
     kept.push(op);
   }
   return kept.filter((op): op is Op => op !== null);
+}
+
+/** Champs d'un itinéraire dont un résultat calculé dépend (tracé, prédiction, POI). */
+const DERIVED_INPUT_FIELDS: ReadonlySet<string> = new Set(Object.values(DERIVED_INPUTS).flat());
+
+/** Champ de premier niveau de l'itinéraire touché par l'écriture `key` de l'objet `objectId`. */
+function itineraryFieldOf(objectId: string, key: string | null): string | null {
+  const itineraryId = itineraryIdOf(objectId);
+  if (!itineraryId) return null;
+  const base = itineraryObjectId(itineraryId);
+  if (objectId === base) return key === null ? null : decodePath(key)[0] ?? null;
+  const segment = objectId.slice(base.length + 1).split('/')[0];
+  const colon = segment.indexOf(':');
+  return decodePath(colon < 0 ? segment : segment.slice(0, colon))[0] ?? null;
+}
+
+/**
+ * L'étape a-t-elle causé un résultat calculé de ces itinéraires ? Oui si elle
+ * a écrit (ou déplacé) une entrée du calcul et que cette valeur est encore
+ * celle de l'état visible : personne ne l'a changée depuis.
+ */
+function causedBy(step: Step, itineraries: ReadonlySet<string>, store: ObjectStore): boolean {
+  const relevant = (id: string, key: string | null) => {
+    const itineraryId = itineraryIdOf(id);
+    const field = itineraryFieldOf(id, key);
+    return itineraryId !== null && itineraries.has(itineraryId) && field !== null && DERIVED_INPUT_FIELDS.has(field);
+  };
+  for (const [prop, write] of step.writes) {
+    const separator = prop.indexOf('\u0000');
+    const id = prop.slice(0, separator);
+    const key = prop.slice(separator + 1);
+    if (!relevant(id, key)) continue;
+    const object = store.get(id);
+    const current = object?.props.has(key) ? { present: true, value: object.props.get(key) } : { present: false };
+    if (current.present === write.present && (!write.present || deepEqual(current.value, write.value))) return true;
+  }
+  for (const [id, pos] of step.positions) {
+    if (relevant(id, null) && store.get(id)?.pos === pos) return true;
+  }
+  for (const id of step.deletions) {
+    if (relevant(id, null) && !store.has(id)) return true;
+  }
+  return false;
 }
 
 /** Opérations de l'inverse encore applicables : rien de ce qu'un autre a changé depuis. */
@@ -153,17 +201,23 @@ export class UndoHistory {
    * Modification locale appliquée (`ops`), avec son inverse calculé sur l'état
    * d'avant (`invertOps`).
    */
-  record(change: CollabLocalChange, ops: readonly Op[], inverse: Op[], now: number): void {
+  record(change: CollabLocalChange, ops: readonly Op[], inverse: Op[], now: number, store: ObjectStore): void {
     if (ops.length === 0 || change === 'comment') return;
     if (change === 'background') {
       const itineraries = new Set(ops.map((op) => itineraryIdOf(op.id)).filter((id): id is string => !!id));
       for (let index = this.undoStack.length - 1; index >= 0; index -= 1) {
         const step = this.undoStack[index];
-        if ([...itineraries].some((id) => step.itineraries.has(id))) {
+        if (![...itineraries].some((id) => step.itineraries.has(id))) continue;
+        // Seulement à l'étape qui l'a causé : la dernière à toucher cet
+        // itinéraire, si elle a écrit des entrées du calcul qui n'ont pas
+        // changé depuis. Sinon (renommage, entrées changées depuis par un
+        // autre éditeur), annuler cette étape remettrait un tracé qui ne
+        // correspond plus aux points (C1-2) : le résultat n'est rattaché à rien.
+        if (causedBy(step, itineraries, store)) {
           step.inverse = compactInverse([...inverse, ...step.inverse]);
           recordWrites(step, ops);
-          return;
         }
+        return;
       }
       // Résultat sans action d'origine (projet ouvert, recalcul) : pas une étape.
       return;
