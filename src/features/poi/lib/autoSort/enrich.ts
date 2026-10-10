@@ -17,6 +17,8 @@ import {
 import { isOpen247 } from './openingHours';
 import {
   AUTO_SORT_BASE_QUALITY,
+  AUTO_SORT_FALLBACK_WATER,
+  AUTO_SORT_WATER_MAX_LATERAL_M,
   AUTO_SORT_GAP_FAMILY,
   AUTO_SORT_KIND_BY_CATEGORY,
   type AutoSortGapFamily,
@@ -224,7 +226,7 @@ export function buildCandidates(
     if (!kind || isExcluded(feature, kind)) continue;
 
     const maxLateralM = kind === 'water'
-      ? Math.min(maxLateralMFor(feature), rules.water.maxLateralM)
+      ? Math.min(maxLateralMFor(feature), AUTO_SORT_WATER_MAX_LATERAL_M[feature.category] ?? rules.water.maxLateralM)
       : maxLateralMFor(feature);
     const passes = findRoutePasses(feature, route.projected, maxLateralM, rules.multiPassSeparationM);
     passes.forEach((pass, passIndex) => {
@@ -235,6 +237,7 @@ export function buildCandidates(
 
       let fallback = false;
       if (kind === 'water') {
+        if (AUTO_SORT_FALLBACK_WATER.has(feature.category)) fallback = true;
         if (inDescent) fallback = true;
         if (side === 'left' && lateralM > rules.water.leftSideMaxLateralM) fallback = true;
       }

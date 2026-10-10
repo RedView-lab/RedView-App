@@ -127,6 +127,8 @@ export const itineraryTranslationPairs: ReadonlyArray<AppTranslationPair> = [
 
   // Marqueurs, popups, prédiction FIT
   { fr: 'Type de POI', en: 'POI type' },
+  // Ligne POI du panneau, lue par l'état par défaut d'un nouveau projet (gestionnaire de projets).
+  { fr: 'Cimetières', en: 'Cemeteries' },
   { fr: 'Durée de pause', en: 'Pause duration' },
   { fr: '1 fit chargé', en: '1 FIT loaded' },
   { fr: '{{count}} fit chargés', en: '{{count}} FITs loaded' },

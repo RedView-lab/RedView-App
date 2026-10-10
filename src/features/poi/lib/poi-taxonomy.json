@@ -1,6 +1,6 @@
 {
   "$comment": "Source de vérité de la taxonomie POI RedView. Consommée par (1) le client React via src/features/poi/lib/poi-taxonomy.ts et (2) l'importeur OSM déployé sur le VPS (/opt/poi-server/import-osm.mjs). Toute catégorie ajoutée ici doit aussi l'être dans PoiCategory (src/features/poi/types.ts), dans PANEL_TO_FEATURE_POI (src/features/itineraryPanel/hooks/useItineraryPoiMap.ts) et dans FEATURE_TO_PANEL_POI (src/features/itineraryPanel/lib/schedule/poi-to-timeline.ts).",
-  "version": 2,
+  "version": 3,
   "groups": [
     { "key": "water", "label": "Eau" },
     { "key": "food", "label": "Ravitaillement" },
@@ -21,17 +21,23 @@
     "rooms", "beds", "tourism", "amenity", "shop", "leisure", "emergency", "railway",
     "public_transport", "mountain_pass", "natural", "man_made", "service:bicycle:repair",
     "description", "note", "ref", "network", "route_ref", "departures_board", "motor_vehicle",
-    "bicycle", "surface", "covered", "inscription", "height", "lit", "indoor", "level"
+    "bicycle", "surface", "covered", "inscription", "height", "lit", "indoor", "level",
+    "cemetery"
   ],
   "$iconComment": "`icon` référence le vocabulaire d'icônes résolu par src/features/poi/lib/poi-icons.ts (LOGICAL_ICON_URLS). Ajouter un nom ici sans l'ajouter là-bas fait retomber sur l'icône générique.",
   "$uiComment": "`ui: false` = catégorie indexée en base mais NON exposée dans l'app (pas de ligne dans le panneau POI, pas de choix dans le sélecteur de catégorie d'un POI manuel, pas de ligne de timeline). Sert à garder « en stock » des POI sans rapport avec la préparation d'itinéraire (défibrillateur, police, poste, laverie…). Retirer le drapeau suffit à les réafficher, aucune réingestion nécessaire.",
-  "$rulesComment": "rules = OR de AND. Chaque règle est un tableau de conditions AND. Une condition = { k, v } (égalité) ou { k, in: [...] } (appartenance).",
+  "$rulesComment": "rules = OR de AND. Chaque règle est un tableau de conditions AND. Une condition = { k, v } (égalité), { k, in: [...] } (appartenance) ou { k, notIn: [...] } (tag absent ou hors de la liste ; jamais seule dans une règle). Interprétées par server/poi-ingest/lib/taxonomy-rules.mjs, la seule implémentation.",
+  "$cemeteryComment": "cemetery : cimetières (landuse=cemetery) et enclos paroissiaux (amenity=grave_yard). En France, presque tous ont un robinet : c'est le point d'eau de secours des ultra-cyclistes. Exclus : les objets cartographiés à l'intérieur d'un cimetière (cemetery=grave / sector… : une tombe, un carré). Les doublons imbriqués sont fusionnés après import (collapse-overlaps.mjs).",
   "categories": [
     { "key": "drinking_water", "label": "Point d'eau potable", "group": "water", "icon": "drinking_water", "rules": [[{ "k": "amenity", "v": "drinking_water" }]] },
     { "key": "water_point", "label": "Point d'eau", "group": "water", "icon": "drinking_water", "rules": [[{ "k": "amenity", "v": "water_point" }]] },
     { "key": "water_tap", "label": "Robinet d'eau", "group": "water", "icon": "drinking_water", "rules": [[{ "k": "man_made", "v": "water_tap" }]] },
     { "key": "spring", "label": "Source d'eau", "group": "water", "icon": "drinking_water", "rules": [[{ "k": "natural", "v": "spring" }]] },
     { "key": "fountain", "label": "Fontaine", "group": "water", "icon": "drinking_water", "rules": [[{ "k": "amenity", "v": "fountain" }]] },
+    { "key": "cemetery", "label": "Cimetière", "group": "water", "icon": "cemetery", "rules": [
+      [{ "k": "landuse", "v": "cemetery" }, { "k": "cemetery", "notIn": ["grave", "sector", "section", "tomb", "columbarium", "colombarium", "scattering_garden", "pet", "construction"] }],
+      [{ "k": "amenity", "v": "grave_yard" }, { "k": "cemetery", "notIn": ["grave", "sector", "section", "tomb", "columbarium", "colombarium", "scattering_garden", "pet", "construction"] }]
+    ] },
 
     { "key": "supermarket", "label": "Supermarché", "group": "food", "icon": "supermarket", "rules": [[{ "k": "shop", "v": "supermarket" }]] },
     { "key": "convenience", "label": "Épicerie", "group": "food", "icon": "bakery", "rules": [[{ "k": "shop", "v": "convenience" }]] },

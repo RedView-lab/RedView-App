@@ -465,7 +465,8 @@
 }
 
 /* Raison du favori posé par le tri automatique. */
-.rv-poi-popup__auto-reason {
+.rv-poi-popup__auto-reason,
+.rv-poi-popup__hint {
   margin-top: 4px;
   font-size: var(--rv-font-size-xs);
   font-weight: 500;

@@ -7,6 +7,7 @@ import type { PoiCategory } from '../../types';
  */
 export const PANEL_POI_ROWS: ReadonlyArray<{ key: PoiCategory; label: string }> = [
   { key: 'fountains', label: 'Fontaines' },
+  { key: 'cemeteries', label: 'Cimetières' },
   { key: 'toilets', label: 'Toilettes' },
   { key: 'supermarkets', label: 'Supermarchés' },
   { key: 'gasStations', label: 'Station Service' },

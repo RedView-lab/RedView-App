@@ -64,6 +64,7 @@ for (const [feature, panel] of Object.entries(FEATURE_TO_PANEL_POI)) {
 const GPX_SYM_TO_PANEL = new Map<string, PanelPoiCategory>(Object.entries({
   'drinking water': 'fountains',
   'water source': 'fountains',
+  cemetery: 'cemeteries',
   restroom: 'toilets',
   store: 'supermarkets',
   'shopping center': 'supermarkets',

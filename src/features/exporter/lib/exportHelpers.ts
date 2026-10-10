@@ -64,6 +64,7 @@ export const FIT_PRODUCT_ID = 1;
 
 export const POI_CATEGORY_TO_GPX_SYM: Record<string, string> = {
   fountains: 'Drinking Water',
+  cemeteries: 'Cemetery',
   toilets: 'Restroom',
   supermarkets: 'Store',
   gasStations: 'Gas Station',
@@ -82,6 +83,7 @@ export const POI_CATEGORY_TO_GPX_SYM: Record<string, string> = {
 
 export const POI_CATEGORY_TO_KML_COLOR: Record<string, string> = {
   fountains: 'ff0047e1',
+  cemeteries: 'ff6f7800',
   toilets: 'ff852c31',
   supermarkets: 'ff00b1f1',
   gasStations: 'ff0035ca',
@@ -101,6 +103,7 @@ export const POI_CATEGORY_TO_KML_COLOR: Record<string, string> = {
 /** Libellés source (FR) ; traduits dans la langue de l'utilisateur au moment de l'export (`resolvePoiCategoryExportLabel`). */
 const POI_CATEGORY_LABEL_FR: Record<string, string> = {
   fountains: "Point d'eau",
+  cemeteries: 'Cimetière',
   toilets: 'Toilettes',
   supermarkets: 'Supermarché',
   gasStations: 'Station-service',

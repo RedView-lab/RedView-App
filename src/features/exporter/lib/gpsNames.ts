@@ -45,6 +45,7 @@ const FEATURE_CODES: Record<FeaturePoiCategory, CategoryCode> = {
   water_tap: code('EAU', 'WAT', false),
   spring: code('EAU', 'WAT', false),
   fountain: code('EAU', 'WAT', false),
+  cemetery: code('CIM', 'CEM', false),
   supermarket: code('SUP', 'SUP', true),
   convenience: code('EPI', 'CON', true),
   bakery: code('BOU', 'BAK', true),
@@ -91,6 +92,7 @@ const FEATURE_CODES: Record<FeaturePoiCategory, CategoryCode> = {
 /** Repli sur la ligne du panneau quand la catégorie OSM n'est plus connue. */
 const PANEL_CODES: Record<PanelPoiCategory, CategoryCode> = {
   fountains: FEATURE_CODES.drinking_water,
+  cemeteries: FEATURE_CODES.cemetery,
   toilets: FEATURE_CODES.toilets,
   supermarkets: FEATURE_CODES.supermarket,
   gasStations: FEATURE_CODES.fuel,

@@ -245,6 +245,7 @@ export const VALUE_LABELS: Record<string, Record<string, string>> = {
   filter: { favoris: 'Favoris', pois: 'Points d’intérêt', waypoints: 'Points de passage', pauses: 'Pauses', alertes: 'Alertes', pente: 'Pente' },
   category: {
     fountains: 'Fontaines',
+    cemeteries: 'Cimetières',
     toilets: 'Toilettes',
     supermarkets: 'Supermarchés',
     gasStations: 'Stations-service',

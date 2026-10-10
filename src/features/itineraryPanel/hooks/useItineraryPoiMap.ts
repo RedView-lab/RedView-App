@@ -27,6 +27,7 @@ import type {
  */
 const PANEL_TO_FEATURE_POI: Record<PanelPoiCategory, FeaturePoiCategory[]> = {
   fountains: ['drinking_water', 'water_point', 'water_tap', 'spring', 'fountain'],
+  cemeteries: ['cemetery'],
   toilets: ['toilets', 'shower'],
   supermarkets: ['supermarket', 'convenience', 'marketplace'],
   gasStations: ['fuel', 'charging_station'],

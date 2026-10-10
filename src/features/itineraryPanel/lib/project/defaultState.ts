@@ -23,6 +23,7 @@ import { repairRouteEndpointArtifacts } from './repair-route-endpoints';
 
 const ALL_POI_CATEGORIES: PoiCategory[] = [
   'fountains',
+  'cemeteries',
   'toilets',
   'supermarkets',
   'gasStations',
@@ -47,10 +48,25 @@ export const DEFAULT_POI_DISTANCE_M = 20;
  */
 const LEGACY_DEFAULT_POI_DISTANCE_M = 40;
 
+/**
+ * Distances par défaut propres à une ligne. Un cimetière est un enclos dont la
+ * base POI garde le centroïde : à 20 m, la plupart de ceux qui bordent la
+ * route seraient écartés.
+ */
+const DEFAULT_POI_DISTANCE_BY_CATEGORY: Partial<Record<PoiCategory, number>> = {
+  cemeteries: 100,
+};
+
+/** Distance par défaut d'une ligne POI (m). */
+export function defaultPoiDistanceM(category: PoiCategory): number {
+  return DEFAULT_POI_DISTANCE_BY_CATEGORY[category] ?? DEFAULT_POI_DISTANCE_M;
+}
+
 function createDefaultPoiState(): PoiState {
   const distanceM = DEFAULT_POI_DISTANCE_M;
   return {
     fountains: { enabled: true, distanceM },
+    cemeteries: { enabled: true, distanceM: defaultPoiDistanceM('cemeteries') },
     toilets: { enabled: true, distanceM },
     supermarkets: { enabled: true, distanceM },
     gasStations: { enabled: true, distanceM },
@@ -95,9 +111,13 @@ function normalizeItineraryPoiState(poi?: Partial<PoiState> | null): PoiState {
       normalized[key] = { enabled, distanceM };
     }
   }
-  if (ALL_POI_CATEGORIES.every((key) => normalized[key].distanceM === LEGACY_DEFAULT_POI_DISTANCE_M)) {
-    for (const key of ALL_POI_CATEGORIES) {
-      normalized[key] = { ...normalized[key], distanceM: DEFAULT_POI_DISTANCE_M };
+  // Seulement les lignes présentes dans l'état stocké : une ligne ajoutée
+  // depuis (cimetières) prend son propre défaut et ne doit pas bloquer la
+  // migration des anciens projets restés à 40 m partout.
+  const storedKeys = ALL_POI_CATEGORIES.filter((key) => poi[key] && typeof poi[key] === 'object');
+  if (storedKeys.length > 0 && storedKeys.every((key) => normalized[key].distanceM === LEGACY_DEFAULT_POI_DISTANCE_M)) {
+    for (const key of storedKeys) {
+      normalized[key] = { ...normalized[key], distanceM: defaultPoiDistanceM(key) };
     }
   }
   return normalized;
@@ -148,6 +168,7 @@ const DEFAULT_TIMELINE_END: TimelineItem = {
  */
 export const DEFAULT_POI_PAUSE_DURATIONS: Readonly<Record<PoiCategory, number | null>> = {
   fountains: 10,
+  cemeteries: 5,
   toilets: null,
   supermarkets: null,
   gasStations: null,

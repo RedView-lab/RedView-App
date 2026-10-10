@@ -60,6 +60,33 @@ describe('GPX RedView : aller-retour export → import', () => {
   });
 });
 
+describe('GPX RedView : cimetière', () => {
+  const cemetery: PoiFeature = { id: 9, ...eastOf(60, -60), category: 'cemetery', name: null, tags: {} };
+  const withCemetery = {
+    ...itinerary,
+    poiFeatures: [cemetery],
+    timeline: [
+      itinerary.timeline[0],
+      { id: 'poi-9', kind: 'poi', label: 'Cimetière', poiCategory: 'cemeteries', osmId: 9, ...eastOf(60, -60), distanceKm: 6.6, visible: true },
+      itinerary.timeline[itinerary.timeline.length - 1],
+    ],
+  } as unknown as Itinerary;
+
+  it("exporté comme point d'eau Garmin, nommé CIM, et relu comme cimetière", () => {
+    const gpx = buildItineraryGpx(withCemetery, { locale: 'fr', pois: 'all' });
+    expect(gpx).toContain('<name>CIM_G60</name>');
+    expect(gpx).toContain('<type>water</type>');
+    expect(gpx).toContain('<redview:category>cemetery</redview:category>');
+    const imported = buildImportedGpxWaypoints(parseGpxText(gpx), points, 1);
+    expect(imported.poiFeatures.map((feature) => [feature.category, feature.name])).toEqual([['cemetery', 'Cimetière']]);
+  });
+
+  it('un symbole Garmin « Cemetery » sans type est relu comme cimetière', () => {
+    const gpx = `<?xml version="1.0"?><gpx version="1.1" creator="Garmin"><wpt lat="44.05" lon="6.0001"><name>Cimetière</name><sym>Cemetery</sym></wpt><trk><trkseg>${points.map((p) => `<trkpt lat="${p.lat}" lon="${p.lon}"/>`).join('')}</trkseg></trk></gpx>`;
+    expect(buildImportedGpxWaypoints(parseGpxText(gpx), points, 1).poiFeatures.map((feature) => feature.category)).toEqual(['cemetery']);
+  });
+});
+
 describe('GPX RedView exporté en anglais', () => {
   it('garde ses favoris à la réimportation', () => {
     const gpx = `<?xml version="1.0"?><gpx version="1.1" creator="RedView"><wpt lat="44.05" lon="6.0001"><name>BAK_R08_Paul</name><cmt>Paul</cmt><desc>Bakery - km 5.5 (favorite)</desc><type>food</type><extensions><redview:category>bakery</redview:category></extensions></wpt><trk><trkseg>${points.map((p) => `<trkpt lat="${p.lat}" lon="${p.lon}"/>`).join('')}</trkseg></trk></gpx>`;

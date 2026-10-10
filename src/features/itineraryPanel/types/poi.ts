@@ -11,6 +11,7 @@ export interface PoiEntry {
 
 export type PoiCategory =
   | 'fountains'
+  | 'cemeteries'
   | 'toilets'
   | 'supermarkets'
   | 'gasStations'
@@ -28,6 +29,8 @@ export type PoiCategory =
 
 export interface PoiState {
   fountains: PoiEntry;
+  /** Cimetières : en France, un robinet presque toujours (eau non garantie potable). */
+  cemeteries: PoiEntry;
   toilets: PoiEntry;
   supermarkets: PoiEntry;
   gasStations: PoiEntry;

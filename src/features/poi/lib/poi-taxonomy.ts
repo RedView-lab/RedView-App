@@ -17,11 +17,16 @@
  */
 import rawTaxonomy from './poi-taxonomy.json';
 
-/** Une condition de tag : égalité (`v`) ou appartenance (`in`). */
+/**
+ * Une condition de tag : égalité (`v`), appartenance (`in`) ou exclusion
+ * (`notIn` : tag absent ou hors de la liste). Interprétée par les importeurs
+ * (`server/poi-ingest/lib/taxonomy-rules.mjs`).
+ */
 interface PoiTagCondition {
   k: string;
   v?: string;
   in?: string[];
+  notIn?: string[];
 }
 
 /** Un tableau de conditions = un AND. */

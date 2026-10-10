@@ -49,30 +49,8 @@ export function loadTaxonomy(explicitPath) {
   return { taxonomy, path: found, keepTags: new Set(taxonomy.keepTags || []) };
 }
 
-function condMatches(tags, cond) {
-  const v = tags[cond.k];
-  if (v == null) return false;
-  if (cond.v != null) return v === cond.v;
-  if (Array.isArray(cond.in)) return cond.in.includes(v);
-  return false;
-}
-
-/** Retourne la clé de catégorie RedView, ou null. Même logique que import-osm.mjs. */
-export function makeResolveCategory(taxonomy) {
-  return function resolveCategory(tags) {
-    if (!tags) return null;
-    for (const cat of taxonomy.categories) {
-      for (const rule of cat.rules) {
-        let ok = true;
-        for (const cond of rule) {
-          if (!condMatches(tags, cond)) { ok = false; break; }
-        }
-        if (ok) return cat.key;
-      }
-    }
-    return null;
-  };
-}
+/** Résolution tag → catégorie RedView : mêmes règles que `import-osm.mjs`. */
+export { makeResolveCategory } from './taxonomy-rules.mjs';
 
 export function makeBuildTagsJson(keepTags) {
   return function buildTagsJson(tags) {

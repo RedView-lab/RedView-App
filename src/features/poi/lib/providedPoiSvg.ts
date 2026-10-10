@@ -29,4 +29,5 @@ export const PROVIDED_POI_SVG = {
   favoriteBar: '/icons/poi/favorites/bar-favorite.svg',
   favoriteHotelPin: '/icons/poi/favorites/hotel-favorite.svg',
   favoriteRefugePin: '/icons/poi/favorites/refuge-favorite.svg',
+  favoriteCemetery: '/icons/poi/favorites/cemetery-favorite.svg',
 } as const;

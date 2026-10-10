@@ -8,6 +8,7 @@ import type { DashboardPoiOptionId } from '@/pages/Dashboard/components/Dashboar
  */
 const DASHBOARD_TO_PANEL_CATEGORY_MAP: Record<DashboardPoiOptionId, PanelPoiCategory[]> = {
   drinking_water: ['fountains'],
+  cemetery: ['cemeteries'],
   toilets: ['toilets'],
   supermarket: ['supermarkets'],
   convenience: ['supermarkets'],
@@ -24,6 +25,7 @@ const DASHBOARD_TO_PANEL_CATEGORY_MAP: Record<DashboardPoiOptionId, PanelPoiCate
 
 const PANEL_TO_DASHBOARD_CATEGORY_MAP: Partial<Record<PanelPoiCategory, DashboardPoiOptionId>> = {
   fountains: 'drinking_water',
+  cemeteries: 'cemetery',
   toilets: 'toilets',
   supermarkets: 'supermarket',
   gasStations: 'fuel',
@@ -44,6 +46,7 @@ const FEATURE_TO_DASHBOARD_CATEGORY: Partial<Record<string, DashboardPoiOptionId
   water_tap: 'drinking_water',
   spring: 'drinking_water',
   fountain: 'drinking_water',
+  cemetery: 'cemetery',
   toilets: 'toilets',
   shower: 'toilets',
   supermarket: 'supermarket',

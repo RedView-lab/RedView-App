@@ -19,17 +19,24 @@
  *   node import-relations.mjs --db data/pois.db
  *   node import-relations.mjs --db data/pois.db --bbox -5.5,41.0,9.9,51.5
  *   node import-relations.mjs --db data/pois.db --dry-run
+ *   node import-relations.mjs --db data/pois.new.db --categories cemetery --border france-border.json
+ *
+ * `--categories` limite les requêtes aux catégories citées ; `--border` ne
+ * garde que les relations dont le centre est dans ce territoire (GeoJSON
+ * MultiPolygon) — la boîte France contient Genève, Bâle, Bruxelles…
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
+import { rasterizeMultiPolygon } from './lib/geo.mjs';
+import { makeResolveCategory, parseCategoryList, ruleToOverpassFilter } from './lib/taxonomy-rules.mjs';
 
 const RELATION_ID_BASE = 20_000_000_000_000; // 2e13
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const args = { db: null, taxonomy: null, bbox: '-5.5,41.0,9.9,51.5', dryRun: false, verbose: false };
+const args = { db: null, taxonomy: null, bbox: '-5.5,41.0,9.9,51.5', dryRun: false, verbose: false, categories: null, border: null };
 const argv = process.argv.slice(2);
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
@@ -38,9 +45,11 @@ for (let i = 0; i < argv.length; i++) {
   else if (a === '--bbox') args.bbox = argv[++i];
   else if (a === '--dry-run') args.dryRun = true;
   else if (a === '--verbose') args.verbose = true;
+  else if (a === '--categories') args.categories = argv[++i];
+  else if (a === '--border') args.border = argv[++i];
 }
 if (!args.db) {
-  console.error('Usage: node import-relations.mjs --db <db.sqlite> [--bbox west,south,east,north] [--dry-run]');
+  console.error('Usage: node import-relations.mjs --db <db.sqlite> [--bbox west,south,east,north] [--categories a,b] [--border <geojson>] [--dry-run]');
   process.exit(1);
 }
 
@@ -52,6 +61,24 @@ if (!fs.existsSync(dbPath)) {
 
 const taxonomy = JSON.parse(fs.readFileSync(args.taxonomy || path.resolve(__dirname, 'poi-taxonomy.json'), 'utf8'));
 const KEEP_TAGS = new Set(taxonomy.keepTags || []);
+
+let onlyCategories;
+try {
+  onlyCategories = parseCategoryList(taxonomy, args.categories);
+} catch (err) {
+  console.error(`❌ ${err.message}`);
+  process.exit(1);
+}
+const resolveCategory = makeResolveCategory(taxonomy, onlyCategories);
+
+let border = null;
+if (args.border) {
+  if (!fs.existsSync(args.border)) {
+    console.error(`❌ Frontière introuvable : ${args.border}`);
+    process.exit(1);
+  }
+  border = rasterizeMultiPolygon(JSON.parse(fs.readFileSync(args.border, 'utf8')));
+}
 
 const [w, s, e, n] = args.bbox.split(',').map(Number);
 if ([w, s, e, n].some((v) => !Number.isFinite(v))) {
@@ -129,20 +156,19 @@ const insertTx = db.transaction((rows) => {
   }
 });
 
-// Une requête Overpass par (catégorie, condition simple).
+// Une requête Overpass par (catégorie, règle).
 const jobs = [];
 for (const cat of taxonomy.categories) {
+  if (onlyCategories && !onlyCategories.includes(cat.key)) continue;
   for (const rule of cat.rules) {
-    if (rule.length !== 1) continue; // les règles AND ne décrivent pas des multipolygones
-    const { k, v, in: values } = rule[0];
-    if (v != null) jobs.push({ category: cat.key, k, v });
-    else if (Array.isArray(values)) for (const value of values) jobs.push({ category: cat.key, k, v: value });
+    const filter = ruleToOverpassFilter(rule);
+    if (filter) jobs.push({ category: cat.key, filter });
   }
 }
 
 console.log(`🔎 ${jobs.length} requêtes de relations sur bbox ${args.bbox}`);
 if (args.dryRun) {
-  for (const j of jobs) console.log(`   relation["${j.k}"="${j.v}"] → ${j.category}`);
+  for (const j of jobs) console.log(`   relation${j.filter} → ${j.category}`);
   process.exit(0);
 }
 
@@ -152,12 +178,12 @@ const perCategory = new Map();
 
 for (const job of jobs) {
   done++;
-  const ql = `[out:json][timeout:170];\nrelation["${job.k}"="${job.v}"](${s},${w},${n},${e});\nout center;`;
+  const ql = `[out:json][timeout:170];\nrelation${job.filter}(${s},${w},${n},${e});\nout center;`;
   let data;
   try {
     data = await overpass(ql);
   } catch (err) {
-    console.warn(`\r   ⚠️  ${job.k}=${job.v} : ${err.message}`);
+    console.warn(`\r   ⚠️  ${job.filter} : ${err.message}`);
     await new Promise((r) => setTimeout(r, 2000));
     continue;
   }
@@ -166,6 +192,10 @@ for (const job of jobs) {
   for (const el of data.elements || []) {
     const center = el.center || (el.lat != null ? { lat: el.lat, lon: el.lon } : null);
     if (!center) continue;
+    if (border && !border.contains(center.lon, center.lat)) continue;
+    // Même priorité que l'import PBF : une relation que la taxonomie range
+    // dans une catégorie plus prioritaire n'est pas réétiquetée ici.
+    if (resolveCategory(el.tags) !== job.category) continue;
     rows.push({
       id: RELATION_ID_BASE + el.id,
       osmId: el.id,

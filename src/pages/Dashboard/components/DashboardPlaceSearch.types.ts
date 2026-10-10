@@ -24,6 +24,7 @@ export interface DashboardPlaceSearchProps {
 
 export type DashboardPoiOptionId =
   | 'drinking_water'
+  | 'cemetery'
   | 'toilets'
   | 'supermarket'
   | 'bakery'

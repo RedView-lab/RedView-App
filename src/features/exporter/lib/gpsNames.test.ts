@@ -76,6 +76,9 @@ describe('convention de nommage GPS', () => {
     // Codes sans ambiguïté entre boulangerie / boucherie, restaurant / restauration rapide.
     expect(gpsCategoryCode('butcher', 'bakeries', 'fr')).toBe('BCH');
     expect(gpsCategoryCode('fast_food', 'fastFood', 'fr')).toBe('FAS');
+    // Cimetière : CIM / CEM, sans nom (« Cimetière de … » n'apprend rien au compteur).
+    expect(gpsCategoryCode('cemetery', 'cemeteries', 'fr')).toBe('CIM');
+    expect(gpsCategoryCode(undefined, 'cemeteries', 'en')).toBe('CEM');
   });
 });
 

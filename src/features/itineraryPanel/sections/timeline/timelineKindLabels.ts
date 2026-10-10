@@ -19,6 +19,7 @@ export function kindLabel(kind: TimelineItemKind, poiCategory?: PoiCategory): st
 export function poiLabel(category: PoiCategory): string {
   switch (category) {
     case 'fountains':    return translateAppText('Eau');
+    case 'cemeteries':   return translateAppText('Cimetière');
     case 'toilets':      return translateAppText('Toilettes');
     case 'supermarkets': return translateAppText('Supermarché');
     case 'gasStations':  return translateAppText('Carburant');

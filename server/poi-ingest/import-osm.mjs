@@ -30,12 +30,20 @@
  *   node import-osm.mjs --pbf /tmp/france.osm.pbf --out data/pois.new.db
  *   node import-osm.mjs --pbf /tmp/corse.osm.pbf --out /tmp/test.db --limit 200000
  *   node import-osm.mjs --pbf /tmp/france.osm.pbf --out data/pois.new.db --relations
+ *
+ * Ajouter une catégorie à une base existante, sans tout reconstruire :
+ *   node -e "new (require('better-sqlite3'))('data/pois.db',{readonly:true}).backup('data/pois.new.db')"
+ *   node import-osm.mjs --pbf /tmp/france.osm.pbf --out data/pois.new.db --append --categories cemetery
+ * `--categories` ne garde que les objets que la taxonomie *complète* range
+ * dans ces catégories (même priorité qu'une reconstruction) : le résultat est
+ * celui qu'aurait donné un import complet, pour ces catégories.
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import parseOSM from 'osm-pbf-parser';
+import { makeResolveCategory, parseCategoryList, ruleToOverpassFilter } from './lib/taxonomy-rules.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -46,7 +54,7 @@ const RELATION_ID_BASE = 20_000_000_000_000; // 2e13
 // ── Args ──────────────────────────────────────────────────────────────
 
 function parseArgs(argv) {
-  const out = { pbf: [], out: null, taxonomy: null, limit: 0, relations: false, bbox: null, keepStaging: false, verbose: false, force: false, append: false };
+  const out = { pbf: [], out: null, taxonomy: null, limit: 0, relations: false, bbox: null, keepStaging: false, verbose: false, force: false, append: false, categories: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--pbf') out.pbf.push(argv[++i]);
@@ -59,6 +67,7 @@ function parseArgs(argv) {
     else if (a === '--verbose') out.verbose = true;
     else if (a === '--force') out.force = true;
     else if (a === '--append') out.append = true;
+    else if (a === '--categories') out.categories = argv[++i];
     else if (a === '--help' || a === '-h') { console.log(fs.readFileSync(fileURLToPath(import.meta.url), 'utf8').split('*/')[0]); process.exit(0); }
   }
   return out;
@@ -66,7 +75,7 @@ function parseArgs(argv) {
 
 const args = parseArgs(process.argv.slice(2));
 if (args.pbf.length === 0 || !args.out) {
-  console.error('Usage: node import-osm.mjs --pbf <file.osm.pbf> [--pbf ...] --out <db.sqlite> [--limit N] [--relations] [--bbox s,w,n,e]');
+  console.error('Usage: node import-osm.mjs --pbf <file.osm.pbf> [--pbf ...] --out <db.sqlite> [--limit N] [--relations] [--bbox w,s,e,n] [--append] [--categories a,b]');
   process.exit(1);
 }
 for (const f of args.pbf) {
@@ -83,31 +92,17 @@ for (const f of args.pbf) console.log(`     • ${f} (${(fs.statSync(f).size / 1
 
 // ── Matching des tags ─────────────────────────────────────────────────
 
-function condMatches(tags, cond) {
-  const v = tags[cond.k];
-  if (v == null) return false;
-  if (cond.v != null) return v === cond.v;
-  if (Array.isArray(cond.in)) return cond.in.includes(v);
-  return false;
+let onlyCategories;
+try {
+  onlyCategories = parseCategoryList(taxonomy, args.categories);
+} catch (err) {
+  console.error(`❌ ${err.message}`);
+  process.exit(1);
 }
-
-function ruleMatches(tags, rule) {
-  for (const cond of rule) {
-    if (!condMatches(tags, cond)) return false;
-  }
-  return true;
-}
+if (onlyCategories) console.log(`🎯 Catégories importées : ${onlyCategories.join(', ')}`);
 
 /** Retourne la clé de catégorie, ou null. */
-function resolveCategory(tags) {
-  if (!tags) return null;
-  for (const cat of taxonomy.categories) {
-    for (const rule of cat.rules) {
-      if (ruleMatches(tags, rule)) return cat.key;
-    }
-  }
-  return null;
-}
+const resolveCategory = makeResolveCategory(taxonomy, onlyCategories);
 
 function buildName(tags) {
   return (
@@ -468,13 +463,10 @@ if (args.relations) {
 
   const blocks = [];
   for (const cat of taxonomy.categories) {
+    if (onlyCategories && !onlyCategories.includes(cat.key)) continue;
     for (const rule of cat.rules) {
-      if (rule.length !== 1) continue; // les règles AND ne visent pas les multipolygones
-      const { k, v, in: values } = rule[0];
-      if (v != null) blocks.push({ cat: cat.key, q: `relation["${k}"="${v}"](${s},${w},${n},${e});` });
-      else if (Array.isArray(values)) {
-        for (const val of values) blocks.push({ cat: cat.key, q: `relation["${k}"="${val}"](${s},${w},${n},${e});` });
-      }
+      const filter = ruleToOverpassFilter(rule);
+      if (filter) blocks.push({ cat: cat.key, q: `relation${filter}(${s},${w},${n},${e});` });
     }
   }
 
@@ -499,6 +491,9 @@ if (args.relations) {
     for (const el of data.elements) {
       const c = el.center || (el.lat != null ? { lat: el.lat, lon: el.lon } : null);
       if (!c) continue;
+      // Même priorité que les nodes et ways : un objet que la taxonomie range
+      // dans une catégorie plus prioritaire n'est pas réétiqueté par ce bloc.
+      if (resolveCategory(el.tags) !== b.cat) continue;
       relBuffer.push({
         id: RELATION_ID_BASE + el.id,
         osmId: el.id,

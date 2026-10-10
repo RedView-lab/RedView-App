@@ -38,6 +38,7 @@ export const POI_MENU_CLOSE_MS = 150;
 
 export const DROPDOWN_VIEWPORT_POI_ICON_URLS: Partial<Record<PoiCategory, string>> = {
   drinking_water: '/icons/poi/dropdown-maps/water.svg',
+  cemetery: '/icons/poi/dropdown-maps/cemetery.svg',
   toilets: '/icons/poi/dropdown-maps/toilets.svg',
   supermarket: '/icons/poi/dropdown-maps/supermarket.svg',
   bakery: '/icons/poi/dropdown-maps/bakery.svg',
@@ -53,6 +54,7 @@ export const DROPDOWN_VIEWPORT_POI_ICON_URLS: Partial<Record<PoiCategory, string
 
 export const DASHBOARD_POI_OPTIONS: readonly DashboardPoiOption[] = [
   { id: 'drinking_water', label: 'Eau', color: '#1447E6' },
+  { id: 'cemetery', label: 'Cimetière', color: '#00786F' },
   { id: 'toilets', label: 'Toilette', color: '#312C85' },
   { id: 'supermarket', label: 'Supermarché', color: '#F1B100' },
   { id: 'bakery', label: 'Boulangerie', color: '#FF6900' },

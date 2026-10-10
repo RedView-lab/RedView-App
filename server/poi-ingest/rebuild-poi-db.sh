@@ -134,6 +134,12 @@ if [[ $WITH_RELATIONS -eq 1 ]]; then
     echo "⚠️  Étape relations échouée — la base reste valide sans elle."
 fi
 
+# Cimetières : l'enclos paroissial dessiné dans le cimetière communal, ou un
+# multipolygone doublé d'un way, donnerait deux POI au même endroit.
+echo ""
+echo "── Fusion des cimetières imbriqués…"
+nice -n 10 node collapse-overlaps.mjs --db "$OUT" --category cemetery --radius 80
+
 # ── Sources externes ────────────────────────────────────────────────────
 # Overture d'abord : elle agrège déjà Meta, Microsoft, Foursquare et
 # AllThePlaces. Chaque source suivante n'est dédupliquée que sur ce qui reste.

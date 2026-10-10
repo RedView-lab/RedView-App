@@ -14,6 +14,8 @@ const FEATURE_COURSE_POINT_TYPE: Record<FeaturePoiCategory, string> = {
   water_tap: 'water',
   spring: 'water',
   fountain: 'water',
+  // Le robinet du cimetière : le compteur l'annonce comme un point d'eau.
+  cemetery: 'water',
   supermarket: 'store',
   convenience: 'store',
   bakery: 'food',
@@ -61,6 +63,7 @@ const FEATURE_COURSE_POINT_TYPE: Record<FeaturePoiCategory, string> = {
 /** Repli par ligne du panneau quand la catégorie OSM n'est plus connue. */
 const PANEL_COURSE_POINT_TYPE: Record<PanelPoiCategory, string> = {
   fountains: 'water',
+  cemeteries: 'water',
   toilets: 'toilet',
   supermarkets: 'store',
   gasStations: 'store',

@@ -4,7 +4,7 @@ import { ActionButtonStack, CheckboxField, PanelToggle } from '../components/con
 import { PoiAutoSortDialog } from '../components/dialogs/PoiAutoSortDialog';
 import { IconInfo } from '../components/icons';
 import { useAppI18n } from '@/shared/i18n';
-import { DEFAULT_POI_DISTANCE_M } from '../lib/project/defaultState';
+import { defaultPoiDistanceM } from '../lib/project/defaultState';
 import { PANEL_POI_ROWS } from '../lib/project/poiRows';
 
 import type { PoiAutoSortSummary, PoiCategory, PoiEntry, PoiState } from '../types';
@@ -58,10 +58,12 @@ function parseDistance(raw: string): number | null {
 
 function DistanceInput({
   value,
+  defaultValue,
   onChange,
   ariaLabel,
 }: {
   value: number | null;
+  defaultValue: number;
   onChange?: (next: number | null) => void;
   ariaLabel?: string;
 }) {
@@ -71,7 +73,7 @@ function DistanceInput({
         className="rvi-chip-input__native"
         value={value !== null ? `${value}m` : ''}
         onChange={(e) => onChange?.(parseDistance(e.target.value))}
-        placeholder={`${DEFAULT_POI_DISTANCE_M}m`}
+        placeholder={`${defaultValue}m`}
         aria-label={ariaLabel}
       />
     </div>
@@ -122,7 +124,8 @@ export function PoiSection({
       {POI_ROWS.map((row) => (
         <div key={row.map((c) => c.key).join('-')} className="rvi-row">
           {row.map((cell) => {
-            const entry = poi?.[cell.key] ?? { enabled: false, distanceM: DEFAULT_POI_DISTANCE_M };
+            const defaultDistanceM = defaultPoiDistanceM(cell.key);
+            const entry = poi?.[cell.key] ?? { enabled: false, distanceM: defaultDistanceM };
             return (
               <CheckboxField
                 key={cell.key}
@@ -131,13 +134,14 @@ export function PoiSection({
                   onChangeEntry?.(cell.key, {
                     ...entry,
                     enabled: v,
-                    distanceM: v ? (entry.distanceM ?? DEFAULT_POI_DISTANCE_M) : entry.distanceM,
+                    distanceM: v ? (entry.distanceM ?? defaultDistanceM) : entry.distanceM,
                   })
                 }
                 label={cell.label}
                 trailing={
                   <DistanceInput
                     value={entry.distanceM ?? null}
+                    defaultValue={defaultDistanceM}
                     onChange={(dist) =>
                       onChangeEntry?.(cell.key, { ...entry, distanceM: dist })
                     }

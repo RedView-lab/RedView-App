@@ -97,6 +97,7 @@ const ROUND_BADGE_ART_SCALE = WAYPOINT_DISC_RATIO / (19.6 / 33);
 
 const PROVIDED_TIMELINE_ROUND_BADGE_URLS: Partial<Record<PoiCategory, string>> = {
   fountains: '/icons/poi/dropdown-maps/water.svg',
+  cemeteries: '/icons/poi/dropdown-maps/cemetery.svg',
   toilets: '/icons/poi/dropdown-maps/toilets.svg',
   supermarkets: '/icons/poi/dropdown-maps/supermarket.svg',
   gasStations: '/icons/poi/dropdown-maps/fuel.svg',
@@ -113,6 +114,7 @@ const PROVIDED_TIMELINE_ROUND_BADGE_URLS: Partial<Record<PoiCategory, string>> =
 
 const PROVIDED_TIMELINE_FAVORITE_BADGE_URLS: Partial<Record<PoiCategory, string>> = {
   fountains: PROVIDED_POI_SVG.favoriteWater,
+  cemeteries: PROVIDED_POI_SVG.favoriteCemetery,
   toilets: PROVIDED_POI_SVG.favoriteToilet,
   supermarkets: PROVIDED_POI_SVG.favoriteSupermarket,
   gasStations: PROVIDED_POI_SVG.favoriteFuel,

@@ -15,6 +15,7 @@ export const POI_CATEGORIES = [
   'water_tap',
   'spring',
   'fountain',
+  'cemetery',
   // Ravitaillement
   'supermarket',
   'convenience',

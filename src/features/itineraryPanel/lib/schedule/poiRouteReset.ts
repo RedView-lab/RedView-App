@@ -8,7 +8,7 @@ import { CUSTOM_POI_SOURCE, type PoiCategory as FeaturePoiCategory, type PoiFeat
 import { filterPoisByLateralDistance } from '@/features/poi/lib/corridor-distance-filter';
 
 import type { Itinerary } from '../../types';
-import { DEFAULT_POI_DISTANCE_M } from '../project/defaultState';
+import { DEFAULT_POI_DISTANCE_M, defaultPoiDistanceM } from '../project/defaultState';
 import {
   buildRouteGeometrySignature,
   projectDistanceAlongRouteM,
@@ -57,7 +57,7 @@ export function resetPoisForRouteChange(itinerary: Itinerary): void {
     for (const feature of candidates) {
       const panelCategory = FEATURE_TO_PANEL_POI[feature.category];
       const categoryDistanceM = panelCategory
-        ? (itinerary.poi?.[panelCategory]?.distanceM ?? DEFAULT_POI_DISTANCE_M)
+        ? (itinerary.poi?.[panelCategory]?.distanceM ?? defaultPoiDistanceM(panelCategory))
         : DEFAULT_POI_DISTANCE_M;
       maxDistanceByCategory[feature.category] = Math.max(categoryDistanceM, KEPT_FAVORITE_MAX_DISTANCE_M);
     }

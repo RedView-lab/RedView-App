@@ -155,6 +155,7 @@ export const AUTO_SORT_KIND_BY_CATEGORY: Partial<Record<PoiCategory, AutoSortKin
   water_tap: 'water',
   spring: 'water',
   fountain: 'water',
+  cemetery: 'water',
   supermarket: 'shop',
   convenience: 'shop',
   bakery: 'shop',
@@ -171,12 +172,29 @@ export const AUTO_SORT_KIND_BY_CATEGORY: Partial<Record<PoiCategory, AutoSortKin
   hotel: 'hotel',
 };
 
+/**
+ * Points d'eau de secours : retenus seulement faute d'un vrai point d'eau
+ * (le robinet d'un cimetière existe presque toujours en France, mais n'est
+ * ni signalé ni garanti potable).
+ */
+export const AUTO_SORT_FALLBACK_WATER: ReadonlySet<PoiCategory> = new Set<PoiCategory>(['cemetery']);
+
+/**
+ * Distance latérale max. propre à une catégorie d'eau, à la place de la
+ * « proximité immédiate » (`water.maxLateralM`) : un cimetière est un centroïde
+ * de surface, à plusieurs dizaines de mètres de son portail sur la route.
+ */
+export const AUTO_SORT_WATER_MAX_LATERAL_M: Partial<Record<PoiCategory, number>> = {
+  cemetery: 120,
+};
+
 /** Intérêt intrinsèque d'une catégorie pour un cycliste qui se ravitaille. */
 export const AUTO_SORT_BASE_QUALITY: Partial<Record<PoiCategory, number>> = {
   drinking_water: 1,
   water_point: 0.95,
   water_tap: 0.9,
   fountain: 0.6,
+  cemetery: 0.5,
   spring: 0.45,
   supermarket: 1,
   convenience: 0.9,
@@ -214,6 +232,8 @@ export const AUTO_SORT_TYPICAL_HOURS: Partial<Record<PoiCategory, ClockWindow[]>
   fuel: [{ startMin: h(7), endMin: h(20) }],
   vending_machine: [{ startMin: 0, endMin: h(24) }],
   hotel: [{ startMin: 0, endMin: h(24) }],
+  // Grilles fermées la nuit (horaires municipaux : ~8 h → 17 h l'hiver, 19 h l'été).
+  cemetery: [{ startMin: h(8), endMin: h(18) }],
 };
 
 /**
@@ -236,6 +256,7 @@ export const AUTO_SORT_GAP_FAMILY: Partial<Record<PoiCategory, AutoSortGapFamily
   water_tap: 'water',
   spring: 'water',
   fountain: 'water',
+  cemetery: 'water',
   supermarket: 'grocery',
   convenience: 'grocery',
   marketplace: 'grocery',

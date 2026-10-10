@@ -39,6 +39,7 @@ const LOGICAL_ICON_URLS: Record<string, string> = {
   cash: '/icons/ui/credit-card-02.svg',
   mail: '/icons/ui/mail-02.svg',
   scenic: PROVIDED_POI_SVG.refugePin,
+  cemetery: '/icons/poi/dropdown-maps/cemetery.svg',
 };
 
 /** Variantes « rond » (carte, itinéraire standard), par nom d'icône logique. */
@@ -63,6 +64,7 @@ const LOGICAL_ROUND_ICON_URLS: Record<string, string> = {
   cash: '/icons/ui/credit-card-02.svg',
   mail: '/icons/ui/mail-02.svg',
   scenic: '/icons/poi/dropdown-maps/refuge.svg',
+  cemetery: '/icons/poi/dropdown-maps/cemetery.svg',
 };
 
 /** Variantes « pointe / favori » disponibles, par nom d'icône logique. */
@@ -80,6 +82,7 @@ const LOGICAL_FAVORITE_ICON_URLS: Record<string, string> = {
   hotel: PROVIDED_POI_SVG.favoriteHotelPin,
   refuge: PROVIDED_POI_SVG.favoriteRefugePin,
   scenic: PROVIDED_POI_SVG.favoriteRefugePin,
+  cemetery: PROVIDED_POI_SVG.favoriteCemetery,
 };
 
 function logicalName(category: PoiCategory): string {

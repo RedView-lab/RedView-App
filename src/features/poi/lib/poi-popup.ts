@@ -23,6 +23,24 @@ const AUTO_REASON_LABELS: Record<PoiAutoSortReason, string> = {
   gap6h: 'Dernier avant 6h sans équivalent',
 };
 
+/**
+ * Note sur l'eau d'un cimetière : son robinet existe presque toujours en
+ * France, mais rien ne le signale ni n'en garantit la potabilité — sauf quand
+ * OSM l'indique (`drinking_water`). Null pour les autres catégories.
+ */
+export function poiWaterHint(feature: Pick<PoiFeature, 'category' | 'tags'>): string | null {
+  if (feature.category !== 'cemetery') return null;
+  const drinking = feature.tags?.drinking_water;
+  if (drinking === 'yes' || drinking === 'treated') return 'Eau potable signalée';
+  if (drinking === 'no' || drinking === 'not') return 'Eau signalée non potable';
+  return 'Robinet probable, eau non garantie potable';
+}
+
+/** Titre d'un POI sans nom : la catégorie quand elle suffit à le désigner. */
+function unnamedPoiTitle(feature: PoiFeature): string {
+  return feature.category === 'cemetery' ? POI_LABELS.cemetery : 'Sans nom';
+}
+
 export interface PoiPopupState {
   favoriteEnabled: boolean;
   /** Règle du tri auto, quand il a retenu ce POI. */
@@ -94,7 +112,8 @@ export function resolvePopupState(
 }
 
 function buildPopupHtml(feature: PoiFeature, state: PoiPopupState): string {
-  const name = feature.name?.trim() || 'Sans nom';
+  const name = feature.name?.trim() || unnamedPoiTitle(feature);
+  const waterHint = poiWaterHint(feature);
   const category = POI_LABELS[feature.category] ?? feature.category.replace(/_/g, ' ');
   const pauseDurationLabel = formatPauseDuration(state.pauseDurationMin);
 
@@ -120,6 +139,7 @@ function buildPopupHtml(feature: PoiFeature, state: PoiPopupState): string {
           ? `<div class="rv-poi-popup__auto-reason"><span>Tri auto</span> · <span>${escapeHtml(AUTO_REASON_LABELS[state.autoReason])}</span></div>`
           : ''
       }
+      ${waterHint ? `<div class="rv-poi-popup__hint">${escapeHtml(waterHint)}</div>` : ''}
 
       <div class="rv-poi-popup__divider"></div>
 

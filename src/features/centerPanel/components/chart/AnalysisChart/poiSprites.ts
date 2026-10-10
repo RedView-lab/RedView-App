@@ -32,6 +32,7 @@ const FALLBACK_BADGE_COLOR = '#5a5a5a';
 // Mêmes tables d'assets que `PoiBadge` (itineraryPanel/sections/timeline/KindBadge).
 const ROUND_BADGE_URLS: Partial<Record<PoiCategory, string>> = {
   fountains: '/icons/poi/dropdown-maps/water.svg',
+  cemeteries: '/icons/poi/dropdown-maps/cemetery.svg',
   toilets: '/icons/poi/dropdown-maps/toilets.svg',
   supermarkets: '/icons/poi/dropdown-maps/supermarket.svg',
   gasStations: '/icons/poi/dropdown-maps/fuel.svg',
@@ -48,6 +49,7 @@ const ROUND_BADGE_URLS: Partial<Record<PoiCategory, string>> = {
 
 const FAVORITE_BADGE_URLS: Partial<Record<PoiCategory, string>> = {
   fountains: PROVIDED_POI_SVG.favoriteWater,
+  cemeteries: PROVIDED_POI_SVG.favoriteCemetery,
   toilets: PROVIDED_POI_SVG.favoriteToilet,
   supermarkets: PROVIDED_POI_SVG.favoriteSupermarket,
   gasStations: PROVIDED_POI_SVG.favoriteFuel,

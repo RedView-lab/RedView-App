@@ -32,6 +32,7 @@ export const FEATURE_TO_PANEL_POI: Partial<Record<FeaturePoiCategory, PanelPoiCa
   water_tap: 'fountains',
   spring: 'fountains',
   fountain: 'fountains',
+  cemetery: 'cemeteries',
   // Sanitaires
   toilets: 'toilets',
   shower: 'toilets',

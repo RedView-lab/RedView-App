@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { ItineraryProject } from '../../types';
 
 import { createDefaultItinerary, normalizeItineraryProject } from './defaultState';
+import { PANEL_POI_ROWS } from './poiRows';
 
 function projectWithRoute(elevations: number[]): ItineraryProject {
   const itinerary = createDefaultItinerary();
@@ -30,5 +31,34 @@ describe('normalizeItineraryProject : altitudes corrompues', () => {
     // Toujours nettoyé à la normalisation suivante du même tracé (jamais retenu comme sain).
     const again = normalizeItineraryProject(corrupted).itineraries[0].gpxRoute!.points;
     expect(again.every((point) => point.elevationM !== -32768)).toBe(true);
+  });
+});
+
+describe('normalizeItineraryProject : lignes POI', () => {
+  function projectWithPoi(poi: Record<string, unknown>): ItineraryProject {
+    const itinerary = createDefaultItinerary();
+    (itinerary as { poi: unknown }).poi = poi;
+    return { itineraries: [itinerary], activeItineraryId: itinerary.id } as unknown as ItineraryProject;
+  }
+
+  it("un nouvel itinéraire cherche les cimetières à 100 m (centroïde de l'enclos)", () => {
+    expect(createDefaultItinerary().poi.cemeteries).toEqual({ enabled: true, distanceM: 100 });
+    expect(PANEL_POI_ROWS.map((row) => row.key)).toContain('cemeteries');
+  });
+
+  it('un ancien projet sans la ligne la reçoit avec son propre défaut, ses réglages intacts', () => {
+    const poi = normalizeItineraryProject(projectWithPoi({ fountains: { enabled: false, distanceM: 60 } })).itineraries[0].poi;
+    expect(poi.fountains).toEqual({ enabled: false, distanceM: 60 });
+    expect(poi.cemeteries).toEqual({ enabled: true, distanceM: 100 });
+  });
+
+  it('un ancien projet resté à 40 m partout passe encore aux nouveaux défauts', () => {
+    const poi = normalizeItineraryProject(projectWithPoi({
+      fountains: { enabled: true, distanceM: 40 },
+      toilets: { enabled: true, distanceM: 40 },
+    })).itineraries[0].poi;
+    expect(poi.fountains.distanceM).toBe(20);
+    expect(poi.toilets.distanceM).toBe(20);
+    expect(poi.cemeteries.distanceM).toBe(100);
   });
 });
