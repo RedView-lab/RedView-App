@@ -4,6 +4,51 @@ import { translateAppText } from '@/shared/i18n/config';
 export const LIDAR_ROUTE_OVERLAY_STORAGE_KEY = 'redview:lidar:route_overlay';
 export const LIDAR_ROUTE_OVERLAY_CHANNEL_NAME = 'redview:lidar:route_overlay';
 
+/**
+ * Projet de cette page : celui ouvert dans l'onglet de l'app, ou celui d'où
+ * le visualiseur a été ouvert (paramètre `project` de son URL). Chaque
+ * message et la copie localStorage le portent ; un message d'un autre projet
+ * est ignoré — plusieurs onglets de l'app sur des projets différents
+ * recevaient chacun les traces créées dans le visualiseur (C2-1). Sans projet
+ * (visualiseur ouvert à la main, message d'une version précédente) : tout est
+ * accepté, comme avant.
+ */
+let syncProjectId: string | null = readViewerProjectParam();
+
+/** Visualiseur : projet d'où il a été ouvert (`?project=`, buildViewerUrl). Une page de l'app n'en a pas. */
+function readViewerProjectParam(): string | null {
+  try {
+    const value = new URLSearchParams(globalThis.location?.search ?? '').get('project');
+    return value && value.length <= 64 ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+export function setLidarRouteSyncProject(projectId: string | null): void {
+  if (projectId === syncProjectId) return;
+  syncProjectId = projectId;
+  // Autre projet : son dernier état publié n'est pas celui-ci.
+  lastPublishedRoutes = null;
+}
+
+export function getLidarRouteSyncProject(): string | null {
+  return syncProjectId;
+}
+
+function storageKey(): string {
+  return syncProjectId ? `${LIDAR_ROUTE_OVERLAY_STORAGE_KEY}:${syncProjectId}` : LIDAR_ROUTE_OVERLAY_STORAGE_KEY;
+}
+
+function isForThisProject(message: { projectId?: unknown }): boolean {
+  return !syncProjectId || typeof message.projectId !== 'string' || message.projectId === syncProjectId;
+}
+
+/** Projet de la page, posé sur un message sortant. */
+function projectStamp(): { projectId?: string } {
+  return syncProjectId ? { projectId: syncProjectId } : {};
+}
+
 export interface LidarRouteOverlayPoint {
   lat: number;
   lon: number;
@@ -24,6 +69,8 @@ export interface LidarRouteOverlayState {
   version: 1;
   updatedAt: string;
   source?: 'redview_app' | 'lidar_viewer';
+  /** Projet de l'expéditeur (absent : version précédente). */
+  projectId?: string;
   routes: LidarRouteOverlayItem[];
 }
 
@@ -32,6 +79,8 @@ export interface LidarRouteEditMessage {
   version: 1;
   updatedAt: string;
   source: 'redview_app' | 'lidar_viewer';
+  /** Projet de l'expéditeur (absent : version précédente). */
+  projectId?: string;
   routeId: string;
   points: LidarRouteOverlayPoint[];
   actionName?: string;
@@ -42,6 +91,8 @@ export interface LidarRouteCreateMessage {
   version: 1;
   updatedAt: string;
   source: 'redview_app' | 'lidar_viewer';
+  /** Projet de l'expéditeur (absent : version précédente). */
+  projectId?: string;
   route: LidarRouteOverlayItem;
 }
 
@@ -54,6 +105,8 @@ export interface LidarRouteDuplicateMessage {
   version: 1;
   updatedAt: string;
   source: 'redview_app' | 'lidar_viewer';
+  /** Projet de l'expéditeur (absent : version précédente). */
+  projectId?: string;
   sourceRouteId: string;
   route: LidarRouteOverlayItem;
 }
@@ -63,6 +116,8 @@ export interface LidarRouteRenameMessage {
   version: 1;
   updatedAt: string;
   source: 'redview_app' | 'lidar_viewer';
+  /** Projet de l'expéditeur (absent : version précédente). */
+  projectId?: string;
   routeId: string;
   name: string;
 }
@@ -72,6 +127,8 @@ export interface LidarRouteDeleteMessage {
   version: 1;
   updatedAt: string;
   source: 'redview_app' | 'lidar_viewer';
+  /** Projet de l'expéditeur (absent : version précédente). */
+  projectId?: string;
   routeId: string;
 }
 
@@ -120,7 +177,9 @@ function scheduleStorageWrite(state: LidarRouteOverlayState): void {
     _storageDebounceTimer = null;
     if (typeof window === 'undefined' || !_pendingStorageState) return;
     try {
-      window.localStorage.setItem(LIDAR_ROUTE_OVERLAY_STORAGE_KEY, JSON.stringify(_pendingStorageState));
+      // Clé du projet de l’état (la page a pu changer de projet pendant l’attente).
+      const key = _pendingStorageState.projectId ? `${LIDAR_ROUTE_OVERLAY_STORAGE_KEY}:${_pendingStorageState.projectId}` : LIDAR_ROUTE_OVERLAY_STORAGE_KEY;
+      window.localStorage.setItem(key, JSON.stringify(_pendingStorageState));
     } catch (err) {
       console.warn('[LiDAR] Failed to write route overlay to localStorage:', err);
     }
@@ -177,6 +236,7 @@ export function extractLidarRouteOverlayState(
   if (!itineraries || itineraries.length === 0) {
     return {
       version: 1,
+      ...projectStamp(),
       updatedAt: new Date().toISOString(),
       source,
       routes: [],
@@ -198,6 +258,7 @@ export function extractLidarRouteOverlayState(
 
   return {
     version: 1,
+    ...projectStamp(),
     updatedAt: new Date().toISOString(),
     source,
     routes,
@@ -249,6 +310,7 @@ export function broadcastLidarRouteEdit(
   const msg: LidarRouteEditMessage = {
     type: 'UPDATE_ROUTE_POINTS',
     version: 1,
+    ...projectStamp(),
     updatedAt: new Date().toISOString(),
     source,
     routeId,
@@ -258,7 +320,7 @@ export function broadcastLidarRouteEdit(
 
   // 1) Mettre à jour l'état des tracés en stockage local
   try {
-    const raw = window.localStorage.getItem(LIDAR_ROUTE_OVERLAY_STORAGE_KEY);
+    const raw = window.localStorage.getItem(storageKey());
     if (raw) {
       const parsed = JSON.parse(raw) as LidarRouteOverlayState;
       if (parsed && Array.isArray(parsed.routes)) {
@@ -293,6 +355,7 @@ export function broadcastLidarRouteCreate(
   const msg: LidarRouteCreateMessage = {
     type: 'CREATE_ROUTE',
     version: 1,
+    ...projectStamp(),
     updatedAt: new Date().toISOString(),
     source,
     route,
@@ -311,6 +374,7 @@ export function broadcastLidarRouteDuplicate(
   const msg: LidarRouteDuplicateMessage = {
     type: 'DUPLICATE_ROUTE',
     version: 1,
+    ...projectStamp(),
     updatedAt: new Date().toISOString(),
     source,
     sourceRouteId,
@@ -326,12 +390,13 @@ function storeAddedRoute(
   updatedAt: string,
 ): void {
   try {
-    const raw = window.localStorage.getItem(LIDAR_ROUTE_OVERLAY_STORAGE_KEY);
+    const raw = window.localStorage.getItem(storageKey());
     const parsed = raw ? (JSON.parse(raw) as LidarRouteOverlayState) : null;
     const currentRoutes = parsed && Array.isArray(parsed.routes) ? parsed.routes : [];
     const nextRoutes = [...currentRoutes.filter((r) => r.id !== route.id), route];
     scheduleStorageWrite({
       version: 1,
+      ...projectStamp(),
       updatedAt,
       source,
       routes: nextRoutes,
@@ -360,6 +425,7 @@ export function broadcastLidarRouteRename(
   const msg: LidarRouteRenameMessage = {
     type: 'RENAME_ROUTE',
     version: 1,
+    ...projectStamp(),
     updatedAt: new Date().toISOString(),
     source,
     routeId,
@@ -368,7 +434,7 @@ export function broadcastLidarRouteRename(
 
   // 1) Mettre à jour le localStorage
   try {
-    const raw = window.localStorage.getItem(LIDAR_ROUTE_OVERLAY_STORAGE_KEY);
+    const raw = window.localStorage.getItem(storageKey());
     if (raw) {
       const parsed = JSON.parse(raw) as LidarRouteOverlayState;
       if (parsed && Array.isArray(parsed.routes)) {
@@ -403,6 +469,7 @@ export function broadcastLidarRouteDelete(
   const msg: LidarRouteDeleteMessage = {
     type: 'DELETE_ROUTE',
     version: 1,
+    ...projectStamp(),
     updatedAt: new Date().toISOString(),
     source,
     routeId,
@@ -410,7 +477,7 @@ export function broadcastLidarRouteDelete(
 
   // 1) Mettre à jour le localStorage
   try {
-    const raw = window.localStorage.getItem(LIDAR_ROUTE_OVERLAY_STORAGE_KEY);
+    const raw = window.localStorage.getItem(storageKey());
     if (raw) {
       const parsed = JSON.parse(raw) as LidarRouteOverlayState;
       if (parsed && Array.isArray(parsed.routes)) {
@@ -437,7 +504,7 @@ export function loadLidarRouteOverlay(): LidarRouteOverlayState | null {
   if (typeof window === 'undefined') return null;
 
   try {
-    const raw = window.localStorage.getItem(LIDAR_ROUTE_OVERLAY_STORAGE_KEY);
+    const raw = window.localStorage.getItem(storageKey());
     if (!raw) return null;
     const parsed = JSON.parse(raw) as LidarRouteOverlayState;
     if (parsed && Array.isArray(parsed.routes)) {
@@ -461,7 +528,7 @@ export function subscribeToLidarRouteOverlay(
       bc = new BroadcastChannel(LIDAR_ROUTE_OVERLAY_CHANNEL_NAME);
       bc.onmessage = (event) => {
         const data = event.data as LidarRouteSyncMessage;
-        if (data) {
+        if (data && isForThisProject(data)) {
           onUpdate(data);
         }
       };
@@ -471,10 +538,10 @@ export function subscribeToLidarRouteOverlay(
   }
 
   const handleStorage = (event: StorageEvent) => {
-    if (event.key === LIDAR_ROUTE_OVERLAY_STORAGE_KEY && event.newValue) {
+    if (event.key === storageKey() && event.newValue) {
       try {
         const state = JSON.parse(event.newValue) as LidarRouteOverlayState;
-        if (state && Array.isArray(state.routes)) {
+        if (state && Array.isArray(state.routes) && isForThisProject(state)) {
           onUpdate(state);
         }
       } catch (err) {

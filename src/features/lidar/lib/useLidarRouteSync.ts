@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import {
+  setLidarRouteSyncProject,
   subscribeToLidarRouteOverlay,
   syncLidarRouteOverlay,
   type LidarRouteOverlayItem,
@@ -8,6 +9,8 @@ import {
 import type { Itinerary } from '@/features/itineraryPanel/types';
 
 interface UseLidarRouteSyncOptions {
+  /** Projet ouvert dans cet onglet : seuls ses messages sont traités, les siens le portent (C2-1). */
+  projectId: string | null;
   itineraries: readonly Itinerary[] | undefined;
   onLidarRouteEdit?: (
     routeId: string,
@@ -25,6 +28,7 @@ interface UseLidarRouteSyncOptions {
  * l'application principale RedView et le Viewer LiDAR HD (inter-onglets / BroadcastChannel).
  */
 export function useLidarRouteSync({
+  projectId,
   itineraries,
   ...handlers
 }: UseLidarRouteSyncOptions): void {
@@ -33,6 +37,12 @@ export function useLidarRouteSync({
   useEffect(() => {
     handlersRef.current = handlers;
   });
+
+  // 0) Projet de la page (déclaré avant les publications ci-dessous, qui le portent).
+  useEffect(() => {
+    setLidarRouteSyncProject(projectId);
+    return () => setLidarRouteSyncProject(null);
+  }, [projectId]);
 
   // 1) Synchro sortante : quand les itinéraires changent dans RedView, pousser vers la couche LiDAR
   // (seulement quand un tracé lui-même a changé : la plupart des éditions du projet n'y touchent pas).

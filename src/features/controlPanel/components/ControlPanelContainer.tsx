@@ -32,6 +32,8 @@ import {
 
 export interface ControlPanelContainerProps {
   map: MapboxMap | null;
+  /** Projet ouvert : le visualiseur LiDAR ouvert d'ici ne parle qu'à lui. */
+  projectId: string | null;
   isMapLoaded: boolean;
   onBasemapChange?: (id: BasemapId) => void;
   onWeatherOverlayStatusChange?: OverlayStatusReporter;
@@ -59,6 +61,7 @@ export interface ControlPanelContainerProps {
  */
 export const ControlPanelContainer = memo(function ControlPanelContainer({
   map,
+  projectId,
   isMapLoaded,
   onBasemapChange,
   onWeatherOverlayStatusChange,
@@ -137,6 +140,7 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
   );
 
   useLidarRouteSync({
+    projectId,
     itineraries,
     onLidarRouteEdit: useCallback(
       (

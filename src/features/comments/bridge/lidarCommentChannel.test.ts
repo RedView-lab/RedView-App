@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { readLidarCommentState } from './lidarCommentChannel';
+import { answersLidarHello, isForLidarViewerProject, readLidarCommentState } from './lidarCommentChannel';
 
 const thread = {
   id: 'cm-1',
@@ -25,5 +25,25 @@ describe('pont des commentaires vers le viewer LiDAR', () => {
     expect(readLidarCommentState({ version: 1, type: 'HELLO' })).toBeNull();
     expect(readLidarCommentState({ type: 'STATE', projectId: 'p', me: {} })).toBeNull();
     expect(readLidarCommentState(null)).toBeNull();
+  });
+});
+
+describe('plusieurs onglets de l’app sur des projets différents (C2-2)', () => {
+  const state = (projectId: string) => ({
+    version: 1 as const, type: 'STATE' as const, projectId, updatedAt: 't', me: { userId: 'u-1', name: 'Alice' }, members: [], threads: [], reads: {},
+  });
+
+  it('le visualiseur n’accepte que l’état et la fermeture de son projet', () => {
+    expect(isForLidarViewerProject(state('alpes'), 'alpes')).toBe(true);
+    expect(isForLidarViewerProject(state('pyrenees'), 'alpes')).toBe(false);
+    expect(isForLidarViewerProject({ version: 1, type: 'CLOSED', projectId: 'pyrenees' }, 'alpes')).toBe(false);
+    // Visualiseur ouvert sans projet (version précédente, à la main) : comme avant.
+    expect(isForLidarViewerProject(state('pyrenees'), null)).toBe(true);
+  });
+
+  it('seul l’onglet du projet du visualiseur répond à son HELLO', () => {
+    expect(answersLidarHello({ version: 1, type: 'HELLO', projectId: 'alpes' }, 'alpes')).toBe(true);
+    expect(answersLidarHello({ version: 1, type: 'HELLO', projectId: 'alpes' }, 'pyrenees')).toBe(false);
+    expect(answersLidarHello({ version: 1, type: 'HELLO' }, 'pyrenees')).toBe(true);
   });
 });

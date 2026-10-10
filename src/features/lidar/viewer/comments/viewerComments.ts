@@ -11,6 +11,7 @@
 // caméra (transformations DOM, pas de rendu React par image) et s'estompent derrière une crête.
 
 import {
+  isForLidarViewerProject,
   postLidarCommentMessage,
   readLidarCommentState,
   readStoredLidarCommentState,
@@ -23,6 +24,7 @@ import { createDocumentId } from '@/features/itineraryPanel/lib/project/ids';
 import type { ProjectCommentAnchor, ProjectCommentZone } from '@/features/itineraryPanel/types';
 import type { ProjectedScreenPoint } from '../route/terrainRaycaster';
 import type { Vec3 } from '../tools/types';
+import { getLidarRouteSyncProject } from '../../lib/routeOverlaySync';
 import { mountViewerCommentsUi } from './mount';
 
 export interface ViewerCommentsOptions {
@@ -77,8 +79,10 @@ export class ViewerComments {
 
   constructor(opts: ViewerCommentsOptions) {
     this.opts = opts;
+    // Projet d'où le visualiseur a été ouvert (`?project=`) : seuls ses fils sont montrés et écrits (C2-2).
+    const projectId = getLidarRouteSyncProject();
     this.snapshot = {
-      state: readStoredLidarCommentState(),
+      state: readStoredLidarCommentState(projectId),
       live: false,
       openThreadId: null,
       hoveredThreadId: null,
@@ -86,6 +90,7 @@ export class ViewerComments {
       draftFocusRequest: 0,
     };
     this.unsubscribe = subscribeLidarComments((message) => {
+      if (!isForLidarViewerProject(message, projectId)) return;
       if (message.type === 'STATE') {
         const state = readLidarCommentState(message);
         if (!state) return;
@@ -96,7 +101,7 @@ export class ViewerComments {
         this.update({ live: false, draft: null });
       }
     });
-    postLidarCommentMessage({ version: 1, type: 'HELLO' });
+    postLidarCommentMessage({ version: 1, type: 'HELLO', ...(projectId ? { projectId } : {}) });
     this.helloTimer = window.setTimeout(() => {
       this.helloTimer = null;
       if (!this.snapshot.live) this.notify();

@@ -5,6 +5,7 @@ import type { ProjectCommentsView, ProjectCommentThread } from '@/features/itine
 import type { CommentAction, CommentAuthor } from '../lib/commentActions';
 import type { MentionCandidate } from '../lib/messageText';
 import {
+  answersLidarHello,
   postLidarCommentMessage,
   clearStoredLidarCommentState,
   publishLidarCommentState,
@@ -71,6 +72,7 @@ export function useLidarCommentSync({ projectId, me, members, threads, reads, on
     const state = stateRef.current;
     if (!state) return;
     if (message.type === 'HELLO') {
+      if (!answersLidarHello(message, state.projectId)) return;
       publishLidarCommentState({ ...state, updatedAt: new Date().toISOString() });
       return;
     }

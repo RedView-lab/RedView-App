@@ -705,6 +705,7 @@ export function DashboardEditor({
                       <div ref={rightPrimaryPanelHostRef} style={styles.rightPrimaryPanelStyle}>
                         <ControlPanelContainer
                           map={mapInstance}
+                          projectId={activeProjectId}
                           isMapLoaded={mapLoaded}
                           onBasemapChange={onBasemapChange}
                           onWeatherOverlayStatusChange={onWeatherOverlayStatusChange}

@@ -1,5 +1,6 @@
 import type { TileCoord } from '../types';
 import { formatTileFootprint, tileFootprintSuffix } from './coordConvert';
+import { getLidarRouteSyncProject } from './routeOverlaySync';
 
 type ViewerTileParams = Pick<TileCoord, 'xKm' | 'yKm' | 'projection' | 'altRef' | 'footprint'>;
 
@@ -33,9 +34,15 @@ function normalizeViewerSceneTiles(
   return tiles;
 }
 
+/**
+ * `projectId` : projet d'où le visualiseur est ouvert (par défaut celui de la
+ * page : le projet ouvert dans l'app, ou celui du visualiseur qui change de
+ * dalle) ; ses traces et commentaires ne parlent qu'à ce projet (C2-1, C2-2).
+ */
 export function buildViewerUrl(
   coord: ViewerTileParams,
   selectedCoords?: ViewerTileParams | ViewerTileParams[] | null,
+  projectId: string | null = getLidarRouteSyncProject(),
 ): string {
   const params = new URLSearchParams({
     x: String(coord.xKm),
@@ -43,6 +50,7 @@ export function buildViewerUrl(
     crs: coord.projection,
     alt: coord.altRef,
   });
+  if (projectId) params.set('project', projectId);
   // Dalle-fichier (Japon, NZ) : emprise du fichier, `x`/`y` étant le km de son centre.
   if (coord.footprint) params.set('fp', formatTileFootprint(coord.footprint));
 

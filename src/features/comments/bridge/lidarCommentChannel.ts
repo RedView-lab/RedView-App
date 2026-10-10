@@ -33,12 +33,29 @@ export interface LidarCommentState {
 export type LidarCommentMessage =
   | LidarCommentState
   | { version: 1; type: 'CLOSED'; projectId: string }
-  | { version: 1; type: 'HELLO' }
+  /** `projectId` : projet du visualiseur (absent : version précédente, ou ouvert sans projet). */
+  | { version: 1; type: 'HELLO'; projectId?: string }
   | { version: 1; type: 'COMMENT_ACTION'; projectId: string; action: CommentAction }
   | { version: 1; type: 'MARK_READ'; projectId: string; threadId: string }
   | { version: 1; type: 'MARK_UNREAD'; projectId: string; threadId: string };
 
 const STORAGE_DEBOUNCE_MS = 300;
+
+/**
+ * Plusieurs onglets de l'app peuvent être ouverts sur des projets différents :
+ * le visualiseur ne prend que l'état (et la fermeture) du projet d'où il a été
+ * ouvert — il affichait les fils du dernier onglet publié et y écrivait (C2-2).
+ * Sans projet connu (ouvert à la main, ancienne URL) : comme avant.
+ */
+export function isForLidarViewerProject(message: LidarCommentMessage, viewerProjectId: string | null): boolean {
+  if (!viewerProjectId) return true;
+  return !('projectId' in message) || message.projectId === undefined || message.projectId === viewerProjectId;
+}
+
+/** Seul l'onglet du projet du visualiseur répond à son `HELLO` (un ancien visualiseur, sans projet : tous). */
+export function answersLidarHello(message: Extract<LidarCommentMessage, { type: 'HELLO' }>, projectId: string): boolean {
+  return message.projectId === undefined || message.projectId === projectId;
+}
 
 let sharedChannel: BroadcastChannel | null = null;
 
@@ -130,10 +147,11 @@ export function readLidarCommentState(raw: unknown): LidarCommentState | null {
   };
 }
 
-export function readStoredLidarCommentState(): LidarCommentState | null {
+export function readStoredLidarCommentState(viewerProjectId: string | null = null): LidarCommentState | null {
   try {
     const raw = window.localStorage.getItem(LIDAR_COMMENTS_STORAGE_KEY);
-    return raw ? readLidarCommentState(JSON.parse(raw)) : null;
+    const state = raw ? readLidarCommentState(JSON.parse(raw)) : null;
+    return state && isForLidarViewerProject(state, viewerProjectId) ? state : null;
   } catch {
     return null;
   }
