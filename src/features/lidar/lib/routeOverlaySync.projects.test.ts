@@ -84,6 +84,30 @@ describe('visualiseur LiDAR et onglets de plusieurs projets', () => {
     releaseSecond();
   });
 
+  it('projet quitté quand le verrou est accordé mais son rappel pas encore lancé : rendu tout de suite (C2-1, relecture)', async () => {
+    // Verrou déjà accordé (l'abandon n'y peut plus rien), rappel lancé un peu plus tard.
+    let held = false;
+    vi.stubGlobal('navigator', {
+      locks: {
+        request: (_name: string, _options: unknown, callback: () => unknown) => new Promise<void>((resolve) => {
+          setTimeout(() => {
+            held = true;
+            // Comme les Web Locks : verrou rendu quand le résultat du rappel (promesse ou non) est réglé.
+            void Promise.resolve(callback()).then(() => {
+              held = false;
+              resolve();
+            });
+          }, 10);
+        }),
+      },
+    });
+    const sync = await tab('alpes');
+    sync.claimLidarRouteTaker('alpes')();
+    await settle();
+    expect(sync.isLidarRouteTaker()).toBe(false);
+    expect(held).toBe(false);
+  });
+
   it('le visualiseur n’affiche que les traces de son projet ; l’URL l’ouvre sur le projet de l’onglet', async () => {
     const pyrenees = await tab('pyrenees');
     const viewer = await tab('alpes');

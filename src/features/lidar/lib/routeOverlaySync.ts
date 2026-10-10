@@ -58,6 +58,8 @@ export function claimLidarRouteTaker(projectId: string): () => void {
   let release: (() => void) | null = null;
   locks
     .request(`redview:lidar-route-taker:${projectId}`, { signal: abort.signal }, () => {
+      // Verrou accordé après le nettoyage (abandon trop tard) : rendu tout de suite.
+      if (abort.signal.aborted) return undefined;
       routeTaker = true;
       return new Promise<void>((resolve) => {
         release = resolve;
