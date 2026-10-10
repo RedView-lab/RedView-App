@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 
+import { notify } from '@/shared/lib/notify'
 import { account, clearStoredAppwriteSession } from '@/shared/services/appwrite'
 
 import { confirmAccountEmail, requestAccountEmailCode } from '../lib/emailVerification'
@@ -25,7 +26,11 @@ export default function VerifyEmailScreen({ onVerified, onSignedOut }: VerifyEma
     requested.current = true
     void requestAccountEmailCode()
       .then(({ alreadyVerified }) => { if (alreadyVerified) onVerified() })
-      .catch((error: unknown) => console.warn('[auth] verification code request failed', error))
+      .catch((error: unknown) => {
+        // Rien n'est parti : la personne le sait, « Renvoyer le code » reste là.
+        console.warn('[auth] verification code request failed', error)
+        notify.error(error instanceof Error ? error.message : 'Impossible de vérifier l’adresse e-mail.')
+      })
   }, [onVerified])
 
   const signOut = () => {

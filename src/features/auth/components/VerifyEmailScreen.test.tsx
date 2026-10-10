@@ -11,6 +11,8 @@ const api = vi.hoisted(() => ({
 }));
 vi.mock('../lib/emailVerification', () => ({ requestAccountEmailCode: api.request, confirmAccountEmail: api.confirm }));
 vi.mock('@/shared/services/appwrite', () => ({ account: { deleteSession: api.deleteSession }, clearStoredAppwriteSession: () => {} }));
+const notifyError = vi.hoisted(() => vi.fn());
+vi.mock('@/shared/lib/notify', () => ({ notify: { error: notifyError } }));
 
 const { default: VerifyEmailScreen } = await import('./VerifyEmailScreen');
 
@@ -54,5 +56,13 @@ describe('VerifyEmailScreen (A15-2)', () => {
     view = renderComponent(<VerifyEmailScreen onVerified={onVerified} onSignedOut={() => {}} />);
     await act(async () => {});
     expect(onVerified).toHaveBeenCalledTimes(1);
+  });
+
+  it('premier envoi en échec : un message le dit (pas seulement la console)', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    api.request.mockRejectedValueOnce(new Error('L’e-mail de confirmation n’a pas pu partir. Réessayez plus tard.'));
+    view = renderComponent(<VerifyEmailScreen onVerified={() => {}} onSignedOut={() => {}} />);
+    await act(async () => {});
+    expect(notifyError).toHaveBeenCalledWith('L’e-mail de confirmation n’a pas pu partir. Réessayez plus tard.');
   });
 });
