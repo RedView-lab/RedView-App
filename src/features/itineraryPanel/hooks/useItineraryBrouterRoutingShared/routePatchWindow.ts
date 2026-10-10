@@ -156,7 +156,7 @@ function routeRejoinsStoredTrackAt(
   for (let step = 1; step < route.length && walkedM < REJOIN_PROOF_M; step += 1) {
     const stepM = haversineRouteDistanceM(at(step - 1), at(step));
     walkedM += stepM;
-    const projection = projectOnRouteRange(at(step), routePoints, distances, rangeFromM, rangeToM);
+    const projection = projectOnRouteRange(at(step), routePoints, distances, rangeFromM, rangeToM, boundM);
     if (!projection || projection.offsetM > REJOIN_TOLERANCE_M) continue;
     // Même sens que l'ancien tracé : on s'éloigne de la borne en le suivant.
     const awayM = Math.abs(projection.alongM - boundM);

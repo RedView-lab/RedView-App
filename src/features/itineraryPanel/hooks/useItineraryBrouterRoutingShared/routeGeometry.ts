@@ -101,6 +101,7 @@ export function routePatchBoundaryDistanceM(
       routeDistances,
       patchPoint.distanceM - toleranceM,
       patchPoint.distanceM + toleranceM,
+      patchPoint.distanceM,
     );
     if (near) return near.alongM;
   }
@@ -108,8 +109,22 @@ export function routePatchBoundaryDistanceM(
 }
 
 /**
+ * Écart latéral (m) en deçà duquel deux passages du tracé près de `point` sont
+ * jugés équivalents : sur un aller-retour, l'aller et le retour empruntent la
+ * même voie (écart nul des deux côtés, ou bruit GPS d'un GPX importé).
+ */
+const SAME_PASS_OFFSET_SLACK_M = 20;
+
+/**
  * Projection de `point` sur les seuls segments du tracé situés entre `fromM`
  * et `toM` : distance le long du tracé et écart latéral (m).
+ * `preferM` : position connue du point sur le tracé (kilométrage mémorisé).
+ * Quand le tracé passe plusieurs fois au même endroit (aller-retour, boucle,
+ * détour de ravitaillement), le passage retenu est celui le plus proche de
+ * `preferM` parmi ceux à `SAME_PASS_OFFSET_SLACK_M` du meilleur écart — sans
+ * lui, le premier passage gagnait toujours. Chaque passage est une suite de
+ * segments proches du point ; on garde le meilleur segment de chacun (jamais
+ * un segment voisin sur la même voie, ce qui décalerait la position).
  */
 export function projectOnRouteRange(
   point: LatLon,
@@ -117,11 +132,14 @@ export function projectOnRouteRange(
   routeDistances: number[],
   fromM: number,
   toM: number,
+  preferM?: number,
 ): { alongM: number; offsetM: number } | null {
   const cosLat = Math.cos((point.lat * Math.PI) / 180);
-  let bestDistanceSq = Number.POSITIVE_INFINITY;
-  let bestM: number | null = null;
   const first = Math.max(0, firstIndexAtOrAfter(routeDistances, fromM) - 1);
+  const offsetsM: number[] = [];
+  const alongsM: number[] = [];
+  let bestOffsetM = Number.POSITIVE_INFINITY;
+  let bestM: number | null = null;
   for (let index = first; index < routePoints.length - 1; index += 1) {
     if (routeDistances[index]! > toM) break;
     const a = routePoints[index]!;
@@ -132,13 +150,42 @@ export function projectOnRouteRange(
     const py = point.lat - a.lat;
     const lengthSq = (dx * dx) + (dy * dy);
     const t = lengthSq > 0 ? Math.max(0, Math.min(1, ((px * dx) + (py * dy)) / lengthSq)) : 0;
-    const distanceSq = ((px - (t * dx)) ** 2) + ((py - (t * dy)) ** 2);
-    if (distanceSq < bestDistanceSq) {
-      bestDistanceSq = distanceSq;
-      bestM = routeDistances[index]! + (t * (routeDistances[index + 1]! - routeDistances[index]!));
+    const offsetM = Math.sqrt(((px - (t * dx)) ** 2) + ((py - (t * dy)) ** 2)) * METRES_PER_DEGREE;
+    const alongM = routeDistances[index]! + (t * (routeDistances[index + 1]! - routeDistances[index]!));
+    offsetsM.push(offsetM);
+    alongsM.push(alongM);
+    if (offsetM < bestOffsetM) {
+      bestOffsetM = offsetM;
+      bestM = alongM;
     }
   }
-  return bestM == null ? null : { alongM: bestM, offsetM: Math.sqrt(bestDistanceSq) * METRES_PER_DEGREE };
+  if (bestM == null) return null;
+  if (preferM == null || !Number.isFinite(preferM)) return { alongM: bestM, offsetM: bestOffsetM };
+
+  // Passages : suites de segments à moins de `slack` du meilleur écart.
+  const thresholdM = bestOffsetM + SAME_PASS_OFFSET_SLACK_M;
+  let chosen = { alongM: bestM, offsetM: bestOffsetM };
+  let chosenGapM = Math.abs(bestM - preferM);
+  let passBest: { alongM: number; offsetM: number } | null = null;
+  const closePass = () => {
+    if (!passBest) return;
+    const gapM = Math.abs(passBest.alongM - preferM);
+    if (gapM < chosenGapM) {
+      chosen = passBest;
+      chosenGapM = gapM;
+    }
+    passBest = null;
+  };
+  for (let index = 0; index < offsetsM.length; index += 1) {
+    const offsetM = offsetsM[index]!;
+    if (offsetM > thresholdM) {
+      closePass();
+      continue;
+    }
+    if (!passBest || offsetM < passBest.offsetM) passBest = { alongM: alongsM[index]!, offsetM };
+  }
+  closePass();
+  return chosen;
 }
 
 export function approxDistanceM(a: LatLon, b: LatLon): number {

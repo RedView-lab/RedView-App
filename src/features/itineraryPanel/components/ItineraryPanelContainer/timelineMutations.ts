@@ -10,6 +10,7 @@ import {
   roundDistanceKm,
 } from '@/features/itineraryPanel/lib/routes';
 import { createDocumentId } from '../../lib/project/ids';
+import { routePatchBoundaryDistanceM } from '../../hooks/useItineraryBrouterRoutingShared/routeGeometry';
 import { isRoutableTimelineRow } from './timelineRoutePatch';
 
 /**
@@ -28,6 +29,10 @@ import { isRoutableTimelineRow } from './timelineRoutePatch';
  * @param anchorLonLat Coordonnée géographique que l'utilisateur a saisie sur le
  *                     tracé. Projetée sur la polyligne pour en déduire la
  *                     distance d'insertion — pas stockée sur la ligne.
+ *                     `routeIndex` : position saisie dans `routePoints`
+ *                     (segment + fraction), quand le geste la connaît : sur un
+ *                     aller-retour ou une boucle, elle désigne le passage tiré
+ *                     (sans elle, le premier passage gagnait).
  * @param dropLatLon   Coordonnée où l'utilisateur a relâché le glisser. Devient
  *                     le lat/lon persisté de l'étape (BRouter l'accroche à la
  *                     route la plus proche côté serveur).
@@ -35,14 +40,19 @@ import { isRoutableTimelineRow } from './timelineRoutePatch';
 export function insertWaypointAtRoutePosition(
   timeline: TimelineItem[],
   routePoints: Array<{ lat: number; lon: number }>,
-  anchorLonLat: { lat: number; lon: number },
+  anchorLonLat: { lat: number; lon: number; routeIndex?: number },
   dropLatLon: { lat: number; lon: number },
 ): { newRowId: string; isDirectOnRoute: boolean; anchorDistanceM: number } | null {
   if (routePoints.length < 2) return null;
 
   const cumulative = cumulativeRouteLengthsM(routePoints);
-  const anchor = projectPointAlongRoute(anchorLonLat, routePoints, cumulative);
-  if (!anchor) return null;
+  const anchorDistanceM = routePositionM(
+    { lat: anchorLonLat.lat, lon: anchorLonLat.lon },
+    routePoints,
+    cumulative,
+    distanceAtRouteIndex(cumulative, anchorLonLat.routeIndex),
+  );
+  if (anchorDistanceM == null) return null;
 
   // Parcourir la timeline dans l'ordre pour trouver l'indice de la première
   // ligne routable dont la distance dépasse l'ancre. La nouvelle étape s'insère
@@ -52,12 +62,14 @@ export function insertWaypointAtRoutePosition(
   for (let index = 0; index < timeline.length; index += 1) {
     const row = timeline[index];
     if (!isRoutableTimelineRow(row)) continue;
-    const rowDistanceM = projectPointAlongRoute(
+    // Kilométrage de la ligne : retrouve son passage sur un aller-retour.
+    const rowDistanceM = routePositionM(
       { lat: row.lat, lon: row.lon },
       routePoints,
       cumulative,
-    )?.distanceM;
-    if (rowDistanceM != null && rowDistanceM > anchor.distanceM) {
+      row.distanceKm != null && Number.isFinite(row.distanceKm) ? row.distanceKm * 1_000 : null,
+    );
+    if (rowDistanceM != null && rowDistanceM > anchorDistanceM) {
       insertIndex = index;
       break;
     }
@@ -76,13 +88,37 @@ export function insertWaypointAtRoutePosition(
     id: newRowId,
     kind: 'waypoint',
     label: translateAppText('Nouveau point'),
-    distanceKm: isDirectOnRoute ? roundDistanceKm(anchor.distanceM) : null,
+    distanceKm: isDirectOnRoute ? roundDistanceKm(anchorDistanceM) : null,
     lat: dropLatLon.lat,
     lon: dropLatLon.lon,
     onRoute: isDirectOnRoute || undefined,
   };
   timeline.splice(insertIndex, 0, newRow);
-  return { newRowId, isDirectOnRoute, anchorDistanceM: anchor.distanceM };
+  return { newRowId, isDirectOnRoute, anchorDistanceM };
+}
+
+/** Distance cumulée (m) à une position fractionnaire `routeIndex` de la trace. */
+function distanceAtRouteIndex(cumulative: number[], routeIndex: number | undefined): number | null {
+  if (routeIndex == null || !Number.isFinite(routeIndex)) return null;
+  const segment = Math.floor(routeIndex);
+  if (segment < 0 || segment >= cumulative.length - 1) return null;
+  const t = routeIndex - segment;
+  return cumulative[segment]! + (t * (cumulative[segment + 1]! - cumulative[segment]!));
+}
+
+/**
+ * Position (m) de `point` sur la trace. `hintM` : position connue (geste,
+ * kilométrage d'une ligne) — choisit le bon passage d'une boucle ou d'un
+ * aller-retour (cf. routePatchBoundaryDistanceM) ; sans elle, projection.
+ */
+function routePositionM(
+  point: { lat: number; lon: number },
+  routePoints: Array<{ lat: number; lon: number }>,
+  cumulative: number[],
+  hintM: number | null,
+): number | null {
+  if (hintM == null) return projectPointAlongRoute(point, routePoints, cumulative)?.distanceM ?? null;
+  return routePatchBoundaryDistanceM({ ...point, kind: 'waypoint', distanceM: hintM }, routePoints, cumulative);
 }
 
 export interface InsertWaypointOptions {

@@ -49,6 +49,11 @@ type HoverState = 'trace' | 'route' | 'poi';
 export interface RouteEditPoint {
   lat: number;
   lon: number;
+  /**
+   * Position saisie sur la trace (indice du segment + fraction) : désigne le
+   * passage tiré sur un aller-retour ou une boucle.
+   */
+  routeIndex?: number;
 }
 
 export interface RouteEditTarget {

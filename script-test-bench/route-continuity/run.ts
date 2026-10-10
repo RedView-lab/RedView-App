@@ -136,7 +136,12 @@ async function main() {
   const inputs = await loadSrc<any>('src/features/itineraryPanel/hooks/useItineraryBrouterRouting/routingInputs.ts');
   const elastic = await loadSrc<any>('src/features/itineraryPanel/hooks/useItineraryBrouterRouting/elasticRoutePatch.ts');
   const shared = await loadSrc<any>('src/features/itineraryPanel/hooks/useItineraryBrouterRoutingShared/index.ts');
-  const timeline = await loadSrc<any>('src/features/itineraryPanel/components/ItineraryPanelContainer/timelineMutations.ts');
+  // timelineMutations.ts a été découpé (patch de reroutage, placement des extrémités) : mêmes fonctions.
+  const timeline = {
+    ...await loadSrc<any>('src/features/itineraryPanel/components/ItineraryPanelContainer/timelineMutations.ts'),
+    ...await loadSrc<any>('src/features/itineraryPanel/components/ItineraryPanelContainer/timelineRoutePatch.ts'),
+    ...await loadSrc<any>('src/features/itineraryPanel/components/ItineraryPanelContainer/routeEndpointPlacement.ts'),
+  };
   const forbidden = await loadSrc<any>('src/features/itineraryPanel/context/ProjectStore/forbiddenZonePatch.ts');
   const gaps = await loadSrc<any>('src/features/itineraryPanel/components/ItineraryPanelContainer/importedGpxGaps.ts');
   const gpxParse = await loadSrc<any>('src/features/poi/lib/gpx-parse.ts');

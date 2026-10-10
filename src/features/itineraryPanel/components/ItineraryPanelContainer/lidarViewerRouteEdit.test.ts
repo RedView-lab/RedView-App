@@ -42,6 +42,28 @@ describe('applyLidarViewerRouteEdit', () => {
     expect(itinerary.pendingRoutePatch?.via).toEqual([{ lat: step.lat, lon: step.lon }]);
   });
 
+  it('inserts the step after the summit when the way back of an out-and-back is dragged (H2-2)', () => {
+    const itinerary = createDefaultItinerary();
+    // Aller au sommet (km 5) puis retour par la même route : le km 7 est au même endroit que le km 3.
+    const kmAt = (index: number) => (index <= 5 ? index : 10 - index);
+    itinerary.timeline = [
+      { id: 'start', kind: 'start', label: 'A', distanceKm: 0, ...at(0) },
+      { id: 'summit', kind: 'waypoint', label: 'Sommet', distanceKm: 5, ...at(5) },
+      { id: 'end', kind: 'end', label: 'B', distanceKm: 10, ...at(0) },
+    ];
+    const points = Array.from({ length: 11 }, (_, index) => ({ ...at(kmAt(index)), distanceM: index * 1_000 }));
+    itinerary.gpxRoute = { name: null, points, originalPoints: points, source: 'brouter' };
+    itinerary.gpxRoute.routedInputsKey = getRoutingInputsSignature(itinerary);
+    const next = viewerPoints(itinerary);
+    next[7] = at(3, 800);
+
+    expect(applyLidarViewerRouteEdit(itinerary, next, 'move_point')).toBe('applied');
+
+    expect(itinerary.timeline.map((row) => row.id).slice(0, 2)).toEqual(['start', 'summit']);
+    expect(itinerary.timeline[2]!.kind).toBe('waypoint');
+    expect(itinerary.pendingRoutePatch?.start).toMatchObject({ distanceM: 5_000 });
+  });
+
   it('crops when the start is placed on the route, reroutes when placed off it', () => {
     const cropped = routedItinerary(20);
     const onRoute = [at(8), ...viewerPoints(cropped).slice(9)];

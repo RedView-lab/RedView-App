@@ -53,6 +53,20 @@ function meridianRoute(legsKm: number[], startLat = 44): RoutePoints {
   return points;
 }
 
+/** Comme `meridianRoute`, avec un point tous les `stepM` mètres (aller-retour court). */
+function fineMeridianRoute(legsM: number[], stepM = 100, startLat = 44): RoutePoints {
+  const points: RoutePoints = [{ lat: startLat, lon: 6, distanceM: 0 }];
+  let lat = startLat;
+  for (const legM of legsM) {
+    const step = (Math.sign(legM) * stepM) / 1000 / KM_PER_DEGREE;
+    for (let m = 0; m < Math.abs(legM); m += stepM) {
+      lat += step;
+      points.push({ lat, lon: 6, distanceM: points.length * stepM });
+    }
+  }
+  return points;
+}
+
 function wholeRoutePatch(points: RoutePoints): ItineraryPendingRoutePatch {
   const first = points[0]!;
   const last = points[points.length - 1]!;
@@ -219,6 +233,36 @@ describe('replaceRouteSegment', () => {
     const result = replaceRouteSegment(base, patch, replacement)!;
     expect(result.some((point) => point.lon > 6.001)).toBe(false);
     expect(longestStepM(result)).toBeLessThan(1_001);
+  });
+
+  it('keeps the summit of a short out-and-back when a bound sits on the way back (D1-1)', () => {
+    // 5 km de montée au sommet, 5 km de descente par la même route, puis 5 km plus loin.
+    const base = fineMeridianRoute([5_000, -5_000, -5_000]);
+    const summitLat = base[50]!.lat;
+    // Borne de début sur la descente (km 7,2, même endroit que le km 2,8), fin au km 12.
+    const startBound = base[72]!;
+    const endBound = base[120]!;
+    // Tronçon routé : part de la borne, s'écarte de 150 m, rejoint le tracé au km 12.
+    const detour = parallelPiece(base, 76, 116, 150);
+    const replacement = [
+      ...base.slice(72, 76).map((point) => ({ lat: point.lat, lon: point.lon })),
+      ...detour,
+      ...base.slice(117, 121).map((point) => ({ lat: point.lat, lon: point.lon })),
+    ];
+    const patch: ItineraryPendingRoutePatch = {
+      start: { lat: startBound.lat, lon: startBound.lon, kind: 'waypoint', distanceM: 7_200 },
+      end: { lat: endBound.lat, lon: endBound.lon, kind: 'waypoint', distanceM: 12_000 },
+      via: [],
+    };
+
+    expect(planRouteSplice(base, patch, replacement)).toMatchObject({ ok: true });
+    const plan = planRouteSplice(base, patch, replacement);
+    expect(plan.ok && plan.startCutM).toBeCloseTo(7_200, -1);
+    expect(anchorRoutePatchBound(patch.start, base).lat).toBeCloseTo(startBound.lat, 9);
+    const result = replaceRouteSegment(base, patch, replacement)!;
+    expect(Math.max(...result.map((point) => point.lat))).toBeCloseTo(summitLat, 9);
+    expect(result[result.length - 1]!.distanceM!).toBeGreaterThan(14_900);
+    expect(longestStepM(result)).toBeLessThan(200);
   });
 
   it('refuses bounds resolved on two different passes (would duplicate the route)', () => {

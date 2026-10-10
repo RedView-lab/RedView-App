@@ -101,7 +101,8 @@ export function applyLidarViewerRouteEdit(
       if (moved === 0 || moved === stored.length - 1) {
         return placeRouteEndpoint(itinerary, moved === 0 ? 'start' : 'end', drop, pointLabel(drop)) ? 'applied' : 'ignored';
       }
-      const result = insertWaypointAtRoutePosition(itinerary.timeline, stored, stored[moved]!, drop);
+      const anchor = { lat: stored[moved]!.lat, lon: stored[moved]!.lon, routeIndex: moved };
+      const result = insertWaypointAtRoutePosition(itinerary.timeline, stored, anchor, drop);
       if (!result) return 'ignored';
       if (result.isDirectOnRoute) {
         delete itinerary.pendingRoutePatch;

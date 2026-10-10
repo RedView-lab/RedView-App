@@ -39,7 +39,7 @@ export function cropRoutePoints(
     ? PATCH_BOUNDARY_HINT_TOLERANCE_M + (Math.abs(hintM) * PATCH_BOUNDARY_HINT_RELATIVE_TOLERANCE)
     : null;
   const projection = rangeM != null
-    ? projectOnRouteRange(at, points, distances, hintM! - rangeM, hintM! + rangeM)
+    ? projectOnRouteRange(at, points, distances, hintM! - rangeM, hintM! + rangeM, hintM)
     : projectOnRouteRange(at, points, distances, 0, totalM);
   if (!projection || projection.offsetM > options.toleranceM) return null;
   const cutM = Math.min(totalM, Math.max(0, projection.alongM));
@@ -168,7 +168,7 @@ function findRouteSeam(
     if (side === 'start' ? index > limitIndex : index < limitIndex) break;
     // Fenêtre de recherche qui suit le chemin parcouru sur le tronçon.
     const rangeM = SEAM_BOUND_SEARCH_M + walkedM * 1.5;
-    const projection = projectOnRouteRange(replacement[index]!, routePoints, distances, boundM - rangeM, boundM + rangeM);
+    const projection = projectOnRouteRange(replacement[index]!, routePoints, distances, boundM - rangeM, boundM + rangeM, boundM);
     if (!projection) continue;
     if (index === first) gapM = projection.offsetM;
     if (projection.offsetM <= ROUTE_SEAM_TOLERANCE_M) return { cutM: projection.alongM, index };

@@ -31,8 +31,11 @@ const ROUTE_GRAB_END_MEASURE_PX = ROUTE_GRAB_END_DEAD_ENTER_PX + ROUTE_GRAB_END_
 export type RouteGrabMode = 'enter' | 'exit';
 
 export interface RouteGrabHit {
-  /** Point saisi sur la trace (interpolé en continu sur le segment). */
-  snapped: { lat: number; lon: number };
+  /**
+   * Point saisi sur la trace (interpolé en continu sur le segment) ;
+   * `routeIndex` = indice du segment + fraction, dans `points`.
+   */
+  snapped: { lat: number; lon: number; routeIndex: number };
   /** Distance écran pointeur ↔ trace, en px. */
   distancePx: number;
 }
@@ -230,6 +233,7 @@ export function findRouteGrabHit(
     snapped: {
       lat: p0.lat + bestT * (p1.lat - p0.lat),
       lon: p0.lon + bestT * (p1.lon - p0.lon),
+      routeIndex: bestSegment + bestT,
     },
     distancePx: Math.sqrt(bestDistanceSq),
   };

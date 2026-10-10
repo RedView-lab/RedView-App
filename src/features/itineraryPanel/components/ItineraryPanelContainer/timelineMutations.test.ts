@@ -5,7 +5,7 @@ import { createDefaultItinerary } from '../../lib/project';
 import { haversineRouteDistanceM } from '../../lib/routes';
 import type { Itinerary } from '../../types';
 
-import { buildTimelineAfterRemoval } from './timelineMutations';
+import { buildTimelineAfterRemoval, insertWaypointAtRoutePosition } from './timelineMutations';
 import { buildPendingRoutePatchForEditedRow, setPendingRoutePatchAfterRemoval } from './timelineRoutePatch';
 import { placeRouteEndpoint } from './routeEndpointPlacement';
 
@@ -97,6 +97,39 @@ describe('placeRouteEndpoint on the route (crop)', () => {
 
     expect(itinerary.gpxRoute!.points).toHaveLength(101);
     expect(itinerary.pendingRoutePatch?.start).toMatchObject({ kind: 'start', ...at(30, 2_000) });
+  });
+});
+
+describe('insertWaypointAtRoutePosition', () => {
+  it('orders a step grabbed on the way back of an out-and-back after the summit (G3-1)', () => {
+    // Aller au sommet (km 5) puis retour : le km 7,2 est au même endroit que le km 2,8.
+    const kmAt = (index: number) => (index <= 50 ? index / 10 : 10 - (index / 10));
+    const points = Array.from({ length: 101 }, (_, index) => at(kmAt(index)));
+    const timeline: Itinerary['timeline'] = [
+      { id: 'start', kind: 'start', label: 'A', distanceKm: 0, ...at(0) },
+      { id: 'summit', kind: 'waypoint', label: 'Sommet', distanceKm: 5, ...at(5) },
+      { id: 'end', kind: 'end', label: 'B', distanceKm: 10, ...at(0) },
+    ];
+    // Saisi sur le segment 72 → 73 de la trace (descente), tiré vers l'est.
+    const anchor = { ...points[72]!, routeIndex: 72 };
+
+    const result = insertWaypointAtRoutePosition(timeline, points, anchor, at(2.8, 600))!;
+
+    expect(result.anchorDistanceM).toBeCloseTo(7_200, -1);
+    expect(timeline.map((row) => row.id)).toEqual(['start', 'summit', result.newRowId, 'end']);
+  });
+
+  it('keeps the first pass without a known position on the route', () => {
+    const points = Array.from({ length: 21 }, (_, index) => at(index));
+    const timeline: Itinerary['timeline'] = [
+      { id: 'start', kind: 'start', label: 'A', distanceKm: 0, ...at(0) },
+      { id: 'end', kind: 'end', label: 'B', distanceKm: 20, ...at(20) },
+    ];
+
+    const result = insertWaypointAtRoutePosition(timeline, points, at(12.5), at(12.5, 500))!;
+
+    expect(result.anchorDistanceM).toBeCloseTo(12_500, -1);
+    expect(timeline.map((row) => row.id)).toEqual(['start', result.newRowId, 'end']);
   });
 });
 
