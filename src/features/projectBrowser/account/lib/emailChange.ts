@@ -6,7 +6,12 @@
  */
 import { translateAppText } from '@/shared/i18n';
 import { apiFetch } from '@/shared/lib/apiFetch';
-import { getAppwriteJwt, readStoredAppwriteSession, saveStoredAppwriteSession } from '@/shared/services/appwrite';
+import {
+  forgetRecentAppwriteUser,
+  getAppwriteJwt,
+  readStoredAppwriteSession,
+  saveStoredAppwriteSession,
+} from '@/shared/services/appwrite';
 
 /** Appwrite + envoi d'un e-mail (Resend) côté serveur. */
 const CHANGE_EMAIL_TIMEOUT_MS = 30_000;
@@ -47,5 +52,6 @@ export async function confirmEmailChange(newEmail: string, code: string, passwor
   });
   const stored = readStoredAppwriteSession();
   if (stored?.user.id) saveStoredAppwriteSession({ ...stored.user, email });
+  forgetRecentAppwriteUser();
   return email;
 }

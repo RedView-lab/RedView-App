@@ -20,7 +20,7 @@ vi.mock('@/shared/services/appwrite', () => ({
     get: vi.fn(),
     createOAuth2Session: vi.fn(),
   },
-  saveStoredAppwriteSession: vi.fn(),
+  rememberAppwriteUser: vi.fn(),
 }));
 vi.mock('@/shared/lib/analytics', () => ({ trackAnalyticsEvent: vi.fn(), trackScreen: vi.fn() }));
 

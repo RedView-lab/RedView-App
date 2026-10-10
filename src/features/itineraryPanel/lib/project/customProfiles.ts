@@ -1,6 +1,6 @@
 import { translateAppText } from '@/shared/i18n';
 import { logger } from '@/shared/lib/logger';
-import { account, getAppwriteUser, getSessionUserIdSync } from '@/shared/services/appwrite';
+import { account, getAppwriteUser, getSessionUserIdSync, rememberAppwriteUser } from '@/shared/services/appwrite';
 import type { SavedCustomProfile } from '../../types';
 
 export type { SavedCustomProfile } from '../../types';
@@ -238,7 +238,7 @@ async function runSync(): Promise<void> {
       });
     } else {
       try {
-        await account.updatePrefs({ ...prefs, [PREFS_KEY]: merged });
+        rememberAppwriteUser(await account.updatePrefs({ ...prefs, [PREFS_KEY]: merged }));
         pushed = true;
       } catch (error) {
         logger.projects.warn('[routing-profiles] account sync failed, will retry', error);

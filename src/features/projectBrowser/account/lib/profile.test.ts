@@ -15,6 +15,7 @@ vi.mock('@/shared/services/appwrite', () => ({
   },
   clearStoredAppwriteSession: () => {},
   getAppwriteUser: async () => appwrite.user,
+  rememberAppwriteUser: () => {},
 }));
 
 const { accountUpdateFailureMessage, saveAccountIdentity, updateAccountPassword } = await import('./profile');

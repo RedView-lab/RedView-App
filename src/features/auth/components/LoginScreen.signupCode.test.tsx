@@ -29,7 +29,7 @@ vi.mock('@/shared/services/appwrite', () => ({
     createEmailPasswordSession: auth.createEmailPasswordSession,
     get: vi.fn(async () => ({ $id: 'u1', email: 'rider@example.test', name: 'rider' })),
   },
-  saveStoredAppwriteSession: vi.fn(),
+  rememberAppwriteUser: vi.fn(),
 }));
 vi.mock('@/shared/lib/analytics', () => ({ trackAnalyticsEvent: vi.fn(), trackScreen: vi.fn() }));
 

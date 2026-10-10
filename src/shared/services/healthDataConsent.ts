@@ -18,7 +18,7 @@ import {
   type HealthDataConsent,
 } from '@/shared/lib/healthDataConsent';
 import { notify } from '@/shared/lib/notify';
-import { account, getAppwriteUser, getSessionUserIdSync } from '@/shared/services/appwrite';
+import { account, getAppwriteUser, getSessionUserIdSync, rememberAppwriteUser } from '@/shared/services/appwrite';
 
 const PREFS_KEY = 'healthDataConsent';
 
@@ -38,7 +38,7 @@ function readPrefs(user: Models.User<Models.Preferences> | null): Prefs {
 
 /** Consentement du compte connecté (null : aucun, ou d'une ancienne version — voir `isHealthDataConsentValid`). */
 export async function loadHealthDataConsent(): Promise<HealthDataConsent | null> {
-  const user = await getAppwriteUser();
+  const user = await getAppwriteUser({ reuseRecent: true });
   const userId = user?.$id ?? getSessionUserIdSync();
   if (!userId) return null;
   const fromAccount = user ? parseHealthDataConsent(readPrefs(user)[PREFS_KEY]) : null;
@@ -56,7 +56,7 @@ async function writeAccountConsent(consent: HealthDataConsent | null): Promise<v
   const user = await getAppwriteUser();
   if (!user) throw new Error('Session utilisateur introuvable.');
   // Les préférences sont remplacées en bloc : partir de celles du compte.
-  await account.updatePrefs({ ...readPrefs(user), [PREFS_KEY]: consent });
+  rememberAppwriteUser(await account.updatePrefs({ ...readPrefs(user), [PREFS_KEY]: consent }));
   writeHealthDataConsentMirror(user.$id, consent);
   cached = { userId: user.$id, consent, at: Date.now() };
 }

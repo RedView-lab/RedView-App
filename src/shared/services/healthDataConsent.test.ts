@@ -24,6 +24,7 @@ vi.mock('@/shared/services/appwrite', () => ({
   },
   getAppwriteUser: async () => state.user,
   getSessionUserIdSync: () => state.user?.$id ?? null,
+  rememberAppwriteUser: () => {},
 }));
 vi.mock('@/shared/lib/notify', () => ({ notify: { error: vi.fn(), success: vi.fn(), info: vi.fn() } }));
 

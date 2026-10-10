@@ -1,11 +1,10 @@
 import { Suspense, lazy, useEffect, useRef, useState, type ReactNode } from 'react'
 import {
-  account,
   clearStoredAppwriteSession,
+  fetchAppwriteUser,
   getAppwriteUser,
   hasStoredAppwriteSession,
   readStoredAppwriteSession,
-  saveStoredAppwriteSession,
 } from './shared/services/appwrite'
 import { PROJECT_LOCATION_CHANGE_EVENT, readProjectIdFromPath } from './shared/lib/projectLocation'
 import { LoginScreen, probeSession, SESSION_EXPIRED_EVENT } from './features/auth'
@@ -90,13 +89,12 @@ function isPasswordResetLocation(): boolean {
 
 /**
  * Vérifie la session auprès d'Appwrite (borné par SESSION_PROBE_TIMEOUT_MS) et
- * synchronise le snapshot local : sauvegardé si valide, effacé seulement sur 401.
+ * synchronise le snapshot local : sauvegardé si valide (par fetchAppwriteUser,
+ * qui retient aussi le compte lu), effacé seulement sur 401.
  */
 async function probeAppwriteSession(): Promise<SessionProbeResult> {
-  const result = await probeSession(() => account.get())
-  if (result.kind === 'authenticated') {
-    saveStoredAppwriteSession(result.user)
-  } else if (result.kind === 'unauthenticated') {
+  const result = await probeSession(fetchAppwriteUser)
+  if (result.kind === 'unauthenticated') {
     clearStoredAppwriteSession()
   }
   return result
@@ -223,7 +221,8 @@ function App() {
   useEffect(() => {
     if (!sessionUserId || sessionUserId === DEV_FALLBACK_USER_ID) return
     let cancelled = false
-    void getAppwriteUser().then((user) => {
+    // Le compte que la vérification de session ou la connexion vient de lire.
+    void getAppwriteUser({ reuseRecent: true }).then((user) => {
       if (!cancelled && user && user.$id === sessionUserId) syncAnalyticsAccount(user)
     })
     return () => {

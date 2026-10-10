@@ -2,6 +2,7 @@ import {
   account,
   clearStoredAppwriteSession,
   getAppwriteUser,
+  rememberAppwriteUser,
 } from '@/shared/services/appwrite';
 import { normalizeAccountSportLabel } from '@/shared/services/accountPrefs';
 import {
@@ -111,7 +112,8 @@ export function formatLastConnection(lastSignInAt: string | null) {
 }
 
 export async function loadAccountProfile(fallbackEmail: string, fallbackDisplayName: string): Promise<AccountProfile> {
-  const user = await getAppwriteUser();
+  // Ouverture du gestionnaire de projets : souvent juste après la vérification de session.
+  const user = await getAppwriteUser({ reuseRecent: true });
   if (!user) throw new Error(translateAppText('Session utilisateur introuvable.'));
 
   const metadata = readMetadata(user);
@@ -140,11 +142,13 @@ export async function saveAccountIdentity(form: AccountIdentityForm) {
   const fullName = `${form.firstName.trim()} ${form.lastName.trim()}`.trim();
   try {
     if (fullName && fullName !== user.name) await account.updateName(fullName);
-    return await account.updatePrefs({
+    const updated = await account.updatePrefs({
       ...readMetadata(user),
       first_name: form.firstName.trim(),
       last_name: form.lastName.trim(),
     });
+    rememberAppwriteUser(updated);
+    return updated;
   } catch (error) {
     console.warn('[profile] saveAccountIdentity failed', error);
     throw new Error(appwriteFailureMessage(error, 'Impossible d’enregistrer le compte.'));
@@ -163,7 +167,9 @@ export async function saveAccountPractice(form: AccountPracticeForm) {
   };
 
   try {
-    return await account.updatePrefs(updatedPrefs);
+    const updated = await account.updatePrefs(updatedPrefs);
+    rememberAppwriteUser(updated);
+    return updated;
   } catch (err) {
     console.warn('[profile] updatePrefs failed', err);
     return user;
@@ -186,7 +192,7 @@ export function accountUpdateFailureMessage(error: unknown, fallback: string): s
 /** `currentPassword` : exigé par Appwrite quand le compte a déjà un mot de passe. */
 export async function updateAccountPassword(newPassword: string, currentPassword?: string) {
   try {
-    await account.updatePassword(newPassword, currentPassword || undefined);
+    rememberAppwriteUser(await account.updatePassword(newPassword, currentPassword || undefined));
   } catch (error) {
     console.warn('[profile] updatePassword failed', error);
     throw new Error(accountUpdateFailureMessage(error, 'Impossible de mettre à jour le mot de passe.'));

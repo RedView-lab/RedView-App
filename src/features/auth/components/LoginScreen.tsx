@@ -12,7 +12,7 @@ import {
   AppwriteException,
   ID,
   OAuthProvider,
-  saveStoredAppwriteSession,
+  rememberAppwriteUser,
 } from '@/shared/services/appwrite'
 import VerificationCodeModal from './VerificationCodeModal'
 import {
@@ -301,7 +301,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
       }
 
       const user = await timed(account.get())
-      saveStoredAppwriteSession({ id: user.$id, email: user.email, name: user.name })
+      rememberAppwriteUser(user)
       trackAnalyticsEvent({
         name: mode === 'signup' ? 'signup_completed' : 'login_completed',
         data: { method: 'email' },
@@ -339,7 +339,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
       // Compte créé avec e-mail vérifié -> ouvre la session
       await openEmailSession(trimmedEmail, password)
       const user = await timed(account.get())
-      saveStoredAppwriteSession({ id: user.$id, email: user.email, name: user.name })
+      rememberAppwriteUser(user)
       trackAnalyticsEvent({ name: 'signup_completed', data: { method: 'email' } })
 
       setShowVerificationModal(false)

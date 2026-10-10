@@ -1,7 +1,7 @@
 import {
   client,
   getAppwriteUser,
-  readStoredAppwriteSession,
+  getSessionUserIdSync,
   Role,
   Permission,
   Query,
@@ -17,12 +17,13 @@ function safeThumbnailFileId(projectId: string): string {
   return sanitized.slice(0, 36) || 'thumbnail';
 }
 
+/** Identifiant connu sans aller-retour (comme `getCurrentUserId`), GET /account seulement à défaut. */
 async function getAuthenticatedUserId(): Promise<string> {
+  const known = getSessionUserIdSync();
+  if (known) return known;
+
   const user = await getAppwriteUser();
   if (user?.$id) return user.$id;
-
-  const storedSession = readStoredAppwriteSession();
-  if (storedSession?.user.id) return storedSession.user.id;
 
   throw new Error('Not authenticated');
 }

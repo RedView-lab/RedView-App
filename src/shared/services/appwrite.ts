@@ -110,6 +110,7 @@ export function saveStoredAppwriteSession(user: { id: string; email?: string; na
 
 export function clearStoredAppwriteSession(): void {
   cachedSessionUserId = null;
+  recentUser = null;
   jwtCache.clear();
   if (typeof window === 'undefined') return;
   try {
@@ -119,37 +120,88 @@ export function clearStoredAppwriteSession(): void {
   }
 }
 
-let inFlightUserPromise: Promise<Models.User<Models.Preferences> | null> | null = null;
+// ── Dernier compte lu ──────────────────────────────────────────────────────
+// GET /account renvoie tout le compte. Les lectures d'affichage qui suivent de
+// peu une autre (vérification de session au démarrage, connexion, mesure
+// d'audience, profil du gestionnaire de projets, état de l'accord .fit)
+// reprennent la dernière réponse (`reuseRecent`) : le parcours principal
+// (e2e:journey) faisait 19 GET /account. Chaque modification du compte
+// (préférences, nom, mot de passe, e-mail) remplace ou oublie ce compte ; une
+// lecture suivie d'une réécriture des préférences (remplacées en bloc) lit
+// toujours le compte frais.
+type AppwriteUser = Models.User<Models.Preferences>;
+
+const RECENT_USER_MAX_AGE_MS = 15_000;
+let recentUser: { user: AppwriteUser; at: number } | null = null;
+
+/** Retient un compte que le serveur vient de renvoyer (GET /account, ou réponse d'une modification). */
+export function rememberAppwriteUser(user: AppwriteUser): void {
+  recentUser = { user, at: Date.now() };
+  saveStoredAppwriteSession({ id: user.$id, email: user.email, name: user.name });
+}
+
+/** Le compte a changé sans que sa nouvelle version soit connue (changement d'e-mail par l'API). */
+export function forgetRecentAppwriteUser(): void {
+  recentUser = null;
+}
+
+function readRecentUser(): AppwriteUser | null {
+  if (!recentUser || Date.now() - recentUser.at > RECENT_USER_MAX_AGE_MS) return null;
+  return recentUser.user.$id === getSessionUserIdSync() ? recentUser.user : null;
+}
+
+/** GET /account en cours, partagé par les appelants simultanés. */
+type AccountRequest = { raw: Promise<AppwriteUser>; handled: Promise<AppwriteUser | null> | null };
+let inFlightAccount: AccountRequest | null = null;
+
+function accountRequest(): AccountRequest {
+  if (inFlightAccount) return inFlightAccount;
+  const raw = account.get().then((user) => {
+    rememberAppwriteUser(user);
+    return user;
+  });
+  const request: AccountRequest = { raw, handled: null };
+  inFlightAccount = request;
+  const clear = () => {
+    if (inFlightAccount === request) inFlightAccount = null;
+  };
+  raw.then(clear, clear);
+  return request;
+}
+
+/**
+ * GET /account brut (rejette sur toute erreur, pour qui doit distinguer un 401
+ * d'une coupure : vérification de session au démarrage), partagé avec les
+ * `getAppwriteUser` simultanés.
+ */
+export function fetchAppwriteUser(): Promise<AppwriteUser> {
+  return accountRequest().raw;
+}
 
 /**
  * Interroge GET /account. Renvoie `null` si l'utilisateur n'est pas connecté ou
  * si le réseau est indisponible. Seul un vrai 401 (session absente / expirée)
  * efface la session locale et émet l'événement d'expiration ; une erreur réseau
  * conserve la session connue (les sauvegardes continuent sous le bon compte).
+ *
+ * `reuseRecent` : un compte lu il y a moins de 15 s suffit (affichage, mesure
+ * d'audience) — jamais avant de réécrire les préférences.
  */
-export async function getAppwriteUser(): Promise<Models.User<Models.Preferences> | null> {
-  if (!inFlightUserPromise) {
-    inFlightUserPromise = (async () => {
-      try {
-        const user = await account.get();
-        saveStoredAppwriteSession({ id: user.$id, email: user.email, name: user.name });
-        return user;
-      } catch (error) {
-        if (isSessionRejectedError(error)) {
-          markAppwriteSessionExpired();
-        } else {
-          console.warn('[appwrite] account.get failed (session kept)', error);
-        }
-        return null;
-      }
-    })();
+export async function getAppwriteUser(options: { reuseRecent?: boolean } = {}): Promise<AppwriteUser | null> {
+  if (options.reuseRecent) {
+    const recent = readRecentUser();
+    if (recent) return recent;
   }
-
-  try {
-    return await inFlightUserPromise;
-  } finally {
-    inFlightUserPromise = null;
-  }
+  const request = accountRequest();
+  request.handled ??= request.raw.catch((error: unknown) => {
+    if (isSessionRejectedError(error)) {
+      markAppwriteSessionExpired();
+    } else {
+      console.warn('[appwrite] account.get failed (session kept)', error);
+    }
+    return null;
+  });
+  return request.handled;
 }
 
 /** JWT réutilisé tant qu'il est frais (jwtCache.ts : Appwrite en limite la création à 100/h par utilisateur). */
