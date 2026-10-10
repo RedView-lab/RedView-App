@@ -16,9 +16,13 @@ vi.mock('@/shared/services/appwrite', () => ({
   clearStoredAppwriteSession: () => {},
   getAppwriteUser: async () => appwrite.user,
   rememberAppwriteUser: () => {},
+  updateAccountPrefs: async (update: (prefs: Record<string, unknown>, user: Record<string, unknown>) => unknown) => {
+    const next = await update({ ...(appwrite.user.prefs as Record<string, unknown>) }, appwrite.user);
+    return next ? appwrite.updatePrefs(next as Record<string, unknown>) : appwrite.user;
+  },
 }));
 
-const { accountUpdateFailureMessage, saveAccountIdentity, updateAccountPassword } = await import('./profile');
+const { accountUpdateFailureMessage, saveAccountIdentity, saveAccountPractice, updateAccountPassword } = await import('./profile');
 
 /** Forme d'une AppwriteException : `code` HTTP + `type` stable. */
 const appwriteError = (code: number, type: string) => Object.assign(new Error('english developer message'), { code, type });
@@ -68,5 +72,19 @@ describe('saveAccountIdentity', () => {
   it('un échec est remonté (plus de « Coordonnées enregistrées » quand rien n’est parti)', async () => {
     appwrite.updatePrefs.mockRejectedValue(new TypeError('Failed to fetch'));
     await expect(saveAccountIdentity({ firstName: 'Grace', lastName: 'Hopper', email: '' })).rejects.toThrow(/^Impossible de joindre/);
+  });
+});
+
+describe('saveAccountPractice', () => {
+  it('enregistre pays et sports en gardant les autres préférences', async () => {
+    appwrite.user.prefs = { healthDataConsent: { version: 1 } };
+    await saveAccountPractice({ country: 'FR', sports: [] });
+    expect(appwrite.updatePrefs).toHaveBeenCalledWith({ healthDataConsent: { version: 1 }, country: 'FR', sports: [] });
+    appwrite.user.prefs = {};
+  });
+
+  it('un échec est remonté (l’écran les marquait enregistrés quand rien n’était parti)', async () => {
+    appwrite.updatePrefs.mockRejectedValue(new TypeError('Failed to fetch'));
+    await expect(saveAccountPractice({ country: 'FR', sports: [] })).rejects.toThrow(/^Impossible de joindre/);
   });
 });

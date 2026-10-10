@@ -185,7 +185,7 @@ export function fetchAppwriteUser(): Promise<AppwriteUser> {
  * conserve la session connue (les sauvegardes continuent sous le bon compte).
  *
  * `reuseRecent` : un compte lu il y a moins de 15 s suffit (affichage, mesure
- * d'audience) — jamais avant de réécrire les préférences.
+ * d'audience). Les préférences se réécrivent par `updateAccountPrefs`.
  */
 export async function getAppwriteUser(options: { reuseRecent?: boolean } = {}): Promise<AppwriteUser | null> {
   if (options.reuseRecent) {
@@ -202,6 +202,48 @@ export async function getAppwriteUser(options: { reuseRecent?: boolean } = {}): 
     return null;
   });
   return request.handled;
+}
+
+type AccountPrefs = Record<string, unknown>;
+
+/** Écritures des préférences de cet onglet, l'une après l'autre. */
+let prefsWrites: Promise<unknown> = Promise.resolve();
+
+/**
+ * Réécrit les préférences du compte, qu'Appwrite remplace en bloc : `update`
+ * reçoit celles d'un compte relu juste avant et rend les nouvelles (null : rien
+ * à écrire). Une écriture à la fois dans l'onglet, chacune sur une lecture
+ * faite après la précédente (jamais une lecture déjà en cours, qui peut la
+ * précéder) : deux écritures lancées ensemble (profils de routage, accord
+ * .fit, compte) partaient du même état et la dernière effaçait la clé de
+ * l'autre — un retrait de l'accord .fit pouvait être annulé par la
+ * synchronisation des profils.
+ *
+ * Rend le compte écrit (ou relu, sans écriture) ; null sans session (401) ;
+ * lève sur une autre erreur.
+ */
+export function updateAccountPrefs(
+  update: (prefs: AccountPrefs, user: AppwriteUser) => AccountPrefs | null | Promise<AccountPrefs | null>,
+): Promise<AppwriteUser | null> {
+  const run = prefsWrites.then(async () => {
+    let user: AppwriteUser;
+    try {
+      user = await account.get();
+    } catch (error) {
+      if (!isSessionRejectedError(error)) throw error;
+      markAppwriteSessionExpired();
+      return null;
+    }
+    rememberAppwriteUser(user);
+    const prefs = user.prefs && typeof user.prefs === 'object' ? { ...(user.prefs as AccountPrefs) } : {};
+    const next = await update(prefs, user);
+    if (!next) return user;
+    const updated = await account.updatePrefs(next);
+    rememberAppwriteUser(updated);
+    return updated;
+  });
+  prefsWrites = run.catch(() => undefined);
+  return run;
 }
 
 /** JWT réutilisé tant qu'il est frais (jwtCache.ts : Appwrite en limite la création à 100/h par utilisateur). */

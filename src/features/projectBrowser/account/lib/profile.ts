@@ -3,6 +3,7 @@ import {
   clearStoredAppwriteSession,
   getAppwriteUser,
   rememberAppwriteUser,
+  updateAccountPrefs,
 } from '@/shared/services/appwrite';
 import { normalizeAccountSportLabel } from '@/shared/services/accountPrefs';
 import {
@@ -132,48 +133,40 @@ export async function loadAccountProfile(fallbackEmail: string, fallbackDisplayN
 }
 
 export async function saveAccountIdentity(form: AccountIdentityForm) {
-  const user = await getAppwriteUser();
-  if (!user) throw new Error(translateAppText('Session utilisateur introuvable.'));
-
   // L'adresse e-mail n'est pas modifiable ici (champ en lecture seule) :
   // Appwrite demanderait le mot de passe et la marquerait non vérifiée.
   // Un échec est remonté : « Coordonnées enregistrées » ne s'affichait
   // jusqu'ici même quand rien n'était parti.
   const fullName = `${form.firstName.trim()} ${form.lastName.trim()}`.trim();
+  let user;
   try {
-    if (fullName && fullName !== user.name) await account.updateName(fullName);
-    const updated = await account.updatePrefs({
-      ...readMetadata(user),
-      first_name: form.firstName.trim(),
-      last_name: form.lastName.trim(),
+    user = await updateAccountPrefs(async (prefs, current) => {
+      if (fullName && fullName !== current.name) await account.updateName(fullName);
+      return { ...prefs, first_name: form.firstName.trim(), last_name: form.lastName.trim() };
     });
-    rememberAppwriteUser(updated);
-    return updated;
   } catch (error) {
     console.warn('[profile] saveAccountIdentity failed', error);
     throw new Error(appwriteFailureMessage(error, 'Impossible d’enregistrer le compte.'));
   }
+  if (!user) throw new Error(translateAppText('Session utilisateur introuvable.'));
+  return user;
 }
 
+/** Pays et sports. Un échec est remonté : l'écran les marquait enregistrés quand rien n'était parti. */
 export async function saveAccountPractice(form: AccountPracticeForm) {
-  const user = await getAppwriteUser();
-  if (!user) throw new Error(translateAppText('Session utilisateur introuvable.'));
-
-  const currentPrefs = readMetadata(user);
-  const updatedPrefs = {
-    ...currentPrefs,
-    country: form.country,
-    sports: form.sports.map((sport, index) => buildSportEntry(sport, index)),
-  };
-
+  let user;
   try {
-    const updated = await account.updatePrefs(updatedPrefs);
-    rememberAppwriteUser(updated);
-    return updated;
-  } catch (err) {
-    console.warn('[profile] updatePrefs failed', err);
-    return user;
+    user = await updateAccountPrefs((prefs) => ({
+      ...prefs,
+      country: form.country,
+      sports: form.sports.map((sport, index) => buildSportEntry(sport, index)),
+    }));
+  } catch (error) {
+    console.warn('[profile] saveAccountPractice failed', error);
+    throw new Error(appwriteFailureMessage(error, 'Impossible d’enregistrer les informations de pratique.'));
   }
+  if (!user) throw new Error(translateAppText('Session utilisateur introuvable.'));
+  return user;
 }
 
 /** Refus d'Appwrite propres au mot de passe (le reste : appwriteFailureMessage). */

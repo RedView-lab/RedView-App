@@ -1,6 +1,6 @@
 import { translateAppText } from '@/shared/i18n';
 import { logger } from '@/shared/lib/logger';
-import { account, getAppwriteUser, getSessionUserIdSync, rememberAppwriteUser } from '@/shared/services/appwrite';
+import { getSessionUserIdSync, updateAccountPrefs } from '@/shared/services/appwrite';
 import type { SavedCustomProfile } from '../../types';
 
 export type { SavedCustomProfile } from '../../types';
@@ -221,40 +221,44 @@ function schedulePush(): void {
 async function runSync(): Promise<void> {
   // Pas de session connue (mode local de développement) : bibliothèque locale seule.
   if (!getSessionUserIdSync()) return;
-  const user = await getAppwriteUser();
-  if (!user) return;
 
-  const snapshot = readLibrary();
-  const library = snapshot.ownerId === user.$id ? snapshot : emptyLibrary(user.$id);
-  const prefs = isRecord(user.prefs) ? (user.prefs as Record<string, unknown>) : {};
-  const merged = applyPending(sanitizeSavedCustomProfiles(prefs[PREFS_KEY]), library);
-  const hasPending = library.pendingUpserts.length > 0 || library.pendingDeletes.length > 0;
-
-  let pushed = !hasPending;
-  if (hasPending) {
-    if (JSON.stringify(merged).length > MAX_PREFS_PROFILES_CHARS) {
-      logger.projects.warn('[routing-profiles] library too large for account prefs, kept on this device', {
-        count: merged.length,
-      });
-    } else {
-      try {
-        rememberAppwriteUser(await account.updatePrefs({ ...prefs, [PREFS_KEY]: merged }));
-        pushed = true;
-      } catch (error) {
-        logger.projects.warn('[routing-profiles] account sync failed, will retry', error);
+  // Lecture du compte, fusion et envoi dans le créneau d'écriture des
+  // préférences (updateAccountPrefs) : une autre écriture (accord .fit,
+  // compte) ne peut pas partir du même état et effacer celle-ci, ni l'inverse.
+  let plan = null as { userId: string; library: LocalLibrary; merged: SavedCustomProfile[]; write: boolean } | null;
+  let pushed = false;
+  try {
+    await updateAccountPrefs((prefs, current) => {
+      const snapshot = readLibrary();
+      const library = snapshot.ownerId === current.$id ? snapshot : emptyLibrary(current.$id);
+      const merged = applyPending(sanitizeSavedCustomProfiles(prefs[PREFS_KEY]), library);
+      const hasPending = library.pendingUpserts.length > 0 || library.pendingDeletes.length > 0;
+      const tooLarge = hasPending && JSON.stringify(merged).length > MAX_PREFS_PROFILES_CHARS;
+      if (tooLarge) {
+        logger.projects.warn('[routing-profiles] library too large for account prefs, kept on this device', {
+          count: merged.length,
+        });
       }
-    }
+      plan = { userId: current.$id, library, merged, write: hasPending && !tooLarge };
+      return plan.write ? { ...prefs, [PREFS_KEY]: merged } : null;
+    });
+    pushed = plan?.write === true;
+  } catch (error) {
+    logger.projects.warn('[routing-profiles] account sync failed, will retry', error);
   }
-  syncedUserId = user.$id;
+  // Compte illisible (hors ligne, session refusée) : rien à fusionner.
+  if (!plan) return;
+  const { userId, library, merged } = plan;
+  syncedUserId = userId;
 
   // Modification locale pendant l'envoi : elle est rejouée sur le résultat et
   // repartira au prochain envoi (opérations idempotentes).
   const latest = readLibrary();
-  const changedMeanwhile = latest.ownerId === user.$id && latest.revision !== library.revision;
+  const changedMeanwhile = latest.ownerId === userId && latest.revision !== library.revision;
   const next: LocalLibrary = changedMeanwhile
     ? { ...latest, profiles: applyPending(merged, latest) }
     : {
-        ownerId: user.$id,
+        ownerId: userId,
         profiles: merged,
         pendingUpserts: pushed ? [] : library.pendingUpserts,
         pendingDeletes: pushed ? [] : library.pendingDeletes,

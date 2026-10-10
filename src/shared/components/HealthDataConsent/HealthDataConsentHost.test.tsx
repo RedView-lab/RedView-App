@@ -12,10 +12,13 @@ import { renderComponent, type RenderedComponent } from '@/shared/test/renderCom
 
 const state = vi.hoisted(() => ({ user: { $id: 'moi', prefs: {} as Record<string, unknown> } }));
 vi.mock('@/shared/services/appwrite', () => ({
-  account: { updatePrefs: async (prefs: Record<string, unknown>) => { state.user.prefs = prefs; return state.user; } },
   getAppwriteUser: async () => state.user,
   getSessionUserIdSync: () => state.user.$id,
-  rememberAppwriteUser: () => {},
+  async updateAccountPrefs(update: (prefs: Record<string, unknown>) => Record<string, unknown> | null) {
+    const next = update({ ...state.user.prefs });
+    if (next) state.user.prefs = next;
+    return state.user;
+  },
 }));
 vi.mock('@/shared/lib/notify', () => ({ notify: { error: vi.fn(), success: vi.fn(), info: vi.fn() } }));
 

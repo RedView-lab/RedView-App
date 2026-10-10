@@ -18,7 +18,7 @@ import {
   type HealthDataConsent,
 } from '@/shared/lib/healthDataConsent';
 import { notify } from '@/shared/lib/notify';
-import { account, getAppwriteUser, getSessionUserIdSync, rememberAppwriteUser } from '@/shared/services/appwrite';
+import { getAppwriteUser, getSessionUserIdSync, updateAccountPrefs } from '@/shared/services/appwrite';
 
 const PREFS_KEY = 'healthDataConsent';
 
@@ -53,10 +53,8 @@ export async function loadHealthDataConsent(): Promise<HealthDataConsent | null>
 }
 
 async function writeAccountConsent(consent: HealthDataConsent | null): Promise<void> {
-  const user = await getAppwriteUser();
+  const user = await updateAccountPrefs((prefs) => ({ ...prefs, [PREFS_KEY]: consent }));
   if (!user) throw new Error('Session utilisateur introuvable.');
-  // Les préférences sont remplacées en bloc : partir de celles du compte.
-  rememberAppwriteUser(await account.updatePrefs({ ...readPrefs(user), [PREFS_KEY]: consent }));
   writeHealthDataConsentMirror(user.$id, consent);
   cached = { userId: user.$id, consent, at: Date.now() };
 }

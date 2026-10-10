@@ -72,6 +72,34 @@ describe('GET /account partagé', () => {
     expect(accountGets()).toBe(2);
   });
 
+  it('écritures des préférences simultanées : l’une après l’autre, aucune n’efface la clé de l’autre', async () => {
+    __mock.user = { ...__mock.user, prefs: { country: 'FR' } };
+    // Une lecture déjà en cours avant les écritures ne doit pas servir de base à la seconde.
+    const staleRead = appwrite.getAppwriteUser();
+    const [consent, profiles] = await Promise.all([
+      appwrite.updateAccountPrefs((prefs) => ({ ...prefs, healthDataConsent: null })),
+      appwrite.updateAccountPrefs((prefs) => ({ ...prefs, routingProfiles: [] })),
+    ]);
+    await staleRead;
+    expect(__mock.user.prefs).toEqual({ country: 'FR', healthDataConsent: null, routingProfiles: [] });
+    expect(consent?.prefs).toEqual({ country: 'FR', healthDataConsent: null });
+    expect(profiles?.prefs).toEqual(__mock.user.prefs);
+    // Le compte écrit est retenu : une lecture d'affichage le voit sans GET.
+    const gets = accountGets();
+    expect((await appwrite.getAppwriteUser({ reuseRecent: true }))?.prefs).toEqual(__mock.user.prefs);
+    expect(accountGets()).toBe(gets);
+  });
+
+  it('écriture des préférences : rien à écrire → aucun envoi ; un échec n’empêche pas la suivante', async () => {
+    expect(await appwrite.updateAccountPrefs(() => null)).toMatchObject({ $id: 'user-A' });
+    expect(__mock.prefsUpdates).toBe(0);
+    __mock.dbNetworkDown = true;
+    await expect(appwrite.updateAccountPrefs((prefs) => ({ ...prefs, a: 1 }))).rejects.toThrow();
+    __mock.dbNetworkDown = false;
+    await appwrite.updateAccountPrefs((prefs) => ({ ...prefs, b: 2 }));
+    expect(__mock.user.prefs).toEqual({ b: 2 });
+  });
+
   it('401 : la lecture rend null et efface la session ; la vérification brute rejette', async () => {
     __mock.accountGetMode = 'unauthorized';
     await expect(appwrite.fetchAppwriteUser()).rejects.toMatchObject({ code: 401 });

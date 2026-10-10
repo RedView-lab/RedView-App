@@ -14,17 +14,18 @@ const state = vi.hoisted(() => ({
 }));
 
 vi.mock('@/shared/services/appwrite', () => ({
-  account: {
-    async updatePrefs(prefs: Record<string, unknown>) {
-      if (state.failUpdate) throw new Error('hors ligne');
-      state.updates.push(prefs);
-      if (state.user) state.user.prefs = prefs;
-      return state.user;
-    },
-  },
   getAppwriteUser: async () => state.user,
   getSessionUserIdSync: () => state.user?.$id ?? null,
-  rememberAppwriteUser: () => {},
+  // Même contrat que le vrai : préférences relues, null sans session, lève si l'écriture échoue.
+  async updateAccountPrefs(update: (prefs: Record<string, unknown>) => Record<string, unknown> | null) {
+    if (!state.user) return null;
+    const next = update({ ...state.user.prefs });
+    if (!next) return state.user;
+    if (state.failUpdate) throw new Error('hors ligne');
+    state.updates.push(next);
+    state.user.prefs = next;
+    return state.user;
+  },
 }));
 vi.mock('@/shared/lib/notify', () => ({ notify: { error: vi.fn(), success: vi.fn(), info: vi.fn() } }));
 
