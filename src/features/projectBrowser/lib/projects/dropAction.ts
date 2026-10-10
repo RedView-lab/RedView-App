@@ -1,5 +1,7 @@
 import type { ProjectFolderSummary, ProjectSummary } from '@/shared/services/projects';
 
+import { collectFolderDescendantIds } from './tree';
+
 export type DraggedBrowserItem = { type: 'project' | 'folder'; id: string };
 
 export type DropAction =
@@ -25,5 +27,7 @@ export function resolveDropAction(
   }
   const folder = folders.find((entry) => entry.id === dragged.id);
   if (!folder || folder.id === targetFolderId || folder.parentFolderId === targetFolderId) return null;
+  // Jamais dans l'un de ses sous-dossiers : le dossier et tout son contenu formeraient un cycle (D3-1).
+  if (targetFolderId && collectFolderDescendantIds(folders, folder.id).has(targetFolderId)) return null;
   return { kind: 'move-folder', folderId: folder.id, parentFolderId: targetFolderId };
 }

@@ -1,6 +1,6 @@
 import type { ProjectFolderSummary, ProjectSummary } from '@/shared/services/projects';
 
-import { computeFolderAggregateSize } from './tree';
+import { computeFolderAggregateSize, findCyclicFolderIds } from './tree';
 
 export type VisibleFolder = ProjectFolderSummary & { aggregateSizeBytes: number };
 
@@ -17,8 +17,9 @@ export function resolveCurrentFolderId(
 
 /**
  * Dossiers et projets affichés dans `currentFolderId`, filtrés par la
- * recherche. Un parent inconnu (supprimé, orphelin) compte comme la racine :
- * aucun élément ne doit devenir introuvable dans l'interface.
+ * recherche. Un parent inconnu (supprimé, orphelin) compte comme la racine,
+ * comme un dossier pris dans un cycle de parents (D3-1) : aucun élément ne
+ * doit devenir introuvable dans l'interface.
  */
 export function selectVisibleItems(
   folders: ProjectFolderSummary[],
@@ -28,11 +29,12 @@ export function selectVisibleItems(
 ): { visibleFolders: VisibleFolder[]; visibleProjects: ProjectSummary[] } {
   const query = search.trim().toLowerCase();
   const knownFolderIds = new Set(folders.map((folder) => folder.id));
+  const cyclic = findCyclicFolderIds(folders);
   const effectiveParent = (parentId: string | null) => (parentId && knownFolderIds.has(parentId) ? parentId : null);
   const matches = (name: string) => !query || name.toLowerCase().includes(query);
 
   const visibleFolders = folders
-    .filter((folder) => effectiveParent(folder.parentFolderId) === currentFolderId && matches(folder.name))
+    .filter((folder) => (cyclic.has(folder.id) ? null : effectiveParent(folder.parentFolderId)) === currentFolderId && matches(folder.name))
     .map((folder) => ({ ...folder, aggregateSizeBytes: computeFolderAggregateSize(folder.id, folders, projects) }));
   const visibleProjects = projects.filter(
     (project) => effectiveParent(project.folderId) === currentFolderId && matches(project.name),

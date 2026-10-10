@@ -90,3 +90,23 @@ describe('resolveDropAction', () => {
     expect(resolveDropAction(null, null, folders, projects)).toBeNull();
   });
 });
+
+describe('dossiers en cycle (deux déplacements croisés depuis deux onglets, D3-1)', () => {
+  // Onglet 1 : A dans B ; onglet 2 (liste périmée) : B dans A.
+  const cyclic = [folder('a', 'b', 'A'), folder('b', 'a', 'B'), folder('c', null, 'C')];
+  const inside = [project('ultra', 'a', 'Ultra 2026'), project('autre', null, 'Autre')];
+
+  it('les dossiers du cycle restent à la racine, leurs projets accessibles', () => {
+    const root = selectVisibleItems(cyclic, inside, null, '');
+    expect(root.visibleFolders.map((entry) => entry.id).sort()).toEqual(['a', 'b', 'c']);
+    expect(root.visibleProjects.map((entry) => entry.id)).toEqual(['autre']);
+    expect(selectVisibleItems(cyclic, inside, 'a', '').visibleProjects.map((entry) => entry.id)).toEqual(['ultra']);
+    expect(selectVisibleItems(cyclic, inside, 'a', '').visibleFolders).toEqual([]);
+  });
+
+  it('un dossier n’est jamais déplacé dans l’un de ses sous-dossiers', () => {
+    const tree = [folder('a', null), folder('b', 'a'), folder('c', 'b')];
+    expect(resolveDropAction({ type: 'folder', id: 'a' }, 'c', tree, [])).toBeNull();
+    expect(resolveDropAction({ type: 'folder', id: 'c' }, 'a', tree, [])).toEqual({ kind: 'move-folder', folderId: 'c', parentFolderId: 'a' });
+  });
+});

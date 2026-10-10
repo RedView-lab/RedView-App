@@ -13,6 +13,7 @@ import { logger } from '@/shared/lib/logger';
 import { isOwnDocument } from './access';
 import { getCurrentUserId, isLocalFallbackUser, isOwnedBy, toCloudFailure } from './auth';
 import { CLOUD_LIST_PAGE_SIZE, listAllCloudDocuments, listFirstCloudPage } from './cloudList';
+import { ProjectCloudError } from './errors';
 import { folderRowToSummary } from './mappers';
 import { updateProjectDocumentKeepingBase } from './projectRows';
 import type { ProjectFolderRow, ProjectFolderSummary, ProjectPrivacy } from './types';
@@ -190,6 +191,25 @@ export async function renameProjectFolder(id: string, name: string): Promise<voi
   }
 }
 
+/** `candidateId` est `folderId` lui-même ou l'un de ses sous-dossiers (chaîne de parents, cycle borné). */
+function isSameOrInside(folders: readonly ProjectFolderSummary[], candidateId: string, folderId: string): boolean {
+  const parentOf = new Map(folders.map((folder) => [folder.id, folder.parentFolderId]));
+  const seen = new Set<string>();
+  let cursor: string | null | undefined = candidateId;
+  while (cursor && !seen.has(cursor)) {
+    if (cursor === folderId) return true;
+    seen.add(cursor);
+    cursor = parentOf.get(cursor);
+  }
+  return false;
+}
+
+/**
+ * Déplace un dossier. Refusé (`rejected`) dans l'un de ses sous-dossiers,
+ * vérifié sur la liste relue à l'instant : deux onglets ou appareils, chacun
+ * sur une liste périmée, créaient sinon un cycle (A dans B, B dans A) qui
+ * rendait les deux dossiers et leurs projets introuvables (D3-1).
+ */
 export async function moveProjectFolder(
   id: string,
   parentFolderId: string | null,
@@ -198,6 +218,10 @@ export async function moveProjectFolder(
 
   const userId = await getCurrentUserId();
   const isDev = isLocalFallbackUser(userId);
+
+  if (parentFolderId && isSameOrInside(await listProjectFolders(), parentFolderId, id)) {
+    throw new ProjectCloudError('rejected');
+  }
 
   if (!isDev && !id.startsWith('folder-')) {
     try {

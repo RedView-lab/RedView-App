@@ -45,7 +45,8 @@ describe('folder tree', () => {
 
   it('stops on a parent cycle instead of looping', () => {
     const cyclic = [folder('x', 'y'), folder('y', 'x')];
-    expect(buildFolderBreadcrumbs(cyclic, 'x').map((entry) => entry.id)).toEqual(['y', 'x']);
+    // Dossier pris dans un cycle : affiché à la racine (D3-1), son fil d'Ariane aussi.
+    expect(buildFolderBreadcrumbs(cyclic, 'x').map((entry) => entry.id)).toEqual(['x']);
   });
 
   it('stops at an unknown parent (orphan folder)', () => {
