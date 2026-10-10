@@ -17,9 +17,10 @@ export type RhythmGender = 'default' | 'male' | 'female';
 
 /**
  * "Profil de rythme" : `preset` = un niveau par défaut (Débutant → Expert),
- * `custom` = "Personalisé" (activités .fit + FTP / poids / pneus saisis).
+ * `custom` = "Personalisé" (activités .fit + FTP / poids / pneus saisis),
+ * `speed` = une vitesse moyenne en déplacement choisie (`targetSpeedKmh`).
  */
-export type RhythmProfileMode = 'preset' | 'custom';
+export type RhythmProfileMode = 'preset' | 'custom' | 'speed';
 
 export interface RhythmState {
   /** Date ISO (yyyy-mm-dd) ou null si vide. */
@@ -34,8 +35,19 @@ export interface RhythmState {
    * l'infère des valeurs saisies.
    */
   rhythmProfile?: RhythmProfileMode;
-  /** Niveau du profil par défaut ; ignoré en mode `custom`. */
+  /** Niveau du profil par défaut ; ignoré en modes `custom` et `speed`. */
   practiceLevel?: string | null;
+  /**
+   * Vitesse moyenne en déplacement (km/h, 8 à 50 par pas de 2) du profil
+   * `speed` : le moteur donne la forme du parcours, le résultat est remis à
+   * cette moyenne (lib/rhythm/pace.ts). Gardée quand on change de profil.
+   */
+  targetSpeedKmh?: number | null;
+  /**
+   * « Pondérer » : ± % de vitesse appliqué à l'estimation (pas de 5 %, -50 à
+   * +50 ; + = plus rapide). Absente = neutre.
+   */
+  paceWeightPct?: number;
   applyToAllItineraries?: boolean;
   ftp: number | null;
   systemWeightKg: number | null;

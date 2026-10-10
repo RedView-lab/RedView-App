@@ -232,6 +232,101 @@
   transform: rotate(180deg);
 }
 
+/* ── Profil de rythme + Pondérer (Figma 2147237130 : 188 + 12 + 96) ── */
+.rvi-rythme-figma__row-profile {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+}
+
+.rvi-rythme-figma__row-profile > .rvi-rythme-figma__field {
+  flex: 1 1 0;
+}
+
+/* Profils, puis 22 vitesses : la liste défile, la vitesse choisie au milieu. */
+.rv-dropdown.rvi-rythme-figma__profile-menu {
+  max-height: 320px;
+}
+
+.rvi-rythme-figma__weight-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 0 0 auto;
+  min-width: 96px;
+}
+
+.rvi-rythme-figma__weight-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-height: 19.5px;
+}
+
+/* Valeur non neutre (« +10 % ») : un clic la remet à 0 %. */
+.rvi-rythme-figma__weight-value {
+  flex: none;
+  height: 18px;
+  padding: 0 5px;
+  border: none;
+  border-radius: 4px;
+  background: rgb(var(--rv-ink) / 0.08);
+  color: var(--rv-text);
+  font-family: var(--rv-font-sans);
+  font-size: var(--rv-font-size-xs);
+  font-weight: 600;
+  line-height: 18px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.rvi-rythme-figma__weight-value:hover {
+  background: rgb(var(--rv-ink) / 0.16);
+}
+
+.rvi-rythme-figma__weight-pill {
+  display: flex;
+  align-items: stretch;
+  height: 40px;
+  border-radius: 20px;
+  background: rgb(var(--rv-ink) / 0.16);
+  overflow: hidden;
+}
+
+.rvi-rythme-figma__weight-btn {
+  flex: 1 1 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--rv-text);
+  cursor: pointer;
+  transition: background-color 0.15s ease, opacity 0.15s ease;
+}
+
+.rvi-rythme-figma__weight-btn:not(:disabled):hover {
+  background: rgb(var(--rv-ink) / 0.06);
+}
+
+.rvi-rythme-figma__weight-btn:disabled {
+  opacity: 0.32;
+  cursor: not-allowed;
+}
+
+.rvi-rythme-figma__weight-divider {
+  flex: none;
+  width: 1px;
+  background: rgb(var(--rv-ink) / 0.2);
+}
+
 /* ── Bloc "Personnalisé" (dans un Collapse) ──────────────── */
 /* Fermé, le Collapse ne doit pas ajouter le gap de 12px du parent. */
 .rvi-rythme-figma > .rvi-collapse {
@@ -611,5 +706,51 @@ button.rvi-rythme-figma__card-box.is-selected {
   font-weight: 500;
   line-height: 16px;
   color: light-dark(#b54708, rgba(255, 214, 153, 0.92));
+  overflow-wrap: anywhere;
+}
+
+/* ── Résultats de la prédiction (sous le bouton d'action) ── */
+.rvi-rythme-figma__results {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: -4px 0 0;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: rgb(var(--rv-ink) / 0.06);
+  font-family: var(--rv-font-sans);
+  transition: opacity 0.15s ease;
+}
+
+.rvi-rythme-figma__results.is-stale {
+  opacity: 0.48;
+}
+
+.rvi-rythme-figma__result-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.rvi-rythme-figma__result-row dt {
+  flex: none;
+  margin: 0;
+  font-size: var(--rv-font-size-md);
+  font-weight: 500;
+  line-height: 18px;
+  color: rgb(var(--rv-ink) / 0.64);
+}
+
+.rvi-rythme-figma__result-row dd {
+  min-width: 0;
+  margin: 0;
+  font-size: var(--rv-font-size-md);
+  font-weight: 600;
+  line-height: 18px;
+  color: var(--rv-text);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
 }

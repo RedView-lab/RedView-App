@@ -13,9 +13,9 @@ import type {
   PanelMode,
   RouteProfile,
 } from '../../types';
-import { useAppI18n, type AppTranslationVars } from '@/shared/i18n';
+import { useAppI18n } from '@/shared/i18n';
 import { normalizeDiscipline } from '@/shared/lib/discipline';
-import { buildPauseAwareSchedule } from '../../lib/schedule';
+import { buildRhythmResultSummary, formatCompactDuration } from '../../lib/rhythm/resultSummary';
 import { Collapse } from './Collapse';
 import { ComingSoonSection } from '../../sections/ComingSoonSection';
 import { PoiSection } from '../../sections/PoiSection';
@@ -145,7 +145,12 @@ export function ItineraryPanelModeContent({
   const [isDockResizing, setIsDockResizing] = useState(false);
   const { t } = useAppI18n();
   const routeResultLabel = active ? buildRouteResultLabel(active) : null;
-  const rhythmResultLabel = active ? buildRhythmResultLabel(active, t) : null;
+  const rhythmResultSummary = useMemo(() => (active ? buildRhythmResultSummary(active) : null), [active]);
+  // Avec une prédiction, les résultats détaillés s'affichent sous le bouton :
+  // il redevient « Re-calculer » (état à jour) au lieu de répéter le total.
+  const rhythmResultLabel = rhythmResultSummary
+    ? t('Re-calculer')
+    : active ? buildRhythmResultLabel(active) : null;
   let modeContent: ReactNode = null;
 
   switch (activeMode) {
@@ -196,6 +201,7 @@ export function ItineraryPanelModeContent({
           calculateError={calculateError}
           fitNotice={fitNotice}
           resultLabel={rhythmResultLabel}
+          resultSummary={rhythmResultSummary}
         />
       ) : null;
       break;
@@ -356,35 +362,11 @@ function buildRouteResultLabel(active: Itinerary): string | null {
   return `(${distanceKm.toFixed(2)} km)`;
 }
 
-function buildRhythmResultLabel(
-  active: Itinerary,
-  t: (text: string, vars?: AppTranslationVars) => string,
-): string | null {
-  const schedule = active.prediction ? buildPauseAwareSchedule(active, active.prediction) : null;
-  const durationSeconds = schedule?.totalDurationSeconds ?? active.metrics?.durationSec ?? null;
+/** Sans prédiction : la durée connue de l'itinéraire seule (GPX horodaté…). */
+function buildRhythmResultLabel(active: Itinerary): string | null {
+  const durationSeconds = active.metrics?.durationSec ?? null;
   if (durationSeconds == null || !Number.isFinite(durationSeconds) || durationSeconds <= 0) {
     return null;
   }
-
-  const pauseSeconds = schedule
-    ? schedule.pauseSpans.reduce((total, span) => total + span.durationSeconds, 0)
-    : 0;
-
-  if (pauseSeconds > 0) {
-    // La durée affichée inclut les pauses : « dont » évite de les lire en plus.
-    return t('({{total}} dont {{pause}} de pause)', {
-      total: formatCompactDuration(durationSeconds),
-      pause: formatCompactDuration(pauseSeconds),
-    });
-  }
-
   return `(${formatCompactDuration(durationSeconds)})`;
-}
-
-function formatCompactDuration(totalSeconds: number): string {
-  const roundedMinutes = Math.max(0, Math.round(totalSeconds / 60));
-  const hours = Math.floor(roundedMinutes / 60);
-  const minutes = roundedMinutes % 60;
-  if (hours <= 0) return `${minutes}m`;
-  return `${hours}h${String(minutes).padStart(2, '0')}m`;
 }

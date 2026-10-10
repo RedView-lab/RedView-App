@@ -15,12 +15,14 @@ import {
   hasUsableRouteElevation,
 } from '../../lib/schedule';
 import { isCustomRhythmProfile } from '../../lib/rhythm/profile';
+import { applyRhythmPaceAdjustments, engineRhythmInputs } from '../../lib/rhythm/pace';
+import { canonicalJson } from '../../lib/project/canonicalJson';
 import type { Itinerary, ItineraryProject } from '../../types';
 import { predictCyclingItinerary, type CyclingCalibrationCache } from './cycling';
 import { fitFileKey } from './files';
 import { useProjectStoreOptional } from '../../context/ProjectStore/hooks';
 import { SOLO_COMPUTE_GATE } from '../../context/ProjectStore/collab';
-import { buildPredictionInputSignature, buildPredictionStamp } from './signatures';
+import { buildPredictionInputSignature, buildPredictionStamp, buildRouteSignature } from './signatures';
 import {
   createEmptyFitRuntime,
   type ExcludeFitFiles,
@@ -28,6 +30,31 @@ import {
   type PredictionStoreBridge,
   type UpdateFitRuntime,
 } from './types';
+
+type RoutePoints = NonNullable<Itinerary['gpxRoute']>['points'];
+
+/**
+ * Dernier résultat brut du moteur d'un itinéraire. Le profil « vitesse » et la
+ * pondération ne s'appliquent qu'après le moteur : quand seuls eux changent,
+ * ce résultat est réutilisé et le nouveau temps s'affiche sans recalcul.
+ */
+interface RawPredictionEntry {
+  points: RoutePoints;
+  originalPoints: RoutePoints | undefined;
+  key: string;
+  raw: Promise<PredictionResult>;
+}
+
+/** Entrées que lit le moteur (tracé hors identité des tableaux, rythme moteur, .fit). */
+function rawPredictionKey(itinerary: Itinerary, fitFiles: readonly File[]): string {
+  return [
+    buildRouteSignature(itinerary.gpxRoute?.points),
+    itinerary.gpxRoute?.source ?? '',
+    normalizeDiscipline(itinerary.discipline),
+    canonicalJson(engineRhythmInputs(itinerary.rhythm)),
+    ...fitFiles.map(fitFileKey).sort(),
+  ].join('::');
+}
 
 interface UsePredictionRunArgs {
   active: Itinerary | null;
@@ -61,6 +88,7 @@ export function usePredictionRun({
     null,
   );
   const cyclingCalibrationCacheRef = useRef<CyclingCalibrationCache>(new Map());
+  const rawPredictionCacheRef = useRef<Map<string, RawPredictionEntry>>(new Map());
 
   useEffect(() => {
     fitEngineRef.current = createFitPredictionEngine();
@@ -148,22 +176,39 @@ export function usePredictionRun({
     // Les .fit ne comptent qu'en profil "Personalisé". Vélo : moteur v2
     // (calibration .fit mise en cache, tracé complet).
     const fitFiles = isCustomRhythmProfile(itinerary.rhythm) ? runtime.fitFiles : [];
-    const pending = isFootDiscipline(discipline)
-      ? engine.predictRun(
-          fitFiles,
-          buildRouteGpxFile(itinerary),
-          buildRunPredictionConfigFromRhythm(itinerary.rhythm, discipline, routePoints),
-          onProgress,
-          { key: itineraryId },
-        )
-      : predictCyclingItinerary(
-          engine,
-          itinerary,
-          fitFiles,
-          cyclingCalibrationCacheRef.current,
-          onProgress,
-          { key: itineraryId },
-        );
+    const rawKey = rawPredictionKey(itinerary, fitFiles);
+    const points = itinerary.gpxRoute.points;
+    const originalPoints = itinerary.gpxRoute.originalPoints;
+    const cached = rawPredictionCacheRef.current.get(itineraryId);
+    let enginePending: Promise<PredictionResult>;
+    if (cached && cached.key === rawKey && cached.points === points && cached.originalPoints === originalPoints) {
+      enginePending = cached.raw;
+    } else {
+      enginePending = isFootDiscipline(discipline)
+        ? engine.predictRun(
+            fitFiles,
+            buildRouteGpxFile(itinerary),
+            buildRunPredictionConfigFromRhythm(itinerary.rhythm, discipline, routePoints),
+            onProgress,
+            { key: itineraryId },
+          )
+        : predictCyclingItinerary(
+            engine,
+            itinerary,
+            fitFiles,
+            cyclingCalibrationCacheRef.current,
+            onProgress,
+            { key: itineraryId },
+          );
+      const entry: RawPredictionEntry = { points, originalPoints, key: rawKey, raw: enginePending };
+      rawPredictionCacheRef.current.set(itineraryId, entry);
+      // Échec ou annulation : ne pas resservir une promesse rejetée.
+      enginePending.catch(() => {
+        if (rawPredictionCacheRef.current.get(itineraryId) === entry) rawPredictionCacheRef.current.delete(itineraryId);
+      });
+    }
+    const rhythm = itinerary.rhythm;
+    const pending = enginePending.then((result) => applyRhythmPaceAdjustments(result, rhythm));
 
     void pending
       .then((raw: PredictionResult) => {

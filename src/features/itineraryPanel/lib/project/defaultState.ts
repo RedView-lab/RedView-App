@@ -17,6 +17,7 @@ import { createDefaultExpertState } from '../../expert/defaults';
 // surfaceAnalysis → brouter (profils BRF, messages d'erreur) et les tuiles de terrain.
 import { cleanAndInterpolateElevations, hasCorruptedElevations } from '../route-metrics/elevationSanitizer';
 import { buildImportedRouteMetrics } from '../routes/imported-route';
+import { normalizePaceWeightPct, normalizeTargetSpeedKmh } from '../rhythm/pace';
 import { HIDDEN_PANEL_POI_CATEGORIES } from './poiRows';
 import { createDocumentId } from './ids';
 import { repairRouteEndpointArtifacts } from './repair-route-endpoints';
@@ -240,7 +241,27 @@ export function normalizeItineraryRhythmState(rhythm?: Partial<RhythmState> | nu
       typeof rhythm?.terrainTechnicality === 'number' && Number.isFinite(rhythm.terrainTechnicality)
         ? Math.min(1, Math.max(0, rhythm.terrainTechnicality))
         : base.terrainTechnicality,
+    ...normalizePaceFields(rhythm),
   };
+}
+
+/**
+ * Profil « vitesse » et pondération : ajoutés seulement s'ils existent, pour
+ * que le rythme d'un projet plus ancien reste identique (son estampille de
+ * prédiction aussi). Un profil « vitesse » sans vitesse valable redevient un
+ * niveau par défaut.
+ */
+function normalizePaceFields(
+  rhythm: Partial<RhythmState> | null | undefined,
+): Pick<RhythmState, 'rhythmProfile' | 'targetSpeedKmh' | 'paceWeightPct'> {
+  const out: Pick<RhythmState, 'rhythmProfile' | 'targetSpeedKmh' | 'paceWeightPct'> = {};
+  if (!rhythm) return out;
+  const targetSpeedKmh = normalizeTargetSpeedKmh(rhythm.targetSpeedKmh);
+  if (rhythm.targetSpeedKmh !== undefined) out.targetSpeedKmh = targetSpeedKmh;
+  if (rhythm.rhythmProfile === 'speed' && targetSpeedKmh === null) out.rhythmProfile = 'preset';
+  else if (rhythm.rhythmProfile !== undefined) out.rhythmProfile = rhythm.rhythmProfile;
+  if (rhythm.paceWeightPct !== undefined) out.paceWeightPct = normalizePaceWeightPct(rhythm.paceWeightPct);
+  return out;
 }
 
 /**

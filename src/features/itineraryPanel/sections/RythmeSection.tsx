@@ -3,12 +3,21 @@ import { readDocumentAppLocale, translateAppText, useAppI18n } from '@/shared/i1
 import { ActionButtonStack, ToggleRow } from '../components/controls';
 import { PortalDropdown } from '../components/controls/PortalDropdown';
 import { Collapse } from '../components/shell/Collapse';
-import { PauseIntervalList, PoiPauseGrid, RunReferenceFields, TerrainTechnicalityRow } from './rythme/components';
+import {
+  PaceWeightControl,
+  PauseIntervalList,
+  PoiPauseGrid,
+  PredictionResultSummary,
+  RunReferenceFields,
+  TerrainTechnicalityRow,
+} from './rythme/components';
 import { isFootDiscipline, type SportDiscipline } from '@/shared/lib/discipline';
 import { CalendarPopover } from '../components/calendar';
 import { IconInfo, IconPlus } from '../components/icons';
 import { IconFigmaCheck, IconFigmaChevronDown, IconTrashFigma } from '../components/iconsFigma';
 import { MAX_FIT_FILES, isCustomRhythmProfile } from '../lib/rhythm/profile';
+import { resolveTargetSpeedKmh, targetSpeedOptionsFor } from '../lib/rhythm/pace';
+import type { RhythmResultSummary } from '../lib/rhythm/resultSummary';
 import {
   FTP_RULE,
   SYSTEM_WEIGHT_RULE,
@@ -42,6 +51,8 @@ interface RythmeSectionProps {
   /** Avertissement non bloquant sur les .fit, affiché sous « Activités de référence ». */
   fitNotice?: string | null;
   resultLabel?: string | null;
+  /** Résultats de la prédiction affichés sous le bouton. */
+  resultSummary?: RhythmResultSummary | null;
 }
 
 const PRACTICE_LEVELS = [
@@ -382,6 +393,7 @@ export function RythmeSection({
   calculateError = null,
   fitNotice = null,
   resultLabel = null,
+  resultSummary = null,
 }: RythmeSectionProps) {
   const { locale, t } = useAppI18n();
   const dateChipRef = useRef<HTMLButtonElement | null>(null);
@@ -402,9 +414,25 @@ export function RythmeSection({
   const startDateText = rhythm.startDate ? formatDateForLocale(rhythm.startDate, locale) : null;
   const tiresText = rhythm.tiresMm ? `${rhythm.tiresMm}mm` : '35mm';
   const isCustom = isCustomRhythmProfile(rhythm);
+  const targetSpeedKmh = resolveTargetSpeedKmh(rhythm);
+  const speedOptions = targetSpeedOptionsFor(discipline);
   const presetLevel = PRACTICE_LEVELS.find((l) => l.id === rhythm.practiceLevel) ?? PRACTICE_LEVELS[0];
-  const profileLabel = isCustom ? CUSTOM_PROFILE_LABEL : presetLevel.label;
+  const profileText = targetSpeedKmh !== null
+    ? formatSpeedOption(targetSpeedKmh)
+    : t(isCustom ? CUSTOM_PROFILE_LABEL : presetLevel.label);
   const isCalculating = Boolean(calculateDisabled);
+
+  // À l'ouverture, la vitesse choisie est amenée au milieu de la liste.
+  useEffect(() => {
+    if (!profileMenuOpen) return;
+    const raf = requestAnimationFrame(() => {
+      const menu = document.querySelector<HTMLElement>('.rvi-rythme-figma__profile-menu');
+      const selected = menu?.querySelector<HTMLElement>('[aria-selected="true"]');
+      if (!menu || !selected || menu.scrollHeight <= menu.clientHeight) return;
+      menu.scrollTop = selected.offsetTop - (menu.clientHeight - selected.offsetHeight) / 2;
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [profileMenuOpen]);
 
   const selectPreset = (levelId: string) => {
     onChange?.('rhythmProfile', 'preset');
@@ -414,6 +442,14 @@ export function RythmeSection({
 
   const selectCustom = () => {
     onChange?.('rhythmProfile', 'custom');
+    setProfileMenuOpen(false);
+  };
+
+  // La vitesse d'abord : un profil « vitesse » sans vitesse est ramené à un
+  // niveau par la normalisation du rythme.
+  const selectSpeed = (kmh: number) => {
+    onChange?.('targetSpeedKmh', kmh);
+    onChange?.('rhythmProfile', 'speed');
     setProfileMenuOpen(false);
   };
 
@@ -460,57 +496,82 @@ export function RythmeSection({
           </div>
         </div>
 
-        {/* ── Profil de rythme ── */}
-        <div className="rvi-rythme-figma__field">
-          <span id={profileLabelId} className="rvi-rythme-figma__label-title">{t('Profil de rythme')}</span>
-          <button
-            ref={profileBtnRef}
-            type="button"
-            className={`rvi-rythme-figma__profile-btn${profileMenuOpen ? ' is-open' : ''}`}
-            onClick={() => setProfileMenuOpen((v) => !v)}
-            aria-labelledby={`${profileLabelId} ${profileValueId}`}
-            aria-haspopup="listbox"
-            aria-expanded={profileMenuOpen}
-          >
-            <span id={profileValueId} className="rvi-rythme-figma__profile-text">{t(profileLabel)}</span>
-            <span className={`rvi-rythme-figma__profile-chevron${profileMenuOpen ? ' is-open' : ''}`}>
-              <IconFigmaChevronDown size={24} />
-            </span>
-          </button>
-
-          <PortalDropdown
-            open={profileMenuOpen}
-            anchorRef={profileBtnRef}
-            onClose={() => setProfileMenuOpen(false)}
-            align="left"
-            estimatedHeight={160}
-          >
-            {PRACTICE_LEVELS.map((lvl) => {
-              const selected = !isCustom && presetLevel.id === lvl.id;
-              return (
-                <button
-                  key={lvl.id}
-                  type="button"
-                  className={`rv-dropdown__item${selected ? ' is-selected' : ''}`}
-                  onClick={() => selectPreset(lvl.id)}
-                  role="option"
-                  aria-selected={selected}
-                >
-                  <span>{t(lvl.label)}</span>
-                </button>
-              );
-            })}
-            <div className="rv-dropdown__divider" />
+        {/* ── Profil de rythme + Pondérer ── */}
+        <div className="rvi-rythme-figma__row-profile">
+          <div className="rvi-rythme-figma__field">
+            <span id={profileLabelId} className="rvi-rythme-figma__label-title">{t('Profil de rythme')}</span>
             <button
+              ref={profileBtnRef}
               type="button"
-              className={`rv-dropdown__item${isCustom ? ' is-selected' : ''}`}
-              onClick={selectCustom}
-              role="option"
-              aria-selected={isCustom}
+              className={`rvi-rythme-figma__profile-btn${profileMenuOpen ? ' is-open' : ''}`}
+              onClick={() => setProfileMenuOpen((v) => !v)}
+              aria-labelledby={`${profileLabelId} ${profileValueId}`}
+              aria-haspopup="listbox"
+              aria-expanded={profileMenuOpen}
             >
-              <span>{t(CUSTOM_PROFILE_LABEL)}</span>
+              <span id={profileValueId} className="rvi-rythme-figma__profile-text">{profileText}</span>
+              <span className={`rvi-rythme-figma__profile-chevron${profileMenuOpen ? ' is-open' : ''}`}>
+                <IconFigmaChevronDown size={24} />
+              </span>
             </button>
-          </PortalDropdown>
+
+            <PortalDropdown
+              open={profileMenuOpen}
+              anchorRef={profileBtnRef}
+              onClose={() => setProfileMenuOpen(false)}
+              align="left"
+              className="rvi-rythme-figma__profile-menu"
+              estimatedHeight={320}
+            >
+              {PRACTICE_LEVELS.map((lvl) => {
+                const selected = !isCustom && targetSpeedKmh === null && presetLevel.id === lvl.id;
+                return (
+                  <button
+                    key={lvl.id}
+                    type="button"
+                    className={`rv-dropdown__item${selected ? ' is-selected' : ''}`}
+                    onClick={() => selectPreset(lvl.id)}
+                    role="option"
+                    aria-selected={selected}
+                  >
+                    <span>{t(lvl.label)}</span>
+                  </button>
+                );
+              })}
+              <div className="rv-dropdown__divider" />
+              <button
+                type="button"
+                className={`rv-dropdown__item${isCustom ? ' is-selected' : ''}`}
+                onClick={selectCustom}
+                role="option"
+                aria-selected={isCustom}
+              >
+                <span>{t(CUSTOM_PROFILE_LABEL)}</span>
+              </button>
+              <div className="rv-dropdown__divider" />
+              {/* Vitesse moyenne en déplacement imposée (8 → 50 km/h, pas de 2). */}
+              {speedOptions.map((kmh) => {
+                const selected = targetSpeedKmh === kmh;
+                return (
+                  <button
+                    key={kmh}
+                    type="button"
+                    className={`rv-dropdown__item${selected ? ' is-selected' : ''}`}
+                    onClick={() => selectSpeed(kmh)}
+                    role="option"
+                    aria-selected={selected}
+                  >
+                    <span>{formatSpeedOption(kmh)}</span>
+                  </button>
+                );
+              })}
+            </PortalDropdown>
+          </div>
+
+          <PaceWeightControl
+            value={rhythm.paceWeightPct}
+            onChange={(next) => onChange?.('paceWeightPct', next)}
+          />
         </div>
 
         {/* ── Personnalisé : activités de référence + données du cycliste / coureur ── */}
@@ -698,6 +759,9 @@ export function RythmeSection({
         onLoadingClick={onCancelCalculate}
         resultLabel={calculateError ? null : resultLabel}
       />
+      {resultSummary && !calculateError ? (
+        <PredictionResultSummary summary={resultSummary} stale={isCalculating} />
+      ) : null}
       {calculateError && !isCalculating ? (
         <p className="rvi-rythme-figma__error" role="alert">
           {calculateError}
@@ -705,6 +769,10 @@ export function RythmeSection({
       ) : null}
     </div>
   );
+}
+
+function formatSpeedOption(kmh: number): string {
+  return `${kmh}\u00a0km/h`;
 }
 
 function formatDateForLocale(iso: string, locale: 'fr' | 'en'): string {

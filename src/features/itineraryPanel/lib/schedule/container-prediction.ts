@@ -11,6 +11,7 @@ import type { FootDiscipline } from '@/shared/lib/discipline';
 
 import type { Itinerary, ItineraryProject, RhythmState } from '../../types';
 import { encodeEngineSurface } from '../route-metrics/engineCodes';
+import { resolvePresetLevel } from '../rhythm/pace';
 import { CUSTOM_PROFILE_LEVEL, isCustomRhythmProfile } from '../rhythm/profile';
 
 const EARTH_RADIUS_M = 6_371_008.8;
@@ -46,13 +47,14 @@ function toCyclingGender(gender: RhythmState['gender']): CyclingGender {
 
 /**
  * Cycliste du moteur v2 : le niveau choisi (préréglage, source unique dans le
- * moteur), ou en profil Personnalisé ce que l'utilisateur a saisi (FTP, poids
+ * moteur ; niveau neutre en profil « vitesse », remis ensuite à la vitesse
+ * choisie), ou en profil Personnalisé ce que l'utilisateur a saisi (FTP, poids
  * système, pneus) — qui sert aussi de prior à la calibration .fit.
  */
 export function buildCyclingRiderSpec(rhythm: RhythmState): CyclingRiderSpec {
   const gender = toCyclingGender(rhythm.gender);
   if (!isCustomRhythmProfile(rhythm)) {
-    return { preset: { level: rhythm.practiceLevel ?? 'debutant', gender } };
+    return { preset: { level: resolvePresetLevel(rhythm), gender } };
   }
   const positive = (value: number | null | undefined) =>
     typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined;
@@ -237,7 +239,7 @@ export function buildRunPredictionConfigFromRhythm(
   const custom = isCustomRhythmProfile(rhythm);
   const config: RunPredictionConfig = {
     discipline,
-    level: custom ? CUSTOM_PROFILE_LEVEL : rhythm.practiceLevel ?? 'debutant',
+    level: custom ? CUSTOM_PROFILE_LEVEL : resolvePresetLevel(rhythm),
   };
 
   const maxRoutePoints = resolvePredictionMaxRoutePoints(routePoints);
