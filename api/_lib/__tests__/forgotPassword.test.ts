@@ -5,8 +5,28 @@ vi.mock('../../../server/lib/observability.mjs', () => ({
   captureServerError: (error: unknown) => { captured.errors.push(error); },
 }));
 
-import handler from '../../auth/forgot-password';
+// Le quota par adresse vit dans le magasin de codes, écrit dans os.tmpdir() :
+// un dossier à part, pas celui du serveur de dev.
+const { storeDir } = await vi.hoisted(async () => {
+  const nodeFs = await import('node:fs');
+  const nodeOs = await import('node:os');
+  const nodePath = await import('node:path');
+  return { storeDir: nodeFs.mkdtempSync(nodePath.join(nodeOs.tmpdir(), 'rv-forgot-')) };
+});
+vi.mock('node:os', async (importActual) => {
+  const actual = await importActual<typeof import('node:os')>();
+  return { ...actual, default: { ...actual, tmpdir: () => storeDir }, tmpdir: () => storeDir };
+});
+
+const { default: handler } = await import('../../auth/forgot-password');
 import type { ApiRequest, ApiResponse } from '../types';
+
+let addressSeq = 0;
+/** Une adresse neuve par appel : le quota par adresse (30 s) ne s'en mêle pas. */
+function freshEmail(): string {
+  addressSeq += 1;
+  return `rider${addressSeq}@example.test`;
+}
 
 interface Captured {
   status: number;
@@ -36,6 +56,7 @@ describe('api/auth/forgot-password', () => {
     vi.useFakeTimers({ toFake: ['setTimeout'] });
     vi.stubEnv('APPWRITE_ENDPOINT', 'https://appwrite.test/v1');
     vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('APPWRITE_API_KEY', 'standard_test_key');
     vi.spyOn(console, 'error').mockImplementation(() => {});
     captured.errors.length = 0;
     fetchMock = vi.fn(async () => new Response('{}', { status: 201 }));
@@ -62,36 +83,76 @@ describe('api/auth/forgot-password', () => {
   });
 
   it('remplace une redirection hors liste blanche par l’app', async () => {
-    const { done } = call({ email: 'rider@example.test', redirectUrl: 'https://evil.example/steal' });
+    const { done } = call({ email: freshEmail(), redirectUrl: 'https://evil.example/steal' });
     await vi.advanceTimersByTimeAsync(300);
     await done;
     expect(sentRecovery(fetchMock).url).toBe('https://app.redview.tech/');
   });
 
   it('refuse localhost en production', async () => {
-    const { done } = call({ email: 'rider@example.test', redirectUrl: 'http://localhost:5173/' });
+    const { done } = call({ email: freshEmail(), redirectUrl: 'http://localhost:5173/' });
     await vi.advanceTimersByTimeAsync(300);
     await done;
     expect(sentRecovery(fetchMock).url).toBe('https://app.redview.tech/');
   });
 
-  it('journalise un échec Appwrite autre que 404, sans changer la réponse', async () => {
+  it('appelle Appwrite avec la clé d’API : la limite par IP (celle du serveur, partagée par tous) ne s’applique pas (A1-1)', async () => {
+    const { done } = call({ email: freshEmail() });
+    await vi.advanceTimersByTimeAsync(300);
+    await done;
+    const headers = (fetchMock.mock.calls[0]?.[1] as RequestInit).headers as Record<string, string>;
+    expect(headers['X-Appwrite-Key']).toBe('standard_test_key');
+  });
+
+  it('plus de 10 demandes par heure, pour des adresses différentes : chacune part (A1-1)', async () => {
+    for (let index = 0; index < 12; index += 1) {
+      const { done } = call({ email: freshEmail() });
+      await vi.advanceTimersByTimeAsync(300);
+      expect((await done).status).toBe(200);
+    }
+    expect(fetchMock).toHaveBeenCalledTimes(12);
+  });
+
+  it('quota par adresse : une seconde demande dans les 30 s ne part pas, la réponse reste neutre', async () => {
+    const email = freshEmail();
+    let pending = call({ email });
+    await vi.advanceTimersByTimeAsync(300);
+    await pending.done;
+    pending = call({ email });
+    await vi.advanceTimersByTimeAsync(300);
+    const out = await pending.done;
+    expect(out.status).toBe(200);
+    expect(out.body?.success).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('une clé refusée (401) est signalée et la demande repart sans clé', async () => {
+    fetchMock.mockResolvedValueOnce(new Response('{"type":"general_unauthorized_scope"}', { status: 401 }));
+    const { done } = call({ email: freshEmail() });
+    await vi.advanceTimersByTimeAsync(300);
+    expect((await done).status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const retryHeaders = (fetchMock.mock.calls[1]?.[1] as RequestInit).headers as Record<string, string>;
+    expect(retryHeaders['X-Appwrite-Key']).toBeUndefined();
+    expect(captured.errors).toHaveLength(1);
+  });
+
+  it('un 429 d’Appwrite n’est plus attendu : journalisé et signalé à GlitchTip, sans changer la réponse', async () => {
     fetchMock.mockResolvedValueOnce(new Response('rate limit', { status: 429 }));
-    const { done } = call({ email: 'rider@example.test' });
+    const { done } = call({ email: freshEmail() });
     await vi.advanceTimersByTimeAsync(300);
     expect((await done).status).toBe(200);
     expect(console.error).toHaveBeenCalledTimes(1);
-    // trop de demandes pour cette adresse : voulu, pas une panne
-    expect(captured.errors).toEqual([]);
+    expect(captured.errors.map((error) => String(error))).toEqual(['Error: Appwrite recovery HTTP 429']);
   });
 
   it('signale à GlitchTip une récupération qu’Appwrite refuse ou n’atteint pas', async () => {
     fetchMock.mockResolvedValueOnce(new Response('{"type":"general_argument_invalid"}', { status: 400 }));
-    let pending = call({ email: 'rider@example.test' });
+    let pending = call({ email: freshEmail() });
     await vi.advanceTimersByTimeAsync(300);
     expect((await pending.done).status).toBe(200);
     fetchMock.mockRejectedValueOnce(new Error('connect ECONNREFUSED'));
-    pending = call({ email: 'rider@example.test' });
+    pending = call({ email: freshEmail() });
     await vi.advanceTimersByTimeAsync(300);
     expect((await pending.done).status).toBe(200);
     expect(captured.errors.map((error) => String(error))).toEqual([
