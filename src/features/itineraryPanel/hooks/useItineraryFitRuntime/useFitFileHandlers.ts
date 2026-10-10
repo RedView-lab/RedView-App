@@ -7,7 +7,7 @@ import { deleteFitUploads, uploadProjectItineraryFitFiles } from '@/shared/servi
 import { validateFitFile, type FitFileProblem } from '@/features/fitPredictor/lib/fitFileValidation';
 import { buildFitUploadsSignature } from '../../lib/schedule';
 import { MAX_FIT_FILES } from '../../lib/rhythm/profile';
-import type { Itinerary, ItineraryProject } from '../../types';
+import type { Itinerary, ItineraryFitUpload, ItineraryProject } from '../../types';
 import { buildLocalFitUploadSignature, fitFileKey, planFitSelection } from './files';
 import { buildRejectedFitNotice } from './labels';
 import {
@@ -123,6 +123,11 @@ export function useFitFileHandlers({
       const keptUploads = existingUploads.filter((upload) => nextKeys.has(fitFileKey(upload)));
       const keptUploadKeys = new Set(keptUploads.map(fitFileKey));
       const filesToUpload = nextFitFiles.filter((file) => !keptUploadKeys.has(fitFileKey(file)));
+      // Uploads du projet que cet appareil n'a pas chargés (illisibles ici dans
+      // un projet partagé, téléchargement échoué) : gardés tels quels. Reconstruite
+      // à partir des seuls fichiers chargés, la liste les effaçait du projet.
+      const unloadedUploads = unloadedFitUploads(existingUploads, current.fitFiles)
+        .filter((upload) => !nextKeys.has(fitFileKey(upload)));
 
       try {
         const { uploads: newUploads, failed } = filesToUpload.length > 0
@@ -132,10 +137,13 @@ export function useFitFileHandlers({
         const uploadByKey = new Map(
           [...keptUploads, ...newUploads].map((upload) => [fitFileKey(upload), upload]),
         );
-        const storedUploads = nextFitFiles.flatMap((file) => {
-          const upload = uploadByKey.get(fitFileKey(file));
-          return upload ? [upload] : [];
-        });
+        const storedUploads = [
+          ...nextFitFiles.flatMap((file) => {
+            const upload = uploadByKey.get(fitFileKey(file));
+            return upload ? [upload] : [];
+          }),
+          ...unloadedUploads,
+        ];
 
         // Les fichiers non envoyés restent dans l'état local (toujours utilisés
         // pour la prédiction) ; la signature suit les uploads persistés pour
@@ -212,20 +220,22 @@ export function useFitFileHandlers({
       const nextFitFiles = current.fitFiles.filter((_, index) => !shouldRemove(index));
       if (nextFitFiles.length === current.fitFiles.length) return;
 
-      // Les uploads persistés suivent les fichiers conservés ; la signature est
-      // alignée dessus pour que l'hydratation réutilise les fichiers déjà en
-      // mémoire au lieu de les re-télécharger.
+      // Seuls les uploads des fichiers retirés quittent le projet ; la signature
+      // est alignée sur la liste restante pour que l'hydratation réutilise les
+      // fichiers déjà en mémoire au lieu de les re-télécharger. Un upload que
+      // cet appareil n'a pas chargé (illisible ici dans un projet partagé,
+      // téléchargement échoué) reste : il était effacé du projet, et du bucket.
       const keptKeys = new Set(nextFitFiles.map(fitFileKey));
-      const nextUploads = (itinerary.fitUploads ?? []).filter((upload) =>
-        keptKeys.has(fitFileKey(upload)),
+      const removedKeys = new Set(
+        current.fitFiles.filter((file) => !keptKeys.has(fitFileKey(file))).map(fitFileKey),
       );
+      const uploads = itinerary.fitUploads ?? [];
+      const nextUploads = uploads.filter((upload) => !removedKeys.has(fitFileKey(upload)));
       const uploadedKeys = new Set(nextUploads.map(fitFileKey));
       // RGPD : un .fit retiré est supprimé du bucket. Un « annuler » qui le
       // remettrait dans le projet ne retrouverait plus le fichier :
       // l'hydratation le retire alors proprement (404 → missingFileIds).
-      const removedUploads = (itinerary.fitUploads ?? []).filter(
-        (upload) => !keptKeys.has(fitFileKey(upload)),
-      );
+      const removedUploads = uploads.filter((upload) => removedKeys.has(fitFileKey(upload)));
       if (removedUploads.length > 0) {
         void deleteFitUploads(removedUploads);
       }
@@ -284,4 +294,13 @@ export function useFitFileHandlers({
     handleRemoveFitFile,
     handleClearFitFiles,
   };
+}
+
+/** Uploads persistés dont aucun fichier n'est en mémoire sur cet appareil. */
+function unloadedFitUploads(
+  uploads: readonly ItineraryFitUpload[],
+  loadedFiles: readonly File[],
+): ItineraryFitUpload[] {
+  const loadedKeys = new Set(loadedFiles.map(fitFileKey));
+  return uploads.filter((upload) => !loadedKeys.has(fitFileKey(upload)));
 }

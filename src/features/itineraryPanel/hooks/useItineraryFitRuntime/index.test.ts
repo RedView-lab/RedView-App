@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act } from 'react';
+import { act, type ChangeEvent } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { renderHook } from '@/shared/test/renderHook';
@@ -10,6 +10,7 @@ const projects = vi.hoisted(() => ({
   downloadProjectItineraryFitFileEntries: vi.fn(),
   deleteFitUploads: vi.fn(),
   uploadProjectItineraryFitFiles: vi.fn(),
+  isServerOwnedDocument: vi.fn((_projectId: string) => false),
 }));
 vi.mock('@/shared/services/projects', () => projects);
 vi.mock('@/features/fitPredictor/engine/api', () => ({
@@ -95,5 +96,81 @@ describe('useItineraryFitRuntime — .fit hydration', () => {
     await flush();
     expect(projects.downloadProjectItineraryFitFileEntries).toHaveBeenCalledTimes(2);
     expect(result.current.fitFileNames).toEqual(['ride.fit', 'climb.fit']);
+  });
+});
+
+/**
+ * Upload introuvable (404) : retiré du projet seulement hors partage. Dans un
+ * projet partagé, Appwrite répond aussi 404 pour un fichier qu'on n'a pas le
+ * droit de lire — le retirer l'effaçait pour tous les éditeurs. Ajouter ou
+ * retirer un autre .fit ne touche jamais à un upload que cet appareil n'a pas
+ * chargé (ni dans le projet, ni dans le bucket).
+ */
+describe('useItineraryFitRuntime — uploads introuvables ou illisibles', () => {
+  const fileOf = (u: ItineraryFitUpload) => new File(['fit'], u.name, { lastModified: u.lastModified });
+  const ride = upload('ride.fit');
+  const other = upload('autre-editeur.fit');
+
+  beforeEach(() => {
+    projects.downloadProjectItineraryFitFileEntries.mockReset();
+    projects.deleteFitUploads.mockReset();
+    projects.uploadProjectItineraryFitFiles.mockReset();
+    projects.isServerOwnedDocument.mockReset();
+    projects.downloadProjectItineraryFitFileEntries.mockImplementation(async (uploads: ItineraryFitUpload[]) =>
+      uploads.map((u) => (u === other || u.path === other.path
+        ? { path: u.path, name: u.name, file: null, notFound: true }
+        : { path: u.path, name: u.name, file: fileOf(u), notFound: false })),
+    );
+  });
+
+  /** Applique le dernier `setProject(updater)` à un projet qui contient `active`. */
+  function lastProjectUpdate(setProject: ReturnType<typeof renderRuntime>['setProject'], active: Itinerary) {
+    const updater = setProject.mock.calls.at(-1)?.[0];
+    expect(typeof updater).toBe('function');
+    return (updater as (prev: ItineraryProject) => ItineraryProject)({ itineraries: [active] } as unknown as ItineraryProject);
+  }
+
+  it('projet non partagé : l’upload introuvable est retiré du projet', async () => {
+    projects.isServerOwnedDocument.mockReturnValue(false);
+    const active = itinerary([ride, other]);
+    const { setProject } = renderRuntime(active);
+    await flush();
+    expect(lastProjectUpdate(setProject, active).itineraries[0]!.fitUploads).toEqual([ride]);
+  });
+
+  it('projet partagé : l’upload illisible reste, et n’est pas re-téléchargé tant que la liste ne change pas', async () => {
+    projects.isServerOwnedDocument.mockReturnValue(true);
+    const { result, rerender, setProject } = renderRuntime(itinerary([ride, other]));
+    await flush();
+    expect(setProject).not.toHaveBeenCalled();
+    expect(result.current.fitFileNames).toEqual(['ride.fit']);
+    rerender(itinerary([ride, other]));
+    await flush();
+    expect(projects.downloadProjectItineraryFitFileEntries).toHaveBeenCalledTimes(1);
+  });
+
+  it('retirer un .fit garde l’upload non chargé ici et ne supprime que le fichier retiré', async () => {
+    projects.isServerOwnedDocument.mockReturnValue(true);
+    const active = itinerary([ride, other]);
+    const { result, setProject } = renderRuntime(active);
+    await flush();
+    act(() => result.current.handleRemoveFitFile(0));
+    expect(projects.deleteFitUploads).toHaveBeenCalledWith([ride]);
+    expect(lastProjectUpdate(setProject, active).itineraries[0]!.fitUploads).toEqual([other]);
+  });
+
+  it('ajouter un .fit garde l’upload non chargé ici', async () => {
+    projects.isServerOwnedDocument.mockReturnValue(true);
+    const added = upload('nouveau.fit');
+    projects.uploadProjectItineraryFitFiles.mockResolvedValue({ uploads: [added], failed: [] });
+    const active = itinerary([ride, other]);
+    const { result, setProject } = renderRuntime(active);
+    await flush();
+    const event = { target: { files: [fileOf(added)] } } as unknown as ChangeEvent<HTMLInputElement>;
+    await act(async () => {
+      await result.current.handleFitInputChange(event);
+    });
+    expect(projects.uploadProjectItineraryFitFiles).toHaveBeenCalledWith('p-1', 'it-1', [expect.objectContaining({ name: 'nouveau.fit' })]);
+    expect(lastProjectUpdate(setProject, active).itineraries[0]!.fitUploads).toEqual([ride, added, other]);
   });
 });

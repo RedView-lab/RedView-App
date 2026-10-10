@@ -13,7 +13,7 @@ const fake = vi.hoisted(() => ({
   projects: new Map<string, Record<string, unknown> & { $id: string; $permissions: string[] }>(),
   users: [] as Array<{ $id: string; email: string; name: string; emailVerification?: boolean; status?: boolean }>,
   teams: new Map<string, { name: string; memberships: Array<{ $id: string; userId: string; roles: string[] }> }>(),
-  files: new Map<string, { name: string; $permissions: string[] }>(),
+  files: new Map<string, { name: string; $permissions: string[]; bytes?: Uint8Array }>(),
   journal: new Map<string, { $id: string; project_id: string; payload: string }>(),
   views: new Map<string, { $id: string; project_id: string }>(),
   nextId: 0,
@@ -117,6 +117,11 @@ vi.mock('node-appwrite', async (importActual) => {
       if (permissions) file.$permissions = permissions;
       return file;
     }
+    async getFileDownload(_bucket: string, fileId: string) {
+      const file = fake.files.get(fileId);
+      if (!file?.bytes) throw error(404);
+      return file.bytes.buffer.slice(file.bytes.byteOffset, file.bytes.byteOffset + file.bytes.byteLength);
+    }
     async listFiles(_bucket: string, queries: string[] = []) {
       const name = queryValue(queries, 'equal', 'name');
       return { total: 0, files: [...fake.files].filter(([, file]) => file.name === name).map(([$id]) => ({ $id })) };
@@ -141,6 +146,7 @@ const owner = { id: 'owner', email: 'owner@example.test' };
 const editor = { id: 'editor', email: 'editor@example.test' };
 const stranger = { id: 'stranger', email: 'stranger@example.test' };
 const PROJECT = 'proj1';
+const OWNER_PERMISSIONS = ['read("user:owner")', 'update("user:owner")', 'delete("user:owner")'];
 const TEAM = projectTeamId(PROJECT);
 
 // Horloge avancée de 11 min à chaque test : les limites d'invitation (fenêtre de 10 min) repartent de zéro.
@@ -205,6 +211,16 @@ describe('partage d’un projet', () => {
     // Une seconde invitation du même compte ne duplique rien.
     const again = await inviteToProject(owner, PROJECT, 'editor@example.test');
     expect(again.members).toHaveLength(2);
+  });
+
+  it('gros projet (document dans la charge utile) : ses .fit s’ouvrent aussi à l’équipe', async () => {
+    const document = { schema: 2, itineraries: [{ id: 'it-1', fitUploads: [{ name: 'big.fit', path: 'fitBig' }] }] };
+    fake.files.set('fitBig', { name: 'big.fit', $permissions: OWNER_PERMISSIONS });
+    fake.files.set('payload1', { name: `${PROJECT}.json.gz`, $permissions: OWNER_PERMISSIONS, bytes: gzipSync(JSON.stringify(document)) });
+    fake.projects.get(PROJECT)!.data = 'file:payload1';
+    await inviteToProject(owner, PROJECT, 'editor@example.test');
+    expect(fake.files.get('payload1')!.$permissions).toContain(`read("team:${TEAM}")`);
+    expect(fake.files.get('fitBig')!.$permissions).toContain(`read("team:${TEAM}")`);
   });
 
   it('deux invitations lancées ensemble au premier partage : les deux invités restent membres', async () => {

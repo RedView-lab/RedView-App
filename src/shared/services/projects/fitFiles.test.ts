@@ -36,7 +36,7 @@ vi.mock('@/shared/services/appwrite', () => ({
   },
 }));
 vi.mock('./auth', () => ({ getCurrentUserId: async () => 'moi' }));
-vi.mock('./liveSessions', () => ({ isLiveSession: () => false, sharedProjectTeamId: () => null }));
+vi.mock('./liveSessions', () => ({ isServerOwnedDocument: () => false, sharedProjectTeamId: () => null }));
 
 const { collectProjectFitUploads, deleteOwnedFitFiles, flushPendingFitDeletions, isFitFileOwnedBy, scheduleFitUploadsDeletion } = await import('./fitFiles');
 

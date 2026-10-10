@@ -45,6 +45,13 @@ describe('envoi', () => {
     expect(mock.files.get(shared.uploads[0]!.path!)?.permissions).toContain('read("team:pprojet")');
   });
 
+  it('projet partagé hors session (serveur temps réel injoignable) : l’équipe lit aussi le fichier', async () => {
+    const { mock, fit, live } = await load();
+    live.markSharedProject('partage', 'ppartage', 'propriétaire');
+    const { uploads } = await fit.uploadProjectItineraryFitFiles('partage', 'it1', [fitFile('c.fit')]);
+    expect(mock.files.get(uploads[0]!.path!)?.permissions).toContain('read("team:ppartage")');
+  });
+
   it('un fichier refusé n’empêche pas l’envoi des autres', async () => {
     const { fit } = await load();
     const broken = fitFile('casse.fit');

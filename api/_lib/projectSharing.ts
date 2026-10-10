@@ -1,4 +1,5 @@
-import { gunzipSync } from 'node:zlib';
+import { promisify } from 'node:util';
+import { gunzip, gunzipSync } from 'node:zlib';
 
 import { Query } from 'node-appwrite';
 
@@ -233,6 +234,30 @@ async function grantFile(bucketId: string, fileId: string, ownerId: string, team
   }
 }
 
+const gunzipAsync = promisify(gunzip);
+const MAX_DOCUMENT_BYTES = 200 * 1024 * 1024;
+
+/**
+ * Document d'un gros projet, rangé dans le bucket des charges utiles (`data`
+ * = `file:<id>`). Le pointeur n'est suivi que vers la charge utile du projet,
+ * lisible par son propriétaire (même règle que le serveur temps réel) ; null
+ * sinon, ou si elle est illisible.
+ */
+async function readPayloadDocument(projectId: string, data: string, ownerId: string): Promise<unknown> {
+  const fileId = data.slice('file:'.length);
+  if (!APPWRITE_ID_PATTERN.test(fileId)) return null;
+  const storage = getAppwriteStorage();
+  try {
+    const file = await storage.getFile(PROJECT_PAYLOADS_BUCKET_ID, fileId);
+    if (file.name !== projectPayloadFileName(projectId) || !fileReadableBy(file.$permissions, ownerId, null)) return null;
+    const bytes = Buffer.from(await storage.getFileDownload(PROJECT_PAYLOADS_BUCKET_ID, fileId));
+    return JSON.parse((await gunzipAsync(bytes, { maxOutputLength: MAX_DOCUMENT_BYTES })).toString('utf8'));
+  } catch (error) {
+    console.warn('[projects/share] charge utile illisible, .fit non ouverts à l’équipe', projectId, error);
+    return null;
+  }
+}
+
 /** Fichiers .fit référencés par le document (`fitUploads[].path`). */
 function fitFileIds(data: unknown): string[] {
   let value: unknown = data;
@@ -240,7 +265,7 @@ function fitFileIds(data: unknown): string[] {
     if (value.startsWith('file:')) return [];
     try {
       value = value.startsWith('gz:')
-        ? JSON.parse(gunzipSync(Buffer.from(value.slice(3), 'base64'), { maxOutputLength: 200 * 1024 * 1024 }).toString('utf8'))
+        ? JSON.parse(gunzipSync(Buffer.from(value.slice(3), 'base64'), { maxOutputLength: MAX_DOCUMENT_BYTES }).toString('utf8'))
         : JSON.parse(value);
     } catch {
       return [];
@@ -270,8 +295,10 @@ function fitFileIds(data: unknown): string[] {
  *    propriétaire en attendant le partage (ou partage interrompu) ;
  *  - les fichiers du document (.fit, miniature, charge utile) s'ouvrent à
  *    l'équipe — lus maintenant, tant que seul le propriétaire a écrit le
- *    document. Ensuite, chaque fichier ajouté en session porte déjà la
- *    lecture de l'équipe, et un nouveau membre l'hérite par son rôle.
+ *    document (charge utile comprise pour un gros projet). Ensuite, chaque
+ *    .fit ajouté à un projet partagé porte déjà la lecture de l'équipe (en
+ *    session ou non : uploadProjectItineraryFitFiles), et un nouveau membre
+ *    l'hérite par son rôle.
  */
 /**
  * Opérations de partage d'un même projet, l'une après l'autre. Deux
@@ -315,8 +342,13 @@ async function ensureShared(row: ProjectRowAccess, ownerId: string): Promise<str
 
   if (firstShare) {
     const full = await readProject(row.$id, true);
+    // Gros projet : le document (et donc ses .fit) est dans la charge utile.
+    // Sans lui, les éditeurs recevaient un 404 sur chaque .fit.
+    const document = typeof full.data === 'string' && full.data.startsWith('file:')
+      ? await readPayloadDocument(row.$id, full.data, ownerId)
+      : full.data;
     await Promise.all([
-      ...fitFileIds(full.data).map((fileId) => grantFile(FIT_FILES_BUCKET_ID, fileId, ownerId, teamId)),
+      ...fitFileIds(document).map((fileId) => grantFile(FIT_FILES_BUCKET_ID, fileId, ownerId, teamId)),
       grantFile(THUMBNAILS_BUCKET_ID, row.$id, ownerId, teamId),
       typeof full.data === 'string' && full.data.startsWith('file:')
         ? grantFile(PROJECT_PAYLOADS_BUCKET_ID, full.data.slice('file:'.length), ownerId, teamId, projectPayloadFileName(row.$id))

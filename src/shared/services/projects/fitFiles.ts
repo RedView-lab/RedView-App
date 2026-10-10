@@ -9,7 +9,7 @@ import {
 } from '@/shared/services/appwrite';
 
 import { getCurrentUserId } from './auth';
-import { isLiveSession, sharedProjectTeamId } from './liveSessions';
+import { isServerOwnedDocument, sharedProjectTeamId } from './liveSessions';
 import type { ItineraryFitUpload, ItineraryProject } from './types';
 
 export interface FitUploadBatchResult {
@@ -25,8 +25,10 @@ export async function uploadProjectItineraryFitFiles(
   files: File[],
 ): Promise<FitUploadBatchResult> {
   const userId = await getCurrentUserId();
-  // Projet en co-édition : les autres éditeurs lisent aussi ce fichier (prédiction).
-  const teamId = isLiveSession(projectId) ? sharedProjectTeamId(projectId) : null;
+  // Projet partagé : les autres éditeurs lisent aussi ce fichier (prédiction),
+  // même ajouté hors session (serveur temps réel injoignable, session en cours
+  // d'ouverture). Sans la lecture de l'équipe, ils recevaient un 404.
+  const teamId = isServerOwnedDocument(projectId) ? sharedProjectTeamId(projectId) : null;
   const uploads: ItineraryFitUpload[] = [];
   const failed: File[] = [];
 

@@ -158,6 +158,7 @@ export function useItineraryFitRuntime({
 
   useFitHydration({
     active,
+    projectId,
     hydrationInput: activeFitHydrationInput,
     persistedUploadSignature: activePersistedUploadSignature,
     activePrediction,
