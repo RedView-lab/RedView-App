@@ -15,6 +15,7 @@ import {
   SUBSCRIPTIONS_COLLECTION_ID,
   THUMBNAILS_BUCKET_ID,
 } from './appwrite.js';
+import { DELETION_PENDING_LABEL } from './accountLabels.js';
 import { getCustomerRow } from './billing/customers.js';
 import { PublicError } from './errors.js';
 import { notifyProjectAccessChanged } from './multiplayerNotify.js';
@@ -51,8 +52,7 @@ import { getStripeServer } from './stripe.js';
  */
 
 export const ACCOUNT_DELETIONS_COLLECTION_ID = 'account_deletions';
-/** Labels Appwrite : alphanumériques seulement. */
-export const DELETION_PENDING_LABEL = 'deletionpending';
+export { DELETION_PENDING_LABEL };
 const PROJECT_VIEWS_COLLECTION_ID = 'project_views';
 const PAGE_SIZE = 100;
 /** Garde-fou des parcours paginés (100 000 lignes ou fichiers). */
@@ -257,9 +257,11 @@ async function deleteUserRows(userId: string): Promise<{ views: number; folders:
     .filter((row) => ownedBy(row.$permissions, userId));
   await deleteRows(FOLDERS_COLLECTION_ID, folders.map((row) => row.$id));
   // Écrites par le serveur seul (aucune permission client) : `user_id` fait foi.
+  // Le client d'abord : sans lui, un webhook Stripe tardif ne retrouve plus le
+  // compte et ne peut plus recréer une ligne `subscriptions` (A2-2).
+  await deleteRows(CUSTOMERS_COLLECTION_ID, [userId]);
   const subscriptions = await listRows(SUBSCRIPTIONS_COLLECTION_ID, [Query.equal('user_id', userId)]);
   await deleteRows(SUBSCRIPTIONS_COLLECTION_ID, subscriptions.map((row) => row.$id));
-  await deleteRows(CUSTOMERS_COLLECTION_ID, [userId]);
   return { views: views.length, folders: folders.length };
 }
 

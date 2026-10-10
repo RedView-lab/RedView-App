@@ -5,8 +5,10 @@ import {
   APPWRITE_DATABASE_ID,
   CUSTOMERS_COLLECTION_ID,
   getAppwriteDatabases,
+  getAppwriteUsers,
 } from '../appwrite.js';
 import { getStripeServer } from '../stripe.js';
+import { DELETION_PENDING_LABEL } from '../accountLabels.js';
 import type { CustomerRow } from './types.js';
 
 function appwriteCode(error: unknown): number | null {
@@ -118,9 +120,12 @@ export async function getStripeCustomerId(userId: string): Promise<string | null
 }
 
 /**
- * Compte RedView d'un client Stripe. Lève sur une erreur d'Appwrite : le
- * webhook répond alors 500 et Stripe relivre l'évènement, au lieu de le
- * perdre.
+ * Compte RedView d'un client Stripe, null s'il n'y en a pas, s'il est supprimé
+ * ou en cours de suppression : la suppression du client Stripe déclenche
+ * `customer.subscription.deleted`, et un webhook arrivé pendant la purge
+ * recréait la ligne `subscriptions` d'un compte effacé (A2-2). Lève sur une
+ * erreur d'Appwrite : le webhook répond alors 500 et Stripe relivre
+ * l'évènement, au lieu de le perdre.
  */
 export async function getUserIdFromCustomer(stripeCustomerId: string): Promise<string | null> {
   const db = getAppwriteDatabases();
@@ -129,5 +134,13 @@ export async function getUserIdFromCustomer(stripeCustomerId: string): Promise<s
     Query.limit(1),
   ]);
   const userId = result.documents[0]?.user_id;
-  return typeof userId === 'string' && userId ? userId : null;
+  if (typeof userId !== 'string' || !userId) return null;
+  try {
+    const user = await getAppwriteUsers().get(userId);
+    if (Array.isArray(user.labels) && user.labels.includes(DELETION_PENDING_LABEL)) return null;
+  } catch (error) {
+    if (appwriteCode(error) === 404) return null;
+    throw error;
+  }
+  return userId;
 }
