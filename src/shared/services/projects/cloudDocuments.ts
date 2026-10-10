@@ -1,4 +1,5 @@
 import { logger } from '@/shared/lib/logger';
+import { APPWRITE_DATABASE_ID, client, PROJECTS_COLLECTION_ID } from '@/shared/services/appwrite';
 import {
   decompressProjectBytes,
   decompressProjectPayload,
@@ -14,6 +15,7 @@ import { encodeProjectPayloadOffThread } from './payloadEncodingClient';
 import {
   downloadProjectPayloadFile,
   isPayloadFilePointer,
+  latestPayloadPointerExcept,
   pruneProjectPayloadFiles,
   uploadProjectPayloadFile,
 } from './payloadFiles';
@@ -85,16 +87,26 @@ export function withNameSync(row: ProjectRow): ProjectRow {
   return { ...row, data: carryLegacyView(row.data, { ...row.data, name: row.name }) };
 }
 
-/** Lit le fichier pointé par `data` ; une erreur remonte (jamais un projet vide à la place). */
-async function readPayloadFile(pointer: string): Promise<unknown> {
+/**
+ * Lit le fichier pointé par `data` ; une erreur remonte (jamais un projet vide
+ * à la place). Fichier disparu (deux sauvegardes concurrentes d'une ancienne
+ * version de l'app, B3-1) : le plus récent fichier encore présent du projet
+ * est lu à la place.
+ */
+async function readPayloadFile(projectId: string, pointer: string): Promise<unknown> {
   let bytes: Uint8Array<ArrayBuffer>;
   try {
     bytes = await downloadProjectPayloadFile(pointer);
   } catch (error) {
-    // Fichier introuvable : ce n'est pas le projet qui est supprimé. Sans code
-    // HTTP, l'erreur est classée « cloud injoignable » et la copie locale sert.
-    const code = (error as { code?: unknown } | null)?.code;
-    throw code === 404 ? new Error(`Project payload file missing: ${pointer}`, { cause: error }) : error;
+    if ((error as { code?: unknown } | null)?.code !== 404) throw error;
+    const fallback = await latestPayloadPointerExcept(projectId, pointer).catch(() => null);
+    if (!fallback) {
+      // Ce n'est pas le projet qui est supprimé. Sans code HTTP, l'erreur est
+      // classée « cloud injoignable » et la copie locale sert.
+      throw new Error(`Project payload file missing: ${pointer}`, { cause: error });
+    }
+    logger.projects.warn('Project payload file missing, reading the latest one left', { projectId, pointer, fallback });
+    bytes = await downloadProjectPayloadFile(fallback);
   }
   return decodePayload(() => decompressProjectBytes(bytes));
 }
@@ -121,7 +133,7 @@ export async function docToProjectRow(doc: CloudProjectDoc): Promise<ProjectRow>
   let raw: unknown;
   if (isPayloadFilePointer(data)) {
     filePayloadProjects.add(doc.$id);
-    raw = await readPayloadFile(data);
+    raw = await readPayloadFile(doc.$id, data);
   } else if (typeof data === 'string') {
     raw = await decodePayload(() => decompressProjectPayload(data));
   } else {
@@ -216,15 +228,43 @@ export async function writeCloudData(
 }
 
 /**
- * Après une écriture confirmée du document : supprime les anciens fichiers de
- * charge utile du projet. Appelée dans la file cloud du projet, donc aucune
- * sauvegarde suivante n'a pu envoyer un fichier entre-temps. Un projet jamais
- * vu en fichier dans cette session est quand même vérifié une fois (fichier
- * laissé par un autre appareil avant que le projet ne repasse sous la limite).
+ * Écrit des attributs du document d'un projet. `unchangedSince` (version
+ * `$updatedAt` sur laquelle repose l'écriture) la rend conditionnelle :
+ * Appwrite relit la ligne sous verrou et refuse (409
+ * `document_update_conflict`) si elle a été modifiée après — en-tête
+ * `X-Appwrite-Timestamp`, que les méthodes du SDK web ne savent pas poser.
+ * Un contrôle de version fait avant l'écriture laissait deux sauvegardes
+ * concurrentes (onglets, appareils) s'écraser sans conflit (B3-2).
  */
-export async function settlePayloadFiles(projectId: string, data: string): Promise<void> {
+export async function updateProjectDocument(
+  projectId: string,
+  update: Record<string, unknown>,
+  unchangedSince: string | null,
+): Promise<CloudProjectDoc> {
+  const url = new URL(
+    `${client.config.endpoint}/databases/${encodeURIComponent(APPWRITE_DATABASE_ID)}/collections/${encodeURIComponent(PROJECTS_COLLECTION_ID)}/documents/${encodeURIComponent(projectId)}`,
+  );
+  // X-Appwrite-Project explicite : le SDK web ne l'ajoute pas à client.call (accessQueries.ts).
+  const headers: Record<string, string> = {
+    'X-Appwrite-Project': client.config.project,
+    'content-type': 'application/json',
+    accept: 'application/json',
+  };
+  if (unchangedSince) headers['X-Appwrite-Timestamp'] = unchangedSince;
+  return (await client.call('patch', url, headers, { data: update })) as CloudProjectDoc;
+}
+
+/**
+ * Après une écriture confirmée du document (`writtenAt` = son `$updatedAt`) :
+ * supprime les fichiers de charge utile du projet créés avant elle (pas ceux
+ * d'une sauvegarde plus récente d'un autre onglet, pruneProjectPayloadFiles).
+ * Un projet jamais vu en fichier dans cette session est quand même vérifié
+ * une fois (fichier laissé par un autre appareil avant que le projet ne
+ * repasse sous la limite).
+ */
+export async function settlePayloadFiles(projectId: string, data: string, writtenAt: string): Promise<void> {
   if (!filePayloadProjects.has(projectId) && payloadFilesChecked.has(projectId)) return;
   payloadFilesChecked.add(projectId);
-  await pruneProjectPayloadFiles(projectId, data);
+  await pruneProjectPayloadFiles(projectId, data, writtenAt);
   if (!isPayloadFilePointer(data)) filePayloadProjects.delete(projectId);
 }

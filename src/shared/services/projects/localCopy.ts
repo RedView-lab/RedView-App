@@ -7,7 +7,7 @@ import {
 import { getCurrentUserId, isLocalFallbackUser, isOwnedBy } from './auth';
 import { utf8ByteLength } from './limits';
 import { isServerOwnedDocument } from './liveSessions';
-import { enqueue, knownCloudVersions, localQueues, localRevisions } from './projectSession';
+import { enqueue, knownCloudVersions, localQueues, localRevisions, localWriteStamps } from './projectSession';
 import { serializeProjectForStorage, type SerializedProject } from './storedProject';
 import type { ItineraryProject, ProjectRow } from './types';
 
@@ -69,17 +69,27 @@ export function writeLocalCopy(
       throw error;
     }
     failingLocalCopies.delete(id);
+    localWriteStamps.set(id, now);
     return revision;
   });
 }
 
-/** Après confirmation cloud : nouvelle version de base, et propre si aucune écriture locale plus récente. */
+/**
+ * Après confirmation cloud : nouvelle version de base, et propre si aucune
+ * écriture locale plus récente. Une copie réécrite depuis par un autre onglet
+ * (même IndexedDB) n'est pas touchée : son document n'est pas celui que le
+ * cloud vient de confirmer, et lui donner cette version de base ferait passer
+ * ses modifications par-dessus celles-ci sans conflit (B3-2).
+ */
 export function markLocalSynced(id: string, revision: number, cloudUpdatedAt: string): Promise<void> {
   return enqueue(localQueues, id, async () => {
-    await idbUpdateProjectMeta(id, (meta) => ({
-      cloud_updated_at: cloudUpdatedAt,
-      dirty: localRevisions.get(id) === revision ? false : meta.dirty,
-    }));
+    await idbUpdateProjectMeta(id, (meta) => {
+      if (meta.updated_at !== localWriteStamps.get(id)) return {};
+      return {
+        cloud_updated_at: cloudUpdatedAt,
+        dirty: localRevisions.get(id) === revision ? false : meta.dirty,
+      };
+    });
   }).catch((error: unknown) => {
     logger.projects.warn('IndexedDB markLocalSynced failed', error);
   });

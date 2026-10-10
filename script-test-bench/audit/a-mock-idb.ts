@@ -18,10 +18,20 @@ import type { IdbProjectViewEntry } from '../../src/shared/services/storage/idbP
 
 type StoredRow = ProjectRowMeta & { data_json: string; work_json?: string };
 
-const projects = new Map<string, StoredRow>();
-const cache = new Map<string, { projectId: string; ownerId?: string; cachedAt: string; project: ItineraryProject }>();
-const thumbs = new Map<string, Blob>();
-const views = new Map<string, IdbProjectViewEntry>();
+// Base globale : deux bundles chargés (deux onglets, scénarios T*) lisent la même IndexedDB.
+type SharedIdb = {
+  projects: Map<string, StoredRow>;
+  cache: Map<string, { projectId: string; ownerId?: string; cachedAt: string; project: ItineraryProject }>;
+  thumbs: Map<string, Blob>;
+  views: Map<string, IdbProjectViewEntry>;
+};
+const sharedIdb = ((globalThis as typeof globalThis & { __rvAuditIdb?: SharedIdb }).__rvAuditIdb ??= {
+  projects: new Map(),
+  cache: new Map(),
+  thumbs: new Map(),
+  views: new Map(),
+});
+const { projects, cache, thumbs, views } = sharedIdb;
 
 function hydrate(stored: StoredRow): ProjectRow | null {
   const parsed = parseStoredProject(JSON.parse(stored.data_json), parseStoredLocalWork(stored.work_json));

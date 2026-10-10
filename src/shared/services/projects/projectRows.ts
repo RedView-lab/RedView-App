@@ -47,20 +47,22 @@ import {
   docToProjectRow,
   withProjectMetaFields,
   settlePayloadFiles,
+  updateProjectDocument,
   withNameSync,
   writeCloudData,
   type CloudProjectDoc,
 } from './cloudDocuments';
-import { ProjectCloudError } from './errors';
+import { ProjectCloudError, toProjectCloudError } from './errors';
 import { collectProjectFitUploads, deleteFitUploads } from './fitFiles';
 import { readLocalProjects, removeLocalProjectCacheEntry, writeLocalProjects } from './legacyLocalProjects';
 import { utf8ByteLength } from './limits';
 import { markLocalSynced, writeLocalCopy } from './localCopy';
 import {
   deletePayloadFile,
+  deleteProjectPayloadFiles,
   downloadProjectPayloadFile,
   isPayloadFilePointer,
-  pruneProjectPayloadFiles,
+  payloadFileExists,
   uploadProjectPayloadFile,
 } from './payloadFiles';
 import {
@@ -568,10 +570,15 @@ export async function saveProject(
     try {
       const cloud = await buildCloudPayload(json, sizeBytes);
 
+      // Version cloud sur laquelle repose ce document : l'écriture est refusée
+      // par Appwrite si la ligne a changé depuis (B3-2). Forcée : sans condition.
+      let base: string | null = null;
       if (!options.force) {
-        const base = knownCloudVersions.get(id)
+        base = knownCloudVersions.get(id)
           ?? (await idbGetProjectMeta(id).catch(() => null))?.cloud_updated_at
           ?? null;
+        // Contrôle anticipé (n'envoie pas un gros fichier pour rien) ; la
+        // garantie est l'écriture conditionnelle, plus bas.
         const current = (await databases.getDocument(
           APPWRITE_DATABASE_ID,
           PROJECTS_COLLECTION_ID,
@@ -588,19 +595,29 @@ export async function saveProject(
         }
       }
 
-      const written = await writeCloudData(id, userId, cloud);
-      uploaded = written.uploaded;
-      const doc = (await databases.updateDocument(APPWRITE_DATABASE_ID, PROJECTS_COLLECTION_ID, id, {
+      const fields = {
         name: project.name,
-        data: written.data,
         size_bytes: cloud.sizeBytes,
         privacy: project.privacy ?? 'private',
-      })) as unknown as CloudProjectDoc;
+      };
+      let written = await writeCloudData(id, userId, cloud);
+      uploaded = written.uploaded;
+      let doc = await updateProjectDocument(id, { ...fields, data: written.data }, base);
       uploaded = null;
+      // Gros projet : fichier supprimé entre son envoi et l'écriture (élagage
+      // d'une sauvegarde concurrente, forcée ou d'une version précédente de
+      // l'app) — renvoyé, pour que le document ne pointe jamais dans le vide (B3-1).
+      if (written.uploaded && (await payloadFileExists(written.data)) === false) {
+        logger.projects.warn('Project payload file pruned before its document was written, uploading it again', { id });
+        written = await writeCloudData(id, userId, cloud);
+        uploaded = written.uploaded;
+        doc = await updateProjectDocument(id, { ...fields, data: written.data }, doc.$updatedAt);
+        uploaded = null;
+      }
       rememberCloudVersion(id, doc.$updatedAt);
       confirmedDocuments.set(id, json);
       await markLocalSynced(id, revision, doc.$updatedAt);
-      await settlePayloadFiles(id, written.data);
+      await settlePayloadFiles(id, written.data, doc.$updatedAt);
     } catch (e) {
       // Fichier envoyé mais document non pointé dessus : il ne sert à rien.
       if (uploaded) await deletePayloadFile(uploaded);
@@ -614,25 +631,30 @@ export async function saveProject(
  * Lit la version cloud courante puis applique `update` ; si la version de base
  * connue était à jour, elle avance avec la nouvelle `$updatedAt` (évite un faux
  * conflit à la prochaine sauvegarde sans masquer un vrai changement distant).
+ * L'écriture est conditionnelle à la version lue : une sauvegarde d'un autre
+ * onglet arrivée entre la lecture et l'écriture ne doit pas devenir la base
+ * de celui-ci sans avoir été vue (B3-2) ; on relit et on recommence.
  */
-async function updateProjectDocumentKeepingBase(
+export async function updateProjectDocumentKeepingBase(
   id: string,
   update: Record<string, unknown>,
+  metaPatch: Partial<Pick<ProjectRowMeta, 'name' | 'folder_id'>> = {},
 ): Promise<CloudProjectDoc> {
-  const before = (await databases.getDocument(
-    APPWRITE_DATABASE_ID,
-    PROJECTS_COLLECTION_ID,
-    id,
-    [Query.select(['$id', '$updatedAt'])],
-  )) as unknown as CloudProjectDoc;
-  const doc = (await databases.updateDocument(
-    APPWRITE_DATABASE_ID,
-    PROJECTS_COLLECTION_ID,
-    id,
-    update,
-  )) as unknown as CloudProjectDoc;
-  advanceBaseIfCurrent(id, before.$updatedAt, doc.$updatedAt);
-  return doc;
+  for (let attempt = 1; ; attempt += 1) {
+    const before = (await databases.getDocument(
+      APPWRITE_DATABASE_ID,
+      PROJECTS_COLLECTION_ID,
+      id,
+      [Query.select(['$id', '$updatedAt'])],
+    )) as unknown as CloudProjectDoc;
+    try {
+      const doc = await updateProjectDocument(id, update, before.$updatedAt);
+      advanceBaseIfCurrent(id, before.$updatedAt, doc.$updatedAt, metaPatch);
+      return doc;
+    } catch (error) {
+      if (attempt >= 3 || toProjectCloudError(error).kind !== 'conflict') throw error;
+    }
+  }
 }
 
 /**
@@ -640,7 +662,7 @@ async function updateProjectDocumentKeepingBase(
  * fait avancer la version de base (mémoire + IndexedDB) si elle valait
  * `before`, et applique `metaPatch` à la copie locale.
  */
-export function advanceBaseIfCurrent(
+function advanceBaseIfCurrent(
   id: string,
   before: string,
   after: string,
@@ -756,7 +778,7 @@ export async function deleteProject(id: string): Promise<void> {
       if (error.kind !== 'not-found') throw error;
     }
     // Fichiers de charge utile éventuels (gros projets), sans faire échouer la suppression.
-    await enqueue(cloudQueues, id, () => pruneProjectPayloadFiles(id, null));
+    await enqueue(cloudQueues, id, () => deleteProjectPayloadFiles(id));
     await deleteFitUploads(fitUploads);
     filePayloadProjects.delete(id);
     payloadFilesChecked.delete(id);

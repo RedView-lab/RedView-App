@@ -2,7 +2,7 @@ import { IDBObjectStore } from 'fake-indexeddb';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createDefaultItinerary, createDefaultProject } from '@/features/itineraryPanel/lib/project/defaultState';
-import { loadProjectPersistence, reloadProjectSession as reloadTab, type MockAppwriteSdk as MockSdk } from '@/shared/test/projectPersistence';
+import { loadProjectPersistence, openSecondTab, reloadProjectSession as reloadTab, type MockAppwriteSdk as MockSdk } from '@/shared/test/projectPersistence';
 
 /**
  * Règles de persistance des projets (projectRows.ts) sur le vrai code : faux
@@ -171,6 +171,86 @@ describe('saveProject', () => {
     // Ouverture sans copie locale (autre appareil) : le document est relu en entier depuis le fichier.
     await idb.idbDeleteProject(row.id);
     expect((await rows.getProject(row.id))?.data.name).toBe('Gros modifié');
+  });
+});
+
+describe('deux onglets ou deux appareils qui enregistrent en même temps', () => {
+  const payloadFiles = (mock: MockSdk['__mock'], id: string) =>
+    [...mock.files.entries()].filter(([, file]) => file.name === `${id}.json.gz`).map(([fileId]) => fileId);
+
+  it('écriture conditionnelle : l’autre écriture arrivée pendant l’envoi n’est jamais écrasée (B3-2)', async () => {
+    const { mock, rows } = await load();
+    const row = await rows.createProject('Commun');
+    const other = await openSecondTab();
+    await other.rows.getProject(row.id);
+
+    // L'autre onglet enregistre après le contrôle de version de celui-ci, avant son écriture.
+    mock.beforeProjectWrite = () => other.rows.saveProject(row.id, project('Onglet Y'));
+    await expect(rows.saveProject(row.id, project('Onglet X'))).rejects.toSatisfy((error) => kindOf(error) === 'conflict');
+    expect(cloudDoc(mock, row.id).name).toBe('Onglet Y');
+  });
+
+  it('gros projet (fichier du bucket) : le document pointe toujours sur un fichier présent (B3-1)', async () => {
+    const { mock, rows, idb } = await load();
+    limits.payloadChars = 64;
+    const row = await rows.createProject('Gros commun');
+    const other = await openSecondTab();
+    await other.rows.getProject(row.id);
+
+    mock.beforeProjectWrite = () => other.rows.saveProject(row.id, project('Gros Y'));
+    const saves = await Promise.allSettled([rows.saveProject(row.id, project('Gros X'))]);
+    expect(saves[0].status).toBe('rejected');
+
+    const pointer = String(cloudDoc(mock, row.id).data);
+    expect(pointer).toMatch(/^file:/);
+    expect(payloadFiles(mock, row.id)).toEqual([pointer.slice('file:'.length)]);
+    // Troisième appareil, sans copie locale : le projet se relit en entier.
+    await idb.idbDeleteProject(row.id);
+    await reloadTab();
+    expect((await rows.getProject(row.id))?.data.name).toBe('Gros Y');
+  });
+
+  it('élagage : un fichier envoyé après l’écriture de cet onglet n’est jamais supprimé (B3-1)', async () => {
+    const { mock, rows } = await load();
+    limits.payloadChars = 64;
+    const row = await rows.createProject('Gros');
+    const storage = (await import('@/shared/services/appwrite')).storage;
+    // Fichier d'une sauvegarde plus récente (autre onglet), créé juste après l'écriture de celle-ci.
+    const later = vi.spyOn(storage, 'listFiles');
+    later.mockImplementationOnce(async (...args) => {
+      await storage.createFile('project-payloads', 'doc-later', new File([new Uint8Array(4)], `${row.id}.json.gz`));
+      later.mockRestore();
+      return storage.listFiles(...args);
+    });
+    await rows.saveProject(row.id, project('Gros v2'));
+    expect(payloadFiles(mock, row.id)).toContain('doc-later');
+  });
+
+  it('fichier pointé disparu : ouverture sur le plus récent fichier du projet encore présent (B3-1)', async () => {
+    const { mock, rows, idb } = await load();
+    limits.payloadChars = 64;
+    const row = await rows.createProject('Gros');
+    await rows.saveProject(row.id, project('Gros v2'));
+    const pointer = String(cloudDoc(mock, row.id).data).slice('file:'.length);
+    const kept = mock.files.get(pointer)!;
+    mock.files.delete(pointer);
+    mock.files.set('doc-restant', { ...kept, $createdAt: '2027-01-01T00:00:00.000Z' });
+    await idb.idbDeleteProject(row.id);
+    await reloadTab();
+    expect((await rows.getProject(row.id))?.data.name).toBe('Gros v2');
+  });
+
+  it('copie locale commune aux onglets : jamais marquée propre par-dessus l’écriture d’un autre onglet (B3-2)', async () => {
+    const { mock, rows, idb } = await load();
+    const row = await rows.createProject('Local');
+    const other = await openSecondTab();
+    await other.rows.getProject(row.id);
+
+    mock.beforeProjectWrite = () => other.rows.saveProjectLocally(row.id, project('Y hors ligne'));
+    await rows.saveProject(row.id, project('X'));
+    const meta = await idb.idbGetProjectMeta(row.id);
+    expect((await idb.idbGetProject(row.id))?.data.name).toBe('Y hors ligne');
+    expect(meta?.dirty).toBe(true);
   });
 });
 

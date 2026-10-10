@@ -14,6 +14,12 @@ export const knownCloudVersions = new Map<string, string>();
 export const confirmedDocuments = new Map<string, string>();
 /** Révision locale par projet : seule la dernière écriture locale peut être marquée propre. */
 export const localRevisions = new Map<string, number>();
+/**
+ * `updated_at` de la dernière copie locale écrite par cet onglet. La copie
+ * IndexedDB est commune aux onglets : un onglet ne la marque propre (et ne lui
+ * donne sa version cloud) que si elle est encore la sienne.
+ */
+export const localWriteStamps = new Map<string, string>();
 export const localQueues = new Map<string, Promise<unknown>>();
 export const cloudQueues = new Map<string, Promise<unknown>>();
 /** Projets dont la charge utile cloud est (ou était) un fichier du bucket. */

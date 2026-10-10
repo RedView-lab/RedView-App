@@ -54,9 +54,11 @@ g.document = {
 g.location = { pathname: '/' };
 g.history = { replaceState: (_s: unknown, _t: string, path: string) => { (g.location as { pathname: string }).pathname = path; } };
 
+let bundleCount = 0;
 async function loadBundle() {
   const esbuild = await import('esbuild');
-  const outFile = path.join(os.tmpdir(), `rv-audit-persist-${process.pid}.mjs`);
+  // Un fichier par chargement : chaque onglet (scénarios T*) a son propre graphe de modules.
+  const outFile = path.join(os.tmpdir(), `rv-audit-persist-${process.pid}-${++bundleCount}.mjs`);
   const entry = `
     export * from ${JSON.stringify(path.join(SRC, 'shared/services/projects/projectRows.ts'))};
     export * from ${JSON.stringify(path.join(SRC, 'shared/services/projects/projectViews.ts'))};
@@ -214,6 +216,47 @@ async function main() {
       `brut=${(rawBytes / 1e6).toFixed(2)} Mo ; saveProject : ${threw ? `lève ${threw.kind} « ${threw.message?.slice(0, 60)}… »` : 'résout'} ; document : ${pointer ? 'pointeur file:' : `data inline (${String(firstData).slice(0, 20)}…)`}`,
       `502 du proxy : ${__mock.proxyRejections} ; fichiers du projet après 2 sauvegardes : ${files} (1 attendu)`,
       `relu sur un autre appareil : ${whole ? 'entier (nom v2, 15 Mo identiques)' : `INCOMPLET (nom=${reopened?.data?.name})`}`,
+    ]);
+  }
+
+  // ── T1 / T2 : deux onglets (deux bundles = deux graphes de modules, même faux
+  // Appwrite et même IndexedDB) qui enregistrent le même projet en même temps.
+  // L'onglet Y écrit après le contrôle de version de X, avant son écriture (B3-1, B3-2).
+  {
+    fresh();
+    const row = await m.createProject('T1', named('T1'));
+    const tabY = await loadBundle();
+    await tabY.getProject(row.id);
+    __mock.beforeProjectWrite = () => tabY.saveProject(row.id, named('T1 onglet Y'));
+    let outcome = 'résout';
+    try { await m.saveProject(row.id, named('T1 onglet X')); } catch (e) { outcome = `lève ${(e as { kind?: string }).kind}`; }
+    const cloudName = __mock.col('projects').get(row.id)?.name;
+    report('T1', 'deux onglets enregistrent en même temps : écrasement silencieux (pas de conflit)', outcome !== 'lève conflict' || cloudName !== 'T1 onglet Y', [
+      `sauvegarde de X : ${outcome} (conflit attendu) ; nom dans le cloud : « ${cloudName} » (attendu : celui de Y)`,
+    ]);
+  }
+  {
+    fresh();
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    const chunk = Array.from({ length: 1_000_000 }, () => alphabet[Math.floor(rnd() * 62)]).join('');
+    const blob = Array.from({ length: 15 }, (_, i) => chunk.slice(i * 997) + chunk.slice(0, i * 997)).join('');
+    const row = await m.createProject('T2', { ...named('T2'), auditBlob: blob });
+    const tabY = await loadBundle();
+    await tabY.getProject(row.id);
+    __mock.beforeProjectWrite = () => tabY.saveProject(row.id, { ...named('T2 onglet Y'), auditBlob: blob });
+    let outcome = 'résout';
+    try { await m.saveProject(row.id, { ...named('T2 onglet X'), auditBlob: blob }); } catch (e) { outcome = `lève ${(e as { kind?: string }).kind}`; }
+    const data = String(__mock.col('projects').get(row.id)?.data ?? '');
+    const pointed = data.startsWith('file:') && __mock.files.has(data.slice('file:'.length));
+    const files = [...__mock.files.values()].filter((file: { name: string }) => file.name === `${row.id}.json.gz`).length;
+    // Troisième appareil (aucune copie locale, nouvel onglet) : le projet se relit-il ?
+    __idb.clear();
+    const tabZ = await loadBundle();
+    let reopened = '—';
+    try { reopened = (await tabZ.getProject(row.id))?.data?.name ?? 'introuvable'; } catch (e) { reopened = `erreur ${(e as { kind?: string }).kind}`; }
+    report('T2', 'gros projet enregistré par deux onglets : document pointé sur un fichier supprimé', !pointed || files !== 1 || reopened !== 'T2 onglet Y', [
+      `sauvegarde de X : ${outcome} ; fichier pointé présent : ${pointed ? 'oui' : 'NON'} ; fichiers du projet : ${files} (1 attendu)`,
+      `relu sur un troisième appareil : ${reopened}`,
     ]);
   }
 
@@ -792,6 +835,13 @@ async function __mockUpdate(mock: any, id: string, data: string, name = 'C4 v2')
   c.set(id, { ...cur, data, name, $updatedAt: new Date(Date.now() + 3_600_000).toISOString() });
   mock.calls = [];
 }
+
+// Une promesse jamais résolue (file d’attente bloquée) viderait la boucle
+// d’événements : Node sortirait en 0 sans avoir fini. Échec explicite.
+process.on('beforeExit', () => {
+  console.error('Simulation interrompue : boucle d’événements vide avant la fin (promesse jamais résolue).');
+  process.exit(4);
+});
 
 main().catch((e) => {
   console.error(e);

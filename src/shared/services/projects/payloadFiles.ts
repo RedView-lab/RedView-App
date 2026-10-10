@@ -94,20 +94,70 @@ export async function deletePayloadFile(pointer: string): Promise<void> {
   }
 }
 
-/**
- * Supprime les fichiers de charge utile d'un projet, sauf celui que pointe
- * `keepPointer` (version courante). Sans lever : un fichier orphelin sera
- * repris à la sauvegarde suivante. Bucket absent ou projet resté dans le
- * document : liste vide, rien à faire.
- */
-export async function pruneProjectPayloadFiles(projectId: string, keepPointer?: string | null): Promise<void> {
-  const keepId = keepPointer && isPayloadFilePointer(keepPointer) ? payloadFileIdOf(keepPointer) : null;
+/** Le fichier pointé existe-t-il encore ? `null` : impossible de le savoir (réseau…). */
+export async function payloadFileExists(pointer: string): Promise<boolean | null> {
   try {
-    const res = await storage.listFiles(PROJECT_PAYLOADS_BUCKET_ID, [
-      Query.equal('name', payloadFileName(projectId)),
-      Query.limit(100),
-    ]);
-    const stale = res.files.filter((file) => file.$id !== keepId);
+    await storage.getFile(PROJECT_PAYLOADS_BUCKET_ID, payloadFileIdOf(pointer));
+    return true;
+  } catch (error) {
+    return (error as { code?: unknown } | null)?.code === 404 ? false : null;
+  }
+}
+
+function listProjectPayloadFiles(projectId: string) {
+  return storage.listFiles(PROJECT_PAYLOADS_BUCKET_ID, [
+    Query.equal('name', payloadFileName(projectId)),
+    Query.limit(100),
+  ]);
+}
+
+/**
+ * Pointeur du plus récent fichier de charge utile du projet autre que
+ * `missingPointer` : repli quand le fichier pointé par le document a disparu
+ * (état laissé par une ancienne version de l'app, B3-1). `null` sinon.
+ */
+export async function latestPayloadPointerExcept(projectId: string, missingPointer: string): Promise<string | null> {
+  const missingId = payloadFileIdOf(missingPointer);
+  const res = await listProjectPayloadFiles(projectId);
+  const candidates = res.files
+    .filter((file) => file.$id !== missingId)
+    .sort((a, b) => Date.parse(b.$createdAt) - Date.parse(a.$createdAt));
+  return candidates.length > 0 ? toPayloadFilePointer(candidates[0].$id) : null;
+}
+
+/** Projet supprimé : tous ses fichiers de charge utile partent, sans lever. */
+export async function deleteProjectPayloadFiles(projectId: string): Promise<void> {
+  try {
+    const res = await listProjectPayloadFiles(projectId);
+    await Promise.allSettled(res.files.map((file) => storage.deleteFile(PROJECT_PAYLOADS_BUCKET_ID, file.$id)));
+  } catch (error) {
+    logger.projects.debug('Payload files delete skipped', projectId, error);
+  }
+}
+
+/**
+ * Supprime les anciens fichiers de charge utile d'un projet, après une
+ * écriture confirmée du document à l'instant `writtenAt` (son `$updatedAt`) :
+ * seulement ceux créés AVANT cette écriture, jamais celui que pointe
+ * `keepPointer`. Un fichier créé après appartient à une sauvegarde plus
+ * récente d'un autre onglet ou appareil, pas encore écrite dans le document :
+ * le supprimer laisserait ce document pointer sur un fichier absent (B3-1).
+ * Un fichier antérieur est, lui, celui d'une écriture déjà remplacée, ou d'une
+ * écriture concurrente qui sera refusée (conflit) et le supprimera elle-même.
+ * Sans lever : un fichier orphelin sera repris à la sauvegarde suivante.
+ * Bucket absent ou projet resté dans le document : liste vide, rien à faire.
+ */
+export async function pruneProjectPayloadFiles(
+  projectId: string,
+  keepPointer: string | null | undefined,
+  writtenAt: string,
+): Promise<void> {
+  const keepId = keepPointer && isPayloadFilePointer(keepPointer) ? payloadFileIdOf(keepPointer) : null;
+  const before = Date.parse(writtenAt);
+  if (!Number.isFinite(before)) return;
+  try {
+    const res = await listProjectPayloadFiles(projectId);
+    const stale = res.files.filter((file) => file.$id !== keepId && !(Date.parse(file.$createdAt) >= before));
     await Promise.allSettled(stale.map((file) => storage.deleteFile(PROJECT_PAYLOADS_BUCKET_ID, file.$id)));
   } catch (error) {
     logger.projects.debug('Payload files prune skipped', projectId, error);

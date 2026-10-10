@@ -102,6 +102,10 @@ export function toProjectCloudError(error: unknown): ProjectCloudError {
   if (code === 404) {
     return new ProjectCloudError('not-found', { status: code, cause: error });
   }
+  // Écriture conditionnelle refusée (X-Appwrite-Timestamp) : modifié ailleurs entre-temps.
+  if (code === 409 && /document_update_conflict/.test(readErrorText(error))) {
+    return new ProjectCloudError('conflict', { status: code, cause: error });
+  }
   if (code === 400 && /no longer than|too large|size/i.test(readErrorText(error))) {
     return new ProjectCloudError('too-large', { status: code, cause: error });
   }

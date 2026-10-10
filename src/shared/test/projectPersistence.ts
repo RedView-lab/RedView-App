@@ -40,6 +40,19 @@ export async function loadProjectPersistence(userId = 'user-A') {
   };
 }
 
+/**
+ * Second onglet du même navigateur : son propre graphe de modules (état de
+ * session en mémoire à part), le même serveur (faux SDK à état global) et la
+ * même IndexedDB. À appeler après `loadProjectPersistence` ; les modules du
+ * premier onglet, déjà importés, restent ceux du premier.
+ */
+export async function openSecondTab() {
+  vi.resetModules();
+  return {
+    rows: await import('@/shared/services/projects/projectRows'),
+  };
+}
+
 /** Onglet rechargé : l'état de session en mémoire est perdu, la copie locale reste. */
 export async function reloadProjectSession(): Promise<void> {
   const session = await import('@/shared/services/projects/projectSession');

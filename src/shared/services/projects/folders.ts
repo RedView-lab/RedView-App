@@ -14,7 +14,7 @@ import { isOwnDocument } from './access';
 import { getCurrentUserId, isLocalFallbackUser, isOwnedBy, toCloudFailure } from './auth';
 import { CLOUD_LIST_PAGE_SIZE, listAllCloudDocuments, listFirstCloudPage } from './cloudList';
 import { folderRowToSummary } from './mappers';
-import { advanceBaseIfCurrent } from './projectRows';
+import { updateProjectDocumentKeepingBase } from './projectRows';
 import type { ProjectFolderRow, ProjectFolderSummary, ProjectPrivacy } from './types';
 
 const LOCAL_FOLDERS_KEY = 'redview:local-folders:v1';
@@ -237,10 +237,7 @@ export async function deleteProjectFolder(id: string): Promise<void> {
         ]);
         if (children.length === 0) break;
         for (const child of children) {
-          const doc = await databases.updateDocument(APPWRITE_DATABASE_ID, PROJECTS_COLLECTION_ID, child.$id, {
-            folder_id: null,
-          });
-          advanceBaseIfCurrent(child.$id, child.$updatedAt, doc.$updatedAt, { folder_id: null });
+          await updateProjectDocumentKeepingBase(child.$id, { folder_id: null }, { folder_id: null });
         }
         if (children.length < CLOUD_LIST_PAGE_SIZE) break;
       }
