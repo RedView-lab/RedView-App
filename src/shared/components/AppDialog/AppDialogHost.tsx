@@ -14,30 +14,13 @@ import { createPortal } from 'react-dom';
 import { useAppI18n } from '@/shared/i18n';
 import { answerAppDialog, getCurrentAppDialog, subscribeAppDialog, type AppDialogRequest } from '@/shared/lib/appDialog';
 import { appScaleStyle, readRootAppScale } from '@/shared/lib/appScale';
+import { trapFocus } from '@/shared/lib/focusTrap';
 
 import './AppDialogHost.css';
 
 export function AppDialogHost() {
   const request = useSyncExternalStore(subscribeAppDialog, getCurrentAppDialog, () => null);
   return request ? <AppDialog key={request.id} request={request} /> : null;
-}
-
-const FOCUSABLE = 'button:not(:disabled), input:not(:disabled)';
-
-/** Tab et Maj+Tab restent dans la pop-in (aria-modal). */
-function trapFocus(event: KeyboardEvent, container: HTMLElement) {
-  const items = [...container.querySelectorAll<HTMLElement>(FOCUSABLE)];
-  const first = items[0];
-  const last = items[items.length - 1];
-  if (!first || !last) return;
-  const index = items.indexOf(document.activeElement as HTMLElement);
-  if (event.shiftKey && index <= 0) {
-    event.preventDefault();
-    last.focus();
-  } else if (!event.shiftKey && (index === -1 || index === items.length - 1)) {
-    event.preventDefault();
-    first.focus();
-  }
 }
 
 function AppDialog({ request }: { request: AppDialogRequest }) {

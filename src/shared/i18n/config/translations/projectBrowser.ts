@@ -376,6 +376,13 @@ export const projectBrowserTranslationPairs: ReadonlyArray<AppTranslationPair> =
   { fr: 'Impossible d’enregistrer le contact de facturation.', en: 'Unable to save billing contact' },
   { fr: 'E-mail de facturation invalide.', en: 'Invalid billing contact payload' },
   { fr: 'Service momentanément indisponible.', en: 'Service temporarily unavailable.' },
+  // Page de paiement après une confirmation Stripe réussie (BillingActionForm)
+  { fr: 'Paiement reçu', en: 'Payment received' },
+  { fr: 'Moyen de paiement enregistré', en: 'Payment method saved' },
+  { fr: 'Activation en cours…', en: 'Activating…' },
+  { fr: 'Stripe a bien confirmé, mais l’activation n’a pas encore pu être vérifiée. Elle se terminera automatiquement : vous pouvez réessayer ou fermer cette page.', en: 'Stripe confirmed, but the activation could not be verified yet. It will complete automatically: you can try again or close this page.' },
+  { fr: 'Réessayer l’activation', en: 'Retry activation' },
+  { fr: 'Mettez d’abord à jour votre moyen de paiement pour changer de formule.', en: 'Update your payment method first to change plans.' },
   // Déconnexion (profile.ts signOutAccount)
   { fr: 'Déconnexion impossible : vérifiez votre connexion, puis réessayez.', en: 'Could not sign out: check your connection, then try again.' },
   // Changement d'adresse e-mail (ChangeEmailDialog, api/auth/change-email.ts)

@@ -88,7 +88,12 @@ export function SubscriptionPanel({
   const live = hasLiveSubscription(snapshot);
   const loading = subscriptionState.isLoading && !snapshot;
   // Changer de durée : seulement un abonnement à jour et non résilié.
-  const canSwitch = live && !snapshot?.cancelAtPeriodEnd && !hasPaymentIssue(snapshot);
+  const paymentIssue = hasPaymentIssue(snapshot);
+  const canSwitch = live && !snapshot?.cancelAtPeriodEnd && !paymentIssue;
+  // Une raison par cause : un incident de paiement ne se règle pas en « reprenant » l'abonnement (C3-2).
+  const switchBlockedTitle = paymentIssue
+    ? t('Mettez d’abord à jour votre moyen de paiement pour changer de formule.')
+    : t('Reprenez d’abord votre abonnement pour changer de formule.');
   const panelError = billingActionError ?? subscriptionState.error;
 
   const planCards = DISPLAY_PLANS.map((plan) => {
@@ -115,7 +120,7 @@ export function SubscriptionPanel({
         statusLabel={current ? (snapshot?.status === 'trialing' ? t('Essai en cours') : t('Votre formule')) : undefined}
         ctaLabel={current ? t('Formule actuelle') : t('Passer à cette formule')}
         ctaDisabled={current || !canSwitch || billingActionBusy}
-        ctaTitle={!current && !canSwitch ? t('Reprenez d’abord votre abonnement pour changer de formule.') : undefined}
+        ctaTitle={!current && !canSwitch ? switchBlockedTitle : undefined}
         onCta={() => onSwitchPlan(plan.id)}
       />
     );

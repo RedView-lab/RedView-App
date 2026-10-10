@@ -12,6 +12,7 @@ import { createPortal } from 'react-dom';
 import { IconClose } from '@/features/itineraryPanel/components/icons';
 import { useAppI18n } from '@/shared/i18n';
 import { appScaleStyle, readAppScale } from '@/shared/lib/appScale';
+import { trapFocus } from '@/shared/lib/focusTrap';
 
 import { formatLongDate, getDisplayPlan } from '../../lib';
 import type { SubscriptionSnapshot } from '../../types';
@@ -28,6 +29,7 @@ export function CancelSubscriptionDialog({ snapshot, accountEmail, anchorEl, onC
   const { t } = useAppI18n();
   const [busy, setBusy] = useState(false);
   const closeRef = useRef<HTMLButtonElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
   const endDate = formatLongDate(snapshot.currentPeriodEnd);
   const planLabel = snapshot.planId ? t(getDisplayPlan(snapshot.planId).durationLabel) : '—';
   const trialing = snapshot.status === 'trialing';
@@ -35,6 +37,8 @@ export function CancelSubscriptionDialog({ snapshot, accountEmail, anchorEl, onC
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && !busy) onClose();
+      // aria-modal : Tab ne sort pas vers l'onglet Abonnement masqué par le voile (C3-3).
+      else if (event.key === 'Tab' && cardRef.current) trapFocus(event, cardRef.current);
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
@@ -58,6 +62,7 @@ export function CancelSubscriptionDialog({ snapshot, accountEmail, anchorEl, onC
   return createPortal(
     <div className="rv-dialog" role="presentation" onMouseDown={() => !busy && onClose()}>
       <div
+        ref={cardRef}
         className="rv-dialog__card rvpb-cancel-subscription"
         role="dialog"
         aria-modal="true"

@@ -126,4 +126,25 @@ describe('onglet Abonnement', () => {
     click(button('Reprendre mon abonnement'));
     expect(onResumeSubscription).toHaveBeenCalledTimes(1);
   });
+
+  it('incident de paiement : la bulle dit de mettre à jour le moyen de paiement, pas de « reprendre » (C3-2)', () => {
+    const { container } = render(state({ ...TRIALING, status: 'past_due' }, false));
+    const otherCta = container.querySelectorAll('.rvpb-plan-card')[0].querySelector('.rvpb-plan-card__cta') as HTMLButtonElement;
+    expect(otherCta.disabled).toBe(true);
+    expect(otherCta.closest('[title]')?.getAttribute('title') ?? otherCta.title).toBe('Mettez d’abord à jour votre moyen de paiement pour changer de formule.');
+  });
+
+  it('pop-in de résiliation : Tab et Maj+Tab restent dedans (C3-3)', async () => {
+    const { click, button } = render(state(TRIALING, false));
+    click(button('Résilier votre contrat'));
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)));
+    const dialog = document.body.querySelector<HTMLElement>('[role="dialog"][aria-labelledby="rvpb-cancel-subscription-title"]')!;
+    const buttons = [...dialog.querySelectorAll<HTMLButtonElement>('button')];
+    const last = buttons[buttons.length - 1];
+    last.focus();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+    expect(document.activeElement).toBe(buttons[0]);
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }));
+    expect(document.activeElement).toBe(last);
+  });
 });
