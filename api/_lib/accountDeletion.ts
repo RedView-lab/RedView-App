@@ -295,6 +295,33 @@ export async function beginAccountDeletion(userId: string): Promise<{ exists: bo
 }
 
 /**
+ * Suppression en attente depuis au moins `olderThanMs` : la purge de fond qui
+ * suit la réponse 202 a pu être coupée par un redéploiement (SIGTERM), et les
+ * reprises de l'API ne vivent que dans le processus. Le délai laisse finir une
+ * purge encore en cours (reprises : 30 s, 2 min, 10 min).
+ */
+export function isStalePendingDeletion(
+  row: { status?: unknown; requested_at?: unknown },
+  now: number,
+  olderThanMs: number,
+): boolean {
+  if (row.status !== 'pending' || typeof row.requested_at !== 'string') return false;
+  const requestedAt = Date.parse(row.requested_at);
+  return Number.isFinite(requestedAt) && now - requestedAt >= olderThanMs;
+}
+
+/** Comptes dont la suppression attend depuis au moins `olderThanMs` (registre ; absent : aucun). */
+export async function listStalePendingDeletions(now: number, olderThanMs: number): Promise<string[]> {
+  const rows = await listRows(ACCOUNT_DELETIONS_COLLECTION_ID, [
+    Query.equal('status', 'pending'),
+    Query.select(['$id', 'user_id', 'status', 'requested_at']),
+  ]) as Array<Row & { status?: unknown; requested_at?: unknown }>;
+  return rows
+    .filter((row) => isStalePendingDeletion(row, now, olderThanMs) && typeof row.user_id === 'string')
+    .map((row) => row.user_id as string);
+}
+
+/**
  * Supprime le compte `userId` et ses données. Idempotent ; un compte déjà
  * supprimé ne fait que compléter le registre.
  */

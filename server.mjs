@@ -26,6 +26,7 @@ import { createRequestLogger, normalizeRoutePath } from './server/lib/request-lo
 import { VARIANT_SUFFIX, acceptedEncodings, isCompressible } from './server/lib/static-compression.mjs';
 import { REDVIEW_CSP_HEADER } from './server/lib/csp.mjs';
 import { createAppwriteStorageGuard } from './server/lib/storage-guard.mjs';
+import { startAccountDeletionResume } from './server/lib/account-deletion-resume.mjs';
 import { apiRateBucket } from './server/lib/api-rate-buckets.mjs';
 import { resolveLegacyAssetPath } from './server/lib/legacy-asset-paths.mjs';
 import { API_COMPRESS_SYNC_MAX_BYTES, compressApiBody, compressApiBodySync, pickApiEncoding, withVary } from './server/lib/api-compression.mjs';
@@ -584,6 +585,20 @@ if (isMain) {
         log: (message) => console.warn(message),
       }).start();
     }
+    // Suppressions de compte dont la purge de fond a été coupée (redéploiement) :
+    // reprises peu après le démarrage puis toutes les 15 min
+    // (server/lib/account-deletion-resume.mjs). Comme le garde : seulement avec
+    // REDVIEW_RESUME_ACCOUNT_DELETIONS=on, posé par l'image Docker.
+    startAccountDeletionResume({
+      env: process.env,
+      loadResume: async () => {
+        const route = resolveApiRoute(API_DIR, '/api/auth/delete-account', API_ROUTE_OPTIONS);
+        if (!route) return null;
+        const mod = await import(pathToFileURL(route.file).href);
+        return mod.resumePendingAccountDeletions;
+      },
+      report: (error) => captureServerError(error, { route: 'auth/delete-account' }),
+    });
   }
   // Arrêt du conteneur (node en PID 1) : plus de nouvelle connexion, les
   // requêtes en cours finissent (invitation, action de facturation… coupées

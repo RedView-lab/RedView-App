@@ -9,7 +9,10 @@
  * Une suppression interrompue laisse le compte bloqué, marqué
  * `deletionpending`, et `pending` au registre `account_deletions`
  * (api/_lib/accountDeletion.ts) : la personne ne peut plus la relancer. L'API
- * réessaie 3 fois en 12 min ; ce script prend le relais.
+ * réessaie 3 fois en 12 min, puis le serveur de production reprend toute
+ * suppression en attente depuis plus de 15 min, au démarrage et toutes les
+ * 15 min (server/lib/account-deletion-resume.mjs) ; ce script reste pour un
+ * cas bloqué ou hors de l'image.
  *
  * Restaurer une sauvegarde fait revenir les comptes supprimés depuis
  * l'instantané : `--reapply` les supprime de nouveau (même code, idempotent).

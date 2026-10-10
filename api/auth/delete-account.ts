@@ -1,7 +1,7 @@
 import type { ApiRequest, ApiResponse } from '../_lib/types.js';
 
 import { captureServerError } from '../../server/lib/observability.mjs';
-import { beginAccountDeletion, deleteAccount } from '../_lib/accountDeletion.js';
+import { beginAccountDeletion, deleteAccount, listStalePendingDeletions } from '../_lib/accountDeletion.js';
 import { getAppwriteUsers, requireAuthenticatedUser } from '../_lib/appwrite.js';
 import { PublicError, sendSafeError } from '../_lib/errors.js';
 import { readJsonBody, sendMethodNotAllowed } from '../_lib/http.js';
@@ -38,16 +38,24 @@ const CONFIRMATION = 'delete-my-account';
 const CODE_PATTERN = /^\d{6}$/;
 /** Reprises d'une purge interrompue, dans ce processus ; ensuite scripts/appwrite/account-deletions.ts --resume. */
 const RETRY_DELAYS_MS = [30_000, 2 * 60_000, 10 * 60_000];
+/** Âge à partir duquel une suppression en attente est reprise au démarrage du serveur (après les reprises ci-dessus). */
+const RESUME_PENDING_AFTER_MS = 15 * 60_000;
+/** Purges en cours dans ce processus : la reprise ne les double pas. */
+const inFlight = new Set<string>();
 
 /**
  * Purge complète après la réponse (A14-1) : elle parcourt les trois buckets et
  * chaque projet possédé, ce qui dépasserait le délai du nginx de l'hôte (60 s)
  * sur un gros compte. L'accusé part quand elle est finie.
  */
-function purgeInBackground(userId: string, email: string, name: string, attempt = 0): void {
+function purgeInBackground(userId: string, email: string | null, name: string, attempt = 0): void {
+  inFlight.add(userId);
   deleteAccount(userId).then(
     // Sans bloquer : le compte est supprimé même si l'accusé ne part pas.
-    () => { void sendAccountDeletedEmail({ to: email, name }); },
+    () => {
+      inFlight.delete(userId);
+      if (email) void sendAccountDeletedEmail({ to: email, name });
+    },
     (error: unknown) => {
       console.error('[auth/delete-account] purge interrompue, reprise programmée', userId, error);
       captureServerError(error, { route: 'auth/delete-account' });
@@ -56,14 +64,40 @@ function purgeInBackground(userId: string, email: string, name: string, attempt 
   );
 }
 
-function finishDeletionLater(userId: string, email: string, name: string, attempt = 0): void {
+function finishDeletionLater(userId: string, email: string | null, name: string, attempt = 0): void {
   const delay = RETRY_DELAYS_MS[attempt];
   if (delay === undefined) {
+    // Plus de reprise ici : resumePendingAccountDeletions (ou le script) prendra le relais.
+    inFlight.delete(userId);
     console.error('[auth/delete-account] suppression toujours incomplète : scripts/appwrite/account-deletions.ts --resume', userId);
     return;
   }
   const timer = setTimeout(() => purgeInBackground(userId, email, name, attempt + 1), delay);
   timer.unref?.();
+}
+
+/**
+ * Reprend les suppressions restées en attente (registre `pending` depuis plus
+ * de 15 min) : une purge de fond coupée par un redéploiement n'est reprise par
+ * rien d'autre que le script d'admin. Lancée par server.mjs dans l'image de
+ * production seulement (server/lib/account-deletion-resume.mjs). L'accusé
+ * part à l'adresse du compte, encore lisible tant qu'il est seulement bloqué.
+ * Rend les comptes repris.
+ */
+export async function resumePendingAccountDeletions(now = Date.now()): Promise<string[]> {
+  const pending = (await listStalePendingDeletions(now, RESUME_PENDING_AFTER_MS)).filter((userId) => !inFlight.has(userId));
+  for (const userId of pending) {
+    let profile: { email?: string; name?: string } | null = null;
+    try {
+      profile = await getAppwriteUsers().get(userId);
+    } catch (error) {
+      // Compte déjà supprimé : la purge ne fait que compléter le registre, sans accusé.
+      if ((error as { code?: unknown } | null)?.code !== 404) throw error;
+    }
+    purgeInBackground(userId, profile?.email || null, profile?.name ?? '', RETRY_DELAYS_MS.length);
+  }
+  if (pending.length > 0) console.log('[auth/delete-account] suppressions en attente reprises', pending);
+  return pending;
 }
 
 export default async function handler(req: ApiRequest, res: ApiResponse) {

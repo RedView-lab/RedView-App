@@ -93,6 +93,9 @@ ENV SOURCE_COMMIT=${SOURCE_COMMIT}
 ENV REDVIEW_AUTH_STORE_DIR=/app/data
 # Garde des buckets Appwrite (server/lib/storage-guard.mjs) : seulement dans l'image.
 ENV REDVIEW_STORAGE_GUARD=enforce
+# Reprise des suppressions de compte coupées par un redéploiement
+# (server/lib/account-deletion-resume.mjs) : seulement dans l'image.
+ENV REDVIEW_RESUME_ACCOUNT_DELETIONS=on
 RUN mkdir -p /app/data && chown redview:nodejs /app/data && chmod 700 /app/data
 
 USER redview

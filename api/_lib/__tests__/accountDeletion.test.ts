@@ -175,7 +175,7 @@ vi.mock('../multiplayerNotify.js', () => ({
   },
 }));
 
-const { deleteAccount, DELETION_PENDING_LABEL } = await import('../accountDeletion.ts');
+const { deleteAccount, DELETION_PENDING_LABEL, listStalePendingDeletions } = await import('../accountDeletion.ts');
 const { projectTeamId } = await import('../../../server/lib/project-access.mjs');
 
 const own = (userId: string) => [`read("user:${userId}")`, `update("user:${userId}")`, `delete("user:${userId}")`];
@@ -305,5 +305,27 @@ describe('suppression de compte', () => {
     await deleteAccount(ALICE);
     expect(fake.users.has(ALICE)).toBe(false);
     expect(ids('projects')).toEqual(['b-shared', 'forged']);
+  });
+});
+
+describe('suppressions en attente à reprendre (A14-1)', () => {
+  const NOW = Date.parse('2026-10-10T12:00:00.000Z');
+  const ago = (minutes: number) => new Date(NOW - minutes * 60_000).toISOString();
+  const ledgerRow = (id: string, status: string, requestedAt: string) =>
+    fake.collections.get('account_deletions')!.set(id, { $id: id, $permissions: [], user_id: id, status, requested_at: requestedAt });
+
+  it('seulement les suppressions en attente depuis plus de 15 min', async () => {
+    fake.collections.set('account_deletions', new Map());
+    ledgerRow('u-old', 'pending', ago(20));
+    ledgerRow('u-fresh', 'pending', ago(5));
+    ledgerRow('u-done', 'done', ago(60));
+    ledgerRow('u-limit', 'pending', ago(15));
+    ledgerRow('u-garbled', 'pending', 'pas une date');
+    await expect(listStalePendingDeletions(NOW, 15 * 60_000)).resolves.toEqual(['u-limit', 'u-old']);
+  });
+
+  it('sans registre : rien à reprendre', async () => {
+    fake.missingCollections.add('account_deletions');
+    await expect(listStalePendingDeletions(NOW, 15 * 60_000)).resolves.toEqual([]);
   });
 });

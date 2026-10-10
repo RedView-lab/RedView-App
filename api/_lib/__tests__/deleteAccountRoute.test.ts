@@ -13,6 +13,8 @@ import type { ApiRequest, ApiResponse } from '../types';
 const mocks = vi.hoisted(() => ({
   beginAccountDeletion: vi.fn<(userId: string) => Promise<{ exists: boolean }>>(),
   deleteAccount: vi.fn<(userId: string) => Promise<unknown>>(),
+  listStalePendingDeletions: vi.fn<(now: number, olderThanMs: number) => Promise<string[]>>(),
+  users: new Map<string, { $id: string; name: string; email: string }>(),
   sendAccountDeletedEmail: vi.fn(async () => true),
   captureServerError: vi.fn(),
 }));
@@ -20,10 +22,18 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../accountDeletion', () => ({
   beginAccountDeletion: mocks.beginAccountDeletion,
   deleteAccount: mocks.deleteAccount,
+  listStalePendingDeletions: mocks.listStalePendingDeletions,
 }));
 vi.mock('../appwrite', () => ({
   requireAuthenticatedUser: async () => ({ id: 'user-1', email: 'quelquun@example.test' }),
-  getAppwriteUsers: () => ({ get: async () => ({ $id: 'user-1', name: 'Quelqu’un' }) }),
+  getAppwriteUsers: () => ({
+    get: async (userId: string) => {
+      if (userId === 'user-1') return { $id: 'user-1', name: 'Quelqu’un' };
+      const user = mocks.users.get(userId);
+      if (!user) throw Object.assign(new Error('appwrite 404'), { code: 404 });
+      return user;
+    },
+  }),
 }));
 vi.mock('../mailer', () => ({ sendAccountDeletedEmail: mocks.sendAccountDeletedEmail }));
 vi.mock('../verificationStore', () => ({
@@ -35,7 +45,7 @@ vi.mock('../verificationStore', () => ({
 }));
 vi.mock('../../../server/lib/observability.mjs', () => ({ captureServerError: mocks.captureServerError }));
 
-const { default: handler } = await import('../../auth/delete-account');
+const { default: handler, resumePendingAccountDeletions } = await import('../../auth/delete-account');
 
 interface Captured { status: number; body: unknown }
 
@@ -125,5 +135,44 @@ describe('POST /api/auth/delete-account — confirm (A14-1)', () => {
     await flush();
     expect(mocks.deleteAccount).toHaveBeenCalledTimes(2);
     expect(mocks.sendAccountDeletedEmail).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('resumePendingAccountDeletions (A14-1, purge coupée par un redéploiement)', () => {
+  beforeEach(() => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    mocks.deleteAccount.mockReset().mockResolvedValue({});
+    mocks.sendAccountDeletedEmail.mockClear();
+    mocks.listStalePendingDeletions.mockReset();
+    mocks.users.clear();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('reprend chaque suppression en attente depuis plus de 15 min et envoie l’accusé', async () => {
+    mocks.users.set('u-blocked', { $id: 'u-blocked', name: 'Bloqué', email: 'bloque@example.test' });
+    mocks.listStalePendingDeletions.mockResolvedValue(['u-blocked', 'u-gone']);
+
+    await expect(resumePendingAccountDeletions(1_000_000)).resolves.toEqual(['u-blocked', 'u-gone']);
+    await flush();
+
+    expect(mocks.listStalePendingDeletions).toHaveBeenCalledWith(1_000_000, 15 * 60_000);
+    expect(mocks.deleteAccount.mock.calls.map(([userId]) => userId)).toEqual(['u-blocked', 'u-gone']);
+    // Compte déjà effacé : registre complété, pas d'adresse, pas d'accusé.
+    expect(mocks.sendAccountDeletedEmail).toHaveBeenCalledTimes(1);
+    expect(mocks.sendAccountDeletedEmail).toHaveBeenCalledWith({ to: 'bloque@example.test', name: 'Bloqué' });
+  });
+
+  it('ne double pas une purge encore en cours dans ce processus', async () => {
+    let finish!: () => void;
+    mocks.deleteAccount.mockReturnValueOnce(new Promise((resolve) => { finish = () => resolve({}); }));
+    await confirm(); // purge de fond de user-1, en cours
+    mocks.listStalePendingDeletions.mockResolvedValue(['user-1']);
+    await expect(resumePendingAccountDeletions()).resolves.toEqual([]);
+    expect(mocks.deleteAccount).toHaveBeenCalledTimes(1);
+    finish();
+    await flush();
   });
 });
