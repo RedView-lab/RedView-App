@@ -44,3 +44,65 @@ describe('scrubErrorEvent', () => {
     expect(scrubBreadcrumb(crumb)).toBe(crumb);
   });
 });
+
+// G1-1 (audit du 2026-10-10) : les journaux de console portent des noms choisis
+// par l'utilisateur (fichiers .fit — souvent la date et le titre de la sortie —,
+// fichiers .redview, projets), interpolés ou passés en arguments, et le message
+// d'une erreur JSON cite un extrait du document. Rien de cela ne part.
+describe('scrubBreadcrumb — console (G1-1)', () => {
+  it('ne garde que l’étiquette du module, ni le texte ni les arguments', () => {
+    const crumb = scrubBreadcrumb({
+      category: 'console',
+      level: 'warning',
+      message: '[fitFiles] upload failed for file 2026-09-14 Ventoux avec Julie.fit Error: quota',
+      data: { arguments: ['[fitFiles] upload failed for file', '2026-09-14 Ventoux avec Julie.fit', { message: 'quota' }], logger: 'console' },
+    });
+    expect(crumb).toEqual({ category: 'console', level: 'warning', message: '[fitFiles]', data: { logger: 'console' } });
+  });
+
+  it('message interpolé : le nom ne survit pas', () => {
+    const crumb = scrubBreadcrumb({
+      category: 'console',
+      message: '[ProjectBrowser] Sortie Ventoux avec Julie.redview: 2 unreadable FIT file(s) skipped',
+      data: { arguments: ['[ProjectBrowser] Sortie Ventoux avec Julie.redview: 2 unreadable FIT file(s) skipped'] },
+    });
+    expect(JSON.stringify(crumb)).not.toMatch(/Julie|Ventoux/);
+    expect(crumb.message).toBe('[ProjectBrowser]');
+  });
+
+  it('sans étiquette : un texte neutre', () => {
+    const crumb = scrubBreadcrumb({ category: 'console', message: 'SyntaxError: Unexpected token \'S\', "Sortie Ven"... is not valid JSON' });
+    expect(crumb.message).toBe('[console]');
+  });
+});
+
+describe('scrubBreadcrumb — clics (G1-1)', () => {
+  it('les valeurs d’attributs du sélecteur (aria-label, title…) sont retirées', () => {
+    const crumb = scrubBreadcrumb({
+      category: 'ui.click',
+      message: 'div.rv-project-card > button.rv-project-card__open[aria-label="Ouvrir Sortie Ventoux avec Julie"]',
+    });
+    expect(crumb.message).toBe('div.rv-project-card > button.rv-project-card__open[aria-label]');
+  });
+});
+
+describe('scrubErrorEvent — extraits de document (G1-1)', () => {
+  it('le message d’une erreur JSON ne cite plus le document', () => {
+    const event = scrubErrorEvent({
+      exception: {
+        values: [
+          { type: 'SyntaxError', value: 'Unexpected token \'S\', "Sortie Ven"... is not valid JSON' },
+          { type: 'SyntaxError', value: 'JSON Parse error: Unexpected identifier "Julie"' },
+          { type: 'SyntaxError', value: 'Expected \',\' or \'}\' after property value in JSON at position 74 (line 1 column 75)' },
+          { type: 'TypeError', value: 'Cannot read properties of undefined (reading \'name\')' },
+        ],
+      },
+    });
+    const values = event.exception!.values!.map((value) => value.value);
+    expect(values[0]).toBe('Unexpected token, "…"... is not valid JSON');
+    expect(values[1]).toBe('JSON Parse error: Unexpected identifier "…"');
+    expect(values[2]).toBe('Expected \',\' or \'}\' after property value in JSON at position 74 (line 1 column 75)');
+    // Hors JSON, le message reste tel quel.
+    expect(values[3]).toBe('Cannot read properties of undefined (reading \'name\')');
+  });
+});
