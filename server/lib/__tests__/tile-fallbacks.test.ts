@@ -72,8 +72,12 @@ describe('serveTileFallback', () => {
   });
 
   it('draws an OPERA radar tile on the server, immutable once published', async () => {
+    // L'image doit être dans la fenêtre que garde le bucket (24 h).
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(Date.UTC(2026, 9, 9, 13, 22)));
     vi.stubGlobal('fetch', fixtureFetch(buildFixtureCog(), ['20261009T1320']));
     const out = await serve('/radar-tiles/6/32/22?host=opera&path=%2Fopera%2F20261009T1320&p=fill:ff0000_0_100');
+    vi.useRealTimers();
     expect(out.statusCode).toBe(200);
     expect(out.headers['content-type']).toBe('image/png');
     expect(out.headers['cache-control']).toBe('public, max-age=86400, immutable');

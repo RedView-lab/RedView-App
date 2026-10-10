@@ -133,6 +133,22 @@ describe('lecture du COG et tuiles', () => {
     expect(fetchMock).toHaveBeenCalledTimes(5);
   });
 
+  it('image hors de la fenêtre du bucket (trop vieille, future) : aucune requête amont (A12-1)', async () => {
+    const { renderOperaTile } = await loadOpera();
+    await expect(renderOperaTile('20250101T0000', 6, 32, 22, '')).rejects.toThrow(/outside/);
+    await expect(renderOperaTile('20261010T1300', 6, 32, 22, '')).rejects.toThrow(/outside/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('image absente : l’échec est gardé, les tuiles suivantes ne rappellent pas le bucket (A12-1)', async () => {
+    const { renderOperaTile } = await loadOpera();
+    fetchMock.mockImplementation(async () => new Response('nope', { status: 404 }));
+    for (const [x, y] of [[32, 22], [33, 22], [32, 23]]) {
+      await expect(renderOperaTile('20261009T1317', 6, x, y, '')).rejects.toThrow();
+    }
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('colore avec la palette de l’utilisateur', async () => {
     const { renderOperaTile } = await loadOpera();
     const red = decodeRgbaPng(await renderOperaTile('20261009T1320', 6, 32, 22, 'fill:ff0000_0_100'));

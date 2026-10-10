@@ -185,11 +185,28 @@ function frameUrl(frame) {
 
 const headerCache = createByteLru({ maxBytes: 2 * 1024 * 1024, sizeOf: () => 8 * 1024, ttlMs: 26 * 3600_000 });
 const headersInFlight = new Map();
+/**
+ * Images introuvables (minute sans composite, panne passagère) : l'échec est
+ * gardé 2 min, sinon chaque tuile demandée refaisait un appel au bucket (A12-1).
+ */
+const failedHeaders = createByteLru({ maxBytes: 256 * 1024, sizeOf: () => 128, ttlMs: 2 * 60_000 });
+
+/** Le bucket garde 24 h d'images : au-delà (marge comprise) ou dans le futur, aucune requête amont. */
+const FRAME_MAX_AGE_MS = 26 * 3600_000;
+const FRAME_MAX_AHEAD_MS = 15 * 60_000;
+
+/** Image servable : son heure est dans la fenêtre que le bucket peut contenir. */
+export function isServableOperaFrame(frame, nowMs = Date.now()) {
+  const timeMs = frameTimeSeconds(frame) * 1000;
+  return Number.isFinite(timeMs) && timeMs >= nowMs - FRAME_MAX_AGE_MS && timeMs <= nowMs + FRAME_MAX_AHEAD_MS;
+}
 
 /** @returns {Promise<CogHeader>} */
 function frameHeader(frame) {
   const cached = headerCache.get(frame);
   if (cached) return Promise.resolve(cached);
+  const failed = failedHeaders.get(frame);
+  if (failed) return Promise.reject(failed);
   let pending = headersInFlight.get(frame);
   if (!pending) {
     pending = (async () => {
@@ -206,7 +223,12 @@ function frameHeader(frame) {
           bytes = Math.max(bytes * 2, need);
         }
       }
-    })().finally(() => headersInFlight.delete(frame));
+    })()
+      .catch((error) => {
+        failedHeaders.set(frame, error);
+        throw error;
+      })
+      .finally(() => headersInFlight.delete(frame));
     headersInFlight.set(frame, pending);
   }
   return pending;
@@ -424,6 +446,7 @@ export async function renderOperaTile(frame, z, x, y, palette = '') {
   const cached = renderedTiles.get(cacheKey);
   if (cached) return cached;
 
+  if (!isServableOperaFrame(frame)) throw new Error(`OPERA frame ${frame} outside the bucket window`);
   const header = await frameHeader(frame);
   const centerLat = (Math.atan(Math.sinh(Math.PI * (1 - (2 * (y + 0.5)) / 2 ** z))) * 180) / Math.PI;
   const levelIndex = levelForZoom(z, centerLat, header);
