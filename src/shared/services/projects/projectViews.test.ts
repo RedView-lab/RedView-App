@@ -118,6 +118,44 @@ describe('readProjectView', () => {
   });
 });
 
+describe('lu / non lu des commentaires entre appareils (E3-2)', () => {
+  type Reads = NonNullable<NonNullable<ProjectViewState['commentsView']>['reads']>;
+  const withReads = (activeItineraryId: string, reads: Reads): ProjectViewState => ({
+    ...view(activeItineraryId),
+    commentsView: { sort: 'date', reads },
+  });
+  const OLD = { m: 'm1', t: '2026-10-01T10:00:00.000Z' };
+  const NEW = { m: 'm3', t: '2026-10-02T10:00:00.000Z' };
+
+  it('un appareil resté sur une vue ancienne ne remet pas « non lus » les fils lus ailleurs', async () => {
+    const { mock, otherDevice, views, docId } = await load();
+    await views.saveProjectViewNow('p1', withReads('fixe', { f1: OLD }));
+    // Le portable lit f1 jusqu'à son dernier message et lit f2.
+    await otherDevice.updateDocument('db', 'project_views', docId('p1'), {
+      data: JSON.stringify({ updatedAt: '2026-10-02T11:00:00.000Z', view: withReads('portable', { f1: NEW, f2: NEW }) }),
+    });
+    // Le fixe déplace la carte : sa vue part, avec ses anciens repères de lecture.
+    await views.saveProjectViewNow('p1', withReads('fixe déplacé', { f1: OLD, f3: OLD }));
+    const stored = storedView(mock.col('project_views').get(docId('p1'))?.data);
+    expect(stored.activeItineraryId).toBe('fixe déplacé');
+    expect(stored.commentsView?.reads).toEqual({ f1: NEW, f2: NEW, f3: OLD });
+    expect(stored.commentsView?.sort).toBe('date');
+  });
+
+  it('à la lecture, les repères les plus avancés de chaque copie sont gardés', async () => {
+    const { otherDevice, idb, views, docId } = await load();
+    await views.saveProjectViewNow('p1', withReads('ici', { f1: OLD }));
+    await otherDevice.updateDocument('db', 'project_views', docId('p1'), {
+      data: JSON.stringify({ updatedAt: '2026-10-02T11:00:00.000Z', view: withReads('ailleurs', { f1: NEW, f2: NEW }) }),
+    });
+    // Copie locale plus récente (carte déplacée ici), repères plus anciens.
+    await idb.idbSaveProjectView({ projectId: 'p1', ownerId: ME, updatedAt: '2100-01-01T00:00:00.000Z', view: withReads('local récent', { f1: OLD, f3: OLD }) });
+    const read = await views.readProjectView('p1');
+    expect(read?.view.activeItineraryId).toBe('local récent');
+    expect(read?.view.commentsView?.reads).toEqual({ f1: NEW, f2: NEW, f3: OLD });
+  });
+});
+
 describe('aucune requête qui répond 404 (rouge dans la console)', () => {
   const viewCalls = (calls: string[]) => calls.filter((call) => call.endsWith(':project_views'));
 
@@ -129,6 +167,8 @@ describe('aucune requête qui répond 404 (rouge dans la console)', () => {
     expect(viewCalls(mock.calls)).toEqual([
       'listDocuments:project_views',
       'createDocument:project_views',
+      // Relue avant chaque mise à jour : ses repères de lecture sont fusionnés (E3-2).
+      'getDocument:project_views',
       'updateDocument:project_views',
     ]);
   });
@@ -141,7 +181,7 @@ describe('aucune requête qui répond 404 (rouge dans la console)', () => {
     mock.calls = [];
     expect((await views.readProjectView('p1'))?.view.activeItineraryId).toBe('ailleurs');
     await views.saveProjectViewNow('p1', view('ici'));
-    expect(viewCalls(mock.calls)).toEqual(['listDocuments:project_views', 'updateDocument:project_views']);
+    expect(viewCalls(mock.calls)).toEqual(['listDocuments:project_views', 'getDocument:project_views', 'updateDocument:project_views']);
     expect(storedView(mock.col('project_views').get(docId('p1'))?.data).activeItineraryId).toBe('ici');
   });
 
@@ -167,7 +207,7 @@ describe('aucune requête qui répond 404 (rouge dans la console)', () => {
     expect(storedView(mock.col('project_views').get(docId('p1'))?.data).activeItineraryId).toBe('ici');
     mock.calls = [];
     await views.saveProjectViewNow('p1', view('encore'));
-    expect(viewCalls(mock.calls)).toEqual(['updateDocument:project_views']);
+    expect(viewCalls(mock.calls)).toEqual(['getDocument:project_views', 'updateDocument:project_views']);
   });
 });
 

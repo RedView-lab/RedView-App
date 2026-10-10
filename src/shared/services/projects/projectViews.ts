@@ -10,6 +10,9 @@
  *    toutes les CLOUD_WRITE_MAX_WAIT_MS) et à la fermeture du projet.
  * Dernière écriture gagnante, départagée par `updatedAt` à la lecture : un
  * déplacement de carte ou un panneau replié ne réécrit jamais le projet.
+ * Sauf le lu / non lu des commentaires (`commentsView.reads`), fusionné fil
+ * par fil à l'écriture et à la lecture (`mergeViewReads`) : un appareil resté
+ * ouvert sur une vue ancienne remettait « non lus » les fils lus ailleurs.
  *
  * Collection absente (pas encore créée côté serveur) : la vue reste locale,
  * signalée une fois dans la console, sans rien bloquer.
@@ -135,6 +138,34 @@ function isNewerRecord(candidate: StoredProjectView | null, reference: StoredPro
   return Date.parse(candidate.updatedAt) > Date.parse(reference.updatedAt);
 }
 
+type CommentReads = NonNullable<NonNullable<ProjectViewState['commentsView']>['reads']>;
+
+/**
+ * Repères de lecture de `own`, complétés par ceux de `other` : un fil absent
+ * de `own`, ou lu plus loin dans `other` (date du dernier message vu plus
+ * récente), prend le repère de `other`. Sinon `own` gagne, « marqué non lu »
+ * compris (ce repère n'a pas de date). `own` tel quel si rien ne change.
+ */
+function mergeReads(own: CommentReads | undefined, other: CommentReads | undefined): CommentReads | undefined {
+  if (!other) return own;
+  let merged: CommentReads | undefined;
+  for (const [threadId, mark] of Object.entries(other)) {
+    const current = own?.[threadId];
+    const otherIsFurther = !current || (current.t !== undefined && mark.t !== undefined && mark.t > current.t);
+    if (!otherIsFurther) continue;
+    merged ??= { ...own };
+    merged[threadId] = mark;
+  }
+  return merged ?? own;
+}
+
+/** `view` avec les repères de lecture de `other` fusionnés (la même vue si rien ne change). */
+function mergeViewReads(view: ProjectViewState, other: ProjectViewState | undefined): ProjectViewState {
+  const reads = mergeReads(view.commentsView?.reads, other?.commentsView?.reads);
+  if (reads === view.commentsView?.reads) return view;
+  return { ...view, commentsView: { ...view.commentsView, reads } };
+}
+
 function parseCloudView(doc: { data?: unknown; project_id?: unknown; user_id?: unknown }, projectId: string, ownerId: string): StoredProjectView | null {
   if (typeof doc.data !== 'string') return null;
   try {
@@ -164,23 +195,35 @@ async function findOwnCloudView(projectId: string, ownerId: string): Promise<Clo
   return doc;
 }
 
+/** JSON envoyé au cloud ; null (journalisé) au-delà de la taille de l'attribut. */
+function serializeCloudView(record: StoredProjectView, view: ProjectViewState): string | null {
+  const data = JSON.stringify({ updatedAt: record.updatedAt, view });
+  if (data.length <= MAX_PROJECT_VIEW_CHARS) return data;
+  logger.projects.warn('Project view too large for the cloud, kept on this device', {
+    projectId: record.projectId,
+    chars: data.length,
+  });
+  return null;
+}
+
 async function upsertCloudView(record: StoredProjectView, createOnly: boolean): Promise<void> {
   if (cloudViewsUnavailable) return;
-  const data = JSON.stringify({ updatedAt: record.updatedAt, view: record.view });
-  if (data.length > MAX_PROJECT_VIEW_CHARS) {
-    logger.projects.warn('Project view too large for the cloud, kept on this device', {
-      projectId: record.projectId,
-      chars: data.length,
-    });
-    return;
-  }
+  const data = serializeCloudView(record, record.view);
+  if (data == null) return;
   const key = viewKey(record.ownerId, record.projectId);
   const knownId = cloudViewIds.get(key);
   if (typeof knownId === 'string') {
     // Une vraie vue existe : l'amorce ne la remplace jamais.
     if (createOnly) return;
     try {
-      await databases.updateDocument(APPWRITE_DATABASE_ID, PROJECT_VIEWS_COLLECTION_ID, knownId, { data });
+      // Relue juste avant : ses repères de lecture (autre appareil) sont fusionnés, pas écrasés.
+      const current = await databases.getDocument(APPWRITE_DATABASE_ID, PROJECT_VIEWS_COLLECTION_ID, knownId);
+      const merged = serializeCloudView(
+        record,
+        mergeViewReads(record.view, parseCloudView(current as CloudViewDoc, record.projectId, record.ownerId)?.view),
+      );
+      if (merged == null) return;
+      await databases.updateDocument(APPWRITE_DATABASE_ID, PROJECT_VIEWS_COLLECTION_ID, knownId, { data: merged });
       return;
     } catch (error) {
       if (isMissingCollection(error)) {
@@ -216,9 +259,15 @@ async function upsertCloudView(record: StoredProjectView, createOnly: boolean): 
     // s'efface), ou id pris par un autre compte (accessQueries.ts).
     if (errorCode(error) !== 409) throw error;
     if (createOnly) return;
+    // Créée entre-temps ailleurs : ses repères de lecture sont fusionnés.
+    const existing = await findOwnCloudView(record.projectId, record.ownerId);
+    const merged = existing
+      ? serializeCloudView(record, mergeViewReads(record.view, parseCloudView(existing, record.projectId, record.ownerId)?.view))
+      : data;
+    if (merged == null) return;
     cloudViewIds.set(
       key,
-      await (await loadAccessQueries()).writeConflictedCloudView(documentId, record.projectId, record.ownerId, data),
+      await (await loadAccessQueries()).writeConflictedCloudView(documentId, record.projectId, record.ownerId, merged),
     );
   }
 }
@@ -395,11 +444,20 @@ export async function readProjectView(projectId: string): Promise<StoredProjectV
   })();
 
   const [local, cloud] = await Promise.all([localPromise, cloudPromise]);
-  let best: StoredProjectView | null = pending && pending.ownerId === ownerId ? pending : null;
+  const ownPending = pending && pending.ownerId === ownerId ? pending : null;
+  let best: StoredProjectView | null = ownPending;
   if (isNewerRecord(local, best)) best = local;
   if (isNewerRecord(cloud, best)) {
     best = cloud;
     void idbSaveProjectView(cloud!).catch(() => undefined);
+  }
+  if (best) {
+    // La vue la plus récente gagne, mais chaque fil garde le repère de lecture le plus avancé des copies.
+    let view = best.view;
+    for (const candidate of [ownPending, local, cloud]) {
+      if (candidate && candidate !== best) view = mergeViewReads(view, candidate.view);
+    }
+    if (view !== best.view) best = { ...best, view };
   }
   if (best && !pendingViews.has(projectId)) {
     lastKnownViews.set(viewKey(ownerId, projectId), JSON.stringify(best.view));
