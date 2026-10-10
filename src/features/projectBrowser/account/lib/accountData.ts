@@ -19,10 +19,11 @@ import {
 import { readProjectView } from '@/shared/services/projects/projectViews';
 
 /**
- * La purge efface chaque projet et fichier possédé avant de répondre ; elle
- * est idempotente et reprenable, donc un délai dépassé se relance sans risque.
+ * Le serveur répond dès le compte bloqué et la suppression inscrite (202),
+ * la purge se poursuit en tâche de fond (A14-1) : un délai sous les 60 s du
+ * nginx de l'hôte suffit. La purge est idempotente et reprenable.
  */
-const DELETE_ACCOUNT_TIMEOUT_MS = 180_000;
+const DELETE_ACCOUNT_TIMEOUT_MS = 45_000;
 
 async function deleteAccountRequest<T>(body: Record<string, unknown>): Promise<{ status: number; data: T }> {
   const send = async (fresh: boolean) => {
