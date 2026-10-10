@@ -81,7 +81,11 @@ function parseGpxFileInWorker(file: File): Promise<GpxRoute> {
   });
 }
 
-function parseGpxTextWithDomParser(text: string): GpxRoute {
+/**
+ * Repli quand l'analyseur rapide plante : mêmes champs que lui (gpx-loader.test.ts
+ * compare les deux sur un export RedView). Exporté pour ce test.
+ */
+export function parseGpxTextWithDomParser(text: string): GpxRoute {
   const doc = new DOMParser().parseFromString(text, 'application/xml');
 
   if (doc.querySelector('parsererror') || doc.documentElement?.localName !== 'gpx') {
@@ -136,6 +140,10 @@ function parseGpxTextWithDomParser(text: string): GpxRoute {
     const lon = parseXmlNumber(element.getAttribute('lon'));
     if (!isValidCoordinate(lat, lon)) continue;
     const childText = (tag: string) => element.querySelector(tag)?.textContent?.trim() || null;
+    // `<redview:category>` (extension RedView) : par nom local, hors de l'espace de noms GPX.
+    const redviewCategory = Array.from(element.getElementsByTagName('*'))
+      .find((child) => child.localName === 'category' && child.prefix === 'redview')
+      ?.textContent?.trim() || null;
     const elevationM = parseXmlNumber(childText('ele'));
     waypoints.push({
       lat,
@@ -145,6 +153,8 @@ function parseGpxTextWithDomParser(text: string): GpxRoute {
       type: childText('type'),
       sym: childText('sym'),
       desc: childText('desc'),
+      cmt: childText('cmt'),
+      redviewCategory,
     });
   }
   return {

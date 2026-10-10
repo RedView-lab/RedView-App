@@ -79,7 +79,8 @@ export function decodeGpxBytes(bytes: Uint8Array): string {
 const NS = '(?:[A-Za-z_][\\w.-]*:)?';
 
 const GPX_ROOT_REGEX = new RegExp(`<${NS}gpx(?=[\\s/>])`, 'i');
-const GPX_CREATOR_REGEX = new RegExp(`<${NS}gpx\\b[^>]*?\\bcreator\\s*=\\s*(["'])([^"']*)\\1`, 'i');
+// Valeur jusqu'au même guillemet : `creator="Bob's tool"` s'arrêtait à l'apostrophe.
+const GPX_CREATOR_REGEX = new RegExp(`<${NS}gpx\\b[^>]*?\\bcreator\\s*=\\s*(["'])([\\s\\S]*?)\\1`, 'i');
 const ELEVATION_REGEX = new RegExp(`<${NS}ele\\b[^>]*>([\\s\\S]*?)</${NS}ele\\s*>`, 'i');
 const NAME_REGEX = new RegExp(`<${NS}name\\b[^>]*>([\\s\\S]*?)</${NS}name\\s*>`, 'i');
 const WAYPOINT_TYPE_REGEX = new RegExp(`<${NS}type\\b[^>]*>([\\s\\S]*?)</${NS}type\\s*>`, 'i');
@@ -96,7 +97,27 @@ const TRACK_BREAK_REGEX = new RegExp(`<${NS}trk(?:seg)?(?=[\\s/>])`, 'gi');
 
 const TO_RAD = Math.PI / 180;
 
-export function parseGpxText(text: string): GpxRoute {
+/** Remplace un `<` du texte d'une section CDATA (cf. maskXmlNonContent), rendu par decodeXmlText. */
+const CDATA_LT = '\uE000';
+
+/**
+ * Texte du fichier où les commentaires XML sont blanchis et les `<` des
+ * sections CDATA masqués, à longueur égale (les décalages restent justes) :
+ * l'analyse par expressions régulières lisait un `<trkpt>` commenté (point
+ * désactivé à la main) comme un point du tracé — un saut jusqu'à Paris routé
+ * ensuite par BRouter. DOMParser, lui, les ignorait déjà.
+ */
+function maskXmlNonContent(text: string): string {
+  if (!text.includes('<!')) return text;
+  return text
+    .replace(/<!--[\s\S]*?(?:-->|$)/g, (comment) => ' '.repeat(comment.length))
+    .replace(/<!\[CDATA\[[\s\S]*?(?:\]\]>|$)/gi, (section) => (
+      section.slice(0, 9) + section.slice(9).replace(/</g, CDATA_LT)
+    ));
+}
+
+export function parseGpxText(source: string): GpxRoute {
+  const text = maskXmlNonContent(source);
   if (!GPX_ROOT_REGEX.test(text)) {
     throw new GpxParseError('not-gpx');
   }
@@ -341,7 +362,7 @@ function extractPoints(text: string, element: 'trkpt' | 'rtept', offsets?: numbe
 function stripCdata(value: string): string {
   const trimmed = value.trim();
   const match = /^<!\[CDATA\[([\s\S]*?)\]\]>$/i.exec(trimmed);
-  return match ? match[1].trim() : trimmed;
+  return match ? match[1].trim().replaceAll(CDATA_LT, '<') : trimmed;
 }
 
 function decodeXmlText(value: string): string {

@@ -111,6 +111,25 @@ describe('parseGpxText — fichiers limites', () => {
     expect(route.points[1]!.distanceM).toBeCloseTo(1112, 0);
   });
 
+  it('ignores points inside an XML comment or a CDATA section (B1-2)', () => {
+    const route = parseGpxText(gpx(segment(
+      trkpt(45, 6),
+      `<!-- point désactivé : ${trkpt(48, 2)} -->`,
+      trkpt(45.01, 6),
+    )));
+    expect(route.points.map((point) => point.lat)).toEqual([45, 45.01]);
+    const withCdata = parseGpxText(gpx(`<wpt lat="45" lon="6"><desc><![CDATA[voir <trkpt lat="48" lon="2"/>]]></desc></wpt>${segment(trkpt(45, 6), trkpt(45.01, 6))}`));
+    expect(withCdata.points).toHaveLength(2);
+    expect(withCdata.waypoints?.[0]?.desc).toBe('voir <trkpt lat="48" lon="2"/>');
+  });
+
+  it('reads a creator containing the other quote character (B1-3)', () => {
+    const text = `<?xml version="1.0"?><gpx version="1.1" creator="Bob's tool">${segment(trkpt(45, 6), trkpt(45.01, 6))}</gpx>`;
+    expect(parseGpxText(text).creator).toBe("Bob's tool");
+    const single = `<?xml version="1.0"?><gpx version="1.1" creator='Le "vrai" outil'>${segment(trkpt(45, 6), trkpt(45.01, 6))}</gpx>`;
+    expect(parseGpxText(single).creator).toBe('Le "vrai" outil');
+  });
+
   it('reads decimal commas, entities and odd attribute quoting', () => {
     const route = parseGpxText(gpx(segment(
       `<trkpt lon='6' lat = '44'><ele>12,5</ele></trkpt>`,
