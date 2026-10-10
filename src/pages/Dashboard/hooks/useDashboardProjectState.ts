@@ -95,6 +95,15 @@ export function useDashboardProjectState({
   const activeProjectSnapshotRef = useRef<ItineraryProject | null>(null);
   // Écrite aussi par openProject (avant le rendu suivant) ; jamais pendant le rendu.
   const activeProjectIdRef = useLatestRef<string | null>(activeProjectId);
+  /**
+   * Vrai si `projectId` est le projet ouvert. Les écritures liées à un projet
+   * (store, carte) le vérifient : celles d'un projet quitté ne doivent jamais
+   * atterrir dans le suivant (B1-1, F3-1).
+   */
+  const isActiveProject = useCallback(
+    (projectId: string | null) => projectId !== null && projectId === activeProjectIdRef.current,
+    [activeProjectIdRef],
+  );
   const isClosingProjectRef = useRef(false);
   const suppressedInitialProjectIdRef = useRef<string | null>(null);
 
@@ -282,9 +291,18 @@ export function useDashboardProjectState({
    * Seules les couches touchées sont enregistrées : le document (et le travail
    * en attente) par l'autosave, la vue à part — un changement de panneau, de
    * graphe ou d'itinéraire actif ne réécrit jamais le projet.
+   *
+   * `projectId` est celui du store qui publie : un store de projet quitté peut
+   * encore publier un résultat async (import GPX, revêtements…) après
+   * l'ouverture d'un autre projet ; il est ignoré au lieu d'être enregistré
+   * sous le projet ouvert (B1-1).
    */
   const handleProjectChange = useCallback(
-    (next: ItineraryProject) => {
+    (projectId: string | null, next: ItineraryProject) => {
+      if (!isActiveProject(projectId)) {
+        console.warn('[Dashboard] change from a project that is no longer open ignored');
+        return;
+      }
       const previous = activeProjectSnapshotRef.current;
       const dashboard = previous?.dashboard;
       const composed = dashboard ? { ...next, dashboard } : next;
@@ -297,7 +315,7 @@ export function useDashboardProjectState({
       const id = activeProjectIdRef.current;
       if (id && (!change || change.view)) queueProjectViewSave(id, extractProjectView(composed));
     },
-    [activeProjectIdRef, queueProjectSave],
+    [activeProjectIdRef, isActiveProject, queueProjectSave],
   );
 
   /**
@@ -329,6 +347,7 @@ export function useDashboardProjectState({
     handleOpenProject: openProject,
     handleBackToBrowser: closeProject,
     handleProjectChange,
+    isActiveProject,
     handleSaveProject: saveActiveProject,
     updatePersistedDashboard: mutateActiveProjectDashboard,
     getActiveProjectSnapshot,

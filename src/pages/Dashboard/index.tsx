@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
+import type { MapViewport } from '@/features/map3d/lib/viewport-persist';
 import { setDprLayoutScale } from '@/features/map3d/hooks/useMap/runtimeProfile';
 import { appScaleStyle, publishRootAppScale } from '@/shared/lib/appScale';
 import { ProjectBrowserOverlay } from '@/features/projectBrowser';
@@ -70,6 +71,7 @@ export default function Dashboard({
     handleOpenProject,
     handleBackToBrowser,
     handleProjectChange,
+    isActiveProject,
     handleSaveProject,
     updatePersistedDashboard,
     getActiveProjectSnapshot,
@@ -135,6 +137,15 @@ export default function Dashboard({
     activeProjectInitial,
     updatePersistedDashboard,
   });
+
+  // La carte d'un projet quitté enregistre encore sa vue en se démontant :
+  // jamais dans le projet ouvert ensuite (F3-1).
+  const handleProjectMapViewportChange = useCallback(
+    (projectId: string | null, viewport: MapViewport) => {
+      if (isActiveProject(projectId)) handleMapViewportChange(viewport);
+    },
+    [handleMapViewportChange, isActiveProject],
+  );
 
   // Rend les canvas (Mapbox, graphiques) à la résolution de l'écran malgré
   // l'échelle du canvas (`appScaleStyle`). Effet de layout : s'exécute avant
@@ -338,7 +349,7 @@ export default function Dashboard({
               onMapReady={handleMapReady}
               onMapLoadStatusChange={handleMapLoadStatusChangeMeasured}
               onMapReloadChange={handleMapReloadChange}
-              onMapViewportChange={handleMapViewportChange}
+              onMapViewportChange={handleProjectMapViewportChange}
               onToggleMapFocusMode={handleToggleMapFocusMode}
               onRestoreLeftPanel={restoreLeftPanel}
               onRestoreRightPanel={restoreRightPanel}

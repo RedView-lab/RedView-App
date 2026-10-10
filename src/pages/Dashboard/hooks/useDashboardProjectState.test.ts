@@ -123,7 +123,7 @@ describe('ouverture', () => {
     services.rows.set('p1', { row: row('p1', project('Un')) });
     const state = mount();
     await act(async () => { await state().openProject('p1'); });
-    act(() => state().handleProjectChange({ ...state().activeProjectInitial!, name: 'Un modifié' }));
+    act(() => state().handleProjectChange('p1', { ...state().activeProjectInitial!, name: 'Un modifié' }));
     await advance(1_000);
     expect(services.calls).toContain('save:p1:Un modifié');
   });
@@ -162,12 +162,37 @@ describe('ouverture', () => {
     expect(state().activeProjectId).toBeNull();
   });
 
+  it('un résultat tardif du projet quitté n’est jamais enregistré sous le projet ouvert ensuite (B1-1)', async () => {
+    services.rows.set('a', { row: row('a', project('A')) });
+    services.rows.set('b', { row: row('b', project('B')) });
+    const state = mount();
+    await act(async () => { await state().openProject('a'); });
+    const documentA = state().activeProjectInitial!;
+    await act(async () => { await state().openProject('b'); });
+    services.calls = [];
+    services.queueView.mockClear();
+
+    // Fin d'un import GPX lancé dans A, publiée par le store de A déjà démonté.
+    act(() => state().handleProjectChange('a', { ...documentA, name: 'A + import GPX' }));
+    await advance(5_000);
+    expect(services.calls.filter((call) => call.startsWith('save:'))).toEqual([]);
+    expect(services.queueView).not.toHaveBeenCalled();
+    expect(state().getActiveProjectSnapshot()?.name).toBe('B');
+    // Même règle pour la vue enregistrée par la carte de A à son démontage (F3-1).
+    expect(state().isActiveProject('a')).toBe(false);
+    expect(state().isActiveProject('b')).toBe(true);
+
+    act(() => state().handleProjectChange('b', { ...state().activeProjectInitial!, name: 'B modifié' }));
+    await advance(1_000);
+    expect(services.calls).toContain('save:b:B modifié');
+  });
+
   it('les modifications du projet courant partent avant l’ouverture d’un autre', async () => {
     services.rows.set('p1', { row: row('p1', project('Un')) });
     services.rows.set('p2', { row: row('p2', project('Deux')) });
     const state = mount();
     await act(async () => { await state().openProject('p1'); });
-    act(() => state().handleProjectChange({ ...state().activeProjectInitial!, name: 'Un modifié' }));
+    act(() => state().handleProjectChange('p1', { ...state().activeProjectInitial!, name: 'Un modifié' }));
     await act(async () => { await state().openProject('p2'); });
     expect(services.saveLocally).toHaveBeenCalledWith('p1', expect.objectContaining({ name: 'Un modifié' }));
     expect(services.calls.indexOf('save:p1:Un modifié')).toBeLessThan(services.calls.indexOf('get:p2'));
@@ -186,7 +211,7 @@ describe('modifications du projet ouvert', () => {
   it('changement de vue seule : vue enregistrée, projet jamais réécrit', async () => {
     const state = await opened();
     const current = state().activeProjectInitial!;
-    act(() => state().handleProjectChange({ ...current, activeMode: 'rythme' }));
+    act(() => state().handleProjectChange('p1', { ...current, activeMode: 'rythme' }));
     await advance(5_000);
     expect(services.queueView).toHaveBeenCalledTimes(1);
     expect(services.calls.filter((call) => call.startsWith('save:'))).toEqual([]);
@@ -194,7 +219,7 @@ describe('modifications du projet ouvert', () => {
 
   it('changement du document : projet enregistré, vue intacte', async () => {
     const state = await opened();
-    act(() => state().handleProjectChange({ ...state().activeProjectInitial!, name: 'Renommé' }));
+    act(() => state().handleProjectChange('p1', { ...state().activeProjectInitial!, name: 'Renommé' }));
     await advance(1_000);
     expect(services.calls).toContain('save:p1:Renommé');
     expect(services.queueView).not.toHaveBeenCalled();
@@ -208,7 +233,7 @@ describe('modifications du projet ouvert', () => {
     expect(services.queueView).toHaveBeenCalledTimes(1);
 
     const stale = state().activeProjectInitial!;
-    act(() => state().handleProjectChange({ ...stale, name: 'Renommé' }));
+    act(() => state().handleProjectChange('p1', { ...stale, name: 'Renommé' }));
     expect(state().getActiveProjectSnapshot()?.dashboard?.leftPanelWidth).toBe(420);
     await advance(1_000);
     expect(services.calls.filter((call) => call.startsWith('save:'))).toEqual(['save:p1:Renommé']);
@@ -216,7 +241,7 @@ describe('modifications du projet ouvert', () => {
 
   it('fermer le projet envoie ce qui reste et revient au gestionnaire', async () => {
     const state = await opened();
-    act(() => state().handleProjectChange({ ...state().activeProjectInitial!, name: 'Dernier état' }));
+    act(() => state().handleProjectChange('p1', { ...state().activeProjectInitial!, name: 'Dernier état' }));
     await act(async () => { await state().closeProject(); });
     expect(services.calls).toContain('save:p1:Dernier état');
     expect(services.flushViews).toHaveBeenCalledWith('p1');

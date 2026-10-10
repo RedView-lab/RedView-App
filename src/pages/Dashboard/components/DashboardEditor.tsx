@@ -110,7 +110,8 @@ interface DashboardEditorProps {
   onMapReady: (map: MapboxMap) => void;
   onMapLoadStatusChange: OverlayStatusReporter;
   onMapReloadChange: OverlayReloadRegistrar;
-  onMapViewportChange: (viewport: MapViewport) => void;
+  /** `projectId` : projet de la carte qui écrit (celle d'un projet quitté est ignorée). */
+  onMapViewportChange: (projectId: string | null, viewport: MapViewport) => void;
   onToggleMapFocusMode: () => void;
   onRestoreLeftPanel: () => void;
   onRestoreRightPanel: () => void;
@@ -128,7 +129,8 @@ interface DashboardEditorProps {
   onLeftResizeStart: (ev: ReactMouseEvent<HTMLDivElement>) => void;
   onRightResizeStart: (ev: ReactMouseEvent<HTMLDivElement>) => void;
   onCenterResizeStart: (ev: ReactMouseEvent<HTMLDivElement>) => void;
-  onProjectChange: (next: ItineraryProject) => void;
+  /** `projectId` : projet du store qui publie (celui d'un projet quitté est ignoré). */
+  onProjectChange: (projectId: string | null, next: ItineraryProject) => void;
   onBackToBrowser: () => void;
   onSaveProject: (options?: { force?: boolean }) => Promise<ItineraryProject | null>;
   /** État complet du projet ouvert (vue carte et panneaux compris), pour l'export `.redview`. */
@@ -482,12 +484,22 @@ export function DashboardEditor({
     ...(collaborators ?? []),
   ], [collaborators, shareMembers]);
   const rightPanelContentRef = useRef<HTMLDivElement>(null);
+  // Liés au projet pour lequel le store et la carte sont montés (`key` ci-dessous) :
+  // démontés, ils gardent cette version, et leurs écritures tardives sont reconnues.
+  const handleScopedProjectChange = useCallback(
+    (next: ItineraryProject) => onProjectChange(activeProjectId, next),
+    [activeProjectId, onProjectChange],
+  );
+  const handleScopedMapViewportChange = useCallback(
+    (viewport: MapViewport) => onMapViewportChange(activeProjectId, viewport),
+    [activeProjectId, onMapViewportChange],
+  );
 
   return (
     <ProjectProvider
         key={activeProjectId ?? 'no-project'}
         initialProject={activeProjectInitial ?? undefined}
-        onProjectChange={onProjectChange}
+        onProjectChange={handleScopedProjectChange}
         collab={collabSession.link}
         collabPending={collabSession.pending}
       >
@@ -501,7 +513,7 @@ export function DashboardEditor({
           lidarSelectionEnabled={lidarModeEnabled}
           onLidarSelectionDisable={handleLidarSelectionDisable}
           initialViewport={projectMapViewport}
-          onViewportChange={onMapViewportChange}
+          onViewportChange={handleScopedMapViewportChange}
           basemapConfig={activeBasemapConfig}
           contextMenuOverlayContext={contextMenuOverlayContext}
           overlayInsets={mapOverlayInsets}

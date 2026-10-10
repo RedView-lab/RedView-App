@@ -114,8 +114,25 @@ export function ProjectProvider({
   /** Écritures faites avant le branchement, et le document d'où elles partent. */
   const preSessionRef = useRef<{ base: ProjectDocument; changes: PreSessionChange[] } | null>(null);
 
+  /**
+   * Store démonté (projet quitté) : un résultat async qui arrive encore
+   * (import GPX, revêtements, toponymes…) n'est plus publié — il partirait
+   * vers le Dashboard, qui a déjà ouvert un autre projet (B1-1).
+   */
+  const disposedRef = useRef(false);
+  useEffect(() => {
+    disposedRef.current = false;
+    return () => {
+      disposedRef.current = true;
+    };
+  }, []);
+
   /** Publie un état déjà préparé (normalisé + partagé) et le persiste. */
   const commitProject = useCallback((next: ItineraryProject, source: CommitSource) => {
+    if (disposedRef.current) {
+      console.warn('[ProjectProvider] write after the project was closed ignored');
+      return;
+    }
     const prev = projectRef.current;
     projectRef.current = next;
     setProjectInternal(next);
