@@ -56,6 +56,11 @@ export interface AnalysisChartProps {
   axis1Metric: AxisMetricId;
   axis2Metric: AxisMetricId | null;
   xMode: AxisMode;
+  /**
+   * Départ réel (date du Rythme) : libellés de l'axe « heure » lus sur
+   * l'instant (changement d'heure). null : addition d'heures au départ.
+   */
+  clockStart?: Date | null;
   detailZoom: number;
   detailOffset: number;
   yZoom?: number;

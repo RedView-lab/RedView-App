@@ -10,6 +10,7 @@ import {
   interpolateElapsedHoursFromTimeline,
 } from '../series/timeline';
 import { computeCumulativeElevationAtX } from './math';
+import { departureWallClock, wallClockAfterStart } from './format';
 import type { ChartItineraryNode } from './types';
 import type { Itinerary } from '@/features/itineraryPanel/types';
 import type { PauseAwareSchedule } from '@/features/itineraryPanel/lib/schedule';
@@ -48,7 +49,13 @@ export function estimateScheduledSecondsAtDistance(
 }
 
 /** Heure de passage au format « J1 - 08:29 ». */
-export function formatScheduledDayClock(startSecOfDay: number, scheduledSeconds: number): string {
+export function formatScheduledDayClock(startSecOfDay: number, scheduledSeconds: number, start?: Date | null): string {
+  if (start) {
+    // Départ réel : heure murale de l'instant (changement d'heure compris).
+    const wall = wallClockAfterStart(start, scheduledSeconds);
+    const minute = Math.floor(wall.minuteOfDay);
+    return `J${Math.max(1, wall.dayOffset + 1)} - ${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`;
+  }
   const currentSecFromStartOfDay = startSecOfDay + scheduledSeconds;
   const dayNumber = Math.max(1, Math.floor(currentSecFromStartOfDay / 86400) + 1);
   const secInDay = ((Math.round(currentSecFromStartOfDay) % 86400) + 86400) % 86400;
@@ -139,7 +146,7 @@ export function resolveItineraryHoverMetrics({
   const durationFormatted = `${String(h).padStart(2, '0')} : ${String(m).padStart(2, '0')} : ${String(s).padStart(2, '0')}`;
 
   // Format jour et heure : J1 - 08:29 (Figma node 1894:40702)
-  const timeFormatted = formatScheduledDayClock(startSecOfDay, scheduledSeconds);
+  const timeFormatted = formatScheduledDayClock(startSecOfDay, scheduledSeconds, departureWallClock(node?.itinerary.rhythm));
 
   return {
     distanceFormatted,

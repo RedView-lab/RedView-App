@@ -50,6 +50,7 @@ export const AnalysisChart = memo(function AnalysisChart({
   axis1Metric,
   axis2Metric,
   xMode,
+  clockStart = null,
   detailZoom = 0,
   detailOffset = 0,
   yZoom = 0,
@@ -216,8 +217,8 @@ export const AnalysisChart = memo(function AnalysisChart({
     [plotXDomain, xTicks],
   );
   const xAxisLabels = useMemo(
-    () => buildResponsiveXAxisLabels(xPositions, xMode, plotSize.width, xAxis.density),
-    [plotSize.width, xAxis.density, xMode, xPositions],
+    () => buildResponsiveXAxisLabels(xPositions, xMode, plotSize.width, xAxis.density, clockStart),
+    [clockStart, plotSize.width, xAxis.density, xMode, xPositions],
   );
 
   const yPositions = useMemo(

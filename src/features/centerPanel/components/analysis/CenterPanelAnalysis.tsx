@@ -27,6 +27,7 @@ import {
   type ChartPoiAnnotation,
   type ItinerarySteepAlert,
 } from '../chart';
+import { departureWallClock } from '../chart/AnalysisChart/format';
 import { dispatchOpenPoiOnMap } from '@/features/poi/lib/chartPoiSyncBridge';
 import { flyToBounds, flyToPoi } from '@/features/map3d';
 import {
@@ -155,6 +156,10 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
       && activeWeatherItineraryId != null
       && unavailableItineraryIds.includes(activeWeatherItineraryId);
   }, [activeWeatherItineraryId, axis1Value, axis2Value, unavailableItineraryIds]);
+
+  // Départ réel : heures de l'axe « heure » lues sur l'instant (changement d'heure).
+  const activeRhythm = activeItinerary?.rhythm;
+  const chartClockStart = useMemo(() => departureWallClock(activeRhythm), [activeRhythm]);
 
   const dayNightStartReady = Boolean(
     activeItinerary?.rhythm.startDate && activeItinerary?.rhythm.startTime,
@@ -692,6 +697,7 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
           axis1Metric={axis1Value}
           axis2Metric={axis2Value}
           xMode={xMode}
+          clockStart={chartClockStart}
           detailZoom={detailZoom}
           detailOffset={detailOffset}
           yZoom={yZoom}

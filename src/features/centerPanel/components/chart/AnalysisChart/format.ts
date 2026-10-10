@@ -8,6 +8,31 @@ import {
 
 export type XAxisLabelDensity = 'full' | 'compact' | 'tight';
 
+/**
+ * Départ réel du Rythme (date + heure murale), null sans date valide : l'heure
+ * murale d'un passage se lit alors sur l'instant (changement d'heure compris)
+ * au lieu d'additionner des heures à celle du départ.
+ */
+export function departureWallClock(rhythm: { startDate?: string | null; startTime?: string | null } | null | undefined): Date | null {
+  const date = /^(\d{4})-(\d{2})-(\d{2})$/.exec(rhythm?.startDate ?? '');
+  const time = /^(\d{1,2}):(\d{2})$/.exec(rhythm?.startTime?.trim() || '08:00');
+  if (!date || !time) return null;
+  const [year, month, day] = [Number(date[1]), Number(date[2]) - 1, Number(date[3])];
+  const start = new Date(year, month, day, Number(time[1]), Number(time[2]));
+  return start.getFullYear() === year && start.getMonth() === month && start.getDate() === day ? start : null;
+}
+
+/** Jour (0 = jour du départ) et minute du jour de l'heure murale à `elapsedSeconds` après `start`. */
+export function wallClockAfterStart(start: Date, elapsedSeconds: number): { dayOffset: number; minuteOfDay: number } {
+  const at = new Date(start.getTime() + elapsedSeconds * 1000);
+  const midnight = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  return {
+    // Jours de 23 ou 25 h au changement d'heure : arrondi.
+    dayOffset: Math.round((midnight(at) - midnight(start)) / 86_400_000),
+    minuteOfDay: at.getHours() * 60 + at.getMinutes() + at.getSeconds() / 60,
+  };
+}
+
 /** Pas « ronds » pour les axes en heures (minutes). */
 const TIME_STEPS_MIN = [1, 2, 5, 10, 15, 20, 30, 60, 120, 180, 240, 360, 480, 720, 1440];
 const X_LABEL_GAP_PX = 10;
@@ -98,10 +123,11 @@ export function buildResponsiveXAxisLabels(
   xMode: AxisMode,
   plotWidth: number,
   density: XAxisLabelDensity,
+  clockStart?: Date | null,
 ): Array<{ value: number; ratio: number; label: string }> {
   const labels = positions.map((position) => ({
     ...position,
-    label: formatXTick(position.value, xMode, density),
+    label: formatXTick(position.value, xMode, density, clockStart),
   }));
   if (labels.length < 2 || plotWidth <= 0) return labels;
 
@@ -149,15 +175,16 @@ function formatXTick(
   value: number,
   xMode: AxisMode,
   density: 'full' | 'compact' | 'tight' = 'full',
+  clockStart?: Date | null,
 ): string {
   if (xMode === 'distance') return formatDistanceTick(value);
-  if (xMode === 'heure') return formatClockHours(value, density);
+  if (xMode === 'heure') return formatClockHours(value, density, clockStart);
   return formatHours(value, density);
 }
 
-export function formatXAxisValue(value: number, xMode: AxisMode): string {
+export function formatXAxisValue(value: number, xMode: AxisMode, clockStart?: Date | null): string {
   if (xMode === 'distance') return `${value.toFixed(1)} km`;
-  if (xMode === 'heure') return formatClockHours(value);
+  if (xMode === 'heure') return formatClockHours(value, 'full', clockStart);
   return formatHours(value);
 }
 
@@ -189,12 +216,23 @@ function formatHours(
   return `${h}h${m.toString().padStart(2, '0')}`;
 }
 
+/**
+ * Abscisse « heure » (heures depuis minuit du jour de départ, continue) en
+ * heure murale. Avec le départ réel, lue sur l'instant : après le changement
+ * d'heure d'automne, une nuit sur la selle affichait une heure de trop.
+ */
 function formatClockHours(
   hours: number,
   density: 'full' | 'compact' | 'tight' = 'full',
+  clockStart?: Date | null,
 ): string {
   if (!Number.isFinite(hours)) return '--:--';
-  const totalMinutes = Math.round(hours * 60);
+  let totalMinutes = Math.round(hours * 60);
+  if (clockStart) {
+    const startHours = clockStart.getHours() + clockStart.getMinutes() / 60;
+    const wall = wallClockAfterStart(clockStart, (hours - startHours) * 3600);
+    totalMinutes = wall.dayOffset * 1440 + Math.round(wall.minuteOfDay);
+  }
   const dayOffset = Math.floor(totalMinutes / 1440);
   const minutesInDay = ((totalMinutes % 1440) + 1440) % 1440;
   const hh = String(Math.floor(minutesInDay / 60)).padStart(2, '0');
