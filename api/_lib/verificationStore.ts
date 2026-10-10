@@ -329,13 +329,13 @@ function issueCode(key: string, target?: string): string {
  * Compte un échec dans le quota de `key` (verrou 24 h après 10 échecs) ;
  * vrai si la clé vient d'être verrouillée.
  */
-function pushFailure(key: string, now: number, max = MAX_FAILURES_PER_WINDOW, codeKey = key): boolean {
+function pushFailure(key: string, now: number, max = MAX_FAILURES_PER_WINDOW): boolean {
   const quota = getQuota(key, now);
   quota.failures.push(now);
   const locked = quota.failures.length >= max;
   if (locked) {
     quota.lockedUntil = now + LOCK_DURATION_MS;
-    deleteCode(codeKey);
+    deleteCode(key);
   }
   saveQuota(key, quota);
   return locked;
@@ -513,7 +513,9 @@ export function checkVerificationCode(email: string, inputCode: string, target?:
     let locked: boolean;
     if (failureScope) {
       // Les deux compteurs avancent à chaque échec.
-      const scopeLocked = pushFailure(scopedKey(normalizedEmail, failureScope), now, MAX_FAILURES_PER_WINDOW, normalizedEmail);
+      // Le verrou du couple ne touche pas au code en attente : un tiers qui
+      // change d'IP ne peut pas invalider à répétition celui du titulaire.
+      const scopeLocked = pushFailure(scopedKey(normalizedEmail, failureScope), now);
       const addressLocked = pushFailure(normalizedEmail, now, MAX_FAILURES_PER_ADDRESS);
       locked = scopeLocked || addressLocked;
     } else {

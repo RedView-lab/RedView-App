@@ -127,4 +127,14 @@ describe('api/auth/verify-code', () => {
     expect(ok.status).toBe(200);
     expect(users.create).toHaveBeenCalledTimes(1);
   });
+
+  it('le verrou d’un couple adresse + IP n’invalide pas le code en attente du titulaire (A1-4)', async () => {
+    const { email } = await issueCode();
+    const code = sentCodes.at(-1)!;
+    const wrong = code === '000000' ? '111111' : '000000';
+    // Un tiers change d'IP à chaque essai : chaque couple reste sous son verrou.
+    for (let attempt = 0; attempt < 4; attempt += 1) await verify(email, wrong, undefined, `203.0.113.${attempt + 1}`);
+    const ok = await verify(email, code, undefined, '198.51.100.7');
+    expect(ok.status).toBe(200);
+  });
 });
