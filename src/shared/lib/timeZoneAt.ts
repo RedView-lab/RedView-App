@@ -12,10 +12,15 @@
 type TzLookup = (latitude: number, longitude: number) => string;
 
 let lookupPromise: Promise<TzLookup | null> | null = null;
+/** Table chargée : lecture synchrone pour les calculs d'horaires (cf. timeZoneAtSync). */
+let loadedLookup: TzLookup | null = null;
 
 function loadLookup(): Promise<TzLookup | null> {
   lookupPromise ??= import('@photostructure/tz-lookup')
-    .then((mod) => mod.default)
+    .then((mod) => {
+      loadedLookup = mod.default;
+      return mod.default;
+    })
     .catch((error: unknown) => {
       console.warn('[timeZoneAt] time-zone table unavailable', error);
       lookupPromise = null; // nouvel essai au prochain appel
@@ -40,6 +45,26 @@ export async function resolveTimeZoneAt(lng: number, lat: number): Promise<strin
   if (!lookup) return null;
   try {
     return lookup(lat, wrapLongitude(lng));
+  } catch {
+    return null;
+  }
+}
+
+/** Charge la table des fuseaux en arrière-plan (cf. timeZoneAtSync). */
+export async function preloadTimeZoneTable(): Promise<void> {
+  await loadLookup();
+}
+
+/**
+ * Fuseau IANA en (lng, lat) sans attendre : null tant que la table n'est pas
+ * chargée (preloadTimeZoneTable) ou pour des coordonnées invalides. Pour les
+ * calculs synchrones (horaires de passage, exports), qui gardent alors le
+ * fuseau du navigateur.
+ */
+export function timeZoneAtSync(lng: number, lat: number): string | null {
+  if (!loadedLookup || !Number.isFinite(lng) || !Number.isFinite(lat) || Math.abs(lat) > 90) return null;
+  try {
+    return loadedLookup(lat, wrapLongitude(lng));
   } catch {
     return null;
   }

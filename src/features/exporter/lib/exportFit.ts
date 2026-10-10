@@ -113,8 +113,9 @@ export function buildItineraryFitCourse(itinerary: Itinerary, options?: ExportOp
 
   const clock = buildRoutePassageClock(itinerary, options?.prediction ?? itinerary.prediction, createdAt);
   // Départ du Rythme (sans date : le lendemain à son heure, comme l'agenda) :
-  // les heures des points du parcours sont celles de l'agenda.
-  const startMs = Math.round(clock.start.getTime() / 1000) * 1000;
+  // les heures des points du parcours sont celles de l'agenda, à l'heure du
+  // lieu de départ (pas du navigateur qui exporte).
+  const startMs = Math.round(clock.instantMs(clock.start) / 1000) * 1000;
   const recordMessages = buildFitRecordMessages(
     routePoints,
     startMs,

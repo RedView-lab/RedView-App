@@ -21,9 +21,11 @@ import type {
   PoiState,
   TimelineItem,
 } from '../../types';
+import { timeZoneAtSync } from '@/shared/lib/timeZoneAt';
+import { shiftWallClockToTimeZone } from '@/shared/lib/zonedTime';
 import { DEFAULT_POI_DISTANCE_M, normalizeItineraryRhythmState } from '../project/defaultState';
 import { buildPauseAwareSchedule } from './pauseAwareSchedule';
-import { resolveScheduleStart, rideSecondsModel } from './passageClock';
+import { departureTimeZone, resolveScheduleStart, rideSecondsModel } from './passageClock';
 import { FEATURE_TO_PANEL_POI } from './poi-to-timeline';
 
 export interface PoiAutoSortRun {
@@ -137,6 +139,7 @@ export function computePoiAutoSort(
 
   // Pas de date : départ supposé demain, jour de semaine traité comme inconnu.
   const { start, hasRealDate } = resolveScheduleStart(rhythm, now);
+  const timeZone = departureTimeZone(itinerary);
 
   const projected = projectRoutePoints(routePoints);
   const routeTotalM = projected[projected.length - 1]?.progressM ?? 0;
@@ -149,6 +152,7 @@ export function computePoiAutoSort(
     // Les POI retenus ne vont pas dans la timeline : ils ne posent pas de
     // pause, l'horaire du tri reste celui affiché par la feuille de route.
     pauseMinutesFor: () => 0,
+    wallClockAt: (arrival, feature) => shiftWallClockToTimeZone(arrival, timeZone, timeZoneAtSync(feature.lon, feature.lat)),
   };
 
   const result = autoSortPois({

@@ -29,6 +29,11 @@ export interface AutoSortTimeModel {
   hasRealDate: boolean;
   /** Minutes de pause ajoutées si ce POI devient favori (0 si les favoris ne marquent pas de pause). */
   pauseMinutesFor: (feature: PoiFeature) => number;
+  /**
+   * Heure murale au POI d'un passage (`arrival`, heure murale du départ) :
+   * un POI passé une frontière de fuseau. Absent : même fuseau que le départ.
+   */
+  wallClockAt?: (arrival: Date, feature: PoiFeature) => Date;
 }
 
 export interface AutoSortInput {

@@ -166,9 +166,10 @@ export function selectAutoSortPicks(
     if (c.kind === 'water') {
       return { timed: t, scheduledS, clockMin, status: 'open', likelyOpen: true, openFactor: 1 };
     }
+    const arrival = schedule.arrival(scheduledS);
     const status = evaluateOpeningHoursAt(
       c.feature.tags?.opening_hours,
-      schedule.arrival(scheduledS),
+      time.wallClockAt?.(arrival, c.feature) ?? arrival,
       rules.opening.closingMarginMin,
       time.hasRealDate,
     );

@@ -382,6 +382,8 @@ function buildPoiGpsName(
     panelCategory: TimelineItem['poiCategory'];
     label: string | null;
     labelEdited: boolean;
+    /** Position du POI : ses horaires se lisent à l'heure de son fuseau. */
+    at: { lat: number; lon: number };
   },
 ): string {
   const openingHours = poi.feature?.tags?.opening_hours;
@@ -389,7 +391,8 @@ function buildPoiGpsName(
   if (openingHours) {
     const seconds = naming.clock.scheduledSecondsAt(passage.distanceM, naming.totalM);
     const arrival = new Date(naming.clock.start.getTime() + seconds * 1000);
-    openingIntervals = openingIntervalsOnDate(openingHours, arrival, naming.clock.hasRealDate);
+    const localArrival = naming.clock.wallClockAt(arrival, poi.at.lon, poi.at.lat);
+    openingIntervals = openingIntervalsOnDate(openingHours, localArrival, naming.clock.hasRealDate);
   }
   return buildGpsPoiName({
     featureCategory: poi.feature?.category,
@@ -465,7 +468,7 @@ export function collectExportAnchors(
       id: item.id,
       name,
       gpsName: isPoi
-        ? buildPoiGpsName(naming, passage, { feature, panelCategory, label: item.label, labelEdited: item.labelEdited === true })
+        ? buildPoiGpsName(naming, passage, { feature, panelCategory, label: item.label, labelEdited: item.labelEdited === true, at: { lat, lon } })
         : name,
       lat,
       lon,
@@ -496,7 +499,7 @@ export function collectExportAnchors(
     anchors.push({
       id: `poi-${feature.id}`,
       name: label,
-      gpsName: buildPoiGpsName(naming, passage, { feature, panelCategory, label: feature.name, labelEdited: false }),
+      gpsName: buildPoiGpsName(naming, passage, { feature, panelCategory, label: feature.name, labelEdited: false, at: feature }),
       lat: feature.lat,
       lon: feature.lon,
       distanceM,

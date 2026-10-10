@@ -6,6 +6,8 @@
  */
 import type { PredictionResult } from '@/features/fitPredictor';
 import { isFootDiscipline } from '@/shared/lib/discipline';
+import { timeZoneAtSync } from '@/shared/lib/timeZoneAt';
+import { shiftWallClockToTimeZone, wallClockDateToInstantMs } from '@/shared/lib/zonedTime';
 
 import { parseStartReference } from '../../sections/timeline/TimelineTimelineView/utils';
 import type { Itinerary } from '../../types';
@@ -68,6 +70,17 @@ export function resolveScheduleStart(
   return { start, hasRealDate: false };
 }
 
+/**
+ * Fuseau IANA du lieu de départ : l'heure du Rythme y est une heure murale.
+ * null tant que la table des fuseaux n'est pas chargée (preloadTimeZoneTable) :
+ * le fuseau du navigateur tient alors lieu de fuseau du départ.
+ */
+export function departureTimeZone(itinerary: Itinerary): string | null {
+  const startRow = itinerary.timeline.find((row) => row.kind === 'start');
+  const at = startRow?.lat != null && startRow.lon != null ? startRow : itinerary.gpxRoute?.points[0];
+  return at && at.lat != null && at.lon != null ? timeZoneAtSync(at.lon, at.lat) : null;
+}
+
 export interface RoutePassageClock {
   /** Secondes depuis le départ, pauses planifiées comprises, au mètre `distanceM` d'une trace de `totalM` mètres. */
   scheduledSecondsAt: (distanceM: number, totalM: number) => number;
@@ -77,6 +90,17 @@ export interface RoutePassageClock {
   hasRealDate: boolean;
   /** false : temps estimés à vitesse constante faute de prédiction. */
   usedPrediction: boolean;
+  /**
+   * Instant (ms) d'une heure de passage. `start` et les heures qui en
+   * découlent sont des heures murales du lieu de départ, construites dans le
+   * fuseau du navigateur : un horodatage absolu (FIT) passe par ici.
+   */
+  instantMs: (wallClock: Date) => number;
+  /**
+   * Heure murale au lieu (lng, lat) d'un passage, à lire avec les accesseurs
+   * locaux : horaires d'ouverture d'un POI passé une frontière de fuseau.
+   */
+  wallClockAt: (wallClock: Date, lng: number, lat: number) => Date;
 }
 
 /**
@@ -93,6 +117,7 @@ export function buildRoutePassageClock(
   const fallbackSpeedMs = isFootDiscipline(itinerary.discipline) ? FALLBACK_FOOT_SPEED_MS : FALLBACK_SPEED_MS;
   const models = new Map<number, (progressM: number) => number>();
   const { start, hasRealDate } = resolveScheduleStart(itinerary.rhythm, now);
+  const timeZone = departureTimeZone(itinerary);
   return {
     scheduledSecondsAt: (distanceM, totalM) => {
       let model = models.get(totalM);
@@ -106,5 +131,7 @@ export function buildRoutePassageClock(
     start,
     hasRealDate,
     usedPrediction: usable != null,
+    instantMs: (wallClock) => wallClockDateToInstantMs(wallClock, timeZone),
+    wallClockAt: (wallClock, lng, lat) => shiftWallClockToTimeZone(wallClock, timeZone, timeZoneAtSync(lng, lat)),
   };
 }

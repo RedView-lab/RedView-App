@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, memo } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import { useAppI18n } from '@/shared/i18n';
 import { normalizeDiscipline } from '@/shared/lib/discipline';
+import { preloadTimeZoneTable } from '@/shared/lib/timeZoneAt';
 import type { OverlayStatusReporter } from '@/features/map3d';
 
 import { ItineraryPanel } from '../ItineraryPanel';
@@ -286,6 +287,12 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
   );
 
   const [selectedTimelineIds, setSelectedTimelineIds] = useState<string[]>([]);
+
+  // Fuseaux des lieux (heure du départ, horaires d'un POI passé une frontière,
+  // horodatage FIT) : table chargée en arrière-plan, lue ensuite sans attendre.
+  useEffect(() => {
+    void preloadTimeZoneTable();
+  }, []);
 
   useEffect(() => {
     setSelectedTimelineIds([]);
