@@ -1,3 +1,4 @@
+import type { CollabDeniedReason } from './collabClient';
 import { CollabConnection, type CollabConnectionOptions } from './connection';
 
 /**
@@ -15,6 +16,21 @@ type RenameOptions = Pick<CollabConnectionOptions, 'url' | 'projectId' | 'getTok
 };
 
 const DEFAULT_TIMEOUT_MS = 20_000;
+
+/**
+ * Messages montrés tels quels par le toast de la mutation (`useRenameProject`,
+ * traduits par `notify`) : des textes fixes, chacun avec sa paire FR/EN dans
+ * translations/collab.ts — un gabarit (`refusé (${raison})`) ne se traduit
+ * jamais (D3-2, relecture du 2026-10-10).
+ */
+const DENIED_MESSAGES: Record<CollabDeniedReason, string> = {
+  forbidden: 'Vous n’avez plus accès à ce projet partagé : il n’a pas été renommé.',
+  'not-found': 'Ce projet partagé n’existe plus : il n’a pas été renommé.',
+  version: 'Une nouvelle version de RedView est disponible : rechargez la page pour renommer ce projet.',
+  unauthorized: 'Votre session a expiré : reconnectez-vous pour renommer ce projet.',
+};
+const REJECTED_MESSAGE = 'Le serveur de co-édition a refusé ce nom : le projet n’a pas été renommé.';
+const TIMEOUT_MESSAGE = 'Le serveur de co-édition ne répond pas : le projet n’a pas été renommé. Réessayez dans un instant.';
 
 export function renameInRoom({ name, timeoutMs = DEFAULT_TIMEOUT_MS, ...options }: RenameOptions): Promise<void> {
   // Lus par la connexion : `durable` (écrit par le serveur) ne change pas toujours l'état publié.
@@ -39,13 +55,13 @@ export function renameInRoom({ name, timeoutMs = DEFAULT_TIMEOUT_MS, ...options 
       if (error) reject(error);
       else resolve();
     };
-    onRejected = () => finish(new Error('Renommage du projet partagé refusé par le serveur'));
-    const timer = setTimeout(() => finish(new Error('Renommage du projet partagé : serveur temps réel injoignable')), timeoutMs);
+    onRejected = () => finish(new Error(REJECTED_MESSAGE));
+    const timer = setTimeout(() => finish(new Error(TIMEOUT_MESSAGE)), timeoutMs);
     const check = () => {
       if (done) return;
       const state = client.getState();
       if (state.status === 'denied') {
-        finish(new Error(`Renommage du projet partagé refusé (${state.deniedReason ?? 'refus'})`));
+        finish(new Error(DENIED_MESSAGES[state.deniedReason ?? 'forbidden']));
         return;
       }
       if (!state.ready) return;

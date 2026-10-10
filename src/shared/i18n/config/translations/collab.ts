@@ -76,4 +76,11 @@ export const collabTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'Impossible de mettre à jour le partage du projet', en: 'Unable to update project sharing' },
   { fr: 'Ce fil a été supprimé.', en: 'This thread was deleted.' },
   { fr: 'Ce fil a été supprimé. Votre réponse n’a pas été envoyée :', en: 'This thread was deleted. Your reply was not sent:' },
+  // Renommage d'un projet partagé depuis le gestionnaire (collab/client/renameInRoom.ts).
+  { fr: 'Vous n’avez plus accès à ce projet partagé : il n’a pas été renommé.', en: 'You no longer have access to this shared project: it was not renamed.' },
+  { fr: 'Ce projet partagé n’existe plus : il n’a pas été renommé.', en: 'This shared project no longer exists: it was not renamed.' },
+  { fr: 'Une nouvelle version de RedView est disponible : rechargez la page pour renommer ce projet.', en: 'A new version of RedView is available: reload the page to rename this project.' },
+  { fr: 'Votre session a expiré : reconnectez-vous pour renommer ce projet.', en: 'Your session has expired: sign in again to rename this project.' },
+  { fr: 'Le serveur de co-édition a refusé ce nom : le projet n’a pas été renommé.', en: 'The co-editing server refused this name: the project was not renamed.' },
+  { fr: 'Le serveur de co-édition ne répond pas : le projet n’a pas été renommé. Réessayez dans un instant.', en: 'The co-editing server is not responding: the project was not renamed. Try again in a moment.' },
 ];

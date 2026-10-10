@@ -294,6 +294,56 @@ describe('serveur temps réel', () => {
     await waitFor(() => a.client.getDocument().name === 'BikingMan 2026', 'nom chez les autres éditeurs');
   });
 
+  it('renommage hors éditeur refusé ou serveur injoignable : un message fixe, traduit (D3-2)', async () => {
+    // Ce que fait le toast de la mutation (notify → translateAppText), en anglais.
+    const { translateAppText } = await import('../../src/shared/i18n/config/bundle.ts');
+    const failure = async (options: Partial<Parameters<typeof renameInRoom>[0]>) => {
+      try {
+        await renameInRoom({
+          url: `ws://127.0.0.1:${port}/multiplayer`,
+          projectId: 'local-test',
+          getToken: async () => 'dev:bob',
+          WebSocketImpl: WebSocket as unknown as typeof globalThis.WebSocket,
+          name: 'Nouveau nom',
+          ...options,
+        });
+      } catch (error) {
+        return (error as Error).message;
+      }
+      throw new Error('le renommage aurait dû échouer');
+    };
+
+    // Projet supprimé (ou jamais créé) : refusé par le serveur.
+    const denied = await failure({ projectId: 'projet-absent' });
+    // Serveur qui ne répond pas (connexion TCP acceptée, jamais de poignée de main) : délai dépassé.
+    const sockets: net.Socket[] = [];
+    const silent = net.createServer((socket) => { sockets.push(socket); });
+    const silentPort = await new Promise<number>((resolve) => silent.listen(0, '127.0.0.1', () => resolve((silent.address() as { port: number }).port)));
+    let unreachable: string;
+    try {
+      // Fermer un socket `ws` encore en cours d'ouverture émet une erreur (un navigateur n'en fait qu'un avertissement).
+      class QuietWebSocket extends WebSocket {
+        constructor(...args: ConstructorParameters<typeof WebSocket>) {
+          super(...args);
+          this.on('error', () => undefined);
+        }
+      }
+      unreachable = await failure({
+        url: `ws://127.0.0.1:${silentPort}/multiplayer`,
+        timeoutMs: 300,
+        WebSocketImpl: QuietWebSocket as unknown as typeof globalThis.WebSocket,
+      });
+    } finally {
+      for (const socket of sockets) socket.destroy();
+      await new Promise((resolve) => silent.close(resolve));
+    }
+    for (const message of [denied, unreachable]) {
+      expect(message).not.toMatch(/[(){}]|refus\)|not-found|forbidden/);
+      expect(translateAppText(message, undefined, 'en'), `paire FR/EN manquante : ${message}`).not.toBe(message);
+    }
+    expect(denied).not.toBe(unreachable);
+  });
+
   it('commentaires : fil et réponse croisés, écriture sur le message d’un autre refusée', async () => {
     const a = connect('alice', sampleDocument(200));
     await waitFor(() => a.client.getState().ready, 'a prêt');
