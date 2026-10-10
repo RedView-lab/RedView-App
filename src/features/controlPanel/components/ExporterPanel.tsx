@@ -22,6 +22,7 @@ import type { ItineraryProject } from '@/features/itineraryPanel/types';
 import { describeRedviewExportError, exportProjectAsRedview } from '@/features/redviewFile';
 import { useAppI18n } from '@/shared/i18n';
 import { trackAnalyticsEvent } from '@/shared/lib/analytics';
+import { preloadTimeZoneTable } from '@/shared/lib/timeZoneAt';
 import { captureMapThumbnail } from '@/shared/lib/mapThumbnail';
 
 import { Checkbox } from './Checkbox';
@@ -245,6 +246,10 @@ export const ExporterPanel = memo(function ExporterPanel({
       const itineraryRow = selected.find((row) => row.id === 'itineraries');
       if (itineraryRow) {
         try {
+          // Fuseaux des lieux (horodatage FIT, horaires d'un POI passé une
+          // frontière) : la table doit être chargée, sinon le navigateur tient
+          // lieu de fuseau sans le dire. Déjà là en général (panneau d'itinéraire).
+          await preloadTimeZoneTable().catch(() => undefined);
           outcomes.push({ ok: true, message: exportActiveItinerary(itineraryRow.format) });
         } catch (error) {
           console.error('[exporter] failed to export itinerary', error);
