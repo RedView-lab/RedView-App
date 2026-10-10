@@ -7,7 +7,7 @@ import { getAppwriteEndpoint, getAppwriteProjectId, getAppwriteUsers, requireAut
 import { getCustomerRow } from '../_lib/billing/customers.js';
 import { PublicError, sendSafeError } from '../_lib/errors.js';
 import { readJsonBody, sendMethodNotAllowed } from '../_lib/http.js';
-import { sendEmailChangedNoticeEmail } from '../_lib/mailer.js';
+import { sendEmailChangedNoticeEmail, sendEmailChangeTakenEmail } from '../_lib/mailer.js';
 import { getStripeServer } from '../_lib/stripe.js';
 import {
   checkVerificationCode,
@@ -87,6 +87,22 @@ async function syncStripeCustomerEmail(userId: string, email: string, requestId?
   }
 }
 
+/** Marque l'adresse vérifiée, un nouvel essai compris ; un échec est signalé sans interrompre le changement. */
+async function markEmailVerified(userId: string, requestId?: string): Promise<void> {
+  const users = getAppwriteUsers();
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      await users.updateEmailVerification(userId, true);
+      return;
+    } catch (error) {
+      if (attempt === 1) {
+        console.error('[change-email] Email changed but verification flag not set:', error);
+        captureServerError(error, { route: 'auth/change-email', requestId });
+      }
+    }
+  }
+}
+
 export default async function handler(req: ApiRequest, res: ApiResponse) {
   if (req.method !== 'POST') return sendMethodNotAllowed(res, ['POST']);
   try {
@@ -104,9 +120,13 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         // Quota d'abord : la vérification « adresse déjà prise » ne sert pas
         // à sonder des adresses sans limite.
         consumeVerificationRequestQuota(key);
+        // Adresse déjà prise : même réponse qu'un envoi de code (un 409 ici
+        // disait à tout compte connecté si une adresse a un compte RedView,
+        // A1-3) ; le propriétaire de la boîte est prévenu à la place.
         const taken = await users.list([Query.equal('email', newEmail), Query.limit(1)]);
-        if (taken.total > 0) throw new PublicError(EMAIL_TAKEN_MESSAGE, 409);
-        const { sent } = await requestEmailChangeCode(user.id, newEmail);
+        const { sent } = taken.total > 0
+          ? await sendEmailChangeTakenEmail({ to: newEmail })
+          : await requestEmailChangeCode(user.id, newEmail);
         if (!sent) {
           // Rien n'est parti : la demande n'est pas décomptée, le nouvel essai
           // n'attend pas 30 s.
@@ -146,8 +166,11 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         consumeVerificationCode(key);
 
         // Appwrite marque la nouvelle adresse non vérifiée : le code vient de
-        // prouver le contraire.
-        await users.updateEmailVerification(user.id, true);
+        // prouver le contraire. L'adresse a déjà changé et le code est
+        // consommé : un échec ici ne doit pas faire répondre « échec » (A1-2),
+        // sinon le nouvel essai tombe sur « c'est déjà votre adresse » et
+        // Stripe / l'avis à l'ancienne adresse sont sautés.
+        await markEmailVerified(user.id, req.requestId);
         await syncStripeCustomerEmail(user.id, newEmail, req.requestId);
         if (user.email) void sendEmailChangedNoticeEmail({ to: user.email, name: profile.name, newEmail });
         return res.status(200).json({ email: newEmail });

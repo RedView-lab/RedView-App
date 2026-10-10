@@ -393,6 +393,35 @@ export async function sendEmailChangeCodeEmail({ to, code }: { to: string; code:
 }
 
 /**
+ * Envoyé à la place du code quand un compte demande à prendre une adresse qui
+ * appartient déjà à un autre compte : l'API répond comme pour un envoi de code
+ * (pas de sonde d'existence de compte, A1-3), seul le propriétaire de la boîte
+ * voit la différence. Rien de saisi par le demandeur dans le contenu.
+ */
+export async function sendEmailChangeTakenEmail({ to }: { to: string }): Promise<{ sent: boolean }> {
+  const appUrl = appBaseUrl();
+  const subject = 'Cette adresse est déjà celle d’un compte RedView';
+  const intro = 'Un autre compte RedView a demandé à prendre cette adresse e-mail, mais elle est déjà celle de votre compte : rien n’a changé.';
+  const text =
+    `${UNVERIFIED_GREETING}\n\n` +
+    `${intro}\n` +
+    `Si c'était vous, depuis un second compte, connectez-vous plutôt sur ${appUrl}/ avec cette adresse.\n\n` +
+    "Si vous n'êtes pas à l'origine de cette demande, ignorez ce message : votre compte n'est pas touché.\n\n" +
+    '---\n' +
+    'Another RedView account asked to use this e-mail address, but it already belongs to your account: nothing changed. If this wasn’t you, you can safely ignore this e-mail.';
+  const html = emailLayout({
+    title: 'Adresse déjà utilisée',
+    preheader: 'Un autre compte a demandé à prendre votre adresse : rien n’a changé.',
+    bodyHtml:
+      paragraphHtml(`${escapeHtml(UNVERIFIED_GREETING)}<br>${escapeHtml(intro)}`, 24)
+      + buttonHtml(`${appUrl}/`, 'Se connecter à RedView')
+      + noteHtml('Si vous n’êtes pas à l’origine de cette demande, ignorez ce message : votre compte n’est pas touché.'),
+    englishSummary: 'Another RedView account asked to use this e-mail address, but it already belongs to your account: nothing changed. If this wasn’t you, you can safely ignore this e-mail.',
+  });
+  return sendTransactionalEmail('EMAIL-CHANGE-TAKEN', { to, subject, text, html });
+}
+
+/**
  * Avis envoyé à l'ANCIENNE adresse une fois le changement fait : une prise de
  * compte (session volée + mot de passe) ne passe pas inaperçue.
  */

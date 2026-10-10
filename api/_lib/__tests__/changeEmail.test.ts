@@ -26,6 +26,8 @@ const fakes = await vi.hoisted(async () => {
     sentCodes: [] as { to: string; code: string }[],
     mailDown: false,
     notices: [] as { to: string; newEmail: string }[],
+    takenNotices: [] as string[],
+    captured: [] as unknown[],
   };
 });
 
@@ -52,7 +54,7 @@ vi.mock('../appwrite.js', () => ({
 }));
 vi.mock('../billing/customers.js', () => ({ getCustomerRow: async () => fakes.customer }));
 vi.mock('../stripe.js', () => ({ getStripeServer: () => ({ customers: { update: fakes.stripeUpdate } }) }));
-vi.mock('../../../server/lib/observability.mjs', () => ({ captureServerError: () => {} }));
+vi.mock('../../../server/lib/observability.mjs', () => ({ captureServerError: (error: unknown) => { fakes.captured.push(error); } }));
 // Un seul module (importé en .ts par verificationStore, en .js par la route).
 vi.mock('../mailer.ts', () => ({
   sendEmailChangeCodeEmail: vi.fn(async (message: { to: string; code: string }) => {
@@ -62,6 +64,10 @@ vi.mock('../mailer.ts', () => ({
   }),
   sendEmailChangedNoticeEmail: vi.fn(async (message: { to: string; newEmail: string }) => {
     fakes.notices.push(message);
+    return { sent: true };
+  }),
+  sendEmailChangeTakenEmail: vi.fn(async (message: { to: string }) => {
+    fakes.takenNotices.push(message.to);
     return { sent: true };
   }),
   sendVerificationEmail: vi.fn(async () => ({ sent: true })),
@@ -110,6 +116,8 @@ beforeEach(() => {
   fakes.customer = null;
   fakes.stripeUpdate.mockReset().mockResolvedValue({});
   fakes.notices.length = 0;
+  fakes.takenNotices.length = 0;
+  fakes.captured.length = 0;
   fakes.mailDown = false;
 });
 
@@ -157,12 +165,16 @@ describe('api/auth/change-email', () => {
     expect(locked.status).toBe(429);
   });
 
-  it('adresse prise : refusée dès la demande, ou à la confirmation si elle l’a été entre-temps (code gardé)', async () => {
+  it('adresse prise : aucun code (propriétaire prévenu), ou refus à la confirmation si elle l’a été entre-temps (code gardé)', async () => {
     counter += 1;
     fakes.session.id = `u${counter}`;
     fakes.takenEmails.add('taken@example.test');
+    const sentBefore = fakes.sentCodes.length;
     const early = await call({ action: 'request-code', newEmail: 'taken@example.test' });
-    expect(early).toEqual({ status: 409, body: { error: 'Cette adresse est déjà utilisée par un autre compte.' } });
+    // Même réponse qu'un envoi de code : pas de sonde d'existence de compte (A1-3).
+    expect(early).toEqual({ status: 200, body: { sent: true } });
+    expect(fakes.sentCodes.length).toBe(sentBefore);
+    expect(fakes.takenNotices).toEqual(['taken@example.test']);
 
     const code = await requestCode('late@example.test');
     fakes.updateEmail.mockRejectedValueOnce(Object.assign(new Error('exists'), { code: 409, type: 'user_email_already_exists' }));
@@ -207,5 +219,24 @@ describe('api/auth/change-email', () => {
     fakes.stripeUpdate.mockRejectedValueOnce(new Error('stripe down'));
     code = await requestCode();
     expect((await call({ action: 'confirm', newEmail: 'new@example.test', code, password: 'ancien-mdp' })).status).toBe(200);
+  });
+  it('adresse changée mais marquage « vérifiée » en échec : succès quand même, Stripe et ancienne adresse prévenus, échec signalé (A1-2)', async () => {
+    fakes.customer = { stripe_customer_id: 'cus_4', billing_email_mode: null };
+    const code = await requestCode();
+    fakes.users.updateEmailVerification.mockRejectedValue(new Error('appwrite 503'));
+    const done = await call({ action: 'confirm', newEmail: 'new@example.test', code, password: 'ancien-mdp' });
+    expect(done).toEqual({ status: 200, body: { email: 'new@example.test' } });
+    expect(fakes.users.updateEmailVerification).toHaveBeenCalledTimes(2);
+    expect(fakes.stripeUpdate).toHaveBeenCalledWith('cus_4', { email: 'new@example.test' });
+    expect(fakes.notices).toHaveLength(1);
+    expect(fakes.captured.map(String)).toEqual(['Error: appwrite 503']);
+  });
+
+  it('marquage « vérifiée » raté une fois : le second essai suffit, rien n’est signalé', async () => {
+    const code = await requestCode();
+    fakes.users.updateEmailVerification.mockRejectedValueOnce(new Error('blip'));
+    const done = await call({ action: 'confirm', newEmail: 'new@example.test', code, password: 'ancien-mdp' });
+    expect(done.status).toBe(200);
+    expect(fakes.captured).toEqual([]);
   });
 });
