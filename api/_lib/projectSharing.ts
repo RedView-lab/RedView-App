@@ -491,3 +491,48 @@ async function leaveLocked(user: AuthenticatedUser, projectId: string): Promise<
   await getAppwriteTeams().deleteMembership(teamId, membership.$id);
   await notifyProjectAccessChanged(projectId);
 }
+
+/** Ids par demande de `missingFitFiles` (un itinéraire porte au plus 10 .fit). */
+const MAX_FIT_STATUS_IDS = 200;
+const FIT_STATUS_WINDOW_MS = 10 * 60_000;
+const MAX_FIT_STATUS_PER_USER = 60;
+const fitStatusLimiter = createRateLimiter({ windowMs: FIT_STATUS_WINDOW_MS, maxKeys: 20_000 });
+
+/**
+ * Parmi `rawIds`, les .fit qui n'existent plus. Dans un projet partagé,
+ * Appwrite répond aussi 404 à un membre pour un fichier qu'il n'a pas le
+ * droit de lire : seule la clé admin distingue un fichier supprimé (son
+ * auteur a supprimé son compte…) d'un fichier illisible pour ce membre. Le
+ * client retire alors les références mortes et garde les autres.
+ *
+ * Réservé au propriétaire et aux membres de l'équipe ; ne dit rien d'autre
+ * que « n'existe plus », et seulement sur une absence confirmée par Appwrite
+ * (un 404 sans type vient d'un proxy pendant un redémarrage).
+ */
+export async function missingFitFiles(user: AuthenticatedUser, projectId: string, rawIds: unknown): Promise<string[]> {
+  if (!Array.isArray(rawIds) || rawIds.length > MAX_FIT_STATUS_IDS
+    || !rawIds.every((id) => typeof id === 'string' && APPWRITE_ID_PATTERN.test(id))) {
+    throw new PublicError('Invalid file ids', 400);
+  }
+  if (!fitStatusLimiter(`fit-status:${user.id}`, MAX_FIT_STATUS_PER_USER)) {
+    throw new PublicError('Too many requests, try again later', 429);
+  }
+  const row = await readProject(projectId);
+  const isOwner = (await ownerOf(row)) === user.id;
+  const teamId = sharedTeamOf(row);
+  if (!isOwner && !(teamId && (await membershipOf(teamId, user.id))?.confirm)) throw new PublicError('Project not found', 404);
+
+  const storage = getAppwriteStorage();
+  const ids = [...new Set(rawIds as string[])];
+  const missing: string[] = [];
+  for (let start = 0; start < ids.length; start += 10) {
+    await Promise.all(ids.slice(start, start + 10).map(async (fileId) => {
+      try {
+        await storage.getFile(FIT_FILES_BUCKET_ID, fileId);
+      } catch (error) {
+        if (errorCode(error) === 404 && (error as { type?: unknown }).type === 'storage_file_not_found') missing.push(fileId);
+      }
+    }));
+  }
+  return missing;
+}

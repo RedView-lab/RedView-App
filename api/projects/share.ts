@@ -10,6 +10,7 @@ import {
   getShareState,
   inviteToProject,
   leaveProject,
+  missingFitFiles,
   removeFromProject,
 } from '../_lib/projectSharing.js';
 
@@ -21,13 +22,16 @@ import {
  *  - `remove` `{ userId }` : retire un éditeur (propriétaire seulement) ;
  *  - `leave` : un éditeur quitte le projet ;
  *  - `delete` : le propriétaire supprime le projet partagé (avec l'équipe et
- *    les données de la co-édition, que seule la clé admin peut effacer).
+ *    les données de la co-édition, que seule la clé admin peut effacer) ;
+ *  - `fit-status` `{ fileIds }` : parmi ces .fit, ceux qui n'existent plus
+ *    (un membre reçoit aussi 404 sur un fichier qu'il ne peut pas lire).
  */
 interface ShareBody {
   action?: unknown;
   projectId?: unknown;
   email?: unknown;
   userId?: unknown;
+  fileIds?: unknown;
 }
 
 /** Invitations par IP (en plus de la limite par compte de projectSharing.ts) : plusieurs comptes d'une même machine. */
@@ -57,6 +61,8 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       case 'delete':
         await deleteSharedProject(user, projectId);
         return res.status(200).json({ ok: true });
+      case 'fit-status':
+        return res.status(200).json({ missing: await missingFitFiles(user, projectId, body.fileIds) });
       default:
         throw new PublicError('Unknown action', 400);
     }

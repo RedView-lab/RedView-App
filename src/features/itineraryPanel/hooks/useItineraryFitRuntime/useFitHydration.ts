@@ -2,6 +2,7 @@ import { useEffect, useRef, type Dispatch, type SetStateAction } from 'react';
 import type { PredictionResult } from '@/features/fitPredictor';
 import { translateAppText } from '@/shared/i18n';
 import { isServerOwnedDocument } from '@/shared/services/projects';
+import { fetchMissingFitFiles } from '@/shared/services/projects/sharing';
 import type { Itinerary, ItineraryFitUpload, ItineraryProject } from '../../types';
 import { fitFileKey, fitFilesEqual } from './files';
 import { hydratePersistedFitRuntime } from './hydration';
@@ -32,8 +33,10 @@ interface UseFitHydrationArgs {
  *
  * Projet partagé : Appwrite répond aussi 404 pour un fichier que l'on n'a pas
  * le droit de lire (le .fit d'un autre éditeur sans la lecture de l'équipe).
- * L'upload reste alors dans le document — le retirer l'effaçait pour tous —
- * et n'est pas re-téléchargé tant que la liste ne change pas.
+ * Le serveur dit lesquels n'existent plus (auteur qui a supprimé son compte…) :
+ * ceux-là sont retirés ; un fichier seulement illisible ici reste dans le
+ * document — le retirer l'effaçait pour tous — et n'est pas re-téléchargé tant
+ * que la liste ne change pas.
  */
 export function useFitHydration({
   active,
@@ -106,12 +109,20 @@ export function useFitHydration({
         delete unreadableUploadsRef.current[itineraryId];
 
         const missingFileIds = hydrated.missingFileIds ?? [];
-        if (missingFileIds.length > 0 && projectId && isServerOwnedDocument(projectId)) {
+        const shared = projectId != null && isServerOwnedDocument(projectId);
+        // Serveur injoignable : rien n'est retiré, tout est gardé comme illisible.
+        const deletedFileIds = !shared || missingFileIds.length === 0
+          ? missingFileIds
+          : await fetchMissingFitFiles(projectId, missingFileIds).catch(() => []);
+        if (cancelled) return;
+        const unreadableFileIds = missingFileIds.filter((id) => !deletedFileIds.includes(id));
+        if (unreadableFileIds.length > 0) {
           unreadableUploadsRef.current[itineraryId] = {
             signature: persistedUploadSignature,
-            paths: new Set(missingFileIds),
+            paths: new Set(unreadableFileIds),
           };
-        } else if (missingFileIds.length > 0) {
+        }
+        if (deletedFileIds.length > 0) {
           setProject((prev) => ({
             ...prev,
             itineraries: prev.itineraries.map((it) =>
@@ -119,7 +130,7 @@ export function useFitHydration({
                 ? {
                     ...it,
                     fitUploads: (it.fitUploads ?? []).filter(
-                      (u) => !missingFileIds.includes(u.path ?? ''),
+                      (u) => !deletedFileIds.includes(u.path ?? ''),
                     ),
                   }
                 : it,

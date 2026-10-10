@@ -69,3 +69,13 @@ export async function leaveSharedProject(projectId: string): Promise<void> {
 export async function deleteSharedProjectOnServer(projectId: string): Promise<void> {
   await shareRequest({ action: 'delete', projectId });
 }
+
+/**
+ * Parmi ces .fit d'un projet partagé, ceux qui n'existent plus. Un membre
+ * reçoit aussi 404 sur un fichier qu'il n'a pas le droit de lire : seul le
+ * serveur (clé admin) les distingue.
+ */
+export async function fetchMissingFitFiles(projectId: string, fileIds: string[]): Promise<string[]> {
+  const { missing } = await shareRequest<{ missing?: unknown }>({ action: 'fit-status', projectId, fileIds });
+  return Array.isArray(missing) ? missing.filter((id): id is string => typeof id === 'string') : [];
+}

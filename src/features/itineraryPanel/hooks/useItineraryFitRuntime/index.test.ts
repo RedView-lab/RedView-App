@@ -13,6 +13,8 @@ const projects = vi.hoisted(() => ({
   isServerOwnedDocument: vi.fn((_projectId: string) => false),
 }));
 vi.mock('@/shared/services/projects', () => projects);
+const sharing = vi.hoisted(() => ({ fetchMissingFitFiles: vi.fn<(projectId: string, ids: string[]) => Promise<string[]>>() }));
+vi.mock('@/shared/services/projects/sharing', () => sharing);
 vi.mock('@/features/fitPredictor/engine/api', () => ({
   FitPredictionCancelledError: class extends Error {},
   createFitPredictionEngine: () => ({ terminate: () => {} }),
@@ -116,6 +118,7 @@ describe('useItineraryFitRuntime — uploads introuvables ou illisibles', () => 
     projects.deleteFitUploads.mockReset();
     projects.uploadProjectItineraryFitFiles.mockReset();
     projects.isServerOwnedDocument.mockReset();
+    sharing.fetchMissingFitFiles.mockReset().mockResolvedValue([]);
     projects.downloadProjectItineraryFitFileEntries.mockImplementation(async (uploads: ItineraryFitUpload[]) =>
       uploads.map((u) => (u === other || u.path === other.path
         ? { path: u.path, name: u.name, file: null, notFound: true }
@@ -147,6 +150,30 @@ describe('useItineraryFitRuntime — uploads introuvables ou illisibles', () => 
     rerender(itinerary([ride, other]));
     await flush();
     expect(projects.downloadProjectItineraryFitFileEntries).toHaveBeenCalledTimes(1);
+  });
+
+  it('projet partagé : un upload que le serveur dit supprimé est retiré, un illisible reste', async () => {
+    projects.isServerOwnedDocument.mockReturnValue(true);
+    const deleted = upload('supprime.fit');
+    projects.downloadProjectItineraryFitFileEntries.mockImplementation(async (uploads: ItineraryFitUpload[]) =>
+      uploads.map((u) => (u.path === ride.path
+        ? { path: u.path, name: u.name, file: fileOf(u), notFound: false }
+        : { path: u.path, name: u.name, file: null, notFound: true })),
+    );
+    sharing.fetchMissingFitFiles.mockResolvedValue([deleted.path!]);
+    const active = itinerary([ride, other, deleted]);
+    const { setProject } = renderRuntime(active);
+    await flush();
+    expect(sharing.fetchMissingFitFiles).toHaveBeenCalledWith('p-1', [other.path, deleted.path]);
+    expect(lastProjectUpdate(setProject, active).itineraries[0]!.fitUploads).toEqual([ride, other]);
+  });
+
+  it('projet partagé, serveur injoignable : aucun upload n’est retiré', async () => {
+    projects.isServerOwnedDocument.mockReturnValue(true);
+    sharing.fetchMissingFitFiles.mockRejectedValue(new Error('hors ligne'));
+    const { setProject } = renderRuntime(itinerary([ride, other]));
+    await flush();
+    expect(setProject).not.toHaveBeenCalled();
   });
 
   it('retirer un .fit garde l’upload non chargé ici et ne supprime que le fichier retiré', async () => {

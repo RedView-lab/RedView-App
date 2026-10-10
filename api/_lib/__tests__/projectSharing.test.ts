@@ -16,6 +16,8 @@ const fake = vi.hoisted(() => ({
   files: new Map<string, { name: string; $permissions: string[]; bytes?: Uint8Array }>(),
   journal: new Map<string, { $id: string; project_id: string; payload: string }>(),
   views: new Map<string, { $id: string; project_id: string }>(),
+  /** Proxy sans route (Appwrite qui redémarre) : 404 sans type. */
+  storageDown: false,
   nextId: 0,
 }));
 
@@ -108,8 +110,9 @@ vi.mock('node-appwrite', async (importActual) => {
   }
   class Storage {
     async getFile(_bucket: string, fileId: string) {
+      if (fake.storageDown) throw error(404);
       const file = fake.files.get(fileId);
-      if (!file) throw error(404);
+      if (!file) throw Object.assign(error(404), { type: 'storage_file_not_found' });
       return { $id: fileId, ...file, $permissions: [...file.$permissions] };
     }
     async updateFile(_bucket: string, fileId: string, _name?: string, permissions?: string[]) {
@@ -139,7 +142,7 @@ vi.mock('node-appwrite', async (importActual) => {
   return { ...actual, Client, Databases, Users, Teams, Storage };
 });
 
-const { deleteSharedProject, getShareState, inviteToProject, leaveProject, projectTeamId, removeFromProject } = await import('../projectSharing.ts');
+const { deleteSharedProject, getShareState, inviteToProject, leaveProject, missingFitFiles, projectTeamId, removeFromProject } = await import('../projectSharing.ts');
 const { PublicError } = await import('../errors.ts');
 
 const owner = { id: 'owner', email: 'owner@example.test' };
@@ -290,6 +293,34 @@ describe('partage d’un projet', () => {
  * équipe créée d'avance, ids de fichiers étrangers glissés dans le document,
  * comptes non vérifiés, invitations en masse.
  */
+describe('.fit introuvables d’un projet partagé', () => {
+  it('un membre apprend lesquels n’existent plus ; un fichier illisible pour lui n’en fait pas partie', async () => {
+    fake.storageDown = false;
+    await inviteToProject(owner, PROJECT, 'editor@example.test');
+    fake.files.set('prive', { name: 'b.fit', $permissions: ['read("user:owner")'] });
+    expect(await missingFitFiles(editor, PROJECT, ['fit1', 'prive', 'supprime'])).toEqual(['supprime']);
+    expect(await missingFitFiles(owner, PROJECT, ['supprime', 'supprime'])).toEqual(['supprime']);
+  });
+
+  it('404 sans type (proxy pendant un redémarrage) : rien n’est déclaré supprimé', async () => {
+    await inviteToProject(owner, PROJECT, 'editor@example.test');
+    fake.storageDown = true;
+    try {
+      expect(await missingFitFiles(editor, PROJECT, ['supprime'])).toEqual([]);
+    } finally {
+      fake.storageDown = false;
+    }
+  });
+
+  it('un compte hors du projet : 404 ; des ids invalides : 400', async () => {
+    await inviteToProject(owner, PROJECT, 'editor@example.test');
+    await rejects(missingFitFiles(stranger, PROJECT, ['supprime']), 404);
+    await rejects(missingFitFiles(editor, PROJECT, ['../x']), 400);
+    await rejects(missingFitFiles(editor, PROJECT, 'supprime'), 400);
+    await rejects(missingFitFiles(editor, PROJECT, Array.from({ length: 201 }, (_, i) => `f${i}`)), 400);
+  });
+});
+
 describe('partage d’un projet : attaques', () => {
   const ownerPermissions = ['read("user:owner")', 'update("user:owner")', 'delete("user:owner")'];
 
