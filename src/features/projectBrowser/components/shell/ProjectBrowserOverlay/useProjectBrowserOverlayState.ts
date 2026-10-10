@@ -533,7 +533,11 @@ export function useProjectBrowserOverlayState({
   const closeBillingModal = useCallback(() => {
     logBillingUi('billing-modal-close');
     setBillingModal(null);
-  }, []);
+    // Fermée après un paiement confirmé dont l'activation n'a pas pu être
+    // vérifiée : la vue d'ensemble, lue chez Stripe, montre l'abonnement au
+    // lieu d'inviter à payer une seconde fois.
+    void refreshBillingOverview().catch(() => undefined);
+  }, [refreshBillingOverview]);
 
   const accountDisplayName = accountProfile
     ? formatAccountDisplayName(accountProfile, displayName)

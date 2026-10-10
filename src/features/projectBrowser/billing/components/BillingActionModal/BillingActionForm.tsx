@@ -51,8 +51,8 @@ interface BillingActionFormProps {
 
 /**
  * Où Stripe ramène l'utilisateur après un moyen de paiement à redirection
- * (PayPal…) : l'onglet Abonnement, avec de quoi finir le parcours
- * (`useBillingRedirectReturn`).
+ * (PayPal…) : l'onglet Abonnement, avec de quoi finir le parcours (effet de
+ * retour de redirection de `useProjectBrowserOverlayState`).
  */
 function returnUrlFor(flow: BillingModalState): string {
   const url = new URL('/', window.location.origin);
@@ -61,6 +61,12 @@ function returnUrlFor(flow: BillingModalState): string {
   if (flow.mode === 'subscription') url.searchParams.set('subscription', flow.subscriptionId);
   return url.toString();
 }
+
+/**
+ * Nouveaux essais de la finalisation côté app après une confirmation Stripe
+ * réussie (réseau, 5xx) ; le webhook reste le filet.
+ */
+const FINISH_RETRY_DELAYS_MS = [0, 1500, 4000];
 
 const CADENCE_LABELS: Record<SubscriptionPlanId, string> = {
   monthly: 'chaque mois',
@@ -75,6 +81,14 @@ export function BillingActionForm({ flow, onClose, onComplete }: BillingActionFo
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [consentAccepted, setConsentAccepted] = useState(false);
+  /**
+   * Confirmation Stripe réussie : le paiement ou le moyen de paiement est
+   * acquis. Le formulaire n'est plus jamais réaffiché — un nouvel essai ne
+   * pouvait que relancer une confirmation vouée à l'échec (C3-1).
+   */
+  const [confirmed, setConfirmed] = useState<BillingModalCompletion | null>(null);
+  const [finishing, setFinishing] = useState(false);
+  const [finishFailed, setFinishFailed] = useState(false);
   const paymentPageTitleId = useId();
 
   const isSubscription = flow.mode !== 'payment-method';
@@ -108,6 +122,27 @@ export function BillingActionForm({ flow, onClose, onComplete }: BillingActionFo
         ? t('S’abonner et payer {{price}}', { price })
         : t('Enregistrer ce moyen de paiement');
 
+  /** Finalisation côté app (synchronisation, activation de l'essai), avec nouveaux essais. */
+  const finish = async (completion: BillingModalCompletion) => {
+    setFinishing(true);
+    setFinishFailed(false);
+    for (const delay of FINISH_RETRY_DELAYS_MS) {
+      if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
+      try {
+        await onComplete(completion);
+        if (completion.mode !== 'payment-method') {
+          trackAnalyticsEvent({ name: 'checkout_completed', data: { plan: (flow as { planId: SubscriptionPlanId }).planId } });
+        }
+        setFinishing(false);
+        return;
+      } catch (nextError) {
+        logBillingUiError('billing-page-finish-error', nextError, { mode: completion.mode });
+      }
+    }
+    setFinishing(false);
+    setFinishFailed(true);
+  };
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
@@ -123,6 +158,9 @@ export function BillingActionForm({ flow, onClose, onComplete }: BillingActionFo
     setSubmitting(true);
     setError(null);
 
+    // Étape 1 : confirmation chez Stripe. Un échec ici n'a rien prélevé :
+    // le formulaire reste, avec le message.
+    let completion: BillingModalCompletion;
     try {
       const submitResult = await elements.submit();
       if (submitResult.error) throw new Error(submitResult.error.message);
@@ -134,33 +172,75 @@ export function BillingActionForm({ flow, onClose, onComplete }: BillingActionFo
           redirect: 'if_required',
         });
         if (result.error) throw new Error(result.error.message);
-        await onComplete({ mode: 'subscription', subscriptionId: flow.subscriptionId });
-        trackAnalyticsEvent({ name: 'checkout_completed', data: { plan: flow.planId } });
-        return;
-      }
-
-      const result = await stripe.confirmSetup({
-        elements,
-        confirmParams: { return_url: returnUrlFor(flow) },
-        redirect: 'if_required',
-      });
-      if (result.error) throw new Error(result.error.message);
-      const setupIntentId = result.setupIntent?.id;
-      if (!setupIntentId) throw new Error(t('Stripe n’a pas confirmé le moyen de paiement.'));
-
-      if (flow.mode === 'trial') {
-        await onComplete({ mode: 'trial', setupIntentId });
-        trackAnalyticsEvent({ name: 'checkout_completed', data: { plan: flow.planId } });
+        completion = { mode: 'subscription', subscriptionId: flow.subscriptionId };
       } else {
-        await onComplete({ mode: 'payment-method', setupIntentId });
+        const result = await stripe.confirmSetup({
+          elements,
+          confirmParams: { return_url: returnUrlFor(flow) },
+          redirect: 'if_required',
+        });
+        if (result.error) throw new Error(result.error.message);
+        const setupIntentId = result.setupIntent?.id;
+        if (!setupIntentId) throw new Error(t('Stripe n’a pas confirmé le moyen de paiement.'));
+        completion = flow.mode === 'trial' ? { mode: 'trial', setupIntentId } : { mode: 'payment-method', setupIntentId };
       }
     } catch (nextError) {
       logBillingUiError('billing-page-submit-error', nextError, { mode: flow.mode });
       setError(nextError instanceof Error ? t(nextError.message) : t('La confirmation Stripe a échoué.'));
-    } finally {
       setSubmitting(false);
+      return;
     }
+
+    // Étape 2 : finalisation côté app. Le paiement est acquis : quoi qu'il
+    // arrive, plus de formulaire.
+    setConfirmed(completion);
+    setSubmitting(false);
+    await finish(completion);
   };
+
+  if (confirmed) {
+    const confirmedTitle = confirmed.mode === 'subscription' ? t('Paiement reçu') : t('Moyen de paiement enregistré');
+    return (
+      <section className="rvpb-billing-page rv-fixed-viewport" aria-labelledby={paymentPageTitleId}>
+        <div className="rvpb-billing-page__chrome">
+          <header className="rvpb-billing-page__header">
+            <RedViewWordmark />
+          </header>
+          <main className="rvpb-billing-page__main">
+            <section className="rvpb-billing-page__content">
+              <div className="rvpb-billing-page__intro">
+                <h2 id={paymentPageTitleId}>{confirmedTitle}</h2>
+                <p role="status">
+                  {finishFailed
+                    ? t('Stripe a bien confirmé, mais l’activation n’a pas encore pu être vérifiée. Elle se terminera automatiquement : vous pouvez réessayer ou fermer cette page.')
+                    : t('Activation en cours…')}
+                </p>
+              </div>
+              {finishFailed ? (
+                <div className="rvpb-billing-page__actions">
+                  <button
+                    className="rvpb-billing-page__button rvpb-billing-page__button--ghost"
+                    type="button"
+                    onClick={onClose}
+                  >
+                    {t('Fermer')}
+                  </button>
+                  <button
+                    className="rvpb-billing-page__button rvpb-billing-page__button--primary"
+                    type="button"
+                    onClick={() => { void finish(confirmed); }}
+                    disabled={finishing}
+                  >
+                    {t('Réessayer l’activation')}
+                  </button>
+                </div>
+              ) : null}
+            </section>
+          </main>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="rvpb-billing-page rv-fixed-viewport" aria-labelledby={paymentPageTitleId}>
