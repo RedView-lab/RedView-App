@@ -139,8 +139,18 @@ function roundTo(value: number, digits: number): number {
   return Math.round(value * factor) / factor;
 }
 
+/**
+ * Nom du parcours exporté (fichier, nom du parcours sur le GPS) : celui de
+ * l'itinéraire, que l'utilisateur voit et renomme, avant celui du GPX
+ * d'origine. Deux variantes d'un même GPX (« GT20 », « GT20 (copie) »)
+ * portaient le même nom et s'écrasaient sur le compteur.
+ */
+export function resolveExportRouteName(itinerary: Pick<Itinerary, 'name' | 'gpxRoute'>): string {
+  return itinerary.name?.trim() || itinerary.gpxRoute?.name?.trim() || '';
+}
+
 export function buildExportFileName(itinerary: Itinerary, format: string): string {
-  const baseName = itinerary.gpxRoute?.name?.trim() || itinerary.name.trim() || 'itinerary';
+  const baseName = resolveExportRouteName(itinerary) || 'itinerary';
   return `${slugFileName(baseName, 'itinerary')}.${format}`;
 }
 

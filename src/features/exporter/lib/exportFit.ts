@@ -11,6 +11,7 @@ import {
   getExportRoutePoints,
   type ExportOptions,
   type ExportRoutePoint,
+  resolveExportRouteName,
 } from './exportHelpers';
 import { FitCourseWriter } from './fitCourseWriter';
 
@@ -108,7 +109,7 @@ export function buildItineraryFitCourse(itinerary: Itinerary, options?: ExportOp
   const anchors = collectExportAnchors(itinerary, routePoints, { ...options, now: createdAt }).filter(
     (anchor) => anchor.kind !== 'start' && anchor.kind !== 'end',
   );
-  const routeName = itinerary.gpxRoute?.name?.trim() || itinerary.name.trim() || translateAppText('Itinéraire');
+  const routeName = resolveExportRouteName(itinerary) || translateAppText('Itinéraire');
   const totalDistanceM = routePoints[routePoints.length - 1]!.distanceM;
 
   const clock = buildRoutePassageClock(itinerary, options?.prediction ?? itinerary.prediction, createdAt);

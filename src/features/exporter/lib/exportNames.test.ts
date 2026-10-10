@@ -59,6 +59,15 @@ describe('exports avec des noms limites', () => {
     expect(long.startsWith(messages.courseMesgs?.[0]?.name as string)).toBe(true);
   });
 
+  it('variantes d’un même GPX : le nom de l’itinéraire, pas celui du fichier d’origine', () => {
+    // « GT20 » et « GT20 (copie) » s'écrasaient sur le compteur (même nom de parcours).
+    const variant = { ...itinerary('GT20', 'x'), name: 'GT20 variante côte' } as Itinerary;
+    expect(buildExportFileName(variant, 'fit')).toBe('gt20-variante-cote.fit');
+    const { messages } = new Decoder(Stream.fromByteArray(Array.from(buildItineraryFitCourse(variant)))).read();
+    expect(messages.courseMesgs?.[0]?.name).toBe('GT20 variante côte');
+    expect(buildItineraryGpx(variant)).toContain('<name>GT20 variante côte</name>');
+  });
+
   it('nom de fichier : lettres de toute écriture gardées, rien d’interdit', () => {
     expect(buildExportFileName(itinerary('東京ライド', 'x'), 'gpx')).toBe('東京ライド.gpx');
     expect(buildExportFileName(itinerary(HOSTILE, 'x'), 'fit')).toBe('r-d-col-du-l-iseran-東京.fit');

@@ -13,6 +13,7 @@ import {
   exportItineraryFile,
   GARMIN_COURSE_POINT_LIMIT,
   gpsNameExamples,
+  resolveExportRouteName,
   type ExportPoiScope,
   type ItineraryExportFormat,
 } from '@/features/exporter';
@@ -214,7 +215,7 @@ export const ExporterPanel = memo(function ExporterPanel({
     if (!map || !source) throw new Error('Aucun tracé à survoler pour la vidéo.');
     const orientation: FlyoverVideoOrientation = format === 'mp4-portrait' ? 'portrait' : 'landscape';
     const itinerary = store?.project.itineraries.find((candidate) => candidate.id === source.route.itineraryId);
-    const name = itinerary?.gpxRoute?.name?.trim() || itinerary?.name?.trim() || 'flyover';
+    const name = (itinerary ? resolveExportRouteName(itinerary) : '') || 'flyover';
     void startFlyoverVideoExport({
       liveMap: map,
       route: source.route,

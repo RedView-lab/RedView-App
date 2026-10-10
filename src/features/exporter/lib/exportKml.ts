@@ -10,6 +10,7 @@ import {
   POI_CATEGORY_TO_KML_COLOR,
   type ExportAnchor,
   type ExportOptions,
+  resolveExportRouteName,
 } from './exportHelpers';
 import { translateAppText } from '@/shared/i18n/config';
 
@@ -40,7 +41,7 @@ export function buildItineraryKml(
 ): string {
   const routePoints = getExportRoutePoints(itinerary);
   const anchors = collectExportAnchors(itinerary, routePoints, options);
-  const routeName = itinerary.gpxRoute?.name?.trim() || itinerary.name.trim() || translateAppText('Itinéraire');
+  const routeName = resolveExportRouteName(itinerary) || translateAppText('Itinéraire');
 
   const styleIds = new Set<string>(['rv-track']);
   for (const anchor of anchors) {

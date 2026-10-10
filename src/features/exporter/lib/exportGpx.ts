@@ -12,6 +12,7 @@ import {
   POI_CATEGORY_TO_GPX_SYM,
   type ExportAnchor,
   type ExportOptions,
+  resolveExportRouteName,
 } from './exportHelpers';
 import { translateAppText } from '@/shared/i18n/config';
 import { gpxCoursePointType } from './coursePointTypes';
@@ -51,7 +52,7 @@ export function buildItineraryGpx(itinerary: Itinerary, options?: ExportOptions)
     .filter((anchor) => anchor.kind !== 'start' && anchor.kind !== 'end');
   const bounds = buildBounds(routePoints);
   const exportedAt = new Date().toISOString();
-  const routeName = itinerary.gpxRoute?.name?.trim() || itinerary.name.trim() || translateAppText('Itinéraire');
+  const routeName = resolveExportRouteName(itinerary) || translateAppText('Itinéraire');
 
   const waypointXml = anchors
     .map((anchor) => {
