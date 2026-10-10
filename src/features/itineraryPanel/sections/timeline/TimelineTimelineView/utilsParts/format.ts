@@ -42,21 +42,23 @@ export function parseStartReference(rhythm?: RhythmState): StartReference {
   };
 }
 
+/**
+ * Départ en heure locale ; null pour une date ou une heure qui n'existe pas
+ * (« 2026-02-31 », « 25:99 » venus d'un .redview ou d'un autre éditeur) :
+ * `new Date` les reportait en silence (4 mars à 02:39). L'heure sautée du
+ * printemps (02:30 le 28/03) reste acceptée : elle devient 03:30.
+ */
 function parseDateTime(dateValue: string, timeValue: string): Date | null {
   const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/u.exec(dateValue);
-  const timeMatch = /^(\d{1,2}):(\d{2})$/u.exec(timeValue);
-  if (!dateMatch || !timeMatch) return null;
+  const minutes = parseTimeMinutes(timeValue);
+  if (!dateMatch || minutes == null) return null;
 
-  const date = new Date(
-    Number(dateMatch[1]),
-    Number(dateMatch[2]) - 1,
-    Number(dateMatch[3]),
-    Number(timeMatch[1]),
-    Number(timeMatch[2]),
-    0,
-    0,
-  );
-  return Number.isNaN(date.getTime()) ? null : date;
+  const [year, month, day] = [Number(dateMatch[1]), Number(dateMatch[2]) - 1, Number(dateMatch[3])];
+  const date = new Date(year, month, day, Math.floor(minutes / 60), minutes % 60, 0, 0);
+  if (Number.isNaN(date.getTime())) return null;
+  // Jour du mois inexistant : reporté par `new Date`, refusé.
+  const calendar = new Date(year, month, day);
+  return calendar.getFullYear() === year && calendar.getMonth() === month && calendar.getDate() === day ? date : null;
 }
 
 function parseTimeMinutes(value: string | null | undefined): number | null {
@@ -66,7 +68,7 @@ function parseTimeMinutes(value: string | null | undefined): number | null {
 
   const hours = Number(match[1]);
   const minutes = Number(match[2]);
-  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes) || hours > 23 || minutes > 59) return null;
   return hours * 60 + minutes;
 }
 
