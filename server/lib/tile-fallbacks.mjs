@@ -7,6 +7,8 @@
 //    AWS Terrarium en direct) → 204 ;
 //  - /vhr-tiles : l'ortho très haute résolution n'existe que côté SW (Mapbox
 //    Satellite reste visible dessous) → 204 ;
+//  - /contour-tiles : les courbes de niveau HD sont calculées par le SW sur
+//    son MNT (la page non contrôlée garde celles de Mapbox) → 204 ;
 //  - `?pf=1` : préchargement spéculatif, inutile sans SW → 204 ;
 //  - /radar-tiles : tuile du radar européen EUMETNET OPERA, fabriquée ici
 //    (server/lib/opera-radar.mjs) et colorée avec la palette `p` ; aussi
@@ -21,10 +23,10 @@ import { OPERA_RADAR_HOST, operaFrameFromPath, renderOperaTile } from './opera-r
 import { isValidRadarPaletteParam } from './radar-recolor.mjs';
 import { generateAltitudeTile, generateSlopeTile } from './terrain-tiles.mjs';
 
-/** @typedef {'radar' | 'slope' | 'altitude' | 'dem' | 'vhr'} TileFamily */
+/** @typedef {'radar' | 'slope' | 'altitude' | 'dem' | 'vhr' | 'contour'} TileFamily */
 /** @typedef {import('node:http').ServerResponse} ServerResponse */
 
-const TILE_FAMILY_RE = /^\/(radar|slope|altitude|dem|vhr)-tiles\//;
+const TILE_FAMILY_RE = /^\/(radar|slope|altitude|dem|vhr|contour)-tiles\//;
 /** Au-delà, la carte agrandit le zoom 7 (source radar de la carte : maxzoom 7). */
 const RADAR_MAX_ZOOM = 7;
 
@@ -46,7 +48,7 @@ export function tileFallbackFamily(pathname) {
  * @param {URLSearchParams} searchParams
  */
 export function tileFallbackHitsUpstream(family, searchParams) {
-  return family !== 'dem' && family !== 'vhr' && searchParams.get('pf') !== '1';
+  return family !== 'dem' && family !== 'vhr' && family !== 'contour' && searchParams.get('pf') !== '1';
 }
 
 /** @param {ServerResponse} res */

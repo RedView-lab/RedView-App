@@ -19,6 +19,7 @@ const MAP_CACHE_PREFIXES = [
   'vhr-tiles-',
   'slope-tiles-',
   'altitude-tiles-',
+  'contour-tiles-',
   'shadow-tiles-',
   'dem-static-',
 ];
@@ -30,6 +31,7 @@ const CURRENT_MAP_CACHE_NAMES = new Set([
   VHR_CACHE_NAME,
   SLOPE_CACHE_NAME,
   ALTITUDE_CACHE_NAME,
+  CONTOUR_CACHE_NAME,
   STATIC_CACHE_NAME,
 ]);
 
@@ -47,7 +49,7 @@ function purgeManagedMapCaches({ includeCurrent = false } = {}) {
 }
 
 // ── Routage statique (Static Routing API du Service Worker, Chrome/Edge 123+) ──
-// router.js ne répond qu'aux six familles de tuiles ci-dessous ; toute autre
+// router.js ne répond qu'aux sept familles de tuiles ci-dessous ; toute autre
 // requête (tuiles satellite / vectorielles Mapbox, sprites, glyphes, appels
 // d'API, ressources de l'app) part au réseau. Sans routes, le navigateur
 // envoie quand même chacune d'elles d'abord au fil du SW — si bien que, pendant
@@ -63,6 +65,7 @@ const SW_FETCH_EVENT_PATHS = [
   '/vhr-tiles/*',
   '/slope-tiles/*',
   '/altitude-tiles/*',
+  '/contour-tiles/*',
   '/radar-tiles/*',
 ];
 
@@ -158,6 +161,7 @@ self.addEventListener('message', (e) => {
     try { altitudeHotClear(); } catch { /* ignore */ }
     try { orthoHotClear(); } catch { /* ignore */ }
     try { vhrHotClear(); } catch { /* ignore */ }
+    try { if (typeof contourHotClear === 'function') contourHotClear(); } catch { /* ignore */ }
     purgeManagedMapCaches({ includeCurrent: true });
     return;
   }
@@ -168,7 +172,10 @@ self.addEventListener('message', (e) => {
     try { slopeHotClear(); } catch { /* ignore */ }
     try { altitudeHotClear(); } catch { /* ignore */ }
     try { orthoHotClear(); } catch { /* ignore */ }
+    // Les courbes de niveau sont tirées du DEM : elles partent avec lui.
+    try { if (typeof contourHotClear === 'function') contourHotClear(); } catch { /* ignore */ }
     caches.delete(CACHE_NAME);
+    caches.delete(CONTOUR_CACHE_NAME);
     return;
   }
   if (e.data?.type === 'CLEAR_SLOPE_CACHE') {

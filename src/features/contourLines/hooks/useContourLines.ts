@@ -5,12 +5,19 @@ import {
   buildContourLineLayer,
   buildContourPaints,
   buildContourSource,
-  CONTOUR_CASING_LAYER_ID,
+  CONTOUR_HD_MIN_MAP_ZOOM,
+  CONTOUR_HD_SOURCE_ID,
+  CONTOUR_LAYER_IDS,
   CONTOUR_LAYER_PREFIX,
-  CONTOUR_LINE_LAYER_ID,
-  CONTOUR_SOURCE_ID,
+  contourHdTileUrl,
+  type ContourDemProfile,
   type ContourTone,
+  type ContourVariant,
 } from '../lib/contour-source';
+
+const VARIANTS: readonly ContourVariant[] = ['mapbox', 'hd'];
+/** Zoom maximal d'une couche Mapbox (style-spec). */
+const MAX_LAYER_ZOOM = 24;
 
 function findFirstSymbolLayerId(map: MapboxMap): string | undefined {
   return map.getStyle()?.layers?.find((layer) => layer.type === 'symbol')?.id;
@@ -37,24 +44,33 @@ function hideNativeContourLayers(map: MapboxMap) {
   }
 }
 
-function addContourLayers(map: MapboxMap, opacity: number, intervalMeters: number, tone: ContourTone) {
+function addContourLayers(
+  map: MapboxMap,
+  opacity: number,
+  intervalMeters: number,
+  tone: ContourTone,
+  demProfile: ContourDemProfile,
+) {
   try {
     hideNativeContourLayers(map);
-    if (!map.getSource(CONTOUR_SOURCE_ID)) {
-      map.addSource(CONTOUR_SOURCE_ID, buildContourSource());
-    }
     const beforeId = findFirstSymbolLayerId(map);
-    if (!map.getLayer(CONTOUR_CASING_LAYER_ID)) {
-      map.addLayer(
-        buildContourCasingLayer(opacity, intervalMeters, tone) as Parameters<MapboxMap['addLayer']>[0],
-        beforeId,
-      );
-    }
-    if (!map.getLayer(CONTOUR_LINE_LAYER_ID)) {
-      map.addLayer(
-        buildContourLineLayer(opacity, intervalMeters, tone) as Parameters<MapboxMap['addLayer']>[0],
-        beforeId,
-      );
+    for (const variant of VARIANTS) {
+      const ids = CONTOUR_LAYER_IDS[variant];
+      if (!map.getSource(ids.source)) {
+        map.addSource(ids.source, buildContourSource(variant, demProfile));
+      }
+      if (!map.getLayer(ids.casing)) {
+        map.addLayer(
+          buildContourCasingLayer(opacity, intervalMeters, tone, variant) as Parameters<MapboxMap['addLayer']>[0],
+          beforeId,
+        );
+      }
+      if (!map.getLayer(ids.line)) {
+        map.addLayer(
+          buildContourLineLayer(opacity, intervalMeters, tone, variant) as Parameters<MapboxMap['addLayer']>[0],
+          beforeId,
+        );
+      }
     }
   } catch {
     /* le style est peut-être en transition */
@@ -63,23 +79,55 @@ function addContourLayers(map: MapboxMap, opacity: number, intervalMeters: numbe
 
 function removeContourLayers(map: MapboxMap) {
   try {
-    if (map.getLayer(CONTOUR_LINE_LAYER_ID)) map.removeLayer(CONTOUR_LINE_LAYER_ID);
-    if (map.getLayer(CONTOUR_CASING_LAYER_ID)) map.removeLayer(CONTOUR_CASING_LAYER_ID);
-    if (map.getSource(CONTOUR_SOURCE_ID)) map.removeSource(CONTOUR_SOURCE_ID);
+    for (const variant of VARIANTS) {
+      const ids = CONTOUR_LAYER_IDS[variant];
+      if (map.getLayer(ids.line)) map.removeLayer(ids.line);
+      if (map.getLayer(ids.casing)) map.removeLayer(ids.casing);
+      if (map.getSource(ids.source)) map.removeSource(ids.source);
+    }
   } catch {
     /* le style est peut-être en transition */
   }
 }
 
-function setContourVisibility(map: MapboxMap, visible: boolean) {
-  for (const layerId of [CONTOUR_CASING_LAYER_ID, CONTOUR_LINE_LAYER_ID]) {
-    try {
-      if (map.getLayer(layerId)) {
-        map.setLayoutProperty(layerId, 'visibility', visible ? 'visible' : 'none');
+/**
+ * Courbes de Mapbox sous CONTOUR_HD_MIN_MAP_ZOOM et courbes du SW au-dessus
+ * quand le relief vient du pipeline HD ; celles de Mapbox seules sinon. Une
+ * couche masquée ne demande aucune tuile : rien n'atteint /contour-tiles hors HD.
+ */
+function setContourVisibility(map: MapboxMap, visible: boolean, hd: boolean) {
+  for (const variant of VARIANTS) {
+    const ids = CONTOUR_LAYER_IDS[variant];
+    const shown = visible && (variant === 'mapbox' || hd);
+    for (const layerId of [ids.casing, ids.line]) {
+      try {
+        const layer = map.getLayer(layerId);
+        if (!layer) continue;
+        const maxzoom = hd ? CONTOUR_HD_MIN_MAP_ZOOM : MAX_LAYER_ZOOM;
+        if (variant === 'mapbox' && (layer.maxzoom ?? MAX_LAYER_ZOOM) !== maxzoom) {
+          map.setLayerZoomRange(layerId, 0, maxzoom);
+        }
+        const next = shown ? 'visible' : 'none';
+        if (map.getLayoutProperty(layerId, 'visibility') !== next) {
+          map.setLayoutProperty(layerId, 'visibility', next);
+        }
+      } catch {
+        /* la couche n'existe peut-être pas encore */
       }
-    } catch {
-      /* la couche n'existe peut-être pas encore */
     }
+  }
+}
+
+/** La source HD lit la tuile DEM du maillage : son URL suit le profil 1 m / 0,40 m. */
+function updateContourDemProfile(map: MapboxMap, demProfile: ContourDemProfile) {
+  try {
+    const source = map.getSource(CONTOUR_HD_SOURCE_ID) as
+      | { tiles?: string[]; setTiles?: (tiles: string[]) => unknown }
+      | undefined;
+    const url = contourHdTileUrl(demProfile);
+    if (source?.setTiles && source.tiles?.[0] !== url) source.setTiles([url]);
+  } catch {
+    /* le style est peut-être en transition */
   }
 }
 
@@ -90,23 +138,32 @@ function updateContourPaint(map: MapboxMap, opacity: number, intervalMeters: num
   const lineOpacity = paints.lineOpacity as unknown as DataDrivenPropertyValueSpecification<number>;
   const lineWidth = paints.lineWidth as unknown as DataDrivenPropertyValueSpecification<number>;
   try {
-    if (map.getLayer(CONTOUR_CASING_LAYER_ID)) {
-      map.setFilter(CONTOUR_CASING_LAYER_ID, paints.filter);
-      map.setPaintProperty(CONTOUR_CASING_LAYER_ID, 'line-color', paints.casingColor);
-      map.setPaintProperty(CONTOUR_CASING_LAYER_ID, 'line-opacity', casingOpacity);
-      map.setPaintProperty(CONTOUR_CASING_LAYER_ID, 'line-width', casingWidth);
-    }
-    if (map.getLayer(CONTOUR_LINE_LAYER_ID)) {
-      map.setFilter(CONTOUR_LINE_LAYER_ID, paints.filter);
-      map.setPaintProperty(CONTOUR_LINE_LAYER_ID, 'line-color', paints.lineColor);
-      map.setPaintProperty(CONTOUR_LINE_LAYER_ID, 'line-opacity', lineOpacity);
-      map.setPaintProperty(CONTOUR_LINE_LAYER_ID, 'line-width', lineWidth);
+    for (const variant of VARIANTS) {
+      const ids = CONTOUR_LAYER_IDS[variant];
+      if (map.getLayer(ids.casing)) {
+        map.setFilter(ids.casing, paints.filter);
+        map.setPaintProperty(ids.casing, 'line-color', paints.casingColor);
+        map.setPaintProperty(ids.casing, 'line-opacity', casingOpacity);
+        map.setPaintProperty(ids.casing, 'line-width', casingWidth);
+      }
+      if (map.getLayer(ids.line)) {
+        map.setFilter(ids.line, paints.filter);
+        map.setPaintProperty(ids.line, 'line-color', paints.lineColor);
+        map.setPaintProperty(ids.line, 'line-opacity', lineOpacity);
+        map.setPaintProperty(ids.line, 'line-width', lineWidth);
+      }
     }
   } catch {
     /* le style est peut-être en transition */
   }
 }
 
+/**
+ * @param hd vrai quand le relief 3D vient du pipeline HD du Service Worker
+ *   (1 m / 0,40 m) : au-dessus du zoom 12, les courbes sont alors les isolignes
+ *   de son maillage.
+ * @param demProfile profil DEM de ce maillage (`terrain` = 1 m).
+ */
 export function useContourLines(
   map: MapboxMap | null,
   isMapLoaded: boolean,
@@ -115,6 +172,8 @@ export function useContourLines(
   intervalMeters: number,
   available: boolean,
   tone: ContourTone = 'light',
+  hd = false,
+  demProfile: ContourDemProfile = 'default',
 ) {
   const mountedRef = useRef(false);
   const enabledRef = useRef(enabled);
@@ -122,6 +181,8 @@ export function useContourLines(
   const intervalRef = useRef(intervalMeters);
   const availableRef = useRef(available);
   const toneRef = useRef(tone);
+  const hdRef = useRef(hd);
+  const demProfileRef = useRef(demProfile);
 
   useEffect(() => {
     enabledRef.current = enabled;
@@ -129,7 +190,9 @@ export function useContourLines(
     intervalRef.current = intervalMeters;
     availableRef.current = available;
     toneRef.current = tone;
-  }, [enabled, opacity, intervalMeters, available, tone]);
+    hdRef.current = hd;
+    demProfileRef.current = demProfile;
+  }, [enabled, opacity, intervalMeters, available, tone, hd, demProfile]);
 
   useEffect(() => {
     if (!map || !isMapLoaded || !available) return;
@@ -137,15 +200,20 @@ export function useContourLines(
       hideNativeContourLayers(map);
       return;
     }
-    addContourLayers(map, opacityRef.current, intervalRef.current, toneRef.current);
+    addContourLayers(map, opacityRef.current, intervalRef.current, toneRef.current, demProfileRef.current);
     mountedRef.current = true;
-    setContourVisibility(map, enabledRef.current && availableRef.current);
+    setContourVisibility(map, enabledRef.current && availableRef.current, hdRef.current);
   }, [map, isMapLoaded, available]);
 
   useEffect(() => {
     if (!map || !isMapLoaded || !mountedRef.current) return;
-    setContourVisibility(map, enabled && available);
-  }, [map, isMapLoaded, enabled, available]);
+    updateContourDemProfile(map, demProfile);
+  }, [map, isMapLoaded, demProfile]);
+
+  useEffect(() => {
+    if (!map || !isMapLoaded || !mountedRef.current) return;
+    setContourVisibility(map, enabled && available, hd);
+  }, [map, isMapLoaded, enabled, available, hd]);
 
   useEffect(() => {
     if (!map || !isMapLoaded || !mountedRef.current) return;
@@ -159,9 +227,9 @@ export function useContourLines(
       mountedRef.current = false;
       setTimeout(() => {
         if (!availableRef.current) return;
-        addContourLayers(map, opacityRef.current, intervalRef.current, toneRef.current);
+        addContourLayers(map, opacityRef.current, intervalRef.current, toneRef.current, demProfileRef.current);
         mountedRef.current = true;
-        setContourVisibility(map, enabledRef.current && availableRef.current);
+        setContourVisibility(map, enabledRef.current && availableRef.current, hdRef.current);
       }, 0);
     };
 

@@ -25,7 +25,15 @@
 // Tampon de cache — modifié à chaque changement qui invalide le cache, pour que
 // le navigateur détecte une différence d'octets dans ce fichier et déclenche
 // install→activate→purge.
-// Actuel : dem-tiles-v54-rgb-up-rle / radar-v4-opera / dem-negative-v30 / slope-tiles-v3-rle / vhr-tiles-v1 / altitude-stale-v1
+// Actuel : dem-tiles-v54-rgb-up-rle / radar-v4-opera / dem-negative-v30 / slope-tiles-v3-rle / vhr-tiles-v1 / altitude-stale-v1 / contour-tiles-v2
+// 2026-10-10 contour-tiles-v2 : /contour-tiles — courbes de niveau vectorielles
+// (MVT, processing/contours.js, runtime/contour-handler.js), isolignes exactes
+// de la surface que Mapbox dessine : un sommet par pixel de la tuile DEM du
+// maillage (MNS en 0,40 m, MNT en 1 m), diagonale haut-droite → bas-gauche,
+// bordure est / sud des voisines. Les courbes de mapbox-terrain-v2 (MNT
+// grossier) drapées sur le relief LiDAR montaient et descendaient le long des
+// pentes. Nouveau cache `contour-tiles-v2-…` (le v1 de la même journée, tiré du
+// MNT lissé, est purgé) ; aucun autre nom de cache ne change.
 // 2026-10-09 radar-v4-opera : radar européen EUMETNET OPERA (CC BY 4.0) à la place
 // de RainViewer (API gratuite réservée à l'usage personnel) ; le Service Worker
 // relaie les tuiles /radar-tiles au serveur, qui les fabrique, au lieu de recolorer
@@ -153,6 +161,7 @@ importScripts(
   withEpoch('/sw-dem/sources/vhr-ortho.js'),
   withEpoch('/sw-dem/processing/slope.js'),
   withEpoch('/sw-dem/processing/altitude.js'),
+  withEpoch('/sw-dem/processing/contours.js'),
   // Switzerland — swissSURFACE3D Raster (COG over STAC, 0.5 m LiDAR DSM)
   withEpoch('/sw-dem/swiss/swiss-config.js'),
   withEpoch('/sw-dem/swiss/swiss-coords.js'),
@@ -191,13 +200,14 @@ importScripts(
   withEpoch('/sw-dem/runtime/dem-helpers.js'),
   withEpoch('/sw-dem/runtime/dem-health.js'),
   withEpoch('/sw-dem/runtime/upgrade-scheduler.js'),
-  // Avant slope-handler.js / altitude-handler.js : tous deux créent leur suivi
+  // Avant slope-handler.js / altitude-handler.js / contour-handler.js : tous créent leur suivi
   // des tuiles périmées à l'évaluation.
   withEpoch('/sw-dem/runtime/derived-tile-stale.js'),
   withEpoch('/sw-dem/runtime/dem-handler.js'),
   withEpoch('/sw-dem/runtime/slope-pool.js'),
   withEpoch('/sw-dem/runtime/slope-handler.js'),
   withEpoch('/sw-dem/runtime/altitude-handler.js'),
+  withEpoch('/sw-dem/runtime/contour-handler.js'),
   withEpoch('/sw-dem/runtime/radar-handler.js'),
   withEpoch('/sw-dem/runtime/router.js'),
 );

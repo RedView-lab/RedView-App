@@ -7,6 +7,7 @@ import type { Ctx } from './context';
 import { installDemWantedTilesSync } from './demWantedTiles';
 import { clearVisibleTimer } from './visibleClock';
 import { logger } from '@/shared/lib/logger';
+import { CONTOUR_HD_SOURCE_ID } from '@/features/contourLines/lib/contour-source';
 
 /**
  * Écouteurs de suivi des tuiles + accroches aux événements de style /
@@ -251,9 +252,10 @@ export function attachListeners(ctx: Ctx): void {
       return;
     }
 
-    // Le SW a répondu à certaines tuiles de pente / d'altitude par un remplaçant
-    // ou une construction provisoire (travail annulé par un geste de
-    // déplacement / zoom, DEM pas encore construit, voisines manquantes). Mapbox
+    // Le SW a répondu à certaines tuiles de pente / d'altitude / de courbes de
+    // niveau par un remplaçant ou une construction provisoire (travail annulé par
+    // un geste de déplacement / zoom, DEM pas encore construit, voisines
+    // manquantes). Mapbox
     // garde toute image en 200 comme définitive, donc ces tuiles restaient vides
     // jusqu'à leur sortie de la vue. On recharge cette source une fois le geste
     // terminé — un rechargement pendant le geste serait de nouveau annulé par le
@@ -262,7 +264,9 @@ export function attachListeners(ctx: Ctx): void {
       ? 'slope-tiles'
       : event.data?.type === 'ALTITUDE_TILES_STALE'
         ? 'altitude-tiles'
-        : null;
+        : event.data?.type === 'CONTOUR_TILES_STALE'
+          ? CONTOUR_HD_SOURCE_ID
+          : null;
     if (staleSourceId) {
       const reloadWhenSettled = (): void => {
         if (isCancelled()) return;

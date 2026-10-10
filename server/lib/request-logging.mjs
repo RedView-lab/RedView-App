@@ -18,7 +18,7 @@ import { resolveBuildId } from './build-id.mjs';
 const REQUEST_ID_RE = /^[A-Za-z0-9._-]{8,128}$/;
 const HEALTH_PATHS = new Set(['/health', '/healthz', '/api/health']);
 const API_PREFIX_ALIASES = new Set(['openmeteo', 'weather', 'brouter']);
-const TILE_ROUTE_RE = /^\/(radar|slope|altitude|dem|vhr)-tiles\//;
+const TILE_ROUTE_RE = /^\/(radar|slope|altitude|dem|vhr|contour)-tiles\//;
 
 /** X-Request-ID entrant s'il est sûr à journaliser et renvoyer, sinon un UUID. */
 export function resolveRequestId(header) {

@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
 // Interception des fetchs — aiguille /dem-tiles, /ortho-tiles, /vhr-tiles,
-// /slope-tiles, /altitude-tiles vers le module de handler correspondant.
+// /slope-tiles, /altitude-tiles, /contour-tiles vers le module de handler correspondant.
 // L'ancien /shadow-tiles répond 410 d'office (handler retiré le 29 avril).
 //
 // Extrait de sw-dem.js (3 mai).
@@ -106,7 +106,7 @@ self.addEventListener('fetch', (event) => {
   // Uniquement les routes de tuiles de NOTRE origine.
   if (url.origin !== self.location.origin) return;
 
-  const tileMatch = url.pathname.match(/^\/(?:dem|ortho|vhr|slope|altitude|radar)-tiles\/(\d+)\/(\d+)\/(\d+)$/);
+  const tileMatch = url.pathname.match(/^\/(?:dem|ortho|vhr|slope|altitude|contour|radar)-tiles\/(\d+)\/(\d+)\/(\d+)$/);
   if (tileMatch && !parseRouterTileCoords(tileMatch)) {
     event.respondWith(noTileResponseRouter('invalid-coords'));
     return;
@@ -187,6 +187,18 @@ self.addEventListener('fetch', (event) => {
       parseInt(altitudeMatch[2], 10),
       parseInt(altitudeMatch[3], 10),
       altitudeZone,
+      resolveDemProfile(url),
+    ));
+    return;
+  }
+
+  // Courbes de niveau vectorielles tirées du MNT (contour-handler.js).
+  const contourMatch = url.pathname.match(/^\/contour-tiles\/(\d+)\/(\d+)\/(\d+)$/);
+  if (contourMatch) {
+    event.respondWith(handleContourRequest(
+      parseInt(contourMatch[1], 10),
+      parseInt(contourMatch[2], 10),
+      parseInt(contourMatch[3], 10),
       resolveDemProfile(url),
     ));
     return;

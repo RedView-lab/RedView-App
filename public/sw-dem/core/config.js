@@ -280,6 +280,9 @@ const ORTHO_CACHE_NAME = `ortho-tiles-${MAP_CACHE_EPOCH}`;
 // sans toucher aux caches DEM.
 const SLOPE_CACHE_NAME = `slope-tiles-v3-${MAP_CACHE_EPOCH}`;
 const ALTITUDE_CACHE_NAME = `altitude-tiles-${MAP_CACHE_EPOCH}`;
+// Courbes de niveau vectorielles (MVT), isolignes exactes du maillage du terrain
+// (runtime/contour-handler.js).
+const CONTOUR_CACHE_NAME = `contour-tiles-v2-${MAP_CACHE_EPOCH}`;
 const STATIC_CACHE_NAME = `dem-static-${MAP_CACHE_EPOCH}`;
 
 // Indicateur de debug — conditionne la journalisation détaillée par tuile. Les

@@ -35,6 +35,7 @@ describe('tileFallbackFamily', () => {
     expect(tileFallbackFamily('/altitude-tiles/12/2100/1500')).toBe('altitude');
     expect(tileFallbackFamily('/dem-tiles/12/2100/1500.png')).toBe('dem');
     expect(tileFallbackFamily('/vhr-tiles/19/1/1')).toBe('vhr');
+    expect(tileFallbackFamily('/contour-tiles/14/8500/5900')).toBe('contour');
     expect(tileFallbackFamily('/api/slope-tiles/1/1/1')).toBeNull();
     expect(tileFallbackFamily('/assets/slope-tiles.js')).toBeNull();
   });
@@ -44,6 +45,7 @@ describe('tileFallbackFamily', () => {
     expect(tileFallbackHitsUpstream('slope', new URLSearchParams('pf=1'))).toBe(false);
     expect(tileFallbackHitsUpstream('dem', new URLSearchParams())).toBe(false);
     expect(tileFallbackHitsUpstream('vhr', new URLSearchParams())).toBe(false);
+    expect(tileFallbackHitsUpstream('contour', new URLSearchParams())).toBe(false);
   });
 });
 
@@ -61,7 +63,7 @@ describe('serveTileFallback', () => {
   });
 
   it('answers 204 never cached for DEM, VHR and prefetches, without any upstream call', async () => {
-    for (const url of ['/dem-tiles/12/1/1.png', '/vhr-tiles/19/1/1', '/slope-tiles/12/1/1?pf=1']) {
+    for (const url of ['/dem-tiles/12/1/1.png', '/vhr-tiles/19/1/1', '/contour-tiles/14/1/1', '/slope-tiles/12/1/1?pf=1']) {
       const out = await serve(url);
       expect(out.statusCode).toBe(204);
       expect(out.headers['cache-control']).toBe('no-store');
