@@ -189,13 +189,14 @@ export async function exportAccountData(onProgress?: (progress: AccountExportPro
     if (stored) views.push({ projectId: id, view: stored.view });
   }
   const otherFits = (await listOwnedFitFiles()).filter((file) => !exportedFitPaths.has(file.id));
-  const fitEntries = await downloadProjectItineraryFitFileEntries(
-    otherFits.map((file) => ({ path: file.id, name: file.name, type: 'application/octet-stream', lastModified: 0, size: 0 })),
-  );
   const fitTaken = new Set<string>();
   let sharedFitFileCount = 0;
-  for (const entry of fitEntries) {
-    if (!entry.file) continue;
+  // Un fichier à la fois, comme les projets : jamais tous en mémoire avant l'écriture.
+  for (const fit of otherFits) {
+    const [entry] = await downloadProjectItineraryFitFileEntries([
+      { path: fit.id, name: fit.name, type: 'application/octet-stream', lastModified: 0, size: 0 },
+    ]);
+    if (!entry?.file) continue;
     await builder.add(`fit-partages/${uniqueEntryName(entry.name || `${entry.path}.fit`, fitTaken)}`, entry.file);
     sharedFitFileCount += 1;
   }
