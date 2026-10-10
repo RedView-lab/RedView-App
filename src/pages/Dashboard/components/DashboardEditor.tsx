@@ -1,3 +1,7 @@
+// Premier import : les paires de l'éditeur doivent être enregistrées avant
+// l'évaluation de tout module qui traduit (chargées avec l'éditeur, hors du
+// chemin critique du gestionnaire de projets).
+import '@/shared/i18n/config/registerEditorTranslations';
 import {
   useEffect,
   useRef,

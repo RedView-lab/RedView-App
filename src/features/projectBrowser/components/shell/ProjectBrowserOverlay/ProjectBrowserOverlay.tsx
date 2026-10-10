@@ -5,12 +5,10 @@ import { RedViewLogo } from '@/shared/components/RedViewLogo';
 import { trackScreen, type AnalyticsScreen } from '@/shared/lib/analytics';
 import { trackNavigationImport } from '@/shared/lib/staleBuild';
 
-import { AccountPanel } from '../../../account';
-import { SettingsPanel } from '../../../settings';
 import { ProjectsPanel } from '../../projects';
-import { SubscriptionPanel } from '../../subscription';
 import type { ProjectBrowserOverlayProps } from '../../../types';
 import { TopTabs } from '../TopTabs';
+import { AccountPanel, prefetchTabPanelsWhenIdle, SettingsPanel, SubscriptionPanel } from './lazyTabPanels';
 import { ProjectBrowserOverlayHeader } from './ProjectBrowserOverlayHeader';
 import { useProjectBrowserOverlayState } from './useProjectBrowserOverlayState';
 
@@ -39,6 +37,8 @@ export function ProjectBrowserOverlay(props: ProjectBrowserOverlayProps) {
   useEffect(() => {
     if (props.open) trackScreen(TAB_SCREENS[state.activeTab]);
   }, [props.open, state.activeTab]);
+
+  useEffect(() => (props.open ? prefetchTabPanelsWhenIdle() : undefined), [props.open]);
 
   if (!props.open) return null;
 
@@ -120,6 +120,7 @@ export function ProjectBrowserOverlay(props: ProjectBrowserOverlayProps) {
             />
           ) : null}
 
+          <Suspense fallback={null}>
           {state.activeTab === 'subscription' ? (
             <SubscriptionPanel
               subscriptionState={state.subscriptionState}
@@ -156,6 +157,7 @@ export function ProjectBrowserOverlay(props: ProjectBrowserOverlayProps) {
           {state.activeTab === 'settings' ? (
             <SettingsPanel profile={state.accountProfile} />
           ) : null}
+          </Suspense>
 
         {state.billingModal ? (
           <Suspense fallback={null}>

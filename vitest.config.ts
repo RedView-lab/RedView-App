@@ -21,7 +21,7 @@ export default defineConfig({
       'server/multiplayer/**/*.test.ts',
     ],
     environment: 'node',
-    setupFiles: ['./vitest.setup.ts'],
+    setupFiles: ['./vitest.setup.ts', './src/shared/test/setupTranslations.ts'],
     // Le runner CI (4 vCPU) fait tourner tsc, ESLint, madge et knip en même
     // temps que Vitest : un test de 0,7 s y a dépassé 5 s (53e53a3). En local
     // le délai par défaut reste, pour qu'un test devenu lent s'y voie.

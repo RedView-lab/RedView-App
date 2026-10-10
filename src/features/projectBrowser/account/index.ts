@@ -1,4 +1,3 @@
-export { AccountPanel } from './components';
 export {
   formatAccountDisplayName,
   formatLastConnection,

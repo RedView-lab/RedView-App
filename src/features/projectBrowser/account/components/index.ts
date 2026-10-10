@@ -1,7 +1,1 @@
-;
 export { AccountPanel } from './AccountPanel';
-;
-;
-;
-;
-;

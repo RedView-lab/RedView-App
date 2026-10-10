@@ -18,6 +18,8 @@ export {
 export {
   canonicalizeAppText,
   createAppTranslationBundle,
+  getAppTranslationBundle,
   interpolateAppTranslation,
+  subscribeAppTranslations,
   translateAppText,
 } from './bundle';

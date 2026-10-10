@@ -3,6 +3,8 @@
 // ============================================
 // Lit les paramètres de tuile dans l'URL, charge depuis l'OPFS, décode et colorise dans un worker, rend en WebGPU.
 
+// Premier import : toutes les paires (l'app ne livre au chargement que celles hors éditeur).
+import '@/shared/i18n/config/registerEditorTranslations';
 import '@/shared/styles/typography.css';
 import '@/shared/styles/theme.css';
 import '@/shared/styles/glass.css';

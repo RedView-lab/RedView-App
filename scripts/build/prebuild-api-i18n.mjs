@@ -12,8 +12,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..', '..');
 const translationsDir = join(root, 'src', 'shared', 'i18n', 'config', 'translations');
 
-// Chaque fichier de paires du dossier translations (index.ts ne fait que réexporter).
-// Même ordre que translations/index.ts : sur une clé en double, la dernière paire l'emporte.
+// Chaque fichier de paires du dossier translations (index.ts ne fait que réexporter) :
+// l'API traduit aussi les textes de l'éditeur. Une clé n'a jamais deux traductions
+// (npm run i18n:check), donc l'ordre des fichiers ne change pas le résultat.
 const LEADING_FILES = ['global.ts', 'projectBrowser.ts', 'controlPanel.ts', 'dashboard.ts'];
 const files = [
   ...LEADING_FILES,

@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
 
 import {
   createAppTranslationBundle,
+  getAppTranslationBundle,
   readStoredAppLocale,
+  subscribeAppTranslations,
   writeStoredAppLocale,
   type AppLocale,
   type AppTranslationVars,
@@ -12,11 +14,14 @@ import { buildTranslationLookup, observeDomTranslation, translateString } from '
 
 export function AppI18nProvider({ children }: { children: ReactNode }) {
   const [locale, setLocaleState] = useState<AppLocale>(readStoredAppLocale);
-  // Toutes les paires sont livrées avec l'application
+  // Les paires sont livrées avec le code qui les affiche
   // (shared/i18n/config/translations) : rien à récupérer.
   // `/api/app-translations` renvoyait le même dictionnaire à chaque chargement
-  // (264 Kio non compressés), puis tout le DOM était retraduit.
-  const bundle = useMemo(() => createAppTranslationBundle(locale), [locale]);
+  // (264 Kio non compressés), puis tout le DOM était retraduit. Celles de
+  // l'éditeur s'ajoutent quand il se charge : nouveau dictionnaire, et
+  // l'observateur ci-dessous repasse sur le DOM.
+  const getBundle = useCallback(() => getAppTranslationBundle(locale), [locale]);
+  const bundle = useSyncExternalStore(subscribeAppTranslations, getBundle, getBundle);
 
   const translationLookup = useMemo(() => buildTranslationLookup(bundle.entries), [bundle.entries]);
 

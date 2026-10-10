@@ -110,4 +110,11 @@ export const globalTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'Le nom ne doit pas dépasser 100 caractères.', en: 'Name must not exceed 100 characters.' },
   { fr: 'Le mot de passe ne doit pas dépasser 256 caractères.', en: 'Password must be at most 256 characters.' },
   { fr: 'Une erreur est survenue.', en: 'Something went wrong.' },
+  // Mots courants affichés aussi hors de l'éditeur (gestionnaire de projets, connexion, partage).
+  { fr: 'Fermer', en: 'Close' },
+  { fr: 'Supprimer', en: 'Delete' },
+  { fr: 'Télécharger', en: 'Download' },
+  { fr: 'Recharger', en: 'Reload' },
+  { fr: 'Enregistrement…', en: 'Saving…' },
+  { fr: 'Terminé', en: 'Done' },
 ] as const;

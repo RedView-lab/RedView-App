@@ -1,6 +1,34 @@
 import { readDocumentAppLocale } from './locale';
-import { APP_TRANSLATION_PAIRS } from './translations';
-import type { AppLocale, AppTranslationBundle, AppTranslationVars } from './types';
+import { APP_SHELL_TRANSLATION_PAIRS } from './translations';
+import type { AppLocale, AppTranslationBundle, AppTranslationPair, AppTranslationVars } from './types';
+
+/**
+ * Paires connues de l'application. Celles du gestionnaire de projets, de la
+ * connexion et des écrans hors éditeur sont livrées au chargement ; celles de
+ * l'éditeur 3D et du visualiseur LiDAR s'ajoutent quand leur code arrive
+ * (`registerEditorTranslations.ts`) — 60 % du dictionnaire, qui pesait sur le
+ * chemin critique du gestionnaire (scripts/quality/check-bundle.mjs).
+ */
+const registeredPairs: Array<ReadonlyArray<AppTranslationPair>> = [APP_SHELL_TRANSLATION_PAIRS];
+const registryListeners = new Set<() => void>();
+const bundleByLocale = new Map<AppLocale, AppTranslationBundle>();
+const canonicalLookupByLocale = new Map<AppLocale, Map<string, string>>();
+
+/** Ajoute un lot de paires (sans effet s'il est déjà enregistré) et prévient les abonnés. */
+export function registerAppTranslationPairs(pairs: ReadonlyArray<AppTranslationPair>): void {
+  if (registeredPairs.includes(pairs)) return;
+  registeredPairs.push(pairs);
+  canonicalLookupByLocale.clear();
+  bundleByLocale.clear();
+  for (const listener of registryListeners) listener();
+}
+
+export function subscribeAppTranslations(listener: () => void): () => void {
+  registryListeners.add(listener);
+  return () => {
+    registryListeners.delete(listener);
+  };
+}
 
 export function interpolateAppTranslation(template: string, vars?: AppTranslationVars): string {
   if (!vars) {
@@ -30,11 +58,11 @@ export function createAppTranslationBundle(locale: AppLocale): AppTranslationBun
   // paire qui partage sa traduction (p. ex. 'Gravel' reste 'Gravel' en
   // français bien que { fr: 'Gravier', en: 'Gravel' } existe).
   const sourceLocale: AppLocale = locale === 'fr' ? 'en' : 'fr';
-  for (const pair of APP_TRANSLATION_PAIRS) {
-    entries[pair[sourceLocale]] = pair[locale];
+  for (const pairs of registeredPairs) {
+    for (const pair of pairs) entries[pair[sourceLocale]] = pair[locale];
   }
-  for (const pair of APP_TRANSLATION_PAIRS) {
-    entries[pair[locale]] = pair[locale];
+  for (const pairs of registeredPairs) {
+    for (const pair of pairs) entries[pair[locale]] = pair[locale];
   }
 
   return {
@@ -43,13 +71,21 @@ export function createAppTranslationBundle(locale: AppLocale): AppTranslationBun
   };
 }
 
-const canonicalLookupByLocale = new Map<AppLocale, Map<string, string>>();
+/** Dictionnaire courant d'une langue : même objet tant qu'aucune paire n'est ajoutée (instantané de `useSyncExternalStore`). */
+export function getAppTranslationBundle(locale: AppLocale): AppTranslationBundle {
+  let bundle = bundleByLocale.get(locale);
+  if (!bundle) {
+    bundle = createAppTranslationBundle(locale);
+    bundleByLocale.set(locale, bundle);
+  }
+  return bundle;
+}
 
 function canonicalLookup(locale: AppLocale): Map<string, string> {
   let lookup = canonicalLookupByLocale.get(locale);
   if (!lookup) {
     lookup = new Map();
-    for (const [source, target] of Object.entries(createAppTranslationBundle(locale).entries)) {
+    for (const [source, target] of Object.entries(getAppTranslationBundle(locale).entries)) {
       lookup.set(canonicalizeAppText(source), target);
     }
     canonicalLookupByLocale.set(locale, lookup);

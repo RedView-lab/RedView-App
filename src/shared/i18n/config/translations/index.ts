@@ -2,31 +2,29 @@ import type { AppTranslationPair } from '../types';
 import { appTranslationPairs } from './app';
 import { authTranslationPairs } from './auth';
 import { collabTranslationPairs } from './collab';
-import { commentsTranslationPairs } from './comments';
-import { controlPanelTranslationPairs } from './controlPanel';
 import { creditsTranslationPairs } from './credits';
-import { dashboardTranslationPairs } from './dashboard';
-import { fitPredictorTranslationPairs } from './fitPredictor';
 import { globalTranslationPairs } from './global';
 import { itineraryTranslationPairs } from './itinerary';
-import { lidarTranslationPairs } from './lidar';
-import { mapTranslationPairs } from './map';
 import { projectBrowserTranslationPairs } from './projectBrowser';
 
-// L'ordre compte en cas de clé en double (la paire la plus tardive l'emporte) ;
-// garder le même ordre que LEADING_FILES + alphabétique dans scripts/build/prebuild-api-i18n.mjs.
-export const APP_TRANSLATION_PAIRS: ReadonlyArray<AppTranslationPair> = [
+/**
+ * Paires livrées au chargement : tout texte affiché sans l'éditeur 3D
+ * (connexion, gestionnaire de projets et ses onglets, partage, pages d'erreur,
+ * projet créé depuis le gestionnaire). Les fichiers de l'éditeur et du
+ * visualiseur LiDAR (controlPanel, dashboard, comments, fitPredictor, lidar,
+ * map) arrivent avec leur code : ../registerEditorTranslations.ts.
+ * `npm run bundle:check` échoue si un texte d'un module chargé sans l'éditeur
+ * n'a sa paire que dans l'un d'eux.
+ *
+ * Une même clé ne peut pas avoir deux traductions (`npm run i18n:check`) :
+ * l'ordre des fichiers ne change rien.
+ */
+export const APP_SHELL_TRANSLATION_PAIRS: ReadonlyArray<AppTranslationPair> = [
   ...globalTranslationPairs,
   ...projectBrowserTranslationPairs,
-  ...controlPanelTranslationPairs,
-  ...dashboardTranslationPairs,
   ...appTranslationPairs,
   ...authTranslationPairs,
   ...collabTranslationPairs,
-  ...commentsTranslationPairs,
   ...creditsTranslationPairs,
-  ...fitPredictorTranslationPairs,
   ...itineraryTranslationPairs,
-  ...lidarTranslationPairs,
-  ...mapTranslationPairs,
 ];
