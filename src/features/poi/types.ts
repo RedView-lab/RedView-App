@@ -52,6 +52,7 @@ export const POI_CATEGORIES = [
   // Transport & évacuation
   'train_station',
   'bus_station',
+  'bus_shelter',
   'ferry_terminal',
   // Services
   'toilets',

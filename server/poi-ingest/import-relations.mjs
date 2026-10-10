@@ -24,11 +24,20 @@
  * `--categories` limite les requêtes aux catégories citées ; `--border` ne
  * garde que les relations dont le centre est dans ce territoire (GeoJSON
  * MultiPolygon) — la boîte France contient Genève, Bâle, Bruxelles…
+ *
+ * `--dedupe` : obligatoire sur une base déjà complétée par Overture, SIRENE
+ * ou AllThePlaces, qui ont été dédoublonnées contre une base SANS relations.
+ * Un lieu déjà présent en node / way OSM n'est pas réimporté ; un lieu
+ * présent seulement en source externe est remplacé par la relation OSM (la
+ * source de référence), qui reprend ses téléphone / site / horaires absents.
+ *
+ * Sortie 2 si une requête Overpass a échoué : l'import est alors partiel.
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
+import { DedupeIndex } from './lib/dedupe.mjs';
 import { rasterizeMultiPolygon } from './lib/geo.mjs';
 import { makeResolveCategory, parseCategoryList, ruleToOverpassFilter } from './lib/taxonomy-rules.mjs';
 
@@ -36,7 +45,7 @@ const RELATION_ID_BASE = 20_000_000_000_000; // 2e13
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const args = { db: null, taxonomy: null, bbox: '-5.5,41.0,9.9,51.5', dryRun: false, verbose: false, categories: null, border: null };
+const args = { db: null, taxonomy: null, bbox: '-5.5,41.0,9.9,51.5', dryRun: false, verbose: false, categories: null, border: null, dedupe: false };
 const argv = process.argv.slice(2);
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
@@ -47,9 +56,10 @@ for (let i = 0; i < argv.length; i++) {
   else if (a === '--verbose') args.verbose = true;
   else if (a === '--categories') args.categories = argv[++i];
   else if (a === '--border') args.border = argv[++i];
+  else if (a === '--dedupe') args.dedupe = true;
 }
 if (!args.db) {
-  console.error('Usage: node import-relations.mjs --db <db.sqlite> [--bbox west,south,east,north] [--categories a,b] [--border <geojson>] [--dry-run]');
+  console.error('Usage: node import-relations.mjs --db <db.sqlite> [--bbox west,south,east,north] [--categories a,b] [--border <geojson>] [--dedupe] [--dry-run]');
   process.exit(1);
 }
 
@@ -86,11 +96,13 @@ if ([w, s, e, n].some((v) => !Number.isFinite(v))) {
   process.exit(1);
 }
 
+// Instances mondiales seulement : une instance régionale (overpass.osm.ch :
+// la Suisse) répond vite et « avec succès » avec un extrait — 16 cimetières en
+// relation au lieu de ~1 400 le 2026-10-10.
 const ENDPOINTS = [
-  'https://overpass.kumi.systems/api/interpreter',
-  'https://overpass.private.coffee/api/interpreter',
-  'https://overpass.osm.ch/api/interpreter',
   'https://overpass-api.de/api/interpreter',
+  'https://overpass.private.coffee/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
 ];
 
 function buildName(tags) {
@@ -149,12 +161,45 @@ const insPoi = db.prepare(
 const insRtree = db.prepare(
   'INSERT OR REPLACE INTO poi_rtree (id, min_lon, max_lon, min_lat, max_lat) VALUES (?, ?, ?, ?, ?)',
 );
+const delPoi = db.prepare('DELETE FROM pois WHERE id = ?');
+const delRtree = db.prepare('DELETE FROM poi_rtree WHERE id = ?');
 const insertTx = db.transaction((rows) => {
   for (const r of rows) {
+    for (const id of r.replaces ?? []) { delPoi.run(id); delRtree.run(id); }
     insPoi.run(r.id, r.osmId, 'relation', r.lat, r.lon, r.category, r.name, r.tags);
     insRtree.run(r.id, r.lon, r.lon, r.lat, r.lat);
   }
 });
+
+/** Clés qu'une relation reprend d'un doublon externe quand elle ne les a pas. */
+const CARRY_OVER_TAGS = ['phone', 'contact:phone', 'website', 'contact:website', 'opening_hours', 'brand', 'email'];
+
+let dedupeIndex = null;
+const sourceById = new Map();
+if (args.dedupe) {
+  console.log('🧮 Index de dédoublonnage…');
+  dedupeIndex = new DedupeIndex();
+  dedupeIndex.buildFromDb(db);
+  for (const r of db.prepare('SELECT id, source, category FROM pois').iterate()) {
+    sourceById.set(r.id, { source: r.source, category: r.category });
+  }
+  console.log(`   ${dedupeIndex.size.toLocaleString('fr-FR')} POI indexés`);
+}
+const dedupeStats = { skippedOsm: 0, replacedExternal: 0 };
+
+/**
+ * Doublon d'une relation : null (nouvelle), 'skip' (déjà en node / way OSM),
+ * ou l'entrée externe à remplacer. Même catégorie exigée.
+ */
+function resolveDuplicate(row, tags) {
+  if (!dedupeIndex) return null;
+  const match = dedupeIndex.findMatch({ lat: row.lat, lon: row.lon, category: row.category, name: row.name, tags });
+  if (!match) return null;
+  const existing = sourceById.get(match.id);
+  if (!existing || existing.category !== row.category) return null;
+  if (match.id >= RELATION_ID_BASE && match.id < RELATION_ID_BASE + 1e13) return 'skip'; // relation déjà importée
+  return existing.source == null ? 'skip' : match;
+}
 
 // Une requête Overpass par (catégorie, règle).
 const jobs = [];
@@ -174,6 +219,7 @@ if (args.dryRun) {
 
 let totalInserted = 0;
 let done = 0;
+let failedJobs = 0;
 const perCategory = new Map();
 
 for (const job of jobs) {
@@ -184,6 +230,7 @@ for (const job of jobs) {
     data = await overpass(ql);
   } catch (err) {
     console.warn(`\r   ⚠️  ${job.filter} : ${err.message}`);
+    failedJobs++;
     await new Promise((r) => setTimeout(r, 2000));
     continue;
   }
@@ -196,7 +243,7 @@ for (const job of jobs) {
     // Même priorité que l'import PBF : une relation que la taxonomie range
     // dans une catégorie plus prioritaire n'est pas réétiquetée ici.
     if (resolveCategory(el.tags) !== job.category) continue;
-    rows.push({
+    const row = {
       id: RELATION_ID_BASE + el.id,
       osmId: el.id,
       lat: center.lat,
@@ -204,7 +251,21 @@ for (const job of jobs) {
       category: job.category,
       name: buildName(el.tags || {}),
       tags: buildTagsJson(el.tags || {}),
-    });
+    };
+    const duplicate = resolveDuplicate(row, el.tags || {});
+    if (duplicate === 'skip') { dedupeStats.skippedOsm++; continue; }
+    if (duplicate) {
+      const tags = JSON.parse(row.tags);
+      const external = JSON.parse(db.prepare('SELECT tags FROM pois WHERE id = ?').get(duplicate.id)?.tags || '{}');
+      for (const k of CARRY_OVER_TAGS) if (tags[k] == null && external[k] != null) tags[k] = external[k];
+      row.tags = JSON.stringify(tags);
+      row.replaces = [duplicate.id];
+      sourceById.delete(duplicate.id);
+      dedupeStats.replacedExternal++;
+    }
+    dedupeIndex?.accept({ ...row, tags: el.tags || {} });
+    sourceById.set(row.id, { source: null, category: row.category });
+    rows.push(row);
   }
 
   if (rows.length) {
@@ -220,6 +281,13 @@ console.log(`\n✅ ${totalInserted} relations insérées`);
 for (const [cat, count] of [...perCategory.entries()].sort((a, b) => b[1] - a[1])) {
   console.log(`   ${String(count).padStart(6)}  ${cat}`);
 }
+if (dedupeIndex) {
+  console.log(`🧹 Dédoublonnage : ${dedupeStats.skippedOsm} déjà en node / way OSM (ignorées), ${dedupeStats.replacedExternal} doublons externes remplacés`);
+}
 const total = db.prepare('SELECT count(*) AS n FROM pois').get().n;
 console.log(`📊 Total base : ${total.toLocaleString('fr-FR')} POI`);
 db.close();
+if (failedJobs > 0) {
+  console.error(`❌ ${failedJobs} requête(s) Overpass en échec : import partiel.`);
+  process.exit(2);
+}

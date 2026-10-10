@@ -55,7 +55,7 @@ const MAP = {} as MapboxMap;
 
 function renderPoi(routeId: string) {
   return renderHook(
-    (id: string) => usePoi(MAP, true, CATEGORIES, ROUTE, 100, DISTANCES, undefined, undefined, null, {}, id),
+    (id: string) => usePoi(MAP, true, CATEGORIES, ROUTE, 100, DISTANCES, undefined, null, {}, id),
     { initialProps: routeId },
   );
 }

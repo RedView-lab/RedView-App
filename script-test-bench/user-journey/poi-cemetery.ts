@@ -6,8 +6,9 @@
  *   1. connexion, projet, import d'une boucle GPX ;
  *   2. onglet POI : la ligne « Cimetières » est cochée à 100 m ;
  *   3. « Charger » : le faux serveur POI renvoie un cimetière sans nom à 60 m,
- *      un cimetière à 400 m (hors des 100 m) et une fontaine ; on vérifie la
- *      catégorie demandée, la feuille de route, la popup, l'export GPX.
+ *      un cimetière à 400 m (hors des 100 m), un point d'eau et une fontaine
+ *      déclarée non potable ; on vérifie les requêtes par rayon, le filtrage,
+ *      la feuille de route et l'export GPX.
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -49,6 +50,8 @@ const POIS = [
   { id: 10_000_000_000_001, osmId: 1, osmType: 'way', ...onLoop(0.8, 60), category: 'cemetery', name: null, tags: { landuse: 'cemetery' }, source: null, srcConfidence: null },
   { id: 10_000_000_000_002, osmId: 2, osmType: 'way', ...onLoop(2.4, 400), category: 'cemetery', name: 'Cimetière lointain', tags: {}, source: null, srcConfidence: null },
   { id: 3, osmId: 3, osmType: 'node', ...onLoop(4.0, 5), category: 'drinking_water', name: null, tags: { amenity: 'drinking_water' }, source: null, srcConfidence: null },
+  // Fontaine déclarée non potable (base d'avant la taxonomie v4) : jamais affichée ni enregistrée.
+  { id: 4, osmId: 4, osmType: 'node', ...onLoop(5.0, 3), category: 'fountain', name: 'Fontaine décorative', tags: { amenity: 'fountain', drinking_water: 'no' }, source: null, srcConfidence: null },
 ];
 
 async function main() {
@@ -111,8 +114,10 @@ async function main() {
     const others = requested.filter((q) => !q.categories.includes('cemetery'));
     check(others.length > 0 && others.every((q) => q.radiusM < 30), 'autres catégories interrogées à < 30 m', others.map((q) => `${q.categories.length} cat. à ${q.radiusM.toFixed(0)} m`).join(', '));
     const found = await p.getByText(/POI trouvés/).first().textContent();
-    // 60 m gardé (≤ 100 m), 400 m écarté, la fontaine à 5 m gardée (≤ 20 m).
-    check(/\(2 POI trouvés\)/.test(found ?? ''), 'filtrage latéral : cimetière à 60 m gardé, à 400 m écarté', found ?? '');
+    // 60 m gardé (≤ 100 m), 400 m écarté, le point d'eau à 5 m gardé (≤ 20 m),
+    // la fontaine non potable écartée.
+    check(/\(2 POI trouvés\)/.test(found ?? ''), 'filtrage : cimetière à 60 m gardé, à 400 m écarté, fontaine non potable écartée', found ?? '');
+    check(!(await p.getByText('Fontaine décorative').count()), 'fontaine non potable absente de la feuille de route');
 
     // Feuille de route : un cimetière sans nom s'appelle « Cimetière ».
     const sheet = p.getByRole('button', { name: /Feuille de route/ }).first();

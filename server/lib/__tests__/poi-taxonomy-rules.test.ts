@@ -42,6 +42,38 @@ describe('cimetières', () => {
   });
 });
 
+describe('taxonomie v4', () => {
+  it("un point d'eau déclaré non potable n'est plus de l'eau", () => {
+    expect(resolve({ amenity: 'fountain', drinking_water: 'no' })).toBeNull();
+    expect(resolve({ natural: 'spring', drinking_water: 'not' })).toBeNull();
+    expect(resolve({ man_made: 'water_tap', drinking_water: 'no' })).toBeNull();
+    expect(resolve({ amenity: 'drinking_water', man_made: 'water_tap', drinking_water: 'no' })).toBeNull();
+    // Sans tag ou potable : inchangé.
+    expect(resolve({ amenity: 'fountain' })).toBe('fountain');
+    expect(resolve({ amenity: 'fountain', drinking_water: 'yes' })).toBe('fountain');
+    expect(resolve({ natural: 'spring', drinking_water: 'conditional' })).toBe('spring');
+  });
+
+  it('une station avec boutique est une station-service, pas une épicerie', () => {
+    expect(resolve({ amenity: 'fuel', shop: 'convenience' })).toBe('fuel');
+    expect(resolve({ amenity: 'fuel', shop: 'supermarket' })).toBe('fuel');
+    expect(resolve({ shop: 'convenience' })).toBe('convenience');
+  });
+
+  it("un abri de bus n'est pas un refuge", () => {
+    expect(resolve({ amenity: 'shelter', shelter_type: 'public_transport' })).toBe('bus_shelter');
+    expect(resolve({ amenity: 'shelter' })).toBe('shelter');
+    expect(resolve({ amenity: 'shelter', shelter_type: 'basic_hut' })).toBe('shelter');
+    expect(taxonomy.categories.find((c) => c.key === 'bus_shelter')?.ui).toBe(false);
+  });
+
+  it('distributeurs de pain et de pizza', () => {
+    expect(resolve({ amenity: 'vending_machine', vending: 'bread' })).toBe('vending_machine');
+    expect(resolve({ amenity: 'vending_machine', vending: 'pizza' })).toBe('vending_machine');
+    expect(resolve({ amenity: 'vending_machine', vending: 'cigarettes' })).toBeNull();
+  });
+});
+
 describe('--categories', () => {
   it('restreint la sortie sans changer la priorité de la taxonomie complète', () => {
     const only = makeResolveCategory(taxonomy, ['cemetery']);

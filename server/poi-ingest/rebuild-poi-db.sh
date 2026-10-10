@@ -130,8 +130,11 @@ done
 if [[ $WITH_RELATIONS -eq 1 ]]; then
   echo ""
   echo "── Multipolygones (relations) via Overpass…"
-  nice -n 10 node import-relations.mjs --db "$OUT" || \
-    echo "⚠️  Étape relations échouée — la base reste valide sans elle."
+  # Base France seule : la boîte de recherche déborde sur Genève, Bâle…
+  REL_ARGS=(--db "$OUT")
+  [[ "${REGIONS[*]}" == "europe/france" && -f france-border.json ]] && REL_ARGS+=(--border france-border.json)
+  nice -n 10 node import-relations.mjs "${REL_ARGS[@]}" || \
+    echo "⚠️  Étape relations échouée ou partielle — la base reste valide sans elle."
 fi
 
 # Cimetières : l'enclos paroissial dessiné dans le cimetière communal, ou un

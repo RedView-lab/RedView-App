@@ -11,6 +11,7 @@ import type { PoiAutoSortReason, PoiFeature } from '../types';
 import { DEFAULT_POI_PAUSE_MIN, POI_LABELS } from '../types';
 import { getPoiIconUrl } from './poi-icons';
 import { formatPoiPauseLabel } from './poi-sprites';
+import { poiWaterHint } from './waterPotability';
 
 /** Libellés (source FR, traduits par l'observateur DOM d'AppI18nProvider). */
 const AUTO_REASON_LABELS: Record<PoiAutoSortReason, string> = {
@@ -22,19 +23,6 @@ const AUTO_REASON_LABELS: Record<PoiAutoSortReason, string> = {
   hotel: 'Hôtel pour la nuit',
   gap6h: 'Dernier avant 6h sans équivalent',
 };
-
-/**
- * Note sur l'eau d'un cimetière : son robinet existe presque toujours en
- * France, mais rien ne le signale ni n'en garantit la potabilité — sauf quand
- * OSM l'indique (`drinking_water`). Null pour les autres catégories.
- */
-export function poiWaterHint(feature: Pick<PoiFeature, 'category' | 'tags'>): string | null {
-  if (feature.category !== 'cemetery') return null;
-  const drinking = feature.tags?.drinking_water;
-  if (drinking === 'yes' || drinking === 'treated') return 'Eau potable signalée';
-  if (drinking === 'no' || drinking === 'not') return 'Eau signalée non potable';
-  return 'Robinet probable, eau non garantie potable';
-}
 
 /** Titre d'un POI sans nom : la catégorie quand elle suffit à le désigner. */
 function unnamedPoiTitle(feature: PoiFeature): string {

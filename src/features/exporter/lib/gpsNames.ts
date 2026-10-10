@@ -77,6 +77,7 @@ const FEATURE_CODES: Record<FeaturePoiCategory, CategoryCode> = {
   police: code('POL', 'POL', false),
   train_station: code('GAR', 'TRN', true),
   bus_station: code('BUS', 'BUS', true),
+  bus_shelter: code('ABB', 'BSH', false),
   ferry_terminal: code('FER', 'FER', true),
   toilets: code('TOI', 'TOI', false),
   shower: code('DOU', 'SHO', false),

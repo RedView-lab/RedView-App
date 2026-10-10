@@ -42,7 +42,7 @@ import { useProjectSave } from './useProjectSave';
 import { useCustomProfiles } from './useCustomProfiles';
 import { useRouteOverlayStatus } from './useRouteOverlayStatus';
 import { usePoiRouteInvalidation } from './usePoiRouteInvalidation';
-import { applyCorridorComplete, applyCorridorUpdate } from './poiCorridorMutations';
+import { applyCorridorComplete } from './poiCorridorMutations';
 import {
   applyBatchRoadTypeChange,
   applyProfileChange,
@@ -392,11 +392,6 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
   });
 
   // Résultats de la recherche POI (async) : hors historique.
-  const handleCorridorUpdate = useCallback((features: PoiFeature[]) => {
-    const targetId = activeIdRef.current;
-    setProjectWithoutHistory((p) => applyCorridorUpdate(p, targetId, features));
-  }, [setProjectWithoutHistory]);
-
   const handleCorridorComplete = useCallback((features: PoiFeature[], searchedRoutePoints: GpxRoute['points']) => {
     const targetId = activeIdRef.current;
     setProjectWithoutHistory((p) => applyCorridorComplete(p, targetId, features, searchedRoutePoints));
@@ -442,7 +437,6 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     map,
     isMapLoaded,
     active,
-    handleCorridorUpdate,
     handleCorridorComplete,
     {
       getPopupState: poiHandlers.resolvePoiPopupState,

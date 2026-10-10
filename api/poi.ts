@@ -296,10 +296,12 @@ function validateCorridorBody(
     };
   }
 
-  if (!Array.isArray(raw.categories) || raw.categories.length > CORRIDOR_MAX_CATEGORIES) {
+  // Liste vide refusée : le serveur POI ne filtrerait plus par catégorie et
+  // renverrait tout le couloir, catégories masquées comprises.
+  if (!Array.isArray(raw.categories) || raw.categories.length === 0 || raw.categories.length > CORRIDOR_MAX_CATEGORIES) {
     return {
       ok: false,
-      error: `categories must be an array of at most ${CORRIDOR_MAX_CATEGORIES} strings`,
+      error: `categories must be an array of 1..${CORRIDOR_MAX_CATEGORIES} strings`,
     };
   }
   const categories: string[] = [];

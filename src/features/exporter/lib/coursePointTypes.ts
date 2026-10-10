@@ -47,6 +47,7 @@ const FEATURE_COURSE_POINT_TYPE: Record<FeaturePoiCategory, string> = {
   police: 'info',
   train_station: 'transport',
   bus_station: 'transport',
+  bus_shelter: 'transport',
   ferry_terminal: 'transport',
   toilets: 'toilet',
   shower: 'shower',

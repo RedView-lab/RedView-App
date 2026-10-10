@@ -8,47 +8,9 @@ import type { ItineraryProject } from '../../types';
 import { mergePoiFeatureFavorites } from './poiFeatureUtils';
 
 /**
- * Résultats (partiels puis finaux) de la recherche POI le long du corridor,
- * appliqués à un itinéraire cible. Transformations pures du projet.
+ * Résultat de la recherche POI le long du corridor, appliqué à un itinéraire
+ * cible. Transformation pure du projet.
  */
-
-/** Résultats intermédiaires : met à jour `poiFeatures` si elles ont changé. */
-export function applyCorridorUpdate(
-  p: ItineraryProject,
-  targetId: string,
-  features: PoiFeature[],
-): ItineraryProject {
-  const target = p.itineraries.find((i) => i.id === targetId);
-  if (!target) return p;
-  const mergedFeatures = mergePoiFeatureFavorites(
-    features,
-    target.timeline,
-    target.poiFeatures ?? [],
-    target.rhythm,
-  );
-  const current = target.poiFeatures ?? [];
-  const unchanged =
-    current.length === mergedFeatures.length
-    && current.every((feature, index) => {
-      const next = mergedFeatures[index];
-      return (
-        feature.id === next?.id
-        && feature.lat === next.lat
-        && feature.lon === next.lon
-        && feature.category === next.category
-        && feature.name === next.name
-        && Boolean(feature.favorite) === Boolean(next.favorite)
-        && (feature.pauseDurationMin ?? null) === (next?.pauseDurationMin ?? null)
-      );
-    });
-  if (unchanged) return p;
-  return {
-    ...p,
-    itineraries: p.itineraries.map((it) =>
-      it.id === targetId ? { ...it, poiFeatures: mergedFeatures } : it,
-    ),
-  };
-}
 
 /**
  * Recherche terminée : remplace les lignes POI de la feuille de route (en

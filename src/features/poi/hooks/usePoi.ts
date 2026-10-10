@@ -25,6 +25,7 @@ import { GPX_IMPORT_POI_SOURCE } from '../types';
 import { PoiApiError, clampCorridorRadiusM, fetchPoisAlongRouteChunked } from '../lib/poi-api';
 import { buildCorridorSamples } from '../lib/corridor-samples';
 import { groupCategoriesByRadius } from '../lib/corridor-radius-groups';
+import { isDeclaredUndrinkable } from '../lib/waterPotability';
 import { filterPoisByLateralDistance } from '../lib/corridor-distance-filter';
 import { PoiMarkerManager } from '../lib/poi-markers';
 import type { UsePoiPopupActions } from '../lib/poi-popup';
@@ -142,12 +143,6 @@ export function usePoi(
   gpxRoute: GpxRoute | null = null,
   radiusM: number = 1000,
   maxLateralDistanceByCategory: Partial<Record<PoiCategory, number>> | null = null,
-  /**
-   * Inutilisé : la recherche ne publie plus de résultats partiels (une
-   * écriture du projet à la fin, `onCorridorComplete`). Gardé pour la
-   * signature positionnelle.
-   */
-  _onCorridorUpdate?: (features: PoiFeature[]) => void,
   /** Fin de recherche : POI à enregistrer et trace sur laquelle ils ont été cherchés. */
   onCorridorComplete?: (features: PoiFeature[], routePoints: GpxRoute['points']) => void,
   /**
@@ -263,6 +258,7 @@ export function usePoi(
       ? features.filter(
           (feature) =>
             !feature.favorite &&
+            !isDeclaredUndrinkable(feature) &&
             enabledRef.current.has(feature.category) &&
             matchesCategory(feature.category) &&
             keptByRefine(feature),
@@ -295,7 +291,11 @@ export function usePoi(
   const buildStoredFeatures = useCallback((features: PoiFeature[]) => {
     const searched = searchCategoriesRef.current;
     const favorites = features.filter((feature) => feature.favorite);
-    const others = features.filter((feature) => !feature.favorite && searched.has(feature.category));
+    // Un favori reste (choix de l'utilisateur) ; un point d'eau déclaré non
+    // potable n'entre plus dans la feuille de route ni dans l'export.
+    const others = features.filter(
+      (feature) => !feature.favorite && !isDeclaredUndrinkable(feature) && searched.has(feature.category),
+    );
     const route = gpxRef.current;
     if (!route || route.points.length < 2) return [...favorites, ...others];
     return [
