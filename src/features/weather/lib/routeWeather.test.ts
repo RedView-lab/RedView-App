@@ -101,9 +101,13 @@ describe('getRouteWeatherAtDistanceAndTime', () => {
     expect(getRouteWeatherAtDistanceAndTime(ds, 0, 0, 1000)?.temperature).toBeCloseTo(10 - 6.5, 6);
   });
 
-  it('holds the first / last forecast hour outside the series, and gives nothing for a missing hour', () => {
-    expect(getRouteWeatherAtDistanceAndTime(ds, 0, -10 * 3600)?.temperature).toBe(0);
-    expect(getRouteWeatherAtDistanceAndTime(ds, 0, 30 * 3600)?.temperature).toBe(16);
+  it('gives nothing beyond the forecast hours (E2-1), holds an edge hour within an hour of it', () => {
+    // Série de 00:00 à 09:00, départ 06:00.
+    expect(getRouteWeatherAtDistanceAndTime(ds, 0, 3.5 * 3600)?.temperature).toBe(16); // 09:30
+    expect(getRouteWeatherAtDistanceAndTime(ds, 0, 4.5 * 3600)).toBeNull(); // 10:30
+    expect(getRouteWeatherAtDistanceAndTime(ds, 0, 30 * 3600)).toBeNull();
+    expect(getRouteWeatherAtDistanceAndTime(ds, 0, -6.5 * 3600)?.temperature).toBe(0); // 23:30 la veille
+    expect(getRouteWeatherAtDistanceAndTime(ds, 0, -10 * 3600)).toBeNull();
     const gap = dataset([{ lat: 45, lng: 6, distanceM: 0, elevationM: 0, hourly: hourly([0, 1, 2, 3, 4, 5, Number.NaN, 12]) }]);
     expect(getRouteWeatherAtDistanceAndTime(gap, 0, 600)).toBeNull();
   });

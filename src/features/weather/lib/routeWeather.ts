@@ -399,6 +399,19 @@ function parseHourTimeMs(timeIso: string): number {
   return parsed.getTime();
 }
 
+/** Une valeur horaire vaut pour l'heure qui l'entoure : tolérance aux bornes de la série. */
+const FORECAST_EDGE_TOLERANCE_MS = 3600 * 1000;
+
+const MISSING_WEATHER_VALUES: RouteWeatherValues = Object.freeze({
+  temperature: Number.NaN,
+  feelsLike: Number.NaN,
+  rain: Number.NaN,
+  windKmh: Number.NaN,
+  cloudCover: Number.NaN,
+  humidity: Number.NaN,
+  sunshineMin: Number.NaN,
+});
+
 export function getRouteWeatherAtDistanceAndTime(
   dataset: RouteWeatherDataset,
   distanceM: number,
@@ -455,20 +468,20 @@ export function getRouteWeatherAtDistanceAndTime(
     }
     const timeMs = hourly.timeMs;
     const len = timeSlots.length;
-    if (len === 0) {
-      return {
-        temperature: Number.NaN,
-        feelsLike: Number.NaN,
-        rain: Number.NaN,
-        windKmh: Number.NaN,
-        cloudCover: Number.NaN,
-        humidity: Number.NaN,
-        sunshineMin: Number.NaN,
-      };
-    }
+    if (len === 0) return MISSING_WEATHER_VALUES;
 
     const firstTimeMs = timeMs ? timeMs[0]! : parseHourTimeMs(timeSlots[0]!);
     const lastTimeMs = timeMs ? timeMs[len - 1]! : parseHourTimeMs(timeSlots[len - 1]!);
+
+    // Hors des heures reçues (au-delà d'une heure de leurs bornes) : rien.
+    // La plage demandée s'arrête à l'horizon de prévision (J+4) : recopier la
+    // dernière heure étendait une nuit froide ou une averse au lendemain entier.
+    if (
+      targetTimestampMs < firstTimeMs - FORECAST_EDGE_TOLERANCE_MS
+      || targetTimestampMs > lastTimeMs + FORECAST_EDGE_TOLERANCE_MS
+    ) {
+      return MISSING_WEATHER_VALUES;
+    }
 
     if (targetTimestampMs <= firstTimeMs) {
       return {
