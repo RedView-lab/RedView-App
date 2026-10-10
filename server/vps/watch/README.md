@@ -24,7 +24,7 @@ de santé ; « Partagés avec moi » vide pour tous les invités).
 | Certificats TLS | un des hôtes expire dans moins de 14 jours (certbot renouvelle à 30) |
 | Conteneurs | un conteneur `unhealthy` ou `restarting` |
 | Sauvegardes | dernière sauvegarde de plus de 30 h, ou dernier exercice de restauration en échec (`/var/lib/redview-backup/status.json`) |
-| Disque | `/` plein à 90 % |
+| Disque | `/` plein à 80 % (alerte tôt : le disque porte toute l’infra, buckets ouverts aux envois des comptes) |
 | Plancher mémoire | mémoire utilisée sous 25 % : Oracle récupère une instance Always Free inactive (voir `../README.md`) |
 
 ## Alertes

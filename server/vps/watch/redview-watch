@@ -48,7 +48,7 @@ TLS_MIN_DAYS=${TLS_MIN_DAYS:-14}
 WEATHER_MIN_AHEAD_H=${WEATHER_MIN_AHEAD_H:-48}
 BACKUP_STATUS_FILE=${BACKUP_STATUS_FILE:-/var/lib/redview-backup/status.json}
 BACKUP_MAX_AGE_H=${BACKUP_MAX_AGE_H:-30}
-DISK_MAX_PCT=${DISK_MAX_PCT:-90}
+DISK_MAX_PCT=${DISK_MAX_PCT:-80}
 # Plancher « Always Free » : Oracle récupère une instance A1 dont CPU, réseau
 # ET mémoire restent sous 20 % pendant 7 jours (server/vps/README.md).
 MEM_MIN_PCT=${MEM_MIN_PCT:-25}

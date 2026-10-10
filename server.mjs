@@ -25,6 +25,7 @@ import { missingProductionEnv } from './server/lib/env-check.mjs';
 import { createRequestLogger, normalizeRoutePath } from './server/lib/request-logging.mjs';
 import { VARIANT_SUFFIX, acceptedEncodings, isCompressible } from './server/lib/static-compression.mjs';
 import { REDVIEW_CSP_HEADER } from './server/lib/csp.mjs';
+import { createAppwriteStorageGuard } from './server/lib/storage-guard.mjs';
 import { resolveLegacyAssetPath } from './server/lib/legacy-asset-paths.mjs';
 import { API_COMPRESS_SYNC_MAX_BYTES, compressApiBody, compressApiBodySync, pickApiEncoding, withVary } from './server/lib/api-compression.mjs';
 
@@ -594,6 +595,23 @@ if (isMain) {
       const detail = missing.map(({ name, feature }) => `${name} (${feature})`).join(', ');
       console.error(`[RedView Server] Configuration incomplète, fonctions coupées : ${detail}`);
       captureServerError(new Error(`Configuration incomplète : ${missing.map(({ name }) => name).join(', ')}`), { route: 'startup' });
+    }
+    // Garde des buckets Appwrite (contenu, plafond par compte) : les envois
+    // du navigateur y vont directement (server/lib/storage-guard.mjs).
+    // REDVIEW_STORAGE_GUARD = off | report (signale sans supprimer) | enforce (défaut).
+    const guardMode = process.env.REDVIEW_STORAGE_GUARD || 'enforce';
+    if (process.env.APPWRITE_API_KEY && guardMode !== 'off') {
+      createAppwriteStorageGuard({
+        endpoint: process.env.APPWRITE_ENDPOINT || process.env.VITE_APPWRITE_ENDPOINT || 'http://127.0.0.1:8082/v1',
+        projectId: process.env.APPWRITE_PROJECT_ID || process.env.VITE_APPWRITE_PROJECT_ID || 'redview-prod',
+        apiKey: process.env.APPWRITE_API_KEY,
+        enforce: guardMode !== 'report',
+        report: (error, extra) => {
+          console.warn(`[storage-guard] ${error.message}`, JSON.stringify(extra ?? {}));
+          captureServerError(error, { route: 'storage-guard', ...(extra ?? {}) });
+        },
+        log: (message) => console.warn(message),
+      }).start();
     }
   }
   // Arrêt du conteneur (node en PID 1) : plus de nouvelle connexion, les
