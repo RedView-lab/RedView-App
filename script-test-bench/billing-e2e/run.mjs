@@ -258,6 +258,11 @@ async function startAppServer(appwriteEndpoint, { port, webhookSecret, resend })
       PORT: String(port),
       NODE_ENV: 'production',
       LOG_LEVEL: 'warn',
+      // Retours de Stripe (3-D Secure, portail) vers ce serveur local, jamais
+      // vers l'app de production (getAppBaseUrl en production).
+      APP_BASE_URL: `http://127.0.0.1:${port}`,
+      // Jamais de garde des buckets contre le faux Appwrite (off par défaut, explicite ici).
+      REDVIEW_STORAGE_GUARD: 'off',
       APPWRITE_ENDPOINT: appwriteEndpoint,
       APPWRITE_PROJECT_ID: 'billing-e2e',
       APPWRITE_API_KEY: 'billing-e2e-fake-key',

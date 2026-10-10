@@ -78,7 +78,9 @@ async function deliver(handler: Handler): Promise<number> {
   return status;
 }
 
-describe('api/stripe/webhook — e-mails dus au client', () => {
+// Module du webhook rechargé à chaque test (resetModules) : long à importer
+// quand `npm run check` fait tourner les autres suites en parallèle.
+describe('api/stripe/webhook — e-mails dus au client', { timeout: 30_000 }, () => {
   beforeEach(() => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
