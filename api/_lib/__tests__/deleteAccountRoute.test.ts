@@ -165,6 +165,24 @@ describe('resumePendingAccountDeletions (A14-1, purge coupée par un redéploiem
     expect(mocks.sendAccountDeletedEmail).toHaveBeenCalledWith({ to: 'bloque@example.test', name: 'Bloqué' });
   });
 
+  it('un échec durable (Stripe, droit manquant) cesse d’être repris après 5 passages, signalé deux fois seulement', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    mocks.captureServerError.mockClear();
+    mocks.users.set('u-stuck', { $id: 'u-stuck', name: 'Bloqué', email: 'bloque@example.test' });
+    mocks.listStalePendingDeletions.mockResolvedValue(['u-stuck']);
+    mocks.deleteAccount.mockRejectedValue(Object.assign(new Error('stripe: permission denied'), { code: 'permission_denied' }));
+
+    for (let pass = 0; pass < 8; pass += 1) {
+      await resumePendingAccountDeletions();
+      await flush();
+    }
+
+    expect(mocks.deleteAccount).toHaveBeenCalledTimes(5);
+    // Le premier échec, puis l'abandon (le script d'admin prend le relais) : pas un signalement par passage.
+    expect(mocks.captureServerError).toHaveBeenCalledTimes(2);
+    expect(mocks.sendAccountDeletedEmail).not.toHaveBeenCalled();
+  });
+
   it('ne double pas une purge encore en cours dans ce processus', async () => {
     let finish!: () => void;
     mocks.deleteAccount.mockReturnValueOnce(new Promise((resolve) => { finish = () => resolve({}); }));

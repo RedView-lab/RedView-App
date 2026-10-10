@@ -42,6 +42,15 @@ const RETRY_DELAYS_MS = [30_000, 2 * 60_000, 10 * 60_000];
 const RESUME_PENDING_AFTER_MS = 15 * 60_000;
 /** Purges en cours dans ce processus : la reprise ne les double pas. */
 const inFlight = new Set<string>();
+/**
+ * Reprises automatiques ratées par compte, dans ce processus. Un échec durable
+ * (refus de Stripe, droit manquant à la clé) n'est plus repris au-delà : il
+ * resterait relancé et signalé toutes les 15 min. Le compte reste `pending` au
+ * registre pour le script d'admin. Compté en mémoire, pas au registre : pas
+ * d'attribut de plus au schéma de production.
+ */
+const resumeFailures = new Map<string, number>();
+const MAX_RESUME_FAILURES = 5;
 
 /**
  * Purge complète après la réponse (A14-1) : elle parcourt les trois buckets et
@@ -54,9 +63,29 @@ function purgeInBackground(userId: string, email: string | null, name: string, a
     // Sans bloquer : le compte est supprimé même si l'accusé ne part pas.
     () => {
       inFlight.delete(userId);
+      resumeFailures.delete(userId);
       if (email) void sendAccountDeletedEmail({ to: email, name });
     },
     (error: unknown) => {
+      if (attempt >= RETRY_DELAYS_MS.length) {
+        // Reprises de la requête épuisées, ou passage de resumePendingAccountDeletions :
+        // la suite revient aux passages périodiques. Premier échec et abandon
+        // signalés, pas chaque passage.
+        inFlight.delete(userId);
+        const failures = (resumeFailures.get(userId) ?? 0) + 1;
+        resumeFailures.set(userId, failures);
+        const givingUp = failures >= MAX_RESUME_FAILURES;
+        console.error(
+          givingUp
+            ? '[auth/delete-account] reprise automatique abandonnée : scripts/appwrite/account-deletions.ts --resume'
+            : '[auth/delete-account] reprise automatique ratée',
+          userId,
+          failures,
+          error,
+        );
+        if (failures === 1 || givingUp) captureServerError(error, { route: 'auth/delete-account' });
+        return;
+      }
       console.error('[auth/delete-account] purge interrompue, reprise programmée', userId, error);
       captureServerError(error, { route: 'auth/delete-account' });
       finishDeletionLater(userId, email, name, attempt);
@@ -65,13 +94,7 @@ function purgeInBackground(userId: string, email: string | null, name: string, a
 }
 
 function finishDeletionLater(userId: string, email: string | null, name: string, attempt = 0): void {
-  const delay = RETRY_DELAYS_MS[attempt];
-  if (delay === undefined) {
-    // Plus de reprise ici : resumePendingAccountDeletions (ou le script) prendra le relais.
-    inFlight.delete(userId);
-    console.error('[auth/delete-account] suppression toujours incomplète : scripts/appwrite/account-deletions.ts --resume', userId);
-    return;
-  }
+  const delay = RETRY_DELAYS_MS[attempt] ?? RETRY_DELAYS_MS[RETRY_DELAYS_MS.length - 1]!;
   const timer = setTimeout(() => purgeInBackground(userId, email, name, attempt + 1), delay);
   timer.unref?.();
 }
@@ -85,7 +108,8 @@ function finishDeletionLater(userId: string, email: string | null, name: string,
  * Rend les comptes repris.
  */
 export async function resumePendingAccountDeletions(now = Date.now()): Promise<string[]> {
-  const pending = (await listStalePendingDeletions(now, RESUME_PENDING_AFTER_MS)).filter((userId) => !inFlight.has(userId));
+  const pending = (await listStalePendingDeletions(now, RESUME_PENDING_AFTER_MS))
+    .filter((userId) => !inFlight.has(userId) && (resumeFailures.get(userId) ?? 0) < MAX_RESUME_FAILURES);
   for (const userId of pending) {
     let profile: { email?: string; name?: string } | null = null;
     try {
