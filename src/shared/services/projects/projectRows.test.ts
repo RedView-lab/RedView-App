@@ -287,4 +287,17 @@ describe('listes et suppression', () => {
     expect(mock.files.has('fit-1')).toBe(false);
     expect(mock.files.has('fit-autre')).toBe(true);
   });
+
+  it('quitter un projet partagé : sa copie sur l’appareil (document, miniature) disparaît, la ligne reste au propriétaire', async () => {
+    const { mock, otherDevice, rows, idb } = await load();
+    const row = await rows.createProject('Partagé');
+    await otherDevice.updateDocument('db', 'projects', row.id, { team_id: `p${row.id}` });
+    await vi.waitFor(async () => expect(await idb.idbGetProjectMeta(row.id)).not.toBeNull());
+    await idb.idbSaveThumbnail(row.id, new Blob([new Uint8Array([1, 2, 3])], { type: 'image/webp' }));
+
+    await rows.forgetProjectOnDevice(row.id);
+    expect(await idb.idbGetProject(row.id)).toBeNull();
+    expect(await idb.idbGetThumbnail(row.id)).toBeNull();
+    expect(mock.col('projects').has(row.id)).toBe(true);
+  });
 });

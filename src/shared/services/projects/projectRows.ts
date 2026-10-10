@@ -762,8 +762,21 @@ export async function deleteProject(id: string): Promise<void> {
     payloadFilesChecked.delete(id);
   }
 
-  // 2. Suppression locale : IndexedDB (projet + cache + miniature), cache
-  //    localStorage du Dashboard et état de session.
+  // 2. Suppression locale.
+  await forgetProjectOnDevice(id);
+
+  const projects = readLocalProjects().filter((p) => p.id !== id);
+  writeLocalProjects(projects);
+}
+
+/**
+ * Retire un projet de cet appareil : copie IndexedDB (document, travail
+ * local, cache, miniature, vue), cache localStorage du Dashboard, état de
+ * session, et la vue de l'utilisateur (locale et cloud). Après une
+ * suppression, et quand l'utilisateur quitte un projet partagé : la copie de
+ * ce projet n'était jamais rouverte, donc jamais nettoyée.
+ */
+export async function forgetProjectOnDevice(id: string): Promise<void> {
   try {
     await enqueue(localQueues, id, () => idbDeleteProject(id));
   } catch (e) {
@@ -773,9 +786,6 @@ export async function deleteProject(id: string): Promise<void> {
   knownCloudVersions.delete(id);
   confirmedDocuments.delete(id);
   localRevisions.delete(id);
-  // Vue de l'utilisateur (locale et cloud), sans faire échouer la suppression.
+  // Vue de l'utilisateur (locale et cloud), sans faire échouer l'appelant.
   await deleteProjectView(id).catch(() => undefined);
-
-  const projects = readLocalProjects().filter((p) => p.id !== id);
-  writeLocalProjects(projects);
 }

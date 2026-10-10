@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { markSharedProject, sharedProjectTeamId } from '@/shared/services/projects/liveSessions';
+import { forgetProjectOnDevice } from '@/shared/services/projects/projectRows';
 import {
   fetchProjectShare,
   inviteProjectEditor,
@@ -79,6 +80,8 @@ export function useLeaveSharedProject(userId: string | null) {
       cache.updateLibrary((snapshot) => (snapshot
         ? { ...snapshot, sharedProjects: snapshot.sharedProjects.filter((project) => project.id !== id) }
         : snapshot));
+      // Plus d'accès : le document du propriétaire ne reste pas sur l'appareil.
+      void forgetProjectOnDevice(id);
     },
   });
 }
