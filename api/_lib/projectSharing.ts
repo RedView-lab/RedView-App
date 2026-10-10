@@ -427,11 +427,51 @@ async function deleteLocked(user: AuthenticatedUser, projectId: string): Promise
     if (error instanceof PublicError && error.status === 404) return;
     throw error;
   }
-  await requireOwner(row, user, 'Only the owner can delete this project');
+  const ownerId = await requireOwner(row, user, 'Only the owner can delete this project');
+  // Lus avant que le document ne disparaisse (charge utile comprise).
+  const fitIds = await documentFitFileIds(projectId, ownerId);
   await purgeCollabData(projectId);
   await ignoreNotFound(() => getAppwriteTeams().delete(projectTeamId(projectId)));
   await ignoreNotFound(() => getAppwriteDatabases().deleteDocument(APPWRITE_DATABASE_ID, PROJECTS_COLLECTION_ID, projectId));
+  await deleteProjectFitFiles(fitIds, ownerId, projectTeamId(projectId));
   await notifyProjectAccessChanged(projectId);
+}
+
+/** .fit référencés par le document courant du projet (charge utile d'un gros projet comprise). */
+async function documentFitFileIds(projectId: string, ownerId: string): Promise<string[]> {
+  try {
+    const full = await readProject(projectId, true);
+    const document = typeof full.data === 'string' && full.data.startsWith('file:')
+      ? await readPayloadDocument(projectId, full.data, ownerId)
+      : full.data;
+    return fitFileIds(document);
+  } catch (error) {
+    console.warn('[projects/share] .fit du projet supprimé non listés', projectId, error);
+    return [];
+  }
+}
+
+/**
+ * Projet partagé supprimé : ses .fit partent avec lui, ceux des éditeurs
+ * compris (traces GPS, fréquence cardiaque : données de santé, art. 9 RGPD) —
+ * le client n'efface que les siens, avec ses droits, et ceux des autres
+ * restaient indéfiniment, rattachés à rien (A3-1). Seulement un fichier qui
+ * appartient au projet : lisible par son équipe ou par son propriétaire ;
+ * un id étranger glissé dans le document n'est jamais suivi.
+ */
+async function deleteProjectFitFiles(fileIds: readonly string[], ownerId: string, teamId: string): Promise<void> {
+  const storage = getAppwriteStorage();
+  for (let start = 0; start < fileIds.length; start += 10) {
+    await Promise.all(fileIds.slice(start, start + 10).map(async (fileId) => {
+      try {
+        const file = await storage.getFile(FIT_FILES_BUCKET_ID, fileId);
+        if (!fileReadableBy(file.$permissions, ownerId, teamId)) return;
+        await storage.deleteFile(FIT_FILES_BUCKET_ID, fileId);
+      } catch (error) {
+        if (errorCode(error) !== 404) console.warn('[projects/share] .fit du projet supprimé non effacé', fileId, error);
+      }
+    }));
+  }
 }
 
 /** Supprime les lignes `project_id = projectId` d'une collection (absente : rien à faire). */
@@ -518,7 +558,8 @@ export async function missingFitFiles(user: AuthenticatedUser, projectId: string
     throw new PublicError('Too many requests, try again later', 429);
   }
   const row = await readProject(projectId);
-  const isOwner = (await ownerOf(row)) === user.id;
+  const ownerId = await ownerOf(row);
+  const isOwner = ownerId === user.id;
   const teamId = sharedTeamOf(row);
   if (!isOwner && !(teamId && (await membershipOf(teamId, user.id))?.confirm)) throw new PublicError('Project not found', 404);
 
@@ -528,7 +569,10 @@ export async function missingFitFiles(user: AuthenticatedUser, projectId: string
   for (let start = 0; start < ids.length; start += 10) {
     await Promise.all(ids.slice(start, start + 10).map(async (fileId) => {
       try {
-        await storage.getFile(FIT_FILES_BUCKET_ID, fileId);
+        const file = await storage.getFile(FIT_FILES_BUCKET_ID, fileId);
+        // Fichier d'un autre compte, étranger au projet : répondu comme absent,
+        // sinon la route dirait qu'il existe (sondage des .fit d'autrui, A3-2).
+        if (!ownerId || !fileReadableBy(file.$permissions, ownerId, teamId)) missing.push(fileId);
       } catch (error) {
         if (errorCode(error) === 404 && (error as { type?: unknown }).type === 'storage_file_not_found') missing.push(fileId);
       }

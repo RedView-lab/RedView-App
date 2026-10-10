@@ -286,6 +286,20 @@ describe('partage d’un projet', () => {
     // Déjà supprimé : rien à faire, pas d'erreur.
     await deleteSharedProject(owner, PROJECT);
   });
+
+  it('supprimer un projet partagé efface les .fit des éditeurs (données de santé), jamais un fichier étranger au projet (A3-1)', async () => {
+    await inviteToProject(owner, PROJECT, 'editor@example.test');
+    // Sortie de l'éditeur ajoutée en session (lecture d'équipe), et un id étranger glissé dans le document.
+    fake.files.set('fitB', { name: 'sortie-bob.fit', $permissions: ['read("user:editor")', 'update("user:editor")', 'delete("user:editor")', `read("team:${TEAM}")`] });
+    fake.files.set('etranger', { name: 'autre.fit', $permissions: ['read("user:stranger")'] });
+    const document = { schema: 2, itineraries: [{ id: 'it-1', fitUploads: [{ name: 'ride.fit', path: 'fit1' }, { name: 'b.fit', path: 'fitB' }, { name: 'x.fit', path: 'etranger' }] }] };
+    fake.projects.get(PROJECT)!.data = `gz:${gzipSync(JSON.stringify(document)).toString('base64')}`;
+
+    await deleteSharedProject(owner, PROJECT);
+    expect(fake.files.has('fitB')).toBe(false);
+    expect(fake.files.has('fit1')).toBe(false);
+    expect(fake.files.has('etranger')).toBe(true);
+  });
 });
 
 /**
@@ -300,6 +314,12 @@ describe('.fit introuvables d’un projet partagé', () => {
     fake.files.set('prive', { name: 'b.fit', $permissions: ['read("user:owner")'] });
     expect(await missingFitFiles(editor, PROJECT, ['fit1', 'prive', 'supprime'])).toEqual(['supprime']);
     expect(await missingFitFiles(owner, PROJECT, ['supprime', 'supprime'])).toEqual(['supprime']);
+  });
+
+  it('un .fit qui existe mais n’appartient pas au projet est répondu comme absent : pas de sondage d’autres comptes (A3-2)', async () => {
+    await inviteToProject(owner, PROJECT, 'editor@example.test');
+    fake.files.set('autrui', { name: 'autre.fit', $permissions: ['read("user:stranger")'] });
+    expect(await missingFitFiles(editor, PROJECT, ['autrui', 'supprime'])).toEqual(['autrui', 'supprime']);
   });
 
   it('404 sans type (proxy pendant un redémarrage) : rien n’est déclaré supprimé', async () => {
