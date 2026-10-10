@@ -202,6 +202,10 @@ export function createFakeAppwrite({ endpoint, user, loggedIn = true, network = 
         return doc ? { status: 200, body: project(doc, select) } : appwriteError(404, 'Document with the requested ID could not be found.', 'document_not_found');
       }
       if (method === 'POST') {
+        // Comme Appwrite : un id déjà pris répond 409 (jamais un écrasement).
+        if (body?.documentId && docs.has(body.documentId)) {
+          return appwriteError(409, 'Document with the requested ID already exists.', 'document_already_exists');
+        }
         const doc = putDocument(segments[3], body?.documentId ?? `doc${docs.size + 1}`, body?.data ?? {});
         if (Array.isArray(body?.permissions)) doc.$permissions = body.permissions;
         return { status: 201, body: doc };
@@ -214,7 +218,7 @@ export function createFakeAppwrite({ endpoint, user, loggedIn = true, network = 
         return { status: 200, body: doc };
       }
       if (method === 'DELETE') {
-        docs.delete(id);
+        if (!docs.delete(id)) return appwriteError(404, 'Document with the requested ID could not be found.', 'document_not_found');
         return { status: 204, body: null };
       }
     }
@@ -224,15 +228,17 @@ export function createFakeAppwrite({ endpoint, user, loggedIn = true, network = 
       const files = bucket(segments[2]);
       const id = segments[4];
       if (method === 'GET' && !id) {
-        const list = [...files.values()].map((file) => file.meta);
-        return { status: 200, body: { total: list.length, files: list } };
+        const queries = parseQueries(searchParams);
+        const list = [...files.values()].map((file) => file.meta).filter((meta) => queries.every((q) => matches(meta, q)));
+        const limit = queries.find((q) => q.method === 'limit')?.values?.[0] ?? 25;
+        return { status: 200, body: { total: list.length, files: list.slice(0, limit) } };
       }
       const file = id ? files.get(id) : null;
       if (method === 'GET' && segments[5] && file) return { status: 200, body: file.bytes, raw: true };
       if (method === 'GET' && file) return { status: 200, body: file.meta };
       if (method === 'GET') return appwriteError(404, 'The requested file could not be found.', 'storage_file_not_found');
       if (method === 'DELETE') {
-        files.delete(id);
+        if (!files.delete(id)) return appwriteError(404, 'The requested file could not be found.', 'storage_file_not_found');
         return { status: 204, body: null };
       }
       if (method === 'POST') {

@@ -175,8 +175,9 @@ export interface BenchProjectSpec {
 
 /**
  * Id du document `project_views` (copie de projectViews.ts, dont le module ne
- * se charge pas sous Node) : si elles divergeaient, l'app ne lirait pas la vue
- * semée et le banc le verrait (caméra hors du tracé).
+ * se charge pas sous Node). L'app retrouve sa vue par `project_id` + `user_id`
+ * (la vue semée doit porter les deux, sinon caméra hors du tracé) ; l'id garde
+ * la forme de celui qu'elle crée.
  */
 function hash53(value: string, seed: number): number {
   let h1 = 0xdeadbeef ^ seed;

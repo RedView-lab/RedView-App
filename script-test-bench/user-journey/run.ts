@@ -227,6 +227,10 @@ async function main() {
   let failed = false;
   /** Envois de mesure d'audience capturés (joints au rapport, pour l'audit). */
   let analyticsSent: unknown[] = [];
+  /** Nombre d'appels Appwrite quand le compte est supprimé (la session n'existe plus ensuite). */
+  let callsWhileSignedIn = Number.POSITIVE_INFINITY;
+  /** Appels Appwrite du parcours (`méthode chemin → statut`, joints au rapport). */
+  let appwriteCalls: string[] = [];
 
   try {
     // ── Appareil 1 ───────────────────────────────────────────────────────
@@ -416,6 +420,7 @@ async function main() {
         if (body.action === 'request-code') return route.fulfill({ status: 200, contentType: 'application/json', body: '{"sent":true}' });
         if (body.action === 'confirm' && body.code === DELETION_CODE && body.confirm === 'delete-my-account') {
           appwrite.state.loggedIn = false; // compte supprimé : la session n'existe plus
+          callsWhileSignedIn = appwrite.state.calls.length;
           return route.fulfill({ status: 200, contentType: 'application/json', body: '{"deleted":true}' });
         }
         return route.fulfill({ status: 400, contentType: 'application/json', body: '{"error":"Invalid code"}' });
@@ -523,8 +528,18 @@ async function main() {
     });
 
     await step('contrôles globaux', async () => {
+      type AppwriteCall = { method: string; path: string; status: number };
+      appwriteCalls = (appwrite.state.calls as AppwriteCall[]).map((call) => `${call.method} ${call.path} → ${call.status}`);
       check(pageErrors.length === 0, `erreurs de page : ${pageErrors.slice(0, 5).join(' | ')}`);
       check(appwrite.state.unhandled.length === 0, `appels Appwrite non simulés : ${appwrite.state.unhandled.slice(0, 5).join(', ')}`);
+      // Chaque réponse en erreur s'affiche en rouge dans la console de
+      // l'utilisateur : le parcours normal n'en produit aucune. Seuls restent
+      // le `GET /account` 401 d'un visiteur sans session et ce qui suit la
+      // suppression du compte (session détruite exprès).
+      const failedCalls = (appwrite.state.calls as AppwriteCall[])
+        .slice(0, callsWhileSignedIn)
+        .filter((call) => call.status >= 400 && !(call.method === 'GET' && call.path === '/account' && call.status === 401));
+      check(failedCalls.length === 0, `réponses Appwrite en erreur : ${failedCalls.slice(0, 5).map((call) => `${call.method} ${call.path} → ${call.status}`).join(', ')}`);
       check(telemetry.cspReports.length === 0, `violations CSP : ${telemetry.cspReports.slice(0, 5).join(' | ')}`);
       check(telemetry.errors.length === 0, `erreurs envoyées à GlitchTip : ${telemetry.errors.slice(0, 5).join(' | ')}`);
       return `${appwrite.state.calls.length} appels Appwrite simulés`;
@@ -541,7 +556,7 @@ async function main() {
     if (!argv.includes('--keep')) fs.rmSync(workDir, { recursive: true, force: true });
   }
 
-  const report = { date: new Date().toISOString(), channel: CHANNEL, ok: !failed, steps: results, analytics: analyticsSent, a11y: a11yFindings };
+  const report = { date: new Date().toISOString(), channel: CHANNEL, ok: !failed, steps: results, analytics: analyticsSent, a11y: a11yFindings, appwriteCalls };
   fs.writeFileSync(path.join(REPORT_DIR, `user-journey-${report.date.replace(/[:.]/g, '-')}.json`), JSON.stringify(report, null, 2));
   console.log(failed ? `\nParcours en échec (capture : ${path.relative(REPO, path.join(REPORT_DIR, 'failure.png'))})` : '\nParcours principal : OK');
   process.exitCode = failed ? 1 : 0;
