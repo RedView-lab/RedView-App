@@ -77,7 +77,7 @@ export const VERIFICATION_LOCKED_MESSAGE =
  * déploiement effaçait les codes en cours (« Aucun code trouvé ») et
  * remettait à zéro compteurs d'échecs et verrous de 24 h (A13-1).
  */
-function storeDir(): string {
+export function verificationStoreDir(): string {
   const configured = process.env.REDVIEW_AUTH_STORE_DIR?.trim();
   if (!configured) return os.tmpdir();
   try {
@@ -89,7 +89,7 @@ function storeDir(): string {
   }
 }
 
-const STORE_FILE = path.join(storeDir(), 'redview_auth_verification_vault.json');
+const STORE_FILE = path.join(verificationStoreDir(), 'redview_auth_verification_vault.json');
 
 function hashVerificationCode(code: string, salt: string): string {
   return crypto.createHash('sha256').update(`${salt}:${code}`).digest('hex');
