@@ -1,7 +1,7 @@
 import type { ApiRequest, ApiResponse } from '../_lib/types.js';
 
 import { createRateLimiter, getClientIp, rateLimitKeyForIp } from '../../server/lib/http-security.mjs';
-import { requireAuthenticatedUser } from '../_lib/appwrite.js';
+import { rejectUnverifiedEmail, requireAuthenticatedUser } from '../_lib/appwrite.js';
 import { PublicError, sendSafeError } from '../_lib/errors.js';
 import { readJsonBody, sendMethodNotAllowed } from '../_lib/http.js';
 import {
@@ -49,6 +49,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       case 'list':
         return res.status(200).json(await getShareState(user, projectId));
       case 'invite':
+        if (rejectUnverifiedEmail(user, res)) return;
         if (!inviteIpLimiter(rateLimitKeyForIp(getClientIp(req)), MAX_INVITES_PER_IP)) {
           throw new PublicError('Too many invitations, try again later', 429);
         }

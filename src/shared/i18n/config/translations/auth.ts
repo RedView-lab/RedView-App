@@ -59,6 +59,11 @@ export const authTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: "Impossible d'envoyer le code de vérification.", en: 'Unable to send the verification code.' },
   { fr: 'Impossible de lancer la connexion Google.', en: 'Failed to initiate Google OAuth.' },
   { fr: 'La connexion avec Google a échoué. Réessayez.', en: 'Google sign-in failed. Please try again.' },
+  // Adresse d'un compte existant à vérifier (VerifyEmailScreen, api/auth/verify-email.ts)
+  { fr: 'Confirmez d’abord votre adresse e-mail.', en: 'Please confirm your e-mail address first.' },
+  { fr: 'Impossible de vérifier l’adresse e-mail.', en: 'Unable to verify the e-mail address.' },
+  { fr: 'La vérification n’a pas pu être enregistrée. Réessayez.', en: 'The verification could not be saved. Please try again.' },
+  { fr: 'Ce compte n’a pas d’adresse e-mail.', en: 'This account has no e-mail address.' },
   { fr: 'Code invalide.', en: 'Invalid code.' },
   { fr: 'Erreur lors de la confirmation du compte.', en: 'Error while confirming the account.' },
   { fr: 'Impossible de renvoyer le code.', en: 'Unable to resend the code.' },

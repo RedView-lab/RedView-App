@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useRef, useState, type ReactNode } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   clearStoredAppwriteSession,
   fetchAppwriteUser,
@@ -9,6 +9,7 @@ import {
 import { PROJECT_LOCATION_CHANGE_EVENT, readProjectIdFromPath } from './shared/lib/projectLocation'
 import { LoginScreen, probeSession, SESSION_EXPIRED_EVENT } from './features/auth'
 import { syncAnalyticsAccount } from './features/auth/lib/authAnalytics'
+import VerifyEmailScreen from './features/auth/components/VerifyEmailScreen'
 import { getCurrentAnalyticsScreen, trackScreen, type AnalyticsScreen } from './shared/lib/analytics'
 import type { SessionProbeResult } from './features/auth'
 import { MobileBlockScreen, NarrowViewportOverlay } from './shared/components/MobileBlockScreen'
@@ -217,14 +218,27 @@ function App() {
     appQueryClient.clear()
   }, [sessionUserId])
 
+  // Compte dont l'adresse n'est pas prouvée (créé directement par l'API
+  // d'Appwrite, sans le code de l'inscription) : il ne rentre pas dans l'app
+  // avant de la vérifier (A15-2). Inconnu (hors ligne) = pas de blocage.
+  const [unverifiedUserId, setUnverifiedUserId] = useState<string | null>(null)
+  const handleEmailVerified = useCallback(() => setUnverifiedUserId(null), [])
+  const handleUnverifiedSignOut = useCallback(() => {
+    setUnverifiedUserId(null)
+    setSession(null)
+  }, [])
+
   // Mesure d'audience : contexte du compte (ancienneté par tranche, compte
-  // interne exclu) et issue d'un retour OAuth, une fois par session.
+  // interne exclu) et issue d'un retour OAuth, une fois par session ; et
+  // vérification de l'adresse du compte.
   useEffect(() => {
     if (!sessionUserId || sessionUserId === DEV_FALLBACK_USER_ID) return
     let cancelled = false
     // Le compte que la vérification de session ou la connexion vient de lire.
     void getAppwriteUser({ reuseRecent: true }).then((user) => {
-      if (!cancelled && user && user.$id === sessionUserId) syncAnalyticsAccount(user)
+      if (cancelled || !user || user.$id !== sessionUserId) return
+      syncAnalyticsAccount(user)
+      setUnverifiedUserId(user.emailVerification === false ? user.$id : null)
     })
     return () => {
       cancelled = true
@@ -302,6 +316,8 @@ function App() {
         }}
       />
     )
+  } else if (unverifiedUserId && unverifiedUserId === session.user.id) {
+    content = <VerifyEmailScreen onVerified={handleEmailVerified} onSignedOut={handleUnverifiedSignOut} />
   } else {
     // Open beta : tout compte inscrit a un accès complet. Le statut d'abonnement réel
     // est lu côté serveur (billing, Project Browser) ; rien en aval n'affiche « démo ».

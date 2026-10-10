@@ -358,6 +358,24 @@ export async function requestEmailChangeCode(userId: string, newEmail: string): 
 }
 
 /**
+ * Clé des codes de vérification de l'adresse d'un compte existant
+ * (api/auth/verify-email.ts) : le compte, à part des codes d'inscription.
+ */
+export function accountEmailVerificationKey(userId: string): string {
+  return `account-email:${userId}`;
+}
+
+/**
+ * Code qui prouve que le titulaire d'un compte possède son adresse, envoyé à
+ * elle et valable pour elle seule. Quota consommé au préalable sur
+ * `accountEmailVerificationKey`.
+ */
+export async function requestAccountEmailVerificationCode(userId: string, email: string): Promise<{ sent: boolean }> {
+  const code = issueCode(accountEmailVerificationKey(userId), email);
+  return sendVerificationEmail({ to: normalizeVerificationEmail(email), code });
+}
+
+/**
  * Génère un nouveau code (remplace le précédent) et l'envoie par e-mail.
  * Le quota doit avoir été consommé au préalable via
  * `consumeVerificationRequestQuota`.

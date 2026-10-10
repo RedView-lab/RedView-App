@@ -9,7 +9,7 @@ import {
   toBillingError,
 } from '../_lib/billing.js';
 import { readJsonBody, sendMethodNotAllowed } from '../_lib/http.js';
-import { requireAuthenticatedUser } from '../_lib/appwrite.js';
+import { rejectUnverifiedEmail, requireAuthenticatedUser } from '../_lib/appwrite.js';
 import { sendSafeError } from '../_lib/errors.js';
 
 /**
@@ -34,6 +34,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     const action = body.action;
 
     if (action === 'start') {
+      if (rejectUnverifiedEmail(user, res)) return;
       if (!isBillingPlanId(body.planId)) return res.status(400).json({ error: 'Invalid plan selection.' });
       return res.status(200).json(await startSubscription(user.id, user.email, body.planId));
     }

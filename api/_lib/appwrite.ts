@@ -22,6 +22,8 @@ export const PROJECT_PAYLOADS_BUCKET_ID = 'project-payloads';
 export type AuthenticatedUser = {
   id: string;
   email: string | null;
+  /** Adresse prouvée (code, OAuth). Faux pour un compte créé directement par l'API d'Appwrite. */
+  emailVerified?: boolean;
 };
 
 export function getAppwriteEndpoint(): string {
@@ -95,6 +97,20 @@ function getBearerToken(req: ApiRequest): string | null {
   return token;
 }
 
+/** Réponse des actions refusées à un compte dont l'adresse n'est pas vérifiée. */
+export const EMAIL_UNVERIFIED_MESSAGE = 'Confirmez d’abord votre adresse e-mail.';
+
+/**
+ * Refuse (403) une action coûteuse ou engageante (abonnement, partage) à un
+ * compte dont l'adresse n'est pas prouvée (A15-2) ; vrai si refusée. Un
+ * utilisateur sans l'information (`emailVerified` absent) passe.
+ */
+export function rejectUnverifiedEmail(user: Pick<AuthenticatedUser, 'emailVerified'>, res: ApiResponse): boolean {
+  if (user.emailVerified !== false) return false;
+  res.status(403).json({ error: EMAIL_UNVERIFIED_MESSAGE, code: 'email_unverified' });
+  return true;
+}
+
 export async function requireAuthenticatedUser(
   req: ApiRequest,
   res: ApiResponse,
@@ -117,6 +133,7 @@ export async function requireAuthenticatedUser(
     return {
       id: user.$id,
       email: user.email || null,
+      emailVerified: user.emailVerification === true,
     };
   } catch (error) {
     // Jeton refusé par Appwrite : session expirée. Une panne d'Appwrite (réseau,
