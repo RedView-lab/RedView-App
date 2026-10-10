@@ -14,9 +14,31 @@
  * Renvoie null si la carte n'est pas prête ou si la capture a échoué pour une
  * raison quelconque (relecture bloquée, canvas souillé, mémoire épuisée…). Les
  * appelants doivent traiter null comme « pas d'envoi de miniature, on garde la
- * précédente ».
+ * précédente ». Une image d'une seule couleur (carte pas encore dessinée,
+ * style absent, tampon WebGL déjà vidé quand le repli le relit) n'est pas une
+ * miniature : elle remplaçait la bonne pour tous les éditeurs à chaque projet
+ * fermé trop tôt.
  */
 import type { Map as MapboxMap } from 'mapbox-gl';
+
+/** Écart par canal sous lequel deux pixels sont « la même couleur » (bruit d'encodage). */
+const UNIFORM_TOLERANCE = 6;
+
+/** Vrai si tous les pixels (RGBA) échantillonnés ont la couleur du premier. */
+export function isUniformImage(data: ArrayLike<number>, step = 7): boolean {
+  if (data.length < 4) return true;
+  const [r, g, b] = [data[0]!, data[1]!, data[2]!];
+  for (let i = 4 * step; i < data.length; i += 4 * step) {
+    if (
+      Math.abs(data[i]! - r) > UNIFORM_TOLERANCE
+      || Math.abs(data[i + 1]! - g) > UNIFORM_TOLERANCE
+      || Math.abs(data[i + 2]! - b) > UNIFORM_TOLERANCE
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
 
 export async function captureMapThumbnail(
   map: MapboxMap | null,
@@ -52,6 +74,7 @@ export async function captureMapThumbnail(
         sy = Math.round((src.height - sh) / 2);
       }
       ctx.drawImage(src, sx, sy, sw, sh, 0, 0, targetWidth, targetHeight);
+      if (isUniformImage(ctx.getImageData(0, 0, targetWidth, targetHeight).data)) return Promise.resolve(null);
 
       return new Promise<Blob | null>((resolve) => {
         // Encodage WebP léger et ultra-net (qualité 0.65), fallback JPEG 0.68
