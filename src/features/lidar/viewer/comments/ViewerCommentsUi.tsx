@@ -9,7 +9,7 @@ import { CommentDraftCard, CommentThreadCard } from '@/features/comments/compone
 import type { CommentToolValue } from '@/features/comments/context/commentTool';
 import { countUnreadThreads, isThreadUnread } from '@/features/comments/lib/readState';
 import { createDocumentId } from '@/features/itineraryPanel/lib/project/ids';
-import { translateAppText } from '@/shared/i18n/config';
+import { commentAuthorLabel } from '@/features/comments/lib/authorName';
 import '@/features/comments/styles/comments.css';
 import './styles.css';
 import type { ViewerComments } from './viewerComments';
@@ -33,9 +33,11 @@ export function ViewerCommentsUi({ controller }: { controller: ViewerComments })
   }, []);
 
   const members = useMemo(() => state?.members ?? [], [state?.members]);
-  const nameOf = useCallback((userId: string, fallback?: string) => (
-    members.find((member) => member.userId === userId)?.name ?? (fallback || translateAppText('Éditeur'))
-  ), [members]);
+  const membersStatus = state?.membersStatus;
+  const nameOf = useCallback(
+    (userId: string, fallback?: string) => commentAuthorLabel(userId, fallback, members, membersStatus),
+    [members, membersStatus],
+  );
 
   const tool = useMemo<CommentToolValue | null>(() => {
     if (!state) return null;

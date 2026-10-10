@@ -2,6 +2,7 @@ import type { AppTranslationPair } from '../types';
 
 export const commentsTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   // ── Outil Commentaire (barre d'outils, menu du clic droit, raccourcis) ─────
+  { fr: 'Ancien éditeur', en: 'Former editor' },
   { fr: 'Commenter', en: 'Comment tool' },
   { fr: 'Commenter (C)', en: 'Comment (C)' },
   { fr: 'Commenter (C) · {{count}} non lu(s)', en: 'Comment (C) · {{count}} unread' },

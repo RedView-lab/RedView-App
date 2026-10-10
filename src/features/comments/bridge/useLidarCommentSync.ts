@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react';
 import type { ProjectCommentsView, ProjectCommentThread } from '@/features/itineraryPanel/types';
 
 import type { CommentAction, CommentAuthor } from '../lib/commentActions';
+import type { CommentMembersStatus } from '../lib/authorName';
 import type { MentionCandidate } from '../lib/messageText';
 import {
   answersLidarHello,
@@ -23,6 +24,7 @@ interface UseLidarCommentSyncArgs {
   projectId: string | null;
   me: CommentAuthor;
   members: readonly MentionCandidate[];
+  membersStatus?: CommentMembersStatus;
   threads: readonly ProjectCommentThread[];
   reads: ProjectCommentsView['reads'];
   onAction(action: CommentAction): void;
@@ -30,7 +32,7 @@ interface UseLidarCommentSyncArgs {
   onMarkUnread(threadId: string): void;
 }
 
-export function useLidarCommentSync({ projectId, me, members, threads, reads, onAction, onMarkRead, onMarkUnread }: UseLidarCommentSyncArgs): void {
+export function useLidarCommentSync({ projectId, me, members, membersStatus, threads, reads, onAction, onMarkRead, onMarkUnread }: UseLidarCommentSyncArgs): void {
   const stateRef = useRef<LidarCommentState | null>(null);
   const handlers = useRef({ onAction, onMarkRead, onMarkUnread });
   useEffect(() => {
@@ -49,6 +51,7 @@ export function useLidarCommentSync({ projectId, me, members, threads, reads, on
       updatedAt: new Date().toISOString(),
       me,
       members: [...members],
+      ...(membersStatus ? { membersStatus } : {}),
       threads: [...threads],
       reads: reads ?? {},
     };
@@ -57,7 +60,7 @@ export function useLidarCommentSync({ projectId, me, members, threads, reads, on
     // l'onglet de l'app est en arrière-plan et ses minuteries sont freinées
     // (jusqu'à une par minute après 5 min) — le viewer attendrait sa réponse.
     publishLidarCommentState(state);
-  }, [me, members, projectId, reads, threads]);
+  }, [me, members, membersStatus, projectId, reads, threads]);
 
   // Projet fermé (ou autre projet ouvert) : le viewer passe en lecture seule.
   useEffect(() => {

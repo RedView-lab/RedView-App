@@ -32,6 +32,7 @@ import {
 } from '../lib/commentActions';
 import { trackCommentAction } from '../lib/commentAnalytics';
 import { mergeMentionCandidates } from '../lib/identity';
+import { commentAuthorLabel, type CommentMembersStatus } from '../lib/authorName';
 import type { MentionCandidate } from '../lib/messageText';
 import { countUnreadThreads, markThreadRead, markThreadUnread, pruneReadMarks } from '../lib/readState';
 import type { CommentZoneDrawing } from '../lib/zoneDrawing';
@@ -64,12 +65,14 @@ interface CommentToolProviderProps {
   me: CommentAuthor;
   /** Membres du projet partagé et éditeurs présents (mentions et noms). */
   members?: readonly MentionCandidate[];
+  /** Liste des membres d'un projet partagé : en cours de lecture, ou lue (absent : projet non partagé). */
+  membersStatus?: CommentMembersStatus;
 }
 
 /** Zoom minimal pour « aller au commentaire » quand l'auteur n'a pas laissé de point de vue. */
 const FOCUS_MIN_ZOOM = 13;
 
-export function CommentToolProvider({ children, map, projectId = null, me, members: memberList = [] }: CommentToolProviderProps) {
+export function CommentToolProvider({ children, map, projectId = null, me, members: memberList = [], membersStatus }: CommentToolProviderProps) {
   const store = useProjectStoreOptional();
   const project = store?.project ?? null;
   const threads = useMemo(() => project?.comments ?? [], [project?.comments]);
@@ -87,9 +90,10 @@ export function CommentToolProvider({ children, map, projectId = null, me, membe
   const draftTextRef = useRef('');
 
   const members = useMemo(() => mergeMentionCandidates([{ userId: me.userId, name: me.name }], memberList), [me, memberList]);
-  const nameOf = useCallback((userId: string, fallback?: string) => {
-    return members.find((member) => member.userId === userId)?.name ?? (fallback || translateAppText('Éditeur'));
-  }, [members]);
+  const nameOf = useCallback(
+    (userId: string, fallback?: string) => commentAuthorLabel(userId, fallback, members, membersStatus),
+    [members, membersStatus],
+  );
 
   // Lu en dernier : les rappels gardent une identité stable.
   const openThreadData = findThread(threads, openThreadId);
@@ -264,6 +268,7 @@ export function CommentToolProvider({ children, map, projectId = null, me, membe
     projectId,
     me,
     members,
+    membersStatus,
     threads,
     reads: view?.reads,
     onAction: commitFromViewer,

@@ -26,6 +26,8 @@ export interface LidarCommentState {
   updatedAt: string;
   me: CommentAuthor;
   members: MentionCandidate[];
+  /** Projet partagé : liste des membres en cours de lecture ou lue (noms d'auteurs, comments/lib/authorName.ts). */
+  membersStatus?: 'loading' | 'ready';
   threads: ProjectCommentThread[];
   reads: NonNullable<ProjectCommentsView['reads']>;
 }
@@ -142,6 +144,7 @@ export function readLidarCommentState(raw: unknown): LidarCommentState | null {
     members: Array.isArray(state.members)
       ? state.members.filter((member): member is MentionCandidate => Boolean(member) && typeof member.userId === 'string' && typeof member.name === 'string')
       : [],
+    ...(state.membersStatus === 'loading' || state.membersStatus === 'ready' ? { membersStatus: state.membersStatus } : {}),
     threads: sanitizeCommentThreads(state.threads) ?? [],
     reads: state.reads && typeof state.reads === 'object' ? state.reads : {},
   };

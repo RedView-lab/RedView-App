@@ -505,7 +505,13 @@ export function DashboardEditor({
       >
       <LivePresenceContext.Provider value={livePresence}>
       <LivePresenceBridge />
-      <CommentToolProvider map={mapInstance} projectId={activeProjectId} me={commentAuthor} members={commentMembers}>
+      <CommentToolProvider
+        map={mapInstance}
+        projectId={activeProjectId}
+        me={commentAuthor}
+        members={commentMembers}
+        membersStatus={isSharedProject ? (shareMembers ? 'ready' : 'loading') : undefined}
+      >
         <MapView
           onMapReady={onMapReady}
           onMapLoadStatusChange={onMapLoadStatusChange}
