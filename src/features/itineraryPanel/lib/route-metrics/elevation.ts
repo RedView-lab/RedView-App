@@ -167,41 +167,6 @@ export function computeAscentDescentFromElevations(
   return { ascent, descent };
 }
 
-export function interpolateMissingElevations(elevations: Array<number | null>): number[] | null {
-  const knownIndices = elevations.flatMap((value, index) =>
-    value != null && Number.isFinite(value) ? [index] : [],
-  );
-  if (knownIndices.length < 2) return null;
-
-  const filled = elevations.slice();
-  const firstKnown = knownIndices[0];
-  const lastKnown = knownIndices[knownIndices.length - 1];
-
-  for (let i = 0; i < firstKnown; i++) {
-    filled[i] = filled[firstKnown];
-  }
-  for (let i = lastKnown + 1; i < filled.length; i++) {
-    filled[i] = filled[lastKnown];
-  }
-
-  for (let i = 0; i < knownIndices.length - 1; i++) {
-    const startIndex = knownIndices[i];
-    const endIndex = knownIndices[i + 1];
-    const startValue = filled[startIndex] as number;
-    const endValue = filled[endIndex] as number;
-    const span = endIndex - startIndex;
-    for (let j = startIndex + 1; j < endIndex; j++) {
-      const t = (j - startIndex) / span;
-      filled[j] = startValue + (endValue - startValue) * t;
-    }
-  }
-
-  if (filled.some((value) => value == null || !Number.isFinite(value))) {
-    return null;
-  }
-  return filled as number[];
-}
-
 export function smoothElevations(
   rows: Array<{ ele: number }>,
   windowSize = 5,

@@ -26,7 +26,8 @@ export function toGeometryRoutePoints(coordinates: [number, number][]): RoutePoi
 }
 
 /**
- * @param elevationOverride profil d'altitude affiné (MNT IGN / Copernicus) :
+ * @param elevationOverride profil d'altitude affiné (MNT IGN / Terrarium,
+ *   échantillonné aux sommets de la géométrie, cf. refineRouteProfileWithIgnAltimetry) :
  *   remplace les altitudes BRouter sans toucher à la géométrie.
  */
 export function buildStoredRoutePointsFromBrouter(
@@ -48,8 +49,9 @@ export function buildStoredRoutePointsFromBrouter(
       : denseGeometryPoints;
   }
 
-  return messageProfile
-    ? enrichGeometryRoutePoints(geometryPoints, messageProfile)
+  const fallbackProfile = elevationOverride && elevationOverride.length >= 2 ? elevationOverride : messageProfile;
+  return fallbackProfile
+    ? enrichGeometryRoutePoints(geometryPoints, fallbackProfile)
     : geometryPoints;
 }
 
@@ -126,6 +128,24 @@ function scaleRouteProfileDistances(points: RoutePoints, targetDistanceM: number
   return points.map((point) => ({
     ...point,
     distanceM: Number.isFinite(point.distanceM) ? (point.distanceM as number) * scale : point.distanceM,
+  }));
+}
+
+/**
+ * Profil des lignes de `messages` BRouter (support de l'audit du tracé, apparié
+ * aux messages ligne à ligne) avec les altitudes / pentes du profil MNT affiné,
+ * échantillonné, lui, à chaque sommet de la géométrie.
+ */
+export function reElevateMessageProfile(
+  messageProfile: ProfilePoint[],
+  elevationProfile: ProfilePoint[],
+): ProfilePoint[] {
+  const totalDistanceM = messageProfile[messageProfile.length - 1]?.distanceM ?? 0;
+  const profileTotalDistanceM = elevationProfile[elevationProfile.length - 1]?.distanceM ?? 0;
+  const scale = totalDistanceM > 0 && profileTotalDistanceM > 0 ? profileTotalDistanceM / totalDistanceM : 1;
+  return messageProfile.map((point) => ({
+    ...point,
+    ...interpolateProfileSample(elevationProfile, point.distanceM * scale),
   }));
 }
 

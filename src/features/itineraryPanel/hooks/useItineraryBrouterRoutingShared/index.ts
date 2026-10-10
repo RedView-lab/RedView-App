@@ -7,6 +7,7 @@ export type {
 export {
   applyBrouterSurfaceToRoutePoints,
   buildStoredRoutePointsFromBrouter,
+  reElevateMessageProfile,
   toGeometryRoutePoints,
   toStoredRoutePoints,
 } from './routePoints';

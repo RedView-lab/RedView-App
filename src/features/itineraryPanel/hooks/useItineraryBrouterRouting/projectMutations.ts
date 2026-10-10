@@ -16,6 +16,7 @@ import {
   getRoutePointTotalDistanceM,
   mergeSurfaceMetrics,
   projectTimelineLocationDistances,
+  reElevateMessageProfile,
   recomputeApproxSurfaceMetrics,
   replaceRouteSegment,
   roundRouteDistanceKm,
@@ -39,11 +40,18 @@ export interface RouteResultTarget {
   inputsSignature?: string;
 }
 
+/**
+ * Profil des `messages` BRouter (audit, repli sans altitudes de géométrie). Le
+ * profil affiné suit les sommets de la géométrie : ses altitudes sont reportées
+ * sur les lignes de messages, jamais l'inverse.
+ */
 function resolveRouteProfile(
   route: BrouterRoute,
   routeProfileOverride?: RouteProfilePoint[] | null,
 ): RouteProfilePoint[] | null {
-  return routeProfileOverride ?? extractRouteProfileFromBrouter(route);
+  const messageProfile = extractRouteProfileFromBrouter(route);
+  if (!routeProfileOverride || routeProfileOverride.length < 2) return messageProfile;
+  return messageProfile ? reElevateMessageProfile(messageProfile, routeProfileOverride) : routeProfileOverride;
 }
 
 /**
