@@ -91,6 +91,9 @@ export class CollabClient implements ProjectCollabLink {
   private readonly history = new UndoHistory();
   private document: ProjectDocument | null = null;
   private bound = false;
+  /** Lots retenus (`holdOutgoing`) et messages de bail émis pendant ce temps. */
+  private outgoingHeld = false;
+  private heldControl: ClientMessage[] = [];
   private readonly documentListeners = new Set<DocumentListener>();
   private readonly historyListeners = new Set<() => void>();
   private readonly stateListeners = new Set<() => void>();
@@ -106,8 +109,12 @@ export class CollabClient implements ProjectCollabLink {
     this.computeGate = new LeaseGate(options.clientId, {
       isOnline: () => this.transport.isOnline(),
       // Un message de bail part après TOUS les lots en attente : la libération
-      // suit toujours le résultat écrit, jamais l'inverse.
+      // suit toujours le résultat écrit, jamais l'inverse (retenu avec eux).
       send: (message) => {
+        if (this.outgoingHeld) {
+          this.heldControl.push(message);
+          return;
+        }
         this.flush(Number.POSITIVE_INFINITY);
         this.transport.send(message);
       },
@@ -199,8 +206,27 @@ export class CollabClient implements ProjectCollabLink {
       this.engine.seal(true);
       return;
     }
+    if (this.outgoingHeld) return;
     for (const message of this.engine.outgoing(limit)) this.transport.send(message);
     if (this.engine.hasUnsent) this.transport.requestFlush();
+  }
+
+  /**
+   * Retient l'envoi des lots de ce client jusqu'à `until` (la session reprend
+   * d'abord les modifications plus anciennes d'autres onglets fermés : elles
+   * doivent arriver au serveur avant celles-ci, sinon elles les écraseraient,
+   * C1-1). L'état visible, l'état du serveur et la présence ne sont pas retenus.
+   */
+  holdOutgoing(until: Promise<unknown>): void {
+    this.outgoingHeld = true;
+    void until.catch(() => undefined).then(() => {
+      this.outgoingHeld = false;
+      const control = this.heldControl;
+      this.heldControl = [];
+      if (!this.transport.isOnline()) return;
+      this.flush(Number.POSITIVE_INFINITY);
+      for (const message of control) this.transport.send(message);
+    });
   }
 
   /**
@@ -208,6 +234,8 @@ export class CollabClient implements ProjectCollabLink {
    * qu'une fois `welcome` reçu (`transport.isOnline()`), qui la rétablit.
    */
   disconnected(retrying: boolean): void {
+    // Messages de bail d'une connexion perdue : le bail est rendu par la salle.
+    this.heldControl = [];
     this.engine.disconnected();
     this.computeGate.connectionChanged(false);
     // Un refus reste affiché : la fermeture qui le suit ne le remplace pas.

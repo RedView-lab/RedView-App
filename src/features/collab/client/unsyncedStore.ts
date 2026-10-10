@@ -6,9 +6,9 @@ import type { UnsyncedBatch } from './syncEngine';
  * écrites, gardées sur l'appareil (IndexedDB `redview-collab`) : un onglet
  * fermé hors ligne, ou avant l'écriture du journal, ne les perd pas. Une
  * copie par client (onglet) : la session suivante du même utilisateur sur ce
- * projet l'adopte avec son `clientId`, et le serveur, qui connaît le dernier
- * lot appliqué de chaque client (`welcome.clientSeq`), n'en applique jamais
- * un deux fois.
+ * projet les adopte toutes, chacune avec son `clientId` (session.ts), et le
+ * serveur, qui connaît le dernier lot appliqué de chaque client
+ * (`welcome.clientSeq`), n'en applique jamais un deux fois.
  *
  * Un verrou Web Locks par client, tenu toute la session : une copie dont le
  * verrou est libre appartient à un onglet fermé (ou à une session terminée)
@@ -107,27 +107,36 @@ export function holdClientLock(clientId: string): Promise<(() => void) | null> {
   });
 }
 
+export interface AdoptedUnsynced {
+  record: UnsyncedRecord;
+  release: () => void;
+}
+
 /**
- * Copie laissée par un onglet fermé (le plus ancien d'abord) pour ce projet
- * et cet utilisateur, verrouillée pour cette session ; les copies trop
- * vieilles, vides ou d'un autre format de lots sont supprimées au passage.
+ * TOUTES les copies laissées par des onglets fermés pour ce projet et cet
+ * utilisateur, chacune verrouillée pour cette session, la plus ancienne
+ * d'abord ; les copies trop vieilles, vides ou d'un autre format de lots sont
+ * supprimées au passage. Les reprendre toutes d'un coup (et non une par
+ * session) : une copie laissée en attente serait rejouée des jours plus tard
+ * par-dessus des modifications plus récentes (C1-1).
  */
-export async function adoptUnsynced(
-  projectId: string,
-  userId: string,
-): Promise<{ record: UnsyncedRecord; release: () => void } | null> {
+export async function adoptAllUnsynced(projectId: string, userId: string): Promise<AdoptedUnsynced[]> {
   const records = (await listUnsynced(projectId))
     .filter((record) => record.userId === userId)
     .sort((a, b) => a.savedAt - b.savedAt);
+  const adopted: AdoptedUnsynced[] = [];
   for (const record of records) {
     const release = await holdClientLock(record.clientId);
     if (!release) continue;
     const usable = BATCH_FORMAT_PROTOCOLS.includes(record.protocol)
       && record.batches.length > 0
       && Date.now() - record.savedAt <= MAX_AGE_MS;
-    if (usable) return { record, release };
+    if (usable) {
+      adopted.push({ record, release });
+      continue;
+    }
     await deleteUnsynced(record.clientId).catch(() => undefined);
     release();
   }
-  return null;
+  return adopted;
 }

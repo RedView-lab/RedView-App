@@ -124,6 +124,11 @@ export class SyncEngine {
     return this.pending.filter((batch) => !batch.localOnly).length + (this.queued.length > 0 ? 1 : 0);
   }
 
+  /** Tous les lots de ce client sont écrits par le serveur (acquittés ET durables). */
+  get fullySynced(): boolean {
+    return this.unsyncedCount === 0 && this.undurable.length === 0;
+  }
+
   /** Des lots attendent encore d'être envoyés sur la connexion courante. */
   get hasUnsent(): boolean {
     return this.queued.length > 0 || this.pending.some((batch) => batch.clientSeq > this.sentUpTo && !batch.localOnly);

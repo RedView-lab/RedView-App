@@ -1,22 +1,28 @@
 import { PROTOCOL_VERSION } from '../protocol';
 import { CollabConnection, type CollabConnectionOptions } from './connection';
 import type { CollabClient } from './collabClient';
+import { UnsyncedCopyDrain, type CopyDrainOptions } from './copyDrain';
 import {
-  adoptUnsynced,
+  adoptAllUnsynced,
   deleteUnsynced,
   holdClientLock,
   unsyncedPersistenceSupported,
   writeUnsynced,
+  type AdoptedUnsynced,
 } from './unsyncedStore';
 
 /**
  * Session de co-édition d'un projet dans cet onglet : la connexion (et son
  * client) plus la copie sur l'appareil des modifications que le serveur n'a
- * peut-être pas encore écrites (unsyncedStore.ts). Au démarrage, la copie
- * laissée par un onglet fermé est adoptée (même client, lots renvoyés) ;
- * ensuite chaque changement est réécrit après une courte attente, tout de
- * suite quand l'onglet passe en arrière-plan ou se ferme, et la copie est
- * supprimée quand le serveur a tout écrit.
+ * peut-être pas encore écrites (unsyncedStore.ts). Au démarrage, toutes les
+ * copies laissées par des onglets fermés sont reprises : la plus récente
+ * devient celle de la session (même client, lots renvoyés), les plus
+ * anciennes sont renvoyées chacune par sa propre connexion (copyDrain.ts),
+ * et les lots de la session attendent qu'elles soient écrites — l'ordre des
+ * modifications est gardé, la plus récente l'emporte (C1-1). Ensuite chaque
+ * changement est réécrit après une courte attente, tout de suite quand
+ * l'onglet passe en arrière-plan ou se ferme, et la copie est supprimée quand
+ * le serveur a tout écrit.
  */
 
 export interface CollabSessionOptions extends Omit<CollabConnectionOptions, 'clientId' | 'onUnsyncedChange'> {
@@ -25,6 +31,12 @@ export interface CollabSessionOptions extends Omit<CollabConnectionOptions, 'cli
 }
 
 const WRITE_DELAY_MS = 250;
+/**
+ * Une fois la session en ligne, ses lots partent au plus tard après ce délai,
+ * même si une copie plus ancienne n'est pas encore écrite (serveur qui la
+ * refuse sans fermer, connexion de reprise bloquée).
+ */
+const DRAIN_HOLD_MAX_MS = 30_000;
 
 export class CollabSession {
   readonly connection: CollabConnection;
@@ -38,6 +50,9 @@ export class CollabSession {
   private persistedSignature = '';
   private discarded = false;
   private stopped = false;
+  /** Reprise des copies plus anciennes (null : aucune) et celle en cours. */
+  private drained: Promise<void> | null = null;
+  private drain: UnsyncedCopyDrain | null = null;
   private readonly onPageHide = () => this.persistNow();
 
   private constructor(options: CollabSessionOptions, clientId: string, releaseLock: (() => void) | null) {
@@ -55,17 +70,22 @@ export class CollabSession {
     }
   }
 
-  /** Crée la session : copie d'un onglet fermé adoptée, sinon nouveau client (verrouillé). */
+  /**
+   * Crée la session : la plus récente des copies d'onglets fermés adoptée
+   * (les plus anciennes renvoyées avant ses lots), sinon nouveau client (verrouillé).
+   */
   static async start(options: CollabSessionOptions): Promise<CollabSession> {
     if (!unsyncedPersistenceSupported()) return new CollabSession(options, globalThis.crypto.randomUUID(), null);
-    const adopted = await adoptUnsynced(options.projectId, options.userId).catch((error: unknown) => {
+    const adopted = await adoptAllUnsynced(options.projectId, options.userId).catch((error: unknown) => {
       console.warn('[collab] modifications gardées sur l’appareil illisibles', error);
-      return null;
+      return [];
     });
-    if (adopted) {
-      const session = new CollabSession(options, adopted.record.clientId, adopted.release);
-      session.connection.client.engine.restoreUnsynced(adopted.record.batches, adopted.record.nextClientSeq);
+    const newest = adopted.pop();
+    if (newest) {
+      const session = new CollabSession(options, newest.record.clientId, newest.release);
+      session.connection.client.engine.restoreUnsynced(newest.record.batches, newest.record.nextClientSeq);
       session.persistedSignature = session.connection.client.engine.unsyncedSignature();
+      if (adopted.length > 0) session.drainOlderCopies(options, adopted);
       return session;
     }
     const clientId = globalThis.crypto.randomUUID();
@@ -102,9 +122,52 @@ export class CollabSession {
       document.removeEventListener('visibilitychange', this.onPageHide);
     }
     this.connection.stop();
+    await this.drain?.stop();
+    await this.drained;
     await this.writes;
     this.releaseLock?.();
     this.releaseLock = null;
+  }
+
+  /**
+   * Copies plus anciennes : renvoyées une à une (la plus ancienne d'abord),
+   * pendant que les lots de la session attendent. Session fermée avant la
+   * fin : celles qui restent gardent leurs lots sur l'appareil.
+   */
+  private drainOlderCopies(options: CollabSessionOptions, copies: AdoptedUnsynced[]): void {
+    const { userId: _userId, ...connectionOptions } = options;
+    const drainOptions: CopyDrainOptions = connectionOptions;
+    this.drained = (async () => {
+      for (const copy of copies) {
+        if (this.stopped) {
+          copy.release();
+          continue;
+        }
+        const drain = new UnsyncedCopyDrain(drainOptions, copy);
+        this.drain = drain;
+        await drain.done;
+        this.drain = null;
+      }
+    })();
+    this.client.holdOutgoing(Promise.race([this.drained, this.holdDeadline()]));
+  }
+
+  /** Résolue DRAIN_HOLD_MAX_MS après la première mise en ligne de la session. */
+  private holdDeadline(): Promise<void> {
+    return new Promise((resolve) => {
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      const arm = () => {
+        if (timer || this.client.getState().status !== 'online') return;
+        unsubscribe();
+        timer = setTimeout(resolve, DRAIN_HOLD_MAX_MS);
+      };
+      const unsubscribe = this.client.subscribeState(arm);
+      arm();
+      void this.drained?.then(() => {
+        unsubscribe();
+        if (timer) clearTimeout(timer);
+      });
+    });
   }
 
   private schedulePersist(): void {
