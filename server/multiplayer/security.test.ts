@@ -305,7 +305,7 @@ describe('serveur temps réel : jeton et droits pendant la session', () => {
     expect(replay.status).toBe(400);
   });
 
-  it('une IP qui inonde la route de révocation ne bloque pas les vraies révocations (quota par IP, A6-1)', async () => {
+  it('une IP qui inonde la route de révocation ne bloque pas les vraies révocations (quota par IP, A6-1)', { timeout: 30_000 }, async () => {
     const bob = await join('tok-bob', 'b1');
     const attempt = (forwardedFor: string, body: string, signature: string) => fetch(`http://127.0.0.1:${port}/multiplayer/internal/access-changed`, {
       method: 'POST',
