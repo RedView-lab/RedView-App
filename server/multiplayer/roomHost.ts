@@ -5,6 +5,7 @@ import { getHeapStatistics } from 'node:v8';
 import type { ProjectDocument } from '../../src/features/itineraryPanel/lib/project/layers.ts';
 import { referencedRouteBlobs } from '../../src/features/collab/model/diff.ts';
 import { materializeJson } from '../../src/features/collab/model/materialize.ts';
+import { ROOT_OBJECT_ID } from '../../src/features/collab/model/paths.ts';
 import { deserializeCheckedStore, type ClientMessage, type SequencedBatch } from '../../src/features/collab/protocol.ts';
 import { Room, type JoinRequest, type RoomPeer } from '../../src/features/collab/room/room.ts';
 import { RoomState } from '../../src/features/collab/room/roomState.ts';
@@ -88,6 +89,16 @@ const MIN_CATCH_UP_BYTES = 64 * 1024;
 const ROOM_LOAD_HEAP_RATIO = 0.7;
 
 const backoff = (failures: number, minMs: number, maxMs: number) => Math.min(maxMs, minMs * 2 ** Math.max(0, failures - 1));
+/** Longueur de l'attribut `projects.name` (setup-appwrite-schema.mjs) : un nom plus long ferait échouer le point de sauvegarde. */
+const PROJECT_NAME_MAX_CHARS = 255;
+
+/** Nom du document (propriété `name` de la racine), tel que la ligne `projects` peut le garder. */
+function documentName(store: RoomState['store']): string | null {
+  const name = store.get(ROOT_OBJECT_ID)?.props.get('name');
+  if (typeof name !== 'string') return null;
+  const trimmed = name.trim();
+  return trimmed ? Array.from(trimmed).slice(0, PROJECT_NAME_MAX_CHARS).join('') : null;
+}
 
 export class HostedRoom {
   readonly projectId: string;
@@ -357,7 +368,7 @@ export class HostedRoom {
       // un projet supprimé entre-temps n'est pas un écart.
       const shadow = shadowDigest ? await this.shadowValidate(seq, shadowDigest) : null;
       try {
-        await this.host.options.storage.saveCheckpoint(this.projectId, { seq, checkpointJson, documentJson });
+        await this.host.options.storage.saveCheckpoint(this.projectId, { seq, checkpointJson, documentJson, name: documentName(state.store) });
       } catch (error) {
         if (error instanceof ProjectNotFoundError) {
           this.projectDeleted('point de sauvegarde');

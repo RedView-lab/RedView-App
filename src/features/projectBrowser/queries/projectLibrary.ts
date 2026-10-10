@@ -17,6 +17,7 @@ import {
   renameProjectFolder,
   type ProjectBrowserSnapshot,
 } from '@/shared/services/projects';
+import { isSharedProject } from '@/shared/services/projects/liveSessions';
 
 import { duplicateProjectWithAssets } from '../lib/projects/duplicateProject';
 import { importProjectFiles } from '../lib/projects/importProjects';
@@ -119,7 +120,12 @@ export function useRenameProject(userId: string | null) {
   const cache = useLibraryCache(userId);
   return useMutation({
     mutationKey: projectLibraryKeys.mutation('rename-project'),
-    mutationFn: ({ id, name }: { id: string; name: string }) => renameProject(id, name),
+    // Projet partagé : par sa salle (le serveur temps réel écrit le document et reporte le nom dans la ligne, D3-2).
+    mutationFn: async ({ id, name }: { id: string; name: string }) => {
+      if (!isSharedProject(id)) return renameProject(id, name);
+      const { renameSharedProject } = await import('@/features/collab/hooks/useCollabSession');
+      await renameSharedProject(id, name.trim());
+    },
     onSuccess: (_result, { id, name }) => cache.update((snapshot) => patchProject(snapshot, id, { name })),
     onError: relistOnError(cache),
     meta: { errorMessage: 'Échec du renommage.' },

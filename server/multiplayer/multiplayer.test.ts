@@ -14,6 +14,7 @@ import type { ProjectDocument } from '../../src/features/itineraryPanel/lib/proj
 import type { Itinerary } from '../../src/features/itineraryPanel/types/index.ts';
 import { applyCommentAction, type CommentAction } from '../../src/features/comments/lib/commentActions.ts';
 import { CollabConnection } from '../../src/features/collab/client/connection.ts';
+import { renameInRoom } from '../../src/features/collab/client/renameInRoom.ts';
 import { PROTOCOL_VERSION, socketProtocols, type MotionCamera, type MotionViewport } from '../../src/features/collab/protocol.ts';
 import type { MotionEvent } from '../../src/features/collab/realtime.ts';
 import { sampleDocument } from '../../src/features/collab/sim/fixtures.ts';
@@ -278,6 +279,19 @@ describe('serveur temps réel', () => {
     await waitFor(() => itinerary(b, 'it-1').name === 'Alice' && itinerary(a, 'it-2').color === '#3d8bff', 'convergence');
     expect(json(a)).toBe(json(b));
     await waitFor(() => a.client.getState().peers.length === 2, 'présence');
+  });
+
+  it('renommer depuis le gestionnaire de projets (hors éditeur) passe par la salle : tous les éditeurs voient le nom (D3-2)', async () => {
+    const a = connect('alice', sampleDocument(200));
+    await waitFor(() => a.client.getState().ready, 'a prêt');
+    await renameInRoom({
+      url: `ws://127.0.0.1:${port}/multiplayer`,
+      projectId: 'local-test',
+      getToken: async () => 'dev:bob',
+      WebSocketImpl: WebSocket as unknown as typeof globalThis.WebSocket,
+      name: 'BikingMan 2026',
+    });
+    await waitFor(() => a.client.getDocument().name === 'BikingMan 2026', 'nom chez les autres éditeurs');
   });
 
   it('commentaires : fil et réponse croisés, écriture sur le message d’un autre refusée', async () => {

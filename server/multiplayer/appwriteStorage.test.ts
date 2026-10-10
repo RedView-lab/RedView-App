@@ -323,6 +323,17 @@ describe('stockage Appwrite de la salle', () => {
     await reader.shutdown();
   });
 
+  it('projet renommé dans la salle : le nom de la ligne (liste des projets) suit au point de sauvegarde (D3-2)', async () => {
+    const host = newHost({ checkpointBatches: 1 });
+    const room = (await host.open(PROJECT))!;
+    const { handle } = join(room, 'a');
+    const prev = room.room.state.document();
+    const { ops, blobs } = diffDocument(room.room.state.store, prev, { ...prev, name: 'BikingMan 2026' } as ProjectDocument);
+    room.handle(handle, { type: 'batch', clientSeq: 1, ops, blobs: Object.fromEntries(blobs) });
+    await waitFor(() => fake.collections.get('projects')!.get(PROJECT)!.name === 'BikingMan 2026', 'nom de la ligne');
+    await host.shutdown();
+  });
+
   it('document réécrit hors de la salle (ancien client) : le point de sauvegarde et le journal font foi', async () => {
     const host = newHost();
     const room = (await host.open(PROJECT))!;

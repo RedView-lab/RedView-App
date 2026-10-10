@@ -346,7 +346,7 @@ export function createAppwriteStorage(options: AppwriteStorageOptions): RoomStor
       }
     },
 
-    async saveCheckpoint(projectId: string, { seq, checkpointJson, documentJson }: CheckpointWrite): Promise<void> {
+    async saveCheckpoint(projectId: string, { seq, checkpointJson, documentJson, name }: CheckpointWrite): Promise<void> {
       const permissions = await filePermissions(projectId);
       const documentGzip = await gzipAsync(documentJson);
       const inline = `${GZ_PREFIX}${documentGzip.toString('base64')}`;
@@ -365,6 +365,8 @@ export function createAppwriteStorage(options: AppwriteStorageOptions): RoomStor
           data,
           size_bytes: Buffer.byteLength(documentJson, 'utf8'),
           collab: JSON.stringify(meta),
+          // Liste des projets et titre de l'onglet : le nom renommé dans l'éditeur (D3-2).
+          ...(name ? { name } : {}),
         });
       } catch (error) {
         await Promise.allSettled(uploads.map((fileId) => storage.deleteFile(PAYLOADS_BUCKET_ID, fileId)));

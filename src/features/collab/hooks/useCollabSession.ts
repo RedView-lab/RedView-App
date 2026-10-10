@@ -92,6 +92,16 @@ async function sessionToken({ fresh = false }: { fresh?: boolean } = {}): Promis
   throw new Error('session Appwrite requise pour la co-édition');
 }
 
+/**
+ * Renomme un projet partagé depuis le gestionnaire de projets : par sa salle
+ * (le serveur temps réel écrit le document et reporte le nom dans la ligne),
+ * jamais par la seule ligne, que la salle aurait remise à l'ancien nom (D3-2).
+ */
+export async function renameSharedProject(projectId: string, name: string): Promise<void> {
+  const { renameInRoom } = await import('../client/renameInRoom');
+  await renameInRoom({ url: multiplayerSocketUrl(), projectId, getToken: sessionToken, name });
+}
+
 export interface CollabSessionHandle {
   /** Contrat du ProjectStore ; null tant que la session n'est pas créée. */
   link: ProjectCollabLink | null;

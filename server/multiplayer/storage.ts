@@ -32,6 +32,11 @@ export interface CheckpointWrite {
   checkpointJson: string;
   /** JSON du document matérialisé (`projects.data`), au format de l'application. */
   documentJson: string;
+  /**
+   * Nom du document : reporté dans `projects.name` (liste des projets, titre),
+   * qu'aucun client n'écrit pour un projet partagé (D3-2). null : inchangé.
+   */
+  name?: string | null;
 }
 
 /**
