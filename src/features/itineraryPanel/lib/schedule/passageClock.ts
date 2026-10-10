@@ -81,6 +81,22 @@ export function departureTimeZone(itinerary: Itinerary): string | null {
   return at && at.lat != null && at.lon != null ? timeZoneAtSync(at.lon, at.lat) : null;
 }
 
+/** Roulage à vitesse constante sur toute la trace, au format d'une prédiction (pauses seulement). */
+function constantSpeedPrediction(itinerary: Itinerary, speedMs: number): PredictionResult | null {
+  const points = itinerary.gpxRoute?.points;
+  const totalM = points?.[points.length - 1]?.distanceM;
+  if (!totalM || !Number.isFinite(totalM) || totalM <= 0) return null;
+  const totalS = totalM / speedMs;
+  return {
+    total_time_s: totalS,
+    total_distance_m: totalM,
+    points: [
+      { distance_m: 0, elapsed_time_s: 0 },
+      { distance_m: totalM, elapsed_time_s: totalS },
+    ],
+  } as PredictionResult;
+}
+
 export interface RoutePassageClock {
   /** Secondes depuis le départ, pauses planifiées comprises, au mètre `distanceM` d'une trace de `totalM` mètres. */
   scheduledSecondsAt: (distanceM: number, totalM: number) => number;
@@ -113,8 +129,13 @@ export function buildRoutePassageClock(
   now: Date = new Date(),
 ): RoutePassageClock {
   const usable = prediction && prediction.points.length >= 2 ? prediction : null;
-  const stopAnchors = usable ? (buildPauseAwareSchedule(itinerary, usable)?.stopAnchors ?? []) : [];
   const fallbackSpeedMs = isFootDiscipline(itinerary.discipline) ? FALLBACK_FOOT_SPEED_MS : FALLBACK_SPEED_MS;
+  // Sans prédiction (pas encore calculée, en échec), les pauses de la feuille
+  // de route comptent quand même : posées sur un roulage à vitesse de repli.
+  // Les oublier avançait de toute la nuit planifiée les heures de passage de
+  // la fin du parcours (horaires des noms GPS, horodatage FIT, tri auto).
+  const scheduleSource = usable ?? constantSpeedPrediction(itinerary, fallbackSpeedMs);
+  const stopAnchors = scheduleSource ? (buildPauseAwareSchedule(itinerary, scheduleSource)?.stopAnchors ?? []) : [];
   const models = new Map<number, (progressM: number) => number>();
   const { start, hasRealDate } = resolveScheduleStart(itinerary.rhythm, now);
   const timeZone = departureTimeZone(itinerary);
