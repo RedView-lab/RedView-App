@@ -107,6 +107,69 @@ describe('LiDAR tile storage', () => {
     expect(await storage.hasTile(coord)).toBe(true);
   });
 
+  it('keeps the CacheStorage copy readable when an OPFS write fails after creating the file', async () => {
+    // Fichier tenu par la poignée d'accès synchrone d'un worker : `getFileHandle({ create })` crée le fichier, l'écriture échoue.
+    const files = new Map<string, number>();
+    const directory = {
+      getFileHandle: vi.fn(async (name: string, options?: { create?: boolean }) => {
+        if (!files.has(name) && !options?.create) throw new DOMException('absent', 'NotFoundError');
+        if (!files.has(name)) files.set(name, 0);
+        return {
+          createWritable: async () => {
+            throw new DOMException('locked', 'NoModificationAllowedError');
+          },
+          getFile: async () => new Blob([new Uint8Array(files.get(name) ?? 0)]),
+        };
+      }),
+      removeEntry: vi.fn(async (name: string) => {
+        if (!files.delete(name)) throw new DOMException('absent', 'NotFoundError');
+      }),
+    };
+    const cached = new Map<string, Response>();
+    vi.stubGlobal('navigator', {
+      storage: { getDirectory: async () => ({ getDirectoryHandle: async () => directory }), persisted: async () => true },
+    });
+    vi.stubGlobal('caches', {
+      open: async () => ({
+        put: async (key: string, response: Response) => {
+          cached.set(key, response);
+        },
+        match: async (key: string) => cached.get(key)?.clone(),
+        delete: async (key: string) => cached.delete(key),
+      }),
+    });
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const { storage } = await modules();
+    const tile = lasBytes(2048);
+    await storage.saveTile(coord, tile);
+    // Le fichier vide n'est pas laissé dans l'OPFS.
+    expect(files.size).toBe(0);
+    expect((await storage.loadTile(coord))?.byteLength).toBe(tile.byteLength);
+
+    // Un fichier OPFS invalide laissé par une version précédente ne supprime que lui : la copie de CacheStorage reste lue.
+    files.set(tileCoordFileName(coord), 16);
+    expect((await storage.loadTile(coord))?.byteLength).toBe(tile.byteLength);
+    expect(files.size).toBe(0);
+    expect(cached.size).toBe(1);
+  });
+
+  it('fails a download on a full CacheStorage when OPFS is unavailable', async () => {
+    // WebKit sous Windows : pas d'OPFS utilisable, les tuiles vont dans CacheStorage.
+    vi.stubGlobal('navigator', { storage: { persisted: async () => true } });
+    vi.stubGlobal('caches', {
+      open: async () => ({
+        put: async () => {
+          throw new DOMException('quota', 'QuotaExceededError');
+        },
+        match: async () => undefined,
+      }),
+    });
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const { storage } = await modules();
+    await expect(storage.saveTile(coord, lasBytes())).rejects.toBeInstanceOf(storage.StorageFullError);
+    expect(await storage.hasTile(coord)).toBe(false);
+  });
+
   it('asks once per page for persistent storage when tiles are stored', async () => {
     const fake = fakeStorage(new Error('disk error'));
     vi.spyOn(console, 'warn').mockImplementation(() => undefined);

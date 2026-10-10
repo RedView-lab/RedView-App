@@ -132,12 +132,11 @@ export async function saveTile(coord: TileCoord, data: ArrayBuffer): Promise<voi
       await dir.removeEntry(fileName).catch(() => undefined);
       console.warn(`[LiDAR storage] OPFS kept ${written} of ${data.byteLength} bytes for ${fileName}, falling back to CacheStorage.`);
     } catch (err) {
+      // `getFileHandle({ create })` a déjà créé le fichier : vide, il masquerait à la lecture la copie de CacheStorage.
+      await dir.removeEntry(fileName).catch(() => undefined);
       // Le viewer (une autre page) ne lit les tuiles que dans le stockage de
       // l'origine : gardée dans la mémoire de cette page, une tuile qu'il ne peut pas ouvrir est un téléchargement raté.
-      if (isQuotaExceeded(err)) {
-        await dir.removeEntry(fileName).catch(() => undefined);
-        throw new StorageFullError();
-      }
+      if (isQuotaExceeded(err)) throw new StorageFullError();
       console.warn(`[LiDAR storage] OPFS write failed for ${fileName}, falling back to CacheStorage:`, err);
     }
   }
@@ -155,6 +154,7 @@ export async function saveTile(coord: TileCoord, data: ArrayBuffer): Promise<voi
       await cache.put(`/lidar-hd/${fileName}`, response);
       return;
     } catch (err) {
+      if (isQuotaExceeded(err)) throw new StorageFullError();
       console.warn(`[LiDAR storage] CacheStorage put failed for ${fileName}, keeping in memory:`, err);
     }
   }
@@ -164,10 +164,10 @@ export async function saveTile(coord: TileCoord, data: ArrayBuffer): Promise<voi
 }
 
 export async function loadTile(coord: TileCoord): Promise<ArrayBuffer | null> {
-  return loadTileByFileName(tileKey(coord), coord);
+  return loadTileByFileName(tileKey(coord));
 }
 
-export async function loadTileByFileName(fileName: string, coordHint?: TileCoord): Promise<ArrayBuffer | null> {
+export async function loadTileByFileName(fileName: string): Promise<ArrayBuffer | null> {
   // 1. Essayer l'OPFS
   try {
     const dir = await getLidarDir();
@@ -175,12 +175,11 @@ export async function loadTileByFileName(fileName: string, coordHint?: TileCoord
       const fileHandle = await dir.getFileHandle(fileName);
       const file = await fileHandle.getFile();
       const data = await file.arrayBuffer();
-      if (!hasValidLasSignature(data)) {
-        console.warn(`[LiDAR storage] Invalid signature in cached tile ${fileName}; deleting corrupted entry.`);
-        if (coordHint) await deleteTile(coordHint);
-        return null;
-      }
-      return data;
+      if (hasValidLasSignature(data)) return data;
+      // Seul le fichier OPFS est en cause (écriture ratée d'une version précédente) :
+      // la copie de CacheStorage, si elle existe, est lue ensuite.
+      console.warn(`[LiDAR storage] Invalid signature in cached tile ${fileName}; deleting corrupted OPFS entry.`);
+      await removeFileIfPresent(dir, fileName);
     }
   } catch {
     // Absent de l'OPFS ou erreur OPFS
