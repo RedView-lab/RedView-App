@@ -266,6 +266,15 @@ export function openingIntervalsOnDate(
   if (!rules) return null;
 
   const sorted = (day: Date) => [...intervalsForDay(rules, day)].sort((l, r) => l.start - r.start);
+  if (weekdayKnown) {
+    // Passage dans la queue d'une soirée de la veille (bar 18:00-02:00, passage
+    // à 01:00) : c'est elle qui est en cours, pas les horaires du jour — le nom
+    // GPS disait « fermé » alors que le POI est ouvert (cf. statusOnDate).
+    const minuteOfDay = date.getHours() * 60 + date.getMinutes();
+    const yesterday = new Date(date.getFullYear(), date.getMonth(), date.getDate() - 1);
+    const running = sorted(yesterday).filter((it) => it.end > 24 * 60 && minuteOfDay < it.end - 24 * 60);
+    if (running.length > 0) return running.map(({ start, end }) => ({ start, end }));
+  }
   const today = sorted(date);
   if (!weekdayKnown) {
     for (let offset = 1; offset < 7; offset++) {
