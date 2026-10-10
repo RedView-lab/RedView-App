@@ -37,6 +37,17 @@ const SNOW_COVERAGE_PREFIX = 'SNOW_DEPTH__GROUND_OR_WATER_SURFACE___';
 
 const FETCH_TIMEOUT_MS = 25_000;
 
+/**
+ * Domaine de la grille AROME 0,01° (France métropolitaine et alentours) :
+ * une emprise qui ne le touche pas est refusée sans appel amont — chaque
+ * appel consomme le quota de la clé Météo-France, partagé par tous (A5-1).
+ */
+export const AROME_DOMAIN = Object.freeze({ lonMin: -12, latMin: 37.5, lonMax: 16, latMax: 55.4 });
+
+export function intersectsAromeDomain(lonMin: number, latMin: number, lonMax: number, latMax: number): boolean {
+  return lonMax > AROME_DOMAIN.lonMin && lonMin < AROME_DOMAIN.lonMax && latMax > AROME_DOMAIN.latMin && latMin < AROME_DOMAIN.latMax;
+}
+
 // ────────────────────────────── Aides HTTP ──────────────────────────────
 
 function getToken(): string {
@@ -397,6 +408,10 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   } catch (err) {
     const message = err instanceof BadRequestError ? err.message : 'Invalid bbox';
     return res.status(400).json({ error: message });
+  }
+
+  if (!intersectsAromeDomain(lonMin, latMin, lonMax, latMax)) {
+    return res.status(404).json({ error: 'Outside the AROME domain' });
   }
 
   if (!(process.env.METEOFRANCE_API_KEY ?? '').trim()) {

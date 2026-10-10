@@ -51,6 +51,13 @@ describe('api/meteofrance', () => {
 
   const calls = (part: string) => fetchMock.mock.calls.filter(([url]) => String(url).includes(part));
 
+  it('refuses an area outside the AROME domain without any upstream call (A5-1)', async () => {
+    const handler = await loadHandler();
+    const out = await call(handler, { lonMin: '21.00', latMin: '52.10', lonMax: '21.20', latMax: '52.30' });
+    expect(out.status).toBe(404);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('looks the latest AROME run up once for several grids', async () => {
     const handler = await loadHandler();
     await call(handler, { lonMin: '6.80', latMin: '45.80', lonMax: '6.95', latMax: '45.95' });

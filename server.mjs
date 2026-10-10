@@ -126,6 +126,12 @@ const MAX_BILLING_REQUESTS = 30;
 // Webhook Stripe : Stripe livre en rafales depuis quelques IP (horloges de
 // test, relivraisons) ; un 429 retarderait les e-mails d'abonnement.
 const MAX_STRIPE_WEBHOOK_REQUESTS = 600;
+// Neige (/api/snow-context, /api/meteofrance) : un passage du mode neige fait
+// un appel de chaque. Chaque lieu nouveau coûte des lectures de fichiers
+// départementaux (CPU) et un appel sur la clé Météo-France partagée : quota
+// propre, pour qu'une IP ne puisse ni saturer le processus ni vider le quota
+// amont de tout le monde (A11-1, A5-1).
+const MAX_SNOW_REQUESTS = 20;
 
 function checkRateLimit(req, bucket, max) {
   const ipKey = rateLimitKeyForIp(getClientIp(req));
@@ -273,6 +279,7 @@ const server = http.createServer(async (req, res) => {
       const isPointcloud = apiRoute?.route === 'pointcloud';
       const isBilling = req.method !== 'GET' && (apiRoute?.route.startsWith('billing/') ?? false);
       const isStripeWebhook = apiRoute?.route === 'stripe/webhook';
+      const isSnow = apiRoute?.route === 'snow-context' || apiRoute?.route === 'meteofrance';
       const [bucket, max] = isAuth
         ? ['auth', MAX_AUTH_REQUESTS]
         : isWeather
@@ -283,7 +290,9 @@ const server = http.createServer(async (req, res) => {
               ? ['billing', MAX_BILLING_REQUESTS]
               : isStripeWebhook
                 ? ['stripe-webhook', MAX_STRIPE_WEBHOOK_REQUESTS]
-                : ['general', MAX_API_REQUESTS];
+                : isSnow
+                  ? ['snow', MAX_SNOW_REQUESTS]
+                  : ['general', MAX_API_REQUESTS];
       if (!checkRateLimit(req, bucket, max)) {
         return sendTooManyRequests(res);
       }

@@ -74,32 +74,74 @@ async function fetchWithTimeout(url: string, init: RequestInit = {}, timeoutMs =
   }
 }
 
-/** Petit cache à durée de vie qui partage aussi les promesses en cours. */
+/**
+ * Petit cache à durée de vie qui partage aussi les promesses en cours, borné
+ * en entrées ET en octets (CLAUDE.md : tout cache serveur en mémoire a un
+ * budget en octets ; la taille d'une valeur n'est connue qu'une fois
+ * résolue, mesurée sur son JSON).
+ */
 class TtlCache<T> {
-  private readonly map = new Map<string, { value: Promise<T>; expiresAt: number }>();
+  private readonly map = new Map<string, { value: Promise<T>; expiresAt: number; bytes: number }>();
   private readonly takeOldestKey = createOldestKeyTaker(this.map);
   private readonly ttlMs: number;
   private readonly maxEntries: number;
+  private readonly maxBytes: number;
+  private bytes = 0;
 
-  constructor(ttlMs: number, maxEntries: number) {
+  constructor(ttlMs: number, maxEntries: number, maxBytes: number) {
     this.ttlMs = ttlMs;
     this.maxEntries = maxEntries;
+    this.maxBytes = maxBytes;
+  }
+
+  private drop(key: string): void {
+    const entry = this.map.get(key);
+    if (!entry) return;
+    this.bytes -= entry.bytes;
+    this.map.delete(key);
+  }
+
+  private evictOldest(): boolean {
+    const oldest = this.takeOldestKey();
+    if (oldest === undefined) return false;
+    this.drop(oldest);
+    return true;
   }
 
   get(key: string, load: () => Promise<T>): Promise<T> {
     const hit = this.map.get(key);
     if (hit && hit.expiresAt > Date.now()) return hit.value;
-    while (this.map.size >= this.maxEntries) {
-      const oldest = this.takeOldestKey();
-      if (oldest === undefined) break;
-      this.map.delete(oldest);
-    }
+    if (hit) this.drop(key);
+    while (this.map.size >= this.maxEntries && this.evictOldest());
     const value = load();
-    this.map.set(key, { value, expiresAt: Date.now() + this.ttlMs });
-    // Un échec n'est pas mis en cache.
-    value.catch(() => { if (this.map.get(key)?.value === value) this.map.delete(key); });
+    const entry = { value, expiresAt: Date.now() + this.ttlMs, bytes: 0 };
+    this.map.set(key, entry);
+    value.then(
+      (resolved) => {
+        if (this.map.get(key) !== entry) return;
+        entry.bytes = key.length + (JSON.stringify(resolved ?? null)?.length ?? 0);
+        this.bytes += entry.bytes;
+        if (entry.bytes > this.maxBytes) { this.drop(key); return; }
+        while (this.bytes > this.maxBytes && this.evictOldest());
+      },
+      // Un échec n'est pas mis en cache.
+      () => { if (this.map.get(key) === entry) this.drop(key); },
+    );
     return value;
   }
+}
+
+/**
+ * File d'un seul travail à la fois : la lecture d'un fichier départemental
+ * Météo-France coûte ~1,2 s de CPU dans le processus unique de l'app.
+ */
+function createSerialQueue() {
+  let tail: Promise<unknown> = Promise.resolve();
+  return <T>(task: () => Promise<T>): Promise<T> => {
+    const run = tail.then(task, task);
+    tail = run.catch(() => undefined);
+    return run;
+  };
 }
 
 // ────────────────────────────── SLF IMIS ──────────────────────────────
@@ -109,8 +151,8 @@ const SLF_BASE = 'https://measurement-api.slf.ch/public/api/imis';
 interface SlfStation { code: string; label: string; lon: number; lat: number; elevation: number; type: string }
 interface SlfMeasurement { station_code: string; measure_date: string; HS: number | null }
 
-const slfStationsCache = new TtlCache<SlfStation[]>(24 * HOUR_MS, 1);
-const slfMeasurementsCache = new TtlCache<SlfMeasurement[]>(20 * 60_000, 1);
+const slfStationsCache = new TtlCache<SlfStation[]>(24 * HOUR_MS, 1, 4 * 1024 * 1024);
+const slfMeasurementsCache = new TtlCache<SlfMeasurement[]>(20 * 60_000, 1, 16 * 1024 * 1024);
 
 function nearSwitzerland(lat: number, lon: number, radiusKm: number): boolean {
   const m = radiusKm / 100;
@@ -160,9 +202,29 @@ const GEO_API = 'https://geo.api.gouv.fr/communes';
 
 interface MfStation { id: string; name: string; lat: number; lon: number; alt: number; date: string; hs: number }
 
-const mfFilesCache = new TtlCache<Map<string, string>>(24 * HOUR_MS, 1);
-const mfDeptCache = new TtlCache<MfStation[]>(3 * HOUR_MS, 24);
-const deptLookupCache = new TtlCache<string | null>(30 * 24 * HOUR_MS, 2000);
+// Hôtes autorisés pour les fichiers listés par data.gouv.fr : une métadonnée
+// de jeu de données modifiée ne doit pas faire appeler n'importe quel hôte
+// (interne compris) par notre serveur (A11-2).
+const MF_FILE_HOSTS = new Set(['meteofrance.s3.sbg.io.cloud.ovh.net', 'object.files.data.gouv.fr', 'static.data.gouv.fr']);
+
+/** URL de fichier Météo-France acceptable : https, hôte de la liste, sans identifiants ni port. */
+export function isAllowedMfFileUrl(raw: string): boolean {
+  try {
+    const url = new URL(raw);
+    return url.protocol === 'https:' && !url.username && !url.password && url.port === '' && MF_FILE_HOSTS.has(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
+const mfFilesCache = new TtlCache<Map<string, string>>(24 * HOUR_MS, 1, 1024 * 1024);
+// Toute la France tient dans le cache (~100 fichiers départementaux, quelques
+// Ko de stations chacun) : une IP qui fait tourner ses coordonnées ne peut
+// plus vider le cache et faire relire un fichier à chaque requête (A11-1).
+// Chaque département est relu au plus une fois par durée de vie.
+const mfDeptCache = new TtlCache<MfStation[]>(3 * HOUR_MS, 128, 8 * 1024 * 1024);
+const mfParseQueue = createSerialQueue();
+const deptLookupCache = new TtlCache<string | null>(30 * 24 * HOUR_MS, 2000, 512 * 1024);
 
 /** Code de fichier départemental d'un point (la Corse est « 20 » dans ces fichiers), null hors de France. */
 function departmentAt(lat: number, lon: number): Promise<string | null> {
@@ -185,7 +247,7 @@ function mfLatestFiles(): Promise<Map<string, string>> {
     const files = new Map<string, string>();
     for (const r of json.resources ?? []) {
       const m = /\/H_([0-9AB]{2,3})_latest-[0-9]{4}-[0-9]{4}\.csv\.gz$/.exec(r.url ?? '');
-      if (m && r.url) files.set(m[1], r.url);
+      if (m && r.url && isAllowedMfFileUrl(r.url)) files.set(m[1], r.url);
     }
     if (files.size === 0) throw new Error('no latest hourly file listed');
     return files;
@@ -199,7 +261,7 @@ function mfLatestFiles(): Promise<Map<string, string>> {
  * cessent d'émettre au printemps).
  */
 function mfDepartment(dept: string): Promise<MfStation[]> {
-  return mfDeptCache.get(dept, async () => {
+  return mfDeptCache.get(dept, () => mfParseQueue(async () => {
     const url = (await mfLatestFiles()).get(dept);
     if (!url) return [];
     const res = await fetchWithTimeout(url, {}, 60_000);
@@ -244,7 +306,7 @@ function mfDepartment(dept: string): Promise<MfStation[]> {
     const toMs = (d: string) => Date.UTC(+d.slice(0, 4), +d.slice(4, 6) - 1, +d.slice(6, 8), +d.slice(8, 10));
     const minMs = newest.length === 10 ? toMs(newest) - 48 * HOUR_MS : 0;
     return [...latest.values()].filter((s) => s.date.length === 10 && toMs(s.date) >= minMs);
-  });
+  }));
 }
 
 async function meteoFranceStations(lat: number, lon: number, radiusKm: number): Promise<{ stations: StationOut[]; state: SourceState }> {
@@ -290,7 +352,7 @@ interface BraOut {
   limitSouthM: number | null;
 }
 
-const braCache = new TtlCache<BraOut | null>(3 * HOUR_MS, 64);
+const braCache = new TtlCache<BraOut | null>(3 * HOUR_MS, 64, 1024 * 1024);
 
 function pointInRing(lon: number, lat: number, ring: Array<[number, number]>): boolean {
   let inside = false;
@@ -374,7 +436,7 @@ interface WeatherOut {
   windDirDeg: number[];
 }
 
-const weatherCache = new TtlCache<WeatherOut>(HOUR_MS, 128);
+const weatherCache = new TtlCache<WeatherOut>(HOUR_MS, 128, 24 * 1024 * 1024);
 
 /** Open-Meteo auto-hébergé du VPS (api/_lib/openMeteo.ts), sans autre source. */
 async function openMeteo(pathAndQuery: string): Promise<unknown> {
