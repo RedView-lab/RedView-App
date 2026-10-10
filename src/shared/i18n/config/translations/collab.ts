@@ -74,4 +74,6 @@ export const collabTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'Membre invalide', en: 'Invalid member' },
   { fr: 'Action inconnue', en: 'Unknown action' },
   { fr: 'Impossible de mettre à jour le partage du projet', en: 'Unable to update project sharing' },
+  { fr: 'Ce fil a été supprimé.', en: 'This thread was deleted.' },
+  { fr: 'Ce fil a été supprimé. Votre réponse n’a pas été envoyée :', en: 'This thread was deleted. Your reply was not sent:' },
 ];

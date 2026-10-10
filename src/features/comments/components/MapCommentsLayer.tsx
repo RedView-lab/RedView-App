@@ -20,9 +20,10 @@ import { useCommentZoneLayer, type CommentZoneShape } from '../hooks/useCommentZ
 import { useMapAnchoredCard } from '../hooks/useMapAnchoredCard';
 import { canManageThread } from '../lib/commentActions';
 import { clusterPins } from '../lib/clusters';
+import { orphanedReply, ReplyDrafts } from '../lib/orphanReply';
 import { isThreadUnread } from '../lib/readState';
 import { CommentClusterPin, CommentDraftPin, CommentPin } from './CommentPin';
-import { CommentDraftCard, CommentThreadCard } from './CommentThreadCard';
+import { CommentDraftCard, CommentThreadCard, DeletedThreadCard } from './CommentThreadCard';
 import '../styles/comments.css';
 
 /**
@@ -88,6 +89,19 @@ function MapCommentsLayerInner({ map, tool, overlayInsets }: { map: MapboxMap; t
   const threads = visibleThreads(tool);
   const { openThreadId, hoveredThreadId, draft, me } = tool;
   const reads = tool.view?.reads;
+
+  // Réponse en cours de saisie, par fil : survit à la fermeture de la carte
+  // quand un autre éditeur supprime le fil pendant la saisie (E3-1).
+  const [replyDrafts] = useState(() => new ReplyDrafts());
+  const [orphanReply, setOrphanReply] = useState<{ anchor: ProjectCommentThread['anchor']; text: string } | null>(null);
+  // Fil ouvert au rendu précédent (schéma « ajuster l'état quand une prop change »).
+  const [lastOpenThread, setLastOpenThread] = useState<ProjectCommentThread | null>(null);
+  const openThreadNow = threads.find((thread) => thread.id === openThreadId) ?? null;
+  if (openThreadNow !== lastOpenThread) {
+    setLastOpenThread(openThreadNow);
+    const text = orphanedReply(lastOpenThread, openThreadNow, tool.threads, me.userId, lastOpenThread ? replyDrafts.text(lastOpenThread.id) : undefined);
+    if (lastOpenThread && text) setOrphanReply({ anchor: lastOpenThread.anchor, text });
+  }
 
   // Le fil ouvert et le survolé restent seuls (on voit ce qu'on regarde).
   const clusters = clusterPins(threads
@@ -214,7 +228,11 @@ function MapCommentsLayerInner({ map, tool, overlayInsets }: { map: MapboxMap; t
         ) : null}
         {openThreadData ? (
           <AnchoredCard key={openThreadData.id} map={map} anchor={openThreadData.anchor} overlayInsets={overlayInsets}>
-            <CommentThreadCard tool={tool} thread={openThreadData} now={now} />
+            <CommentThreadCard tool={tool} thread={openThreadData} now={now} replyDraft={{ text: replyDrafts.text(openThreadData.id), binding: replyDrafts.binding(openThreadData.id) }} />
+          </AnchoredCard>
+        ) : orphanReply ? (
+          <AnchoredCard key="deleted-thread" map={map} anchor={orphanReply.anchor} overlayInsets={overlayInsets}>
+            <DeletedThreadCard text={orphanReply.text} onClose={() => setOrphanReply(null)} />
           </AnchoredCard>
         ) : null}
       </div>

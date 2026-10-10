@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 
 import type { ProjectCommentThread } from '@/features/itineraryPanel/types';
 import { useAppI18n } from '@/shared/i18n';
@@ -22,9 +22,38 @@ interface CommentThreadCardProps {
   tool: CommentToolValue;
   thread: ProjectCommentThread;
   now: number;
+  /** Réponse en cours de saisie, gardée hors de la carte (fil supprimé pendant la saisie, E3-1). */
+  replyDraft?: { text: string; binding: MutableRefObject<string> };
 }
 
-export function CommentThreadCard({ tool, thread, now }: CommentThreadCardProps) {
+/**
+ * Fil supprimé par son auteur pendant qu'on y répondait : la carte se fermait
+ * avec le texte saisi, sans un mot. La réponse non envoyée reste affichée et
+ * copiable (E3-1).
+ */
+export function DeletedThreadCard({ text, onClose }: { text: string; onClose(): void }) {
+  const { t } = useAppI18n();
+  const copy = () => {
+    void navigator.clipboard?.writeText(text).then(
+      () => notify.success('Commentaire copié'),
+      () => notify.error('Copie impossible'),
+    );
+  };
+  return (
+    <section className="rv-comment-card" data-rv-comment-card="deleted" aria-label={t('Ce fil a été supprimé.')}>
+      <p className="rv-comment-card__readonly" role="status">{t('Ce fil a été supprimé. Votre réponse n’a pas été envoyée :')}</p>
+      <p className="rv-comment-message__text" data-rv-no-translate="true">{text}</p>
+      <footer className="rv-comment-card__reply">
+        <div className="rv-comment-composer__actions">
+          <button type="button" className="rv-comment-text-button" onClick={onClose}>{t('Fermer')}</button>
+          <button type="button" className="rv-comment-text-button rv-comment-text-button--primary" onClick={copy}>{t('Copier le texte')}</button>
+        </div>
+      </footer>
+    </section>
+  );
+}
+
+export function CommentThreadCard({ tool, thread, now, replyDraft }: CommentThreadCardProps) {
   const { t } = useAppI18n();
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -153,6 +182,8 @@ export function CommentThreadCard({ tool, thread, now }: CommentThreadCardProps)
           <CommentComposer
             placeholder={t('Répondre')}
             candidates={candidates}
+            initialText={replyDraft?.text ?? ''}
+            textRef={replyDraft?.binding}
             onSubmit={(input) => tool.reply(thread.id, input)}
             onCancel={tool.closeThread}
           />
