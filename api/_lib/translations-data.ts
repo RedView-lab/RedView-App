@@ -417,6 +417,30 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Something went wrong."
   },
   {
+    "fr": "Fermer",
+    "en": "Close"
+  },
+  {
+    "fr": "Supprimer",
+    "en": "Delete"
+  },
+  {
+    "fr": "Télécharger",
+    "en": "Download"
+  },
+  {
+    "fr": "Recharger",
+    "en": "Reload"
+  },
+  {
+    "fr": "Enregistrement…",
+    "en": "Saving…"
+  },
+  {
+    "fr": "Terminé",
+    "en": "Done"
+  },
+  {
     "fr": "Projets",
     "en": "Projects"
   },
@@ -641,12 +665,12 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Root / Projects"
   },
   {
-    "fr": "Nouveau nom du projet",
-    "en": "New project name"
+    "fr": "Nom du projet",
+    "en": "Project name"
   },
   {
-    "fr": "Nouveau nom du dossier",
-    "en": "New folder name"
+    "fr": "Nom du dossier",
+    "en": "Folder name"
   },
   {
     "fr": "Actions du projet",
@@ -985,12 +1009,24 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Your subscription renews automatically on {{date}}."
   },
   {
-    "fr": "Supprimer définitivement « {{name}} » ?",
-    "en": "Permanently delete “{{name}}”?"
+    "fr": "Supprimer « {{name}} » ?",
+    "en": "Delete “{{name}}”?"
   },
   {
-    "fr": "Supprimer définitivement le dossier « {{name}} » ? Il doit être vide avant suppression.",
-    "en": "Permanently delete the folder “{{name}}”? It must be empty before deletion."
+    "fr": "Le projet et ses itinéraires seront supprimés définitivement.",
+    "en": "The project and its itineraries will be permanently deleted."
+  },
+  {
+    "fr": "Le projet et ses itinéraires seront supprimés définitivement, pour vous comme pour les personnes avec qui vous l’avez partagé.",
+    "en": "The project and its itineraries will be permanently deleted, for you and for the people you shared it with."
+  },
+  {
+    "fr": "Supprimer le dossier « {{name}} » ?",
+    "en": "Delete the folder “{{name}}”?"
+  },
+  {
+    "fr": "Les projets et les dossiers qu’il contient ne sont pas supprimés : ils remontent à la racine.",
+    "en": "The projects and folders inside it are not deleted: they move up to the root."
   },
   {
     "fr": "Ouvrir {{name}}",
@@ -1049,8 +1085,20 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "unsynced local copy"
   },
   {
-    "fr": "Des modifications ne sont pas synchronisées avec le cloud : {{names}}. OK : se déconnecter quand même (ces modifications seront perdues). Annuler : rester connecté pour réessayer plus tard ou exporter les projets.",
-    "en": "Some changes are not synced to the cloud: {{names}}. OK: sign out anyway (these changes will be lost). Cancel: stay signed in to retry later or export the projects."
+    "fr": "Des modifications ne sont pas dans le cloud",
+    "en": "Some changes are not in the cloud"
+  },
+  {
+    "fr": "Projets concernés : {{names}}. Si vous vous déconnectez maintenant, ces modifications seront perdues. Restez connecté pour réessayer plus tard ou exporter ces projets.",
+    "en": "Affected projects: {{names}}. If you sign out now, these changes will be lost. Stay signed in to retry later or to export these projects."
+  },
+  {
+    "fr": "Se déconnecter quand même",
+    "en": "Sign out anyway"
+  },
+  {
+    "fr": "Rester connecté",
+    "en": "Stay signed in"
   },
   {
     "fr": "Des modifications ne sont pas synchronisées.",
@@ -1913,18 +1961,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Basemaps"
   },
   {
-    "fr": "Standard (clair)",
-    "en": "Standard (light)"
-  },
-  {
-    "fr": "Standard (sombre)",
-    "en": "Standard (dark)"
-  },
-  {
-    "fr": "Satellite",
-    "en": "Satellite"
-  },
-  {
     "fr": "Qualité 3D",
     "en": "3D quality"
   },
@@ -1953,30 +1989,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Labels"
   },
   {
-    "fr": "Libellés POI",
-    "en": "POI Labels"
-  },
-  {
-    "fr": "Villes",
-    "en": "Cities"
-  },
-  {
-    "fr": "États / Régions",
-    "en": "States / Regions"
-  },
-  {
-    "fr": "Parcs Naturels",
-    "en": "Natural parks"
-  },
-  {
-    "fr": "Plans d’eau",
-    "en": "Water bodies"
-  },
-  {
-    "fr": "Plans d'eau",
-    "en": "Water bodies"
-  },
-  {
     "fr": "Courbes de niveau",
     "en": "Contour lines"
   },
@@ -1999,14 +2011,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Développer",
     "en": "Expand"
-  },
-  {
-    "fr": "Topographique",
-    "en": "Topographic"
-  },
-  {
-    "fr": "Itinéraires",
-    "en": "Routes"
   },
   {
     "fr": "Défaut",
@@ -2397,16 +2401,8 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Cities & places"
   },
   {
-    "fr": "Parcs Naturels",
-    "en": "Natural parks"
-  },
-  {
     "fr": "Frontières",
     "en": "Borders"
-  },
-  {
-    "fr": "Plans d'eau",
-    "en": "Water bodies"
   },
   {
     "fr": "Tout masquer",
@@ -2657,10 +2653,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Turns"
   },
   {
-    "fr": "Villes",
-    "en": "Cities"
-  },
-  {
     "fr": "Appliquer à tout les itinéraires",
     "en": "Apply to all routes"
   },
@@ -2853,10 +2845,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Finish here"
   },
   {
-    "fr": "Nouveau projet",
-    "en": "New project"
-  },
-  {
     "fr": "Nom du projet",
     "en": "Project name"
   },
@@ -2873,10 +2861,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Just now"
   },
   {
-    "fr": "Enregistrement…",
-    "en": "Saving…"
-  },
-  {
     "fr": "Enregistré",
     "en": "Saved"
   },
@@ -2889,8 +2873,20 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Sync pending"
   },
   {
-    "fr": "Ce projet a été modifié sur un autre appareil. Remplacer la version du cloud par la vôtre ? (Annuler : vos modifications restent sur cet appareil.)",
-    "en": "This project was modified on another device. Replace the cloud version with yours? (Cancel: your changes stay on this device.)"
+    "fr": "Ce projet a été modifié sur un autre appareil",
+    "en": "This project was modified on another device"
+  },
+  {
+    "fr": "Remplacer la version du cloud par la vôtre ? Sinon, vos modifications restent sur cet appareil.",
+    "en": "Replace the cloud version with yours? Otherwise, your changes stay on this device."
+  },
+  {
+    "fr": "Remplacer la version du cloud",
+    "en": "Replace the cloud version"
+  },
+  {
+    "fr": "Garder sur cet appareil",
+    "en": "Keep on this device"
   },
   {
     "fr": "Enregistrer le projet (Ctrl+S)",
@@ -2907,10 +2903,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Paramètres du projet",
     "en": "Project settings"
-  },
-  {
-    "fr": "Télécharger",
-    "en": "Download"
   },
   {
     "fr": "Partager",
@@ -2935,10 +2927,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Redimensionner le panneau",
     "en": "Resize panel"
-  },
-  {
-    "fr": "Itinéraires",
-    "en": "Routes"
   },
   {
     "fr": "Renommer {{name}}",
@@ -2971,10 +2959,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Route",
     "en": "Road"
-  },
-  {
-    "fr": "Cyclisme sur route",
-    "en": "Road cycling"
   },
   {
     "fr": "Marche",
@@ -3025,10 +3009,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Profile 10"
   },
   {
-    "fr": "Profil {{number}}",
-    "en": "Profile {{number}}"
-  },
-  {
     "fr": "Réinitialiser",
     "en": "Reset"
   },
@@ -3043,14 +3023,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Personnalisé",
     "en": "Custom"
-  },
-  {
-    "fr": "Rechercher un lieu",
-    "en": "Search for a place"
-  },
-  {
-    "fr": "Itinéraire {{index}}",
-    "en": "Route {{index}}"
   },
   {
     "fr": "Variante 2",
@@ -3189,10 +3161,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Set a departure date."
   },
   {
-    "fr": "Point de passage",
-    "en": "Waypoint"
-  },
-  {
     "fr": "Pause",
     "en": "Pause"
   },
@@ -3259,10 +3227,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Puissance",
     "en": "Power"
-  },
-  {
-    "fr": "Puissance moyenne",
-    "en": "Average power"
   },
   {
     "fr": "Inclinaison (°)",
@@ -3367,10 +3331,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Favori",
     "en": "Favorite"
-  },
-  {
-    "fr": "Supprimer",
-    "en": "Delete"
   },
   {
     "fr": "Trace supprimée",
@@ -3565,24 +3525,12 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Toilet"
   },
   {
-    "fr": "Station Service",
-    "en": "Fuel station"
-  },
-  {
-    "fr": "Magasin de vélo",
-    "en": "Bike shop"
-  },
-  {
     "fr": "Erreur de recherche",
     "en": "Search error"
   },
   {
     "fr": "Eau",
     "en": "Water"
-  },
-  {
-    "fr": "Toilettes",
-    "en": "Toilets"
   },
   {
     "fr": "Supermarché",
@@ -3593,24 +3541,8 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Fuel"
   },
   {
-    "fr": "Boulangerie",
-    "en": "Bakery"
-  },
-  {
     "fr": "Fast-food",
     "en": "Fast food"
-  },
-  {
-    "fr": "Café",
-    "en": "Cafe"
-  },
-  {
-    "fr": "Bar",
-    "en": "Bar"
-  },
-  {
-    "fr": "Restaurant",
-    "en": "Restaurant"
   },
   {
     "fr": "Vélo",
@@ -3623,10 +3555,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Refuge",
     "en": "Refuge"
-  },
-  {
-    "fr": "Col",
-    "en": "Pass"
   },
   {
     "fr": "Activez au moins un export avant de lancer le téléchargement.",
@@ -3963,30 +3891,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Aucun résultat",
     "en": "No results"
-  },
-  {
-    "fr": "Fontaines",
-    "en": "Fountains"
-  },
-  {
-    "fr": "Supermarchés",
-    "en": "Supermarkets"
-  },
-  {
-    "fr": "Station Service",
-    "en": "Fuel station"
-  },
-  {
-    "fr": "Magasin de vélo",
-    "en": "Bike shop"
-  },
-  {
-    "fr": "Hôtels",
-    "en": "Hotels"
-  },
-  {
-    "fr": "Refuges",
-    "en": "Refuges"
   },
   {
     "fr": "Durée de pause — {{label}}",
@@ -4409,10 +4313,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Adjust every routing-engine parameter. Everything stays local in your browser; changes apply to the next route calculation."
   },
   {
-    "fr": "Fermer",
-    "en": "Close"
-  },
-  {
     "fr": "Activer Mode Expert",
     "en": "Enable expert mode"
   },
@@ -4763,10 +4663,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Durée totale",
     "en": "Total duration"
-  },
-  {
-    "fr": "Recharger",
-    "en": "Reload"
   },
   {
     "fr": "Recharger : {{list}}",
@@ -5709,8 +5605,12 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Leave project"
   },
   {
-    "fr": "Quitter « {{name}} » ? Vous n’y aurez plus accès.",
-    "en": "Leave “{{name}}”? You will no longer have access to it."
+    "fr": "Quitter « {{name}} » ?",
+    "en": "Leave “{{name}}”?"
+  },
+  {
+    "fr": "Vous n’y aurez plus accès. Son propriétaire pourra vous inviter à nouveau.",
+    "en": "You will no longer have access to it. Its owner can invite you again."
   },
   {
     "fr": "{{email}} peut maintenant modifier ce projet.",
@@ -7089,6 +6989,10 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "POI type"
   },
   {
+    "fr": "Cimetières",
+    "en": "Cemeteries"
+  },
+  {
     "fr": "Durée de pause",
     "en": "Pause duration"
   },
@@ -7415,6 +7319,146 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Valeur attendue entre {{min}} et {{max}} {{unit}}",
     "en": "Expected value between {{min}} and {{max}} {{unit}}"
+  },
+  {
+    "fr": "Nouveau projet",
+    "en": "New project"
+  },
+  {
+    "fr": "Itinéraire {{index}}",
+    "en": "Route {{index}}"
+  },
+  {
+    "fr": "Profil {{number}}",
+    "en": "Profile {{number}}"
+  },
+  {
+    "fr": "Point de passage",
+    "en": "Waypoint"
+  },
+  {
+    "fr": "Rechercher un lieu",
+    "en": "Search for a place"
+  },
+  {
+    "fr": "Puissance moyenne",
+    "en": "Average power"
+  },
+  {
+    "fr": "Cyclisme sur route",
+    "en": "Road cycling"
+  },
+  {
+    "fr": "Fontaines",
+    "en": "Fountains"
+  },
+  {
+    "fr": "Toilettes",
+    "en": "Toilets"
+  },
+  {
+    "fr": "Supermarchés",
+    "en": "Supermarkets"
+  },
+  {
+    "fr": "Station Service",
+    "en": "Fuel station"
+  },
+  {
+    "fr": "Boulangerie",
+    "en": "Bakery"
+  },
+  {
+    "fr": "Café",
+    "en": "Cafe"
+  },
+  {
+    "fr": "Bar",
+    "en": "Bar"
+  },
+  {
+    "fr": "Restaurant",
+    "en": "Restaurant"
+  },
+  {
+    "fr": "Magasin de vélo",
+    "en": "Bike shop"
+  },
+  {
+    "fr": "Hôtels",
+    "en": "Hotels"
+  },
+  {
+    "fr": "Refuges",
+    "en": "Refuges"
+  },
+  {
+    "fr": "Col",
+    "en": "Pass"
+  },
+  {
+    "fr": "Standard (clair)",
+    "en": "Standard (light)"
+  },
+  {
+    "fr": "Standard (sombre)",
+    "en": "Standard (dark)"
+  },
+  {
+    "fr": "Topographique",
+    "en": "Topographic"
+  },
+  {
+    "fr": "Satellite",
+    "en": "Satellite"
+  },
+  {
+    "fr": "Libellés POI",
+    "en": "POI Labels"
+  },
+  {
+    "fr": "Itinéraires",
+    "en": "Routes"
+  },
+  {
+    "fr": "Villes",
+    "en": "Cities"
+  },
+  {
+    "fr": "États / Régions",
+    "en": "States / Regions"
+  },
+  {
+    "fr": "Parcs Naturels",
+    "en": "Natural parks"
+  },
+  {
+    "fr": "Plans d'eau",
+    "en": "Water bodies"
+  },
+  {
+    "fr": "Quasi plat",
+    "en": "Nearly flat"
+  },
+  {
+    "fr": "Roulant",
+    "en": "Rolling"
+  },
+  {
+    "fr": "Soutenu",
+    "en": "Sustained"
+  },
+  {
+    "fr": "Raide",
+    "en": "Steep"
+  },
+  {
+    "fr": "Mur",
+    "en": "Wall"
+  },
+  {
+    "fr": "Extrême",
+    "en": "Extreme"
   },
   {
     "fr": "LMB : Orbite · RMB : Pan · Scroll : Zoom",
@@ -8733,8 +8777,16 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "LiDAR point cloud, WebGL 2 engine (works in every browser)."
   },
   {
-    "fr": "Basculer vers le terrain texturé ?\n\n• Relief LiDAR texturé par l'orthophoto en haute résolution\n• Pas de nuage de points ni d'outils de mesure\n• Le sélecteur « Moteur » ramène au nuage de points.",
-    "en": "Switch to the textured terrain?\n\n• LiDAR relief textured with the high-resolution orthophoto\n• No point cloud and no measuring tools\n• The “Engine” selector brings the point cloud back."
+    "fr": "Basculer vers le terrain texturé ?",
+    "en": "Switch to the textured terrain?"
+  },
+  {
+    "fr": "Relief LiDAR texturé par l’orthophoto en haute résolution, sans nuage de points ni outils de mesure. Le sélecteur « Moteur » ramène au nuage de points.",
+    "en": "LiDAR relief textured with the high-resolution orthophoto, without the point cloud or measuring tools. The “Engine” selector brings the point cloud back."
+  },
+  {
+    "fr": "Basculer",
+    "en": "Switch"
   },
   {
     "fr": "Bascule vers le terrain texturé…",
@@ -9041,30 +9093,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Legend"
   },
   {
-    "fr": "Quasi plat",
-    "en": "Nearly flat"
-  },
-  {
-    "fr": "Roulant",
-    "en": "Rolling"
-  },
-  {
-    "fr": "Soutenu",
-    "en": "Sustained"
-  },
-  {
-    "fr": "Raide",
-    "en": "Steep"
-  },
-  {
-    "fr": "Mur",
-    "en": "Wall"
-  },
-  {
-    "fr": "Extrême",
-    "en": "Extreme"
-  },
-  {
     "fr": "Ombres",
     "en": "Shadows"
   },
@@ -9369,6 +9397,22 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Fountain"
   },
   {
+    "fr": "Cimetière",
+    "en": "Cemetery"
+  },
+  {
+    "fr": "Robinet probable, eau non garantie potable",
+    "en": "Tap likely, water not guaranteed drinkable"
+  },
+  {
+    "fr": "Eau potable signalée",
+    "en": "Drinking water reported"
+  },
+  {
+    "fr": "Eau signalée non potable",
+    "en": "Water reported not drinkable"
+  },
+  {
     "fr": "Boucherie / charcuterie",
     "en": "Butcher / delicatessen"
   },
@@ -9583,10 +9627,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Conservation masse",
     "en": "Mass conservation"
-  },
-  {
-    "fr": "Terminé",
-    "en": "Done"
   },
   {
     "fr": "Chercher aussi les sommets, cols et sites (OpenStreetMap)",

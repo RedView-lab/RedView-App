@@ -1,0 +1,42 @@
+/*
+ * Pop-ins de confirmation et de saisie (AppDialogHost). Carte, en-tête, corps
+ * et boutons : `.rv-dialog` (shared/styles/dialog.css) ; texte et champ :
+ * mêmes valeurs que les pop-ins du compte et du partage.
+ */
+
+/* Le formulaire englobe corps et pied (bouton submit) sans casser la colonne de la carte. */
+.rv-app-dialog__form {
+  display: contents;
+}
+
+.rv-app-dialog__text {
+  margin: 0;
+  font-size: var(--rv-font-size-md);
+  line-height: 1.45;
+  color: var(--rv-text);
+}
+
+/* Valeur de contrôle : md / 600 ; même hauteur et rayon que les boutons. */
+.rv-app-dialog__input {
+  min-width: 0;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: rgb(var(--rv-ink) / 0.06);
+  color: var(--rv-text);
+  font: inherit;
+  font-size: var(--rv-font-size-md);
+  font-weight: 600;
+  outline: none;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.rv-app-dialog__input:hover {
+  background: rgb(var(--rv-ink) / 0.08);
+}
+
+.rv-app-dialog__input:focus {
+  border-color: rgb(var(--rv-ink) / 0.24);
+  background: rgb(var(--rv-ink) / 0.08);
+}

@@ -18,6 +18,7 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { appQueryClient } from './shared/services/queryClient'
 import { trackNavigationImport } from './shared/lib/staleBuild'
 import { AppToaster } from './shared/components/AppToaster/AppToaster'
+import { AppDialogGate } from './shared/components/AppDialog/AppDialogGate'
 import { HealthDataConsentHost } from './shared/components/HealthDataConsent/HealthDataConsentHost'
 import { resolveLegalPage } from './features/legal'
 import './index.css'
@@ -324,6 +325,7 @@ function App() {
       {showNarrowViewportOverlay && <NarrowViewportOverlay onContinue={dismissNarrowViewportOverlay} />}
       <AppToaster />
       <HealthDataConsentHost />
+      <AppDialogGate />
     </QueryClientProvider>
   )
 }

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAppI18n } from '@/shared/i18n';
 import { isProjectCloudError } from '@/shared/services/projects';
 import { useLatestRef } from '@/shared/hooks/useLatestRef';
+import { confirmDialog } from '@/shared/lib/appDialog';
 import { notify } from '@/shared/lib/notify';
 import { useProjectSyncStatus } from '@/shared/hooks/useProjectSyncStatus';
 import type { ItineraryProject, ProjectSaveStatus } from '../../types';
@@ -45,7 +46,12 @@ export function useProjectSave({ projectId, onSaveProject, setProject }: UseProj
         if (
           isProjectCloudError(error)
           && error.kind === 'conflict'
-          && window.confirm(t('Ce projet a été modifié sur un autre appareil. Remplacer la version du cloud par la vôtre ? (Annuler : vos modifications restent sur cet appareil.)'))
+          && await confirmDialog({
+            title: t('Ce projet a été modifié sur un autre appareil'),
+            message: t('Remplacer la version du cloud par la vôtre ? Sinon, vos modifications restent sur cet appareil.'),
+            confirmLabel: t('Remplacer la version du cloud'),
+            cancelLabel: t('Garder sur cet appareil'),
+          })
         ) {
           saved = await onSaveProject({ force: true });
         } else {

@@ -11,6 +11,7 @@ import { REDVIEW_FILE_EXTENSION } from '@/features/redviewFile/lib/format';
 import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
 import { useAppI18n } from '@/shared/i18n';
 import { projectAgeBucket, trackAnalyticsEvent } from '@/shared/lib/analytics';
+import { confirmDialog, promptDialog } from '@/shared/lib/appDialog';
 import type { ProjectFolderSummary, ProjectSummary } from '@/shared/services/projects';
 
 import { useFileDropImport } from '../../hooks/useFileDropImport';
@@ -22,6 +23,7 @@ import { ProjectBrowserDragPreview } from './ProjectBrowserDragPreview';
 import { ProjectCard } from './ProjectCard';
 import { useMultiplayerAvailable } from '@/features/collab/queries/multiplayerHealth';
 
+import { leaveProjectDialog } from './leaveProjectDialog';
 import { ShareProjectDialog } from './ShareProjectDialog';
 
 type MenuState =
@@ -194,34 +196,51 @@ export function ProjectsPanel({
       ];
 
   const requestRenameProject = async (project: ProjectSummary) => {
-    const nextName = window.prompt(t('Nouveau nom du projet'), project.name)?.trim();
+    const nextName = await promptDialog({
+      title: t('Renommer le projet'),
+      label: t('Nom du projet'),
+      initialValue: project.name,
+      confirmLabel: t('Renommer'),
+    });
     if (!nextName || nextName === project.name) return;
     await handleRenameProject(project.id, nextName);
   };
 
   const requestRenameFolder = async (folder: ProjectFolderSummary) => {
-    const nextName = window.prompt(t('Nouveau nom du dossier'), folder.name)?.trim();
+    const nextName = await promptDialog({
+      title: t('Renommer le dossier'),
+      label: t('Nom du dossier'),
+      initialValue: folder.name,
+      confirmLabel: t('Renommer'),
+    });
     if (!nextName || nextName === folder.name) return;
     await handleRenameFolder(folder.id, nextName);
   };
 
   const confirmDeleteProject = async (project: ProjectSummary) => {
-    const ok = window.confirm(t('Supprimer définitivement « {{name}} » ?', { name: project.name }));
+    const ok = await confirmDialog({
+      title: t('Supprimer « {{name}} » ?', { name: project.name }),
+      message: project.shared
+        ? t('Le projet et ses itinéraires seront supprimés définitivement, pour vous comme pour les personnes avec qui vous l’avez partagé.')
+        : t('Le projet et ses itinéraires seront supprimés définitivement.'),
+      confirmLabel: t('Supprimer'),
+    });
     if (!ok) return;
     await handleDeleteProject(project.id);
   };
 
   const confirmLeaveProject = async (project: ProjectSummary) => {
-    if (!window.confirm(t('Quitter « {{name}} » ? Vous n’y aurez plus accès.', { name: project.name }))) return;
+    const ok = await confirmDialog(leaveProjectDialog(t, project.name));
+    if (!ok) return;
     await handleLeaveProject(project.id);
   };
 
   const confirmDeleteFolder = async (folder: ProjectFolderSummary) => {
-    const ok = window.confirm(
-      t('Supprimer définitivement le dossier « {{name}} » ? Il doit être vide avant suppression.', {
-        name: folder.name,
-      }),
-    );
+    const ok = await confirmDialog({
+      title: t('Supprimer le dossier « {{name}} » ?', { name: folder.name }),
+      message: t('Les projets et les dossiers qu’il contient ne sont pas supprimés : ils remontent à la racine.'),
+      confirmLabel: t('Supprimer'),
+    });
     if (!ok) return;
     await handleDeleteFolder(folder.id);
   };

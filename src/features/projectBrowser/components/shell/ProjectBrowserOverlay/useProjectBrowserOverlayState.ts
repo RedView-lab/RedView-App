@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useHasChanged } from '@/shared/hooks/useHasChanged';
 import { useAppI18n } from '@/shared/i18n';
 import { setAnalyticsContext, trackAnalyticsEvent } from '@/shared/lib/analytics';
+import { confirmDialog } from '@/shared/lib/appDialog';
 import { notify } from '@/shared/lib/notify';
 import { readStoredAppwriteSession } from '@/shared/services/appwrite';
 
@@ -327,9 +328,12 @@ export function useProjectBrowserOverlayState({
         // Des modifications locales n'ont pas pu être envoyées : la purge locale
         // de la déconnexion les détruirait. L'utilisateur choisit.
         const names = nextError.projects.map((project) => `« ${project.name} »`).join(', ');
-        const confirmed = window.confirm(
-          t('Des modifications ne sont pas synchronisées avec le cloud : {{names}}. OK : se déconnecter quand même (ces modifications seront perdues). Annuler : rester connecté pour réessayer plus tard ou exporter les projets.', { names }),
-        );
+        const confirmed = await confirmDialog({
+          title: t('Des modifications ne sont pas dans le cloud'),
+          message: t('Projets concernés : {{names}}. Si vous vous déconnectez maintenant, ces modifications seront perdues. Restez connecté pour réessayer plus tard ou exporter ces projets.', { names }),
+          confirmLabel: t('Se déconnecter quand même'),
+          cancelLabel: t('Rester connecté'),
+        });
         if (!confirmed) {
           setIsSigningOut(false);
           return;

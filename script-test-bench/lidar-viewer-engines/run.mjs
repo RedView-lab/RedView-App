@@ -12,6 +12,8 @@
  *   - clic droit : menu des outils au relâchement, menu natif bloqué même
  *     quand `contextmenu` arrive à l'appui (ordre Linux) ; glisser droit =
  *     déplacement sans menu ; molette en lignes (Firefox) = zoom ;
+ *   - « Moteur » → terrain texturé : la pop-in de l'app demande d'abord (pas
+ *     un `window.confirm` natif, qui figeait la page), Annuler garde le moteur ;
  *   - aucune exception, aucune erreur WebGL (`getError`, console) ;
  *   - CSP de production (server/lib/csp.mjs) sur les pages et les scripts de
  *     workers : WebAssembly compilé et `eval` refusé dans la page comme dans
@@ -451,6 +453,24 @@ async function runCase(browserName, engine, args, origin, checks, cspReports) {
       snowStatus ? `« ${snowStatus} »` : 'aucun message',
     );
     if (auditHere && snowStatus) await auditA11y(page, 'neige-indisponible');
+
+    // 6. Bascule vers le terrain texturé : pop-in de l'app (shared/lib/appDialog.ts) ;
+    // Annuler garde le moteur en cours et l'affiche de nouveau dans le sélecteur.
+    const engineBefore = (await page.textContent('#panel-engine-mode-value'))?.trim();
+    await page.click('#panel-engine-mode-button');
+    await page.click('[data-engine-mode-option="terrain"]');
+    const engineDialog = page.getByRole('dialog', { name: /terrain texturé|textured terrain/i });
+    const engineDialogShown = await engineDialog.waitFor({ timeout: 20_000 }).then(() => true, () => false);
+    if (auditHere && engineDialogShown) await auditA11y(page, 'bascule-terrain');
+    if (engineDialogShown) await engineDialog.getByRole('button', { name: /^(Annuler|Cancel)$/ }).click();
+    const engineDialogClosed = engineDialogShown
+      && await engineDialog.waitFor({ state: 'detached', timeout: 10_000 }).then(() => true, () => false);
+    const engineAfter = (await page.textContent('#panel-engine-mode-value'))?.trim();
+    checks.record(
+      'bascule vers le terrain : pop-in de l’app, Annuler garde le moteur',
+      engineDialogShown && engineDialogClosed && engineAfter === engineBefore && !page.url().includes('engine=terrain'),
+      `${engineBefore} → ${engineAfter}`,
+    );
 
     const errors = backend === 'webgl' ? await glErrors() : [];
     checks.record('aucune erreur WebGL (getError)', !errors || errors.length === 0, errors?.join(', ') ?? 'contexte illisible');

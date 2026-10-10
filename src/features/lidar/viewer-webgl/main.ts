@@ -342,7 +342,9 @@ export async function runWebGLFallback(
       requestRender();
     },
     onEngineModeChange: (mode) => {
-      if (!switchViewerEngine(mode, 'terrain')) panel.setEngineMode('terrain');
+      void switchViewerEngine(mode, 'terrain').then((switched) => {
+        if (!switched) panel.setEngineMode('terrain');
+      });
     },
     onSnowModeChange: (mode) => {
       void handleSnowModeChange(mode);

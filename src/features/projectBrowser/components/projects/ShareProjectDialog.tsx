@@ -13,6 +13,7 @@ import { createPortal } from 'react-dom';
 import { IconClose, IconShare } from '@/features/itineraryPanel/components/icons';
 import { UserAvatar } from '@/shared/components/UserAvatar/UserAvatar';
 import { useAppI18n } from '@/shared/i18n';
+import { confirmDialog } from '@/shared/lib/appDialog';
 import { appScaleStyle, readAppScale } from '@/shared/lib/appScale';
 import { trackAnalyticsEvent } from '@/shared/lib/analytics';
 import { notify } from '@/shared/lib/notify';
@@ -24,6 +25,7 @@ import {
   useRemoveProjectEditor,
 } from '../../queries/projectSharing';
 
+import { leaveProjectDialog } from './leaveProjectDialog';
 import './ShareProjectDialog.css';
 
 type ShareProjectDialogProps = {
@@ -107,7 +109,7 @@ export function ShareProjectDialog({
   };
 
   const leaveProject = async () => {
-    if (!window.confirm(t('Quitter « {{name}} » ? Vous n’y aurez plus accès.', { name: projectName }))) return;
+    if (!(await confirmDialog(leaveProjectDialog(t, projectName)))) return;
     try {
       await leave.mutateAsync({ id: projectId });
       onClose();

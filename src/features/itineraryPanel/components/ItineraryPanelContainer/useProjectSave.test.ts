@@ -11,6 +11,8 @@ import { useProjectSave } from './useProjectSave';
 
 const toast = vi.hoisted(() => ({ error: vi.fn() }));
 vi.mock('@/shared/lib/notify', () => ({ notify: toast }));
+const dialogs = vi.hoisted(() => ({ confirmDialog: vi.fn<(options: { title: string }) => Promise<boolean>>() }));
+vi.mock('@/shared/lib/appDialog', () => dialogs);
 
 /**
  * Bouton Enregistrer et Ctrl/Cmd+S : une seule sauvegarde à la fois,
@@ -47,6 +49,7 @@ const saved = { savedAt: '2026-10-08T10:00:00.000Z', sizeBytes: 1234 } as Itiner
 beforeEach(() => {
   setProjectSyncStatus({ projectId: null, state: 'idle' });
   toast.error.mockReset();
+  dialogs.confirmDialog.mockReset();
 });
 
 afterEach(() => {
@@ -111,21 +114,21 @@ describe('résultat d’une sauvegarde', () => {
   });
 
   it('conflit : écrase le cloud seulement si l’utilisateur confirme', async () => {
-    const confirm = vi.fn(() => true);
-    Object.assign(window, { confirm });
+    dialogs.confirmDialog.mockResolvedValue(true);
     const save = vi.fn<Save>(async (options) => {
       if (!options?.force) throw new ProjectCloudError('conflict');
       return saved;
     });
     const { hook } = render(save);
     await act(async () => { await hook.result.current.handleSaveProject(); });
-    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(dialogs.confirmDialog).toHaveBeenCalledTimes(1);
+    expect(dialogs.confirmDialog.mock.calls[0]![0].title).toBe('Ce projet a été modifié sur un autre appareil');
     expect(save).toHaveBeenLastCalledWith({ force: true });
     expect(hook.result.current.displayedSaveStatus).toBe('saved');
   });
 
   it('conflit refusé : rien n’est écrasé, l’erreur est affichée 6 s', async () => {
-    Object.assign(window, { confirm: vi.fn(() => false) });
+    dialogs.confirmDialog.mockResolvedValue(false);
     vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     const save = vi.fn<Save>(async () => { throw new ProjectCloudError('conflict'); });
@@ -141,13 +144,12 @@ describe('résultat d’une sauvegarde', () => {
   });
 
   it('une autre erreur ne demande aucune confirmation', async () => {
-    const confirm = vi.fn(() => true);
-    Object.assign(window, { confirm });
+    dialogs.confirmDialog.mockResolvedValue(true);
     vi.spyOn(console, 'error').mockImplementation(() => {});
     const offline = vi.fn<Save>(async () => { throw new ProjectCloudError('offline'); });
     const { hook } = render(offline);
     await act(async () => { await hook.result.current.handleSaveProject(); });
-    expect(confirm).not.toHaveBeenCalled();
+    expect(dialogs.confirmDialog).not.toHaveBeenCalled();
     expect(offline).toHaveBeenCalledTimes(1);
     expect(hook.result.current.displayedSaveMessage).toBe(new ProjectCloudError('offline').message);
     hook.unmount();

@@ -6,6 +6,8 @@ import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 const BENCH_IMPORT_MESSAGE = 'script-test-bench/ est absent de l’image de prod : déplacer le code partagé dans src/ (p. ex. src/shared/test/).'
+const NATIVE_DIALOGS = ['alert', 'confirm', 'prompt']
+const NATIVE_DIALOG_MESSAGE = 'Dialogue natif : utiliser confirmDialog / promptDialog (src/shared/lib/appDialog.ts), ou notify pour un message.'
 
 // Erreurs existantes figées dans eslint-suppressions.json (cliquet) : toute
 // nouvelle erreur échoue ; `npx eslint . --prune-suppressions` après correction.
@@ -58,6 +60,17 @@ export default defineConfig([
         { selector: 'ImportExpression[source.value=/script-test-bench/]', message: BENCH_IMPORT_MESSAGE },
         { selector: 'TSImportType Literal[value=/script-test-bench/]', message: BENCH_IMPORT_MESSAGE },
       ],
+    },
+  },
+  {
+    // Confirmations et saisies : pop-ins de l'app (`confirmDialog` / `promptDialog`,
+    // shared/lib/appDialog.ts). Un dialogue natif fige tout l'onglet (carte,
+    // co-édition, sauvegarde automatique) et n'a pas l'apparence de l'app.
+    files: ['src/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-globals': ['error', ...NATIVE_DIALOGS.map((name) => ({ name, message: NATIVE_DIALOG_MESSAGE }))],
+      'no-restricted-properties': ['error', ...NATIVE_DIALOGS.flatMap((property) =>
+        ['window', 'globalThis', 'self'].map((object) => ({ object, property, message: NATIVE_DIALOG_MESSAGE })))],
     },
   },
   {

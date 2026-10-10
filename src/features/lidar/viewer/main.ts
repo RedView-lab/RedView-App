@@ -9,6 +9,7 @@ import '@/shared/styles/typography.css';
 import '@/shared/styles/theme.css';
 import '@/shared/styles/glass.css';
 import '@/shared/styles/dropdown.css';
+import '@/shared/styles/dialog.css';
 import './loading/styles.css';
 import './panel/styles.css';
 import './tileNavigator/styles.css';
@@ -575,7 +576,9 @@ function edlRadiusPx(): number {
         requestRender();
       },
       onEngineModeChange: (mode) => {
-        if (!switchViewerEngine(mode, runningEngine)) panel.setEngineMode(runningEngine);
+        void switchViewerEngine(mode, runningEngine).then((switched) => {
+          if (!switched) panel.setEngineMode(runningEngine);
+        });
       },
       onSnowModeChange: (mode) => {
         void snowController.handleSnowModeChange(mode, snowContext(), (next) => panel.setSnowMode(next));

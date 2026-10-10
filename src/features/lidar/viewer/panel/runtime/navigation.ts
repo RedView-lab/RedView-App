@@ -1,4 +1,5 @@
 import { translateAppText } from '@/shared/i18n/config';
+import { confirmDialog } from '@/shared/lib/appDialog';
 import { VIEWER_ENGINE_PARAM, viewerEngineParamValue, type ViewerEngineKey } from '../../session/viewerEngine';
 
 function getSafeReferrerUrl(): string | null {
@@ -17,17 +18,20 @@ function getSafeReferrerUrl(): string | null {
 /**
  * Rouvre le viewer avec `targetEngine`. WebGPU et WebGL 2 dessinent le même
  * viewer ; le moteur terrain n'a pas de nuage de points, il demande donc d'abord.
- * Renvoie false quand rien ne change (même moteur, ou bascule annulée).
+ * Résout false quand rien ne change (même moteur, ou bascule annulée).
  */
-export function switchViewerEngine(targetEngine: ViewerEngineKey, runningEngine: ViewerEngineKey): boolean {
+export async function switchViewerEngine(targetEngine: ViewerEngineKey, runningEngine: ViewerEngineKey): Promise<boolean> {
   if (targetEngine === runningEngine) return false;
   if (targetEngine === 'terrain') {
-    const confirmed = window.confirm(translateAppText(
-      'Basculer vers le terrain texturé ?\n\n' +
-      '• Relief LiDAR texturé par l\'orthophoto en haute résolution\n' +
-      '• Pas de nuage de points ni d\'outils de mesure\n' +
-      '• Le sélecteur « Moteur » ramène au nuage de points.'
-    ));
+    // Chargé à la demande : la feuille des pop-ins (partagée avec l'app) reste
+    // hors du découpage commun des deux entrées.
+    const { mountStandaloneAppDialogHost } = await import('@/shared/components/AppDialog/mountStandaloneAppDialogHost');
+    mountStandaloneAppDialogHost();
+    const confirmed = await confirmDialog({
+      title: translateAppText('Basculer vers le terrain texturé ?'),
+      message: translateAppText('Relief LiDAR texturé par l’orthophoto en haute résolution, sans nuage de points ni outils de mesure. Le sélecteur « Moteur » ramène au nuage de points.'),
+      confirmLabel: translateAppText('Basculer'),
+    });
     if (!confirmed) return false;
   }
   const url = new URL(window.location.href);
