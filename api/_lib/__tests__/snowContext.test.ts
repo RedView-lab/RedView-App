@@ -25,7 +25,9 @@ function call(handler: (req: ApiRequest, res: ApiResponse) => unknown, query: Re
   return Promise.resolve(handler({ method: 'GET', query, headers: {} } as unknown as ApiRequest, res)).then(() => status);
 }
 
-describe('api/snow-context', () => {
+// Le module (contours des massifs du BRA compris) est long à importer quand
+// les autres suites tournent en parallèle : délai large.
+describe('api/snow-context', { timeout: 30_000 }, () => {
   it('ne suit que des URL de fichiers Météo-France sur un hôte connu, en https (A11-2)', async () => {
     const { isAllowedMfFileUrl } = await loadModule();
     expect(isAllowedMfFileUrl('https://meteofrance.s3.sbg.io.cloud.ovh.net/clim/H_74_latest-2025-2026.csv.gz')).toBe(true);
