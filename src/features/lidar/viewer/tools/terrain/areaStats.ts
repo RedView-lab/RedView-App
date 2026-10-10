@@ -30,14 +30,61 @@ const MIN_ASPECT_CONSISTENCY = 0.35;
 
 type PlanPoint = { projX: number; projY: number };
 
-function polygonPlanArea(vertices: readonly PlanPoint[]): number {
-  let sum = 0;
+/** Abscisses triées où la ligne horizontale `y` coupe les arêtes (même règle que le balayage). */
+function edgeCrossings(vertices: readonly PlanPoint[], y: number, out: number[]): number[] {
+  out.length = 0;
   for (let k = 0; k < vertices.length; k++) {
     const a = vertices[k]!;
     const b = vertices[(k + 1) % vertices.length]!;
-    sum += a.projX * b.projY - b.projX * a.projY;
+    if ((a.projY <= y) !== (b.projY <= y)) {
+      out.push(a.projX + ((y - a.projY) / (b.projY - a.projY)) * (b.projX - a.projX));
+    }
   }
-  return Math.abs(sum) / 2;
+  return out.sort((p, q) => p - q);
+}
+
+/**
+ * Surface en plan exacte selon la règle pair-impair, celle du remplissage des
+ * statistiques : un polygone qui se recoupe (« nœud papillon », sommet cliqué
+ * dans le mauvais ordre) compte tous ses lobes. La formule du lacet additionne
+ * des aires signées, qui s'annulent alors (H2-1, audit du 2026-10-10).
+ *
+ * Entre deux ordonnées d'événement consécutives (sommets et croisements
+ * d'arêtes), l'ordre des arêtes coupées ne change pas : la largeur intérieure
+ * est linéaire en y, donc exacte au milieu de la tranche. Les polygones sont
+ * cliqués (quelques dizaines de sommets) : la recherche des croisements en
+ * O(n²) est négligeable.
+ */
+function polygonPlanArea(vertices: readonly PlanPoint[]): number {
+  const n = vertices.length;
+  const events: number[] = vertices.map((v) => v.projY);
+  for (let i = 0; i < n; i++) {
+    const a = vertices[i]!;
+    const b = vertices[(i + 1) % n]!;
+    for (let j = i + 2; j < n; j++) {
+      if (i === 0 && j === n - 1) continue; // arêtes voisines par le sommet 0
+      const c = vertices[j]!;
+      const d = vertices[(j + 1) % n]!;
+      const den = (b.projX - a.projX) * (d.projY - c.projY) - (b.projY - a.projY) * (d.projX - c.projX);
+      if (den === 0) continue;
+      const t = ((c.projX - a.projX) * (d.projY - c.projY) - (c.projY - a.projY) * (d.projX - c.projX)) / den;
+      const u = ((c.projX - a.projX) * (b.projY - a.projY) - (c.projY - a.projY) * (b.projX - a.projX)) / den;
+      if (t > 0 && t < 1 && u > 0 && u < 1) events.push(a.projY + t * (b.projY - a.projY));
+    }
+  }
+  events.sort((p, q) => p - q);
+  const crossings: number[] = [];
+  let area = 0;
+  for (let k = 0; k + 1 < events.length; k++) {
+    const y0 = events[k]!;
+    const y1 = events[k + 1]!;
+    if (!(y1 > y0)) continue;
+    edgeCrossings(vertices, (y0 + y1) / 2, crossings);
+    let width = 0;
+    for (let c = 0; c + 1 < crossings.length; c += 2) width += crossings[c + 1]! - crossings[c]!;
+    area += width * (y1 - y0);
+  }
+  return area;
 }
 
 function groundPerimeter(field: TerrainField, vertices: readonly PlanPoint[]): number | null {
@@ -72,15 +119,7 @@ export function computeAreaStats(field: TerrainField, vertices: readonly PlanPoi
 
   // Remplissage par lignes de balayage : lignes d'échantillons, centres de cellules entre les croisements d'arêtes.
   for (let y = minY + step / 2; y < maxY; y += step) {
-    crossings.length = 0;
-    for (let k = 0; k < vertices.length; k++) {
-      const a = vertices[k]!;
-      const b = vertices[(k + 1) % vertices.length]!;
-      if ((a.projY <= y) !== (b.projY <= y)) {
-        crossings.push(a.projX + ((y - a.projY) / (b.projY - a.projY)) * (b.projX - a.projX));
-      }
-    }
-    crossings.sort((p, q) => p - q);
+    edgeCrossings(vertices, y, crossings);
     for (let c = 0; c + 1 < crossings.length; c += 2) {
       const start = minX + Math.ceil((crossings[c]! - minX) / step - 0.5) * step + step / 2;
       for (let x = start; x < crossings[c + 1]!; x += step) {
