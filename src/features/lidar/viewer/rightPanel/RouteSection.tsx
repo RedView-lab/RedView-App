@@ -11,6 +11,7 @@ import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
 import { appScaledOverlayStyle, readAppScale } from '@/shared/lib/appScale';
 import type { LidarRouteOverlayItem, ViewerRouteState } from '../route/types';
 import { useAppI18n } from '@/shared/i18n';
+import { keyboardActivatable } from '@/shared/lib/keyboardActivation';
 
 export interface RouteSectionProps {
   state: ViewerRouteState;
@@ -347,6 +348,7 @@ export const RouteSection = memo(function RouteSection({
               ) : (
                 <div
                   className="rvc-routes__label"
+                  {...keyboardActivatable()}
                   onClick={() => handleRouteClick(route.id)}
                   style={{
                     cursor: 'pointer',

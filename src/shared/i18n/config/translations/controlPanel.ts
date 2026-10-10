@@ -1,6 +1,7 @@
 import type { AppTranslationPair } from '../types';
 
 export const controlPanelTranslationPairs: ReadonlyArray<AppTranslationPair> = [
+  { fr: 'Choisir la date : {{date}}', en: 'Choose the date: {{date}}' },
   { fr: 'Fonds de carte', en: 'Basemaps' },
   { fr: 'Qualité 3D', en: '3D quality' },
   { fr: 'Environnement', en: 'Environment' },

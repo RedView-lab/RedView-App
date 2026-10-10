@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAppI18n } from '@/shared/i18n';
+import { keyboardActivatable } from '@/shared/lib/keyboardActivation';
 import { Section } from '../components/Section';
 import { IconCube, IconExpand, IconExternalLink, IconTrash, IconX } from '../icons';
 import type { DownloadProgress } from '@/features/lidar/types';
@@ -148,6 +149,7 @@ export function LidarTilesSection({
                         ? 'rvc-lidar__label-text is-editable'
                         : 'rvc-lidar__label-text'
                     }
+                    {...keyboardActivatable(Boolean(onTileRename))}
                     onClick={() => startEdit(tile.id, tile.label)}
                     title={onTileRename ? t('Cliquer pour renommer') : tile.label}
                   >

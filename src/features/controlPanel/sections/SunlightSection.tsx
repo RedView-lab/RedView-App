@@ -173,7 +173,7 @@ export function SunlightSection({
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [timeDraftMinutes, setTimeDraftMinutes] = useState(() => getMinutesFromTime(state.time || '00:00'));
   const [isScrubbingTime, setIsScrubbingTime] = useState(false);
-  const calendarAnchorRef = useRef<HTMLDivElement>(null);
+  const calendarAnchorRef = useRef<HTMLButtonElement>(null);
 
   const formatMinutes = (val: number) => {
     const h = Math.floor(val / 60).toString().padStart(2, '0');
@@ -246,14 +246,18 @@ export function SunlightSection({
             />
             <span className="rvc-sunlight__option-label">{t('Choisir une date personnalisée')}</span>
             {state.customDateEnabled && (
-              <div
+              <button
                 ref={calendarAnchorRef}
+                type="button"
                 className="rvc-sunlight__date-input"
+                aria-haspopup="dialog"
+                aria-expanded={calendarOpen}
+                aria-label={t('Choisir la date : {{date}}', { date: formatDateShort(state.date, locale) })}
                 onClick={() => setCalendarOpen((value) => !value)}
               >
                 <IconCalendar size={12} />
                 <span>{formatDateShort(state.date, locale)}</span>
-              </div>
+              </button>
             )}
           </div>
         </div>

@@ -5,6 +5,7 @@ import {
   type RefObject,
 } from 'react';
 import { useAppI18n } from '@/shared/i18n';
+import { keyboardActivatable } from '@/shared/lib/keyboardActivation';
 import { IconStar } from '../../../components/icons';
 import { KindBadge } from '../KindBadge';
 import type { PauseDurationEditState, TimelineStandalonePause } from './types';
@@ -103,6 +104,7 @@ export function TimelineStandalonePauseCard({
             onPointerDown={canEditStandalonePause ? (pointerEvent) => {
               pointerEvent.stopPropagation();
             } : undefined}
+            {...keyboardActivatable(canEditStandalonePause && !isEditingStandalonePause)}
             onClick={canEditStandalonePause ? (clickEvent) => onStandalonePauseDurationClick(pause, clickEvent) : undefined}
           >
             {isEditingStandalonePause ? (

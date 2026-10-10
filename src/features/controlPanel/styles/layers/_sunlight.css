@@ -95,6 +95,8 @@
   width: var(--rvc-panel-select-md);
   height: 30px;
   padding: 4px 8px;
+  border: 0;
+  text-align: left;
   cursor: pointer;
 }
 

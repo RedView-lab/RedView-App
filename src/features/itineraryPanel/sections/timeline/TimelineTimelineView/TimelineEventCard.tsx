@@ -6,6 +6,7 @@ import {
   type RefObject,
 } from 'react';
 import { useAppI18n } from '@/shared/i18n';
+import { keyboardActivatable } from '@/shared/lib/keyboardActivation';
 import {
   IconNiceManYellow,
   IconStar,
@@ -233,6 +234,8 @@ export function TimelineEventCard({
               ) : (
                 <span
                   className="rvi-tl-schedule__pause-chip-text"
+                  {...keyboardActivatable(canEditPoiPause)}
+                  aria-label={canEditPoiPause ? t('Modifier la durée de la pause') : undefined}
                   onClick={canEditPoiPause ? (clickEvent) => onPoiPauseDurationClick(
                     event.item.id,
                     pause.durationMin,
