@@ -224,6 +224,8 @@ try {
 } catch (error) {
   console.error(error);
   errors.app.push(`script: ${error.stack ?? error}`);
+  // Le parcours s'est arrêté avant ses contrôles : jamais un succès.
+  failures.push('script interrompu par une exception');
   if (V) await shot(V, 'zz-viewer-error').catch(() => null);
 } finally {
   await close();
