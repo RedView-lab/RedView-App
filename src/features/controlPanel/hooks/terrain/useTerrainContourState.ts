@@ -4,6 +4,10 @@ import type { Map as MapboxMap } from 'mapbox-gl';
 import { useContourLines } from '@/features/contourLines/hooks/useContourLines';
 import { getActiveDem3dQuality, subscribeDem3dQuality } from '@/features/map3d/lib/dem3dQualityBus';
 import { getActiveDemProfilePreference, subscribeDemProfilePreference } from '@/features/map3d/lib/demProfileBus';
+import {
+  isServiceWorkerControllerCurrent,
+  subscribeServiceWorkerController,
+} from '@/features/map3d/lib/serviceWorkerController';
 import { basemapSupportsContourLines, getBasemapGroundTone } from '../../lib/basemaps';
 import { DEFAULT_CONTROL_PANEL_STATE } from '../../lib/defaultState';
 import type { ControlPanelPersistedState } from '../../lib/persistedState';
@@ -45,13 +49,17 @@ export function useTerrainContourState({
   const contourLinesAvailable = basemapSupportsContourLines(activeBasemapId);
   // Relief HD (1 m / 0,40 m) servi par le Service Worker : les courbes sont les
   // isolignes de son maillage. Sans contrôleur, la carte retombe sur AWS
-  // Terrarium et garde les courbes de Mapbox.
+  // Terrarium et garde les courbes de Mapbox ; de même sous le worker d'un
+  // build précédent (après un déploiement, avant que le nouveau ne prenne la
+  // page), qui ne sert pas /contour-tiles.
   const dem3dQuality = useSyncExternalStore(subscribeDem3dQuality, getActiveDem3dQuality);
   const demProfile = useSyncExternalStore(subscribeDemProfilePreference, getActiveDemProfilePreference);
-  const hdContours = dem3dQuality === 'hd'
-    && isMapLoaded
-    && typeof navigator !== 'undefined'
-    && Boolean(navigator.serviceWorker?.controller);
+  const contourWorkerReady = useSyncExternalStore(
+    subscribeServiceWorkerController,
+    isServiceWorkerControllerCurrent,
+    () => false,
+  );
+  const hdContours = dem3dQuality === 'hd' && isMapLoaded && contourWorkerReady;
 
   useContourLines(
     isMapLoaded ? map : null,

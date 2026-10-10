@@ -2,18 +2,10 @@ import {
   SW_CONTROLLER_TIMEOUT,
 } from './constants';
 import { ensureMapCacheEpochReset, MAP_CACHE_EPOCH } from '../../lib/mapCacheEpoch';
+import { getServiceWorkerEpoch } from '../../lib/serviceWorkerController';
 import { logger, syncLogLevelToServiceWorker, getLogLevel } from '@/shared/lib/logger';
 
 const MAP_CACHE_AUTO_RELOAD_SESSION_KEY = 'redview:map-cache-auto-reload';
-
-function getServiceWorkerEpoch(serviceWorker: ServiceWorker | null | undefined): string | null {
-  if (!serviceWorker?.scriptURL) return null;
-  try {
-    return new URL(serviceWorker.scriptURL).searchParams.get('rv-map-cache-epoch');
-  } catch {
-    return null;
-  }
-}
 
 function hasReloadedForCurrentEpoch(): boolean {
   if (typeof window === 'undefined') return false;

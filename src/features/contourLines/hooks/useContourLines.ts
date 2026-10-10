@@ -14,6 +14,7 @@ import {
   type ContourTone,
   type ContourVariant,
 } from '../lib/contour-source';
+import { subscribeServiceWorkerController } from '@/features/map3d/lib/serviceWorkerController';
 
 const VARIANTS: readonly ContourVariant[] = ['mapbox', 'hd'];
 /** Zoom maximal d'une couche Mapbox (style-spec). */
@@ -237,6 +238,20 @@ export function useContourLines(
     return () => {
       map.off('style.load', onStyleLoad);
     };
+  }, [map, isMapLoaded]);
+
+  // Nouveau Service Worker aux commandes : les tuiles déjà demandées l'ont été
+  // au précédent, ou au serveur quand celui-ci ne connaissait pas
+  // /contour-tiles (204, que Mapbox garde comme tuile vide) : on les redemande.
+  useEffect(() => {
+    if (!map || !isMapLoaded) return;
+    return subscribeServiceWorkerController(() => {
+      try {
+        (map.getSource(CONTOUR_HD_SOURCE_ID) as { reload?: () => void } | undefined)?.reload?.();
+      } catch {
+        /* le style est peut-être en transition */
+      }
+    });
   }, [map, isMapLoaded]);
 
   useEffect(() => {
