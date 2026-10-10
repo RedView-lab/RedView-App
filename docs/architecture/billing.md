@@ -39,6 +39,8 @@ Pendant la bêta ouverte, l'accès à l'app ne dépend pas encore de l'abonnemen
 
 **Changer de durée.** L'app ouvre le portail client sur `flow_data.subscription_update_confirm` : Stripe montre le prorata, encaisse la différence (`always_invoice`) et gère le 3-D Secure. Pendant l'essai, `trial_update_behavior: continue_trial` garde les jours restants. On n'utilise jamais `schedule_at_period_end` : il attacherait un échéancier à l'abonnement, que la résiliation dans l'app ne pourrait plus modifier.
 
+**Adresse des reçus.** Elle se règle dans l'onglet Abonnement de l'app (`customers.billing_email_mode` / `billing_email`), qui réécrit l'e-mail du client Stripe à chaque changement d'adresse du compte. Le portail laisse modifier le nom, l'adresse postale et le numéro de TVA, jamais l'e-mail : sinon il y aurait deux sources de vérité, et un changement d'adresse du compte écraserait sans prévenir celle choisie dans le portail. Toute modification de `portalFeatures` augmente `PORTAL_METADATA_VERSION`, et la configuration existante est mise à jour au prochain appel (ou par `npm run billing:setup`).
+
 **Résilier.** Le bouton « Résilier votre contrat » est dans l'onglet Abonnement (art. L.215-1-1 du Code de la consommation). Il ouvre un récapitulatif : compte, formule, référence `sub_…`, date de fin. La confirmation pose `cancel_at_period_end: true` ; la reprise pose `cancel_at_period_end: false`, qui lève aussi un `cancel_at` posé par le portail. Stripe refuse les deux paramètres ensemble. Le webhook envoie ensuite la confirmation par e-mail (support durable).
 
 **Retour d'une redirection.** Stripe ramène sur `/?tab=subscription&billing_return=<trial|subscription|payment-method>`. L'app finit le parcours, puis retire ces paramètres de l'URL.

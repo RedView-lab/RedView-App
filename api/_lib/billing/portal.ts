@@ -23,7 +23,13 @@ type PortalFeatures = Parameters<Stripe['billingPortal']['configurations']['crea
 type PortalFlowData = NonNullable<NonNullable<Parameters<Stripe['billingPortal']['sessions']['create']>[0]>['flow_data']>;
 
 const PORTAL_METADATA_KEY = 'redview_portal';
-const PORTAL_METADATA_VERSION = '1';
+/**
+ * Version du contenu de la configuration (fonctionnalités, textes). L'augmenter
+ * à chaque changement de `portalFeatures` : une configuration d'une autre
+ * version est remise d'accord, comme sur un changement de prix.
+ * 2 : l'e-mail du client n'est plus modifiable dans le portail (A11-3).
+ */
+const PORTAL_METADATA_VERSION = '2';
 const PORTAL_CACHE_TTL_MS = 10 * 60 * 1000;
 
 let cachedConfiguration: { id: string; key: string; expiresAt: number } | null = null;
@@ -32,7 +38,11 @@ function portalFeatures(productId: string, priceIds: string[]): PortalFeatures {
   return {
     invoice_history: { enabled: true },
     payment_method_update: { enabled: true },
-    customer_update: { enabled: true, allowed_updates: ['email', 'name', 'address', 'tax_id'] },
+    // Pas d'`email` : l'adresse qui reçoit les reçus est un réglage de l'app
+    // (onglet Abonnement, `customers.billing_email_mode`), qui réécrit l'e-mail
+    // Stripe à chaque changement d'adresse du compte. Modifiable ici, elle
+    // aurait deux sources de vérité et serait écrasée sans prévenir (A11-3).
+    customer_update: { enabled: true, allowed_updates: ['name', 'address', 'tax_id'] },
     subscription_cancel: {
       enabled: true,
       mode: 'at_period_end',
@@ -65,8 +75,10 @@ export async function ensurePortalConfiguration(returnUrl: string): Promise<stri
   }
 
   const stripe = getStripeServer();
+  // Toute version de notre configuration est reprise (puis mise à jour) : en
+  // chercher une seule version en créerait une nouvelle à chaque changement.
   const existing = (await stripe.billingPortal.configurations.list({ active: true, limit: 100 })).data.find(
-    (configuration) => configuration.metadata?.[PORTAL_METADATA_KEY] === PORTAL_METADATA_VERSION,
+    (configuration) => Boolean(configuration.metadata?.[PORTAL_METADATA_KEY]),
   );
   const params = {
     business_profile: { headline: 'RedView — gérez votre abonnement' },
@@ -78,7 +90,7 @@ export async function ensurePortalConfiguration(returnUrl: string): Promise<stri
   let id: string;
   if (!existing) {
     id = (await stripe.billingPortal.configurations.create(params)).id;
-  } else if (existing.metadata?.prices !== pricesKey) {
+  } else if (existing.metadata?.[PORTAL_METADATA_KEY] !== PORTAL_METADATA_VERSION || existing.metadata?.prices !== pricesKey) {
     id = (await stripe.billingPortal.configurations.update(existing.id, params)).id;
   } else {
     id = existing.id;
