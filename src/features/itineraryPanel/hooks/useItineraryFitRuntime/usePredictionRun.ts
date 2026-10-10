@@ -48,7 +48,7 @@ interface RawPredictionEntry {
 /** Entrées que lit le moteur (tracé hors identité des tableaux, rythme moteur, .fit). */
 function rawPredictionKey(itinerary: Itinerary, fitFiles: readonly File[]): string {
   return [
-    buildRouteSignature(itinerary.gpxRoute?.points),
+    buildRouteSignature(itinerary.gpxRoute),
     itinerary.gpxRoute?.source ?? '',
     normalizeDiscipline(itinerary.discipline),
     canonicalJson(engineRhythmInputs(itinerary.rhythm)),

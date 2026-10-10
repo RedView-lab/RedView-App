@@ -1,10 +1,9 @@
 import { useEffect, useRef, type Dispatch, type SetStateAction } from 'react';
-import { resolvePredictionDiscipline, type SportDiscipline } from '@/shared/lib/discipline';
+import type { SportDiscipline } from '@/shared/lib/discipline';
 import { hasUsableRouteElevation } from '../../lib/schedule';
 import type { Itinerary, ItineraryProject } from '../../types';
 import { useDerivedComputeGate } from '../../context/ProjectStore/hooks';
-import { isCyclingPredictionOutdated } from './cycling';
-import { buildPredictionStamp } from './signatures';
+import { storedPredictionStillValid } from './signatures';
 import {
   createEmptyFitRuntime,
   type FitRuntimeRef,
@@ -27,7 +26,7 @@ interface UseAutoPredictionArgs {
 /**
  * Recalcul automatique (débounce 300 ms) quand les entrées de la prédiction
  * changent, une fois le rythme configuré ; une prédiction chargée encore
- * valable (distance, discipline, version du moteur) est gardée telle quelle.
+ * valable (cf. storedPredictionStillValid) est gardée telle quelle.
  */
 export function useAutoPrediction({
   active,
@@ -49,33 +48,11 @@ export function useAutoPrediction({
     const itineraryId = active.id;
     const lastSig = lastProcessedSignatureRef.current[itineraryId];
 
-    // Prédiction estampillée encore valable pour les entrées actuelles :
-    // gardée (réouverture, retour d'un annuler, calcul d'un autre éditeur).
-    if (
-      active.prediction
-      && active.pendingFitRecompute !== true
-      && active.predictionInputsKey !== undefined
-      && active.predictionInputsKey === buildPredictionStamp(active)
-      && !isCyclingPredictionOutdated(active.prediction)
-    ) {
+    // Prédiction stockée encore valable pour les entrées actuelles : gardée
+    // (réouverture, retour d'un annuler, calcul d'un autre éditeur).
+    if (storedPredictionStillValid(active, activeDiscipline, { firstPass: !lastSig })) {
       lastProcessedSignatureRef.current[itineraryId] = activeCalculationSignature;
       return;
-    }
-
-    // S'il s'agit du chargement initial de cet itinéraire et qu'on a déjà une prédiction correspondante
-    if (!lastSig) {
-      const lastPointDistM = active.gpxRoute?.points[active.gpxRoute.points.length - 1]?.distanceM ?? 0;
-      const predDistM = active.prediction?.total_distance_m ?? 0;
-      const isDistMismatched = active.prediction && Math.abs(predDistM - lastPointDistM) > 500;
-      const isDisciplineMismatched =
-        active.prediction && resolvePredictionDiscipline(active.prediction) !== activeDiscipline;
-      // Prédiction vélo d'un moteur plus ancien : recalculée avec le moteur courant.
-      const isEngineOutdated = isCyclingPredictionOutdated(active.prediction);
-
-      if (active.prediction && !isDistMismatched && !isDisciplineMismatched && !isEngineOutdated) {
-        lastProcessedSignatureRef.current[itineraryId] = activeCalculationSignature;
-        return;
-      }
     }
 
     if (lastSig === activeCalculationSignature && active.pendingFitRecompute !== true) {

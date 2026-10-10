@@ -49,8 +49,8 @@ export function useItineraryFitRuntime({
     [active, fitRuntimeByItineraryId],
   );
   const activeRouteSignature = useMemo(
-    () => buildRouteSignature(active?.gpxRoute?.points),
-    [active?.gpxRoute?.points],
+    () => buildRouteSignature(active?.gpxRoute),
+    [active?.gpxRoute],
   );
   const activePersistedUploadSignature = active
     ? buildFitUploadsSignature(active.fitUploads ?? [])
