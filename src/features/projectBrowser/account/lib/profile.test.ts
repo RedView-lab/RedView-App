@@ -4,6 +4,9 @@ const appwrite = vi.hoisted(() => ({
   updatePassword: vi.fn<(password: string, oldPassword?: string) => Promise<unknown>>(),
   updateName: vi.fn<(name: string) => Promise<unknown>>(),
   updatePrefs: vi.fn<(prefs: Record<string, unknown>) => Promise<unknown>>(),
+  deleteSession: vi.fn<(id: string) => Promise<unknown>>(),
+  clearedSession: vi.fn(),
+  clearedStore: vi.fn(),
   user: { $id: 'u1', name: 'Ada Lovelace', email: 'ada@example.test', prefs: {} } as Record<string, unknown>,
 }));
 
@@ -12,8 +15,9 @@ vi.mock('@/shared/services/appwrite', () => ({
     updatePassword: appwrite.updatePassword,
     updateName: appwrite.updateName,
     updatePrefs: appwrite.updatePrefs,
+    deleteSession: appwrite.deleteSession,
   },
-  clearStoredAppwriteSession: () => {},
+  clearStoredAppwriteSession: () => appwrite.clearedSession(),
   getAppwriteUser: async () => appwrite.user,
   rememberAppwriteUser: () => {},
   updateAccountPrefs: async (update: (prefs: Record<string, unknown>, user: Record<string, unknown>) => unknown) => {
@@ -22,7 +26,10 @@ vi.mock('@/shared/services/appwrite', () => ({
   },
 }));
 
-const { accountUpdateFailureMessage, saveAccountIdentity, saveAccountPractice, updateAccountPassword } = await import('./profile');
+vi.mock('@/shared/services/storage/idbProjectStore', () => ({ clearProjectStore: async () => appwrite.clearedStore() }));
+vi.mock('@/shared/services/projects', () => ({ syncDirtyProjects: async () => ({ remaining: [] }) }));
+
+const { accountUpdateFailureMessage, saveAccountIdentity, saveAccountPractice, signOutAccount, SignOutFailedError, updateAccountPassword } = await import('./profile');
 
 /** Forme d'une AppwriteException : `code` HTTP + `type` stable. */
 const appwriteError = (code: number, type: string) => Object.assign(new Error('english developer message'), { code, type });
@@ -31,6 +38,9 @@ beforeEach(() => {
   appwrite.updatePassword.mockReset().mockResolvedValue({});
   appwrite.updateName.mockReset().mockResolvedValue({});
   appwrite.updatePrefs.mockReset().mockResolvedValue(appwrite.user);
+  appwrite.deleteSession.mockReset().mockResolvedValue({});
+  appwrite.clearedSession.mockReset();
+  appwrite.clearedStore.mockReset();
   vi.spyOn(console, 'warn').mockImplementation(() => {});
 });
 
@@ -86,5 +96,43 @@ describe('saveAccountPractice', () => {
   it('un échec est remonté (l’écran les marquait enregistrés quand rien n’était parti)', async () => {
     appwrite.updatePrefs.mockRejectedValue(new TypeError('Failed to fetch'));
     await expect(saveAccountPractice({ country: 'FR', sports: [] })).rejects.toThrow(/^Impossible de joindre/);
+  });
+});
+
+describe('signOutAccount (A14-2)', () => {
+  it('révoque la session serveur puis purge l’état local', async () => {
+    await signOutAccount({ force: true });
+    expect(appwrite.deleteSession).toHaveBeenCalledWith('current');
+    expect(appwrite.clearedSession).toHaveBeenCalled();
+    expect(appwrite.clearedStore).toHaveBeenCalled();
+  });
+
+  it('révocation impossible (hors ligne) : erreur claire, rien n’est purgé — la session ne se rouvre pas au rechargement suivant par surprise', async () => {
+    appwrite.deleteSession.mockRejectedValue(new TypeError('Failed to fetch'));
+    await expect(signOutAccount({ force: true })).rejects.toBeInstanceOf(SignOutFailedError);
+    expect(appwrite.clearedSession).not.toHaveBeenCalled();
+    expect(appwrite.clearedStore).not.toHaveBeenCalled();
+  });
+
+  it('révocation lente : attendue au-delà de 1,5 s (l’ancien délai la coupait)', async () => {
+    vi.useFakeTimers();
+    try {
+      let resolve: (value: unknown) => void = () => {};
+      appwrite.deleteSession.mockImplementation(() => new Promise((r) => { resolve = r; }));
+      const pending = signOutAccount({ force: true });
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(appwrite.clearedSession).not.toHaveBeenCalled();
+      resolve({});
+      await pending;
+      expect(appwrite.clearedSession).toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('session déjà refusée par Appwrite (401) : rien à révoquer, la purge continue', async () => {
+    appwrite.deleteSession.mockRejectedValue(appwriteError(401, 'general_unauthorized_scope'));
+    await signOutAccount({ force: true });
+    expect(appwrite.clearedSession).toHaveBeenCalled();
   });
 });

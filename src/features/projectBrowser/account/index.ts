@@ -5,6 +5,7 @@ export {
   
   
   signOutAccount,
+  SignOutFailedError,
   UnsyncedProjectsError,
   
 } from './lib';

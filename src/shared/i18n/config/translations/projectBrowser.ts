@@ -376,6 +376,8 @@ export const projectBrowserTranslationPairs: ReadonlyArray<AppTranslationPair> =
   { fr: 'Impossible d’enregistrer le contact de facturation.', en: 'Unable to save billing contact' },
   { fr: 'E-mail de facturation invalide.', en: 'Invalid billing contact payload' },
   { fr: 'Service momentanément indisponible.', en: 'Service temporarily unavailable.' },
+  // Déconnexion (profile.ts signOutAccount)
+  { fr: 'Déconnexion impossible : vérifiez votre connexion, puis réessayez.', en: 'Could not sign out: check your connection, then try again.' },
   // Changement d'adresse e-mail (ChangeEmailDialog, api/auth/change-email.ts)
   { fr: 'Changer d’adresse e-mail', en: 'Change e-mail address' },
   { fr: 'Nouvelle adresse e-mail', en: 'New e-mail address' },

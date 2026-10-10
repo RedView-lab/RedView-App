@@ -13,6 +13,7 @@ import {
   formatLastConnection,
   loadAccountProfile,
   signOutAccount,
+  SignOutFailedError,
   UnsyncedProjectsError,
   type AccountProfile,
 } from '../../../account';
@@ -341,6 +342,12 @@ export function useProjectBrowserOverlayState({
         await signOutAccount({ force: true });
       }
     } catch (nextError) {
+      if (nextError instanceof SignOutFailedError) {
+        // Session toujours ouverte côté serveur : recharger rouvrirait le compte.
+        notify.error(t(nextError.message));
+        setIsSigningOut(false);
+        return;
+      }
       console.warn('[ProjectBrowserOverlay] Failed to sign out cleanly', nextError);
     }
     if (typeof window !== 'undefined') window.location.reload();

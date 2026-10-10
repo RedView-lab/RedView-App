@@ -12,7 +12,7 @@ import {
   translateAppText,
 } from '@/shared/i18n';
 import { APP_CACHE_EPOCH_STORAGE_KEY } from '@/shared/lib/appCacheEpoch';
-import { appwriteFailureMessage } from '@/shared/lib/appwriteErrors';
+import { appwriteFailureMessage, isSessionRejectedError } from '@/shared/lib/appwriteErrors';
 import { clearAnalyticsContext, trackAnalyticsEvent } from '@/shared/lib/analytics';
 import { syncDirtyProjects } from '@/shared/services/projects';
 import { clearProjectStore } from '@/shared/services/storage/idbProjectStore';
@@ -286,6 +286,44 @@ async function syncPendingProjectsBeforeSignOut(): Promise<Array<{ id: string; n
 }
 
 /**
+ * La session serveur n'a pas pu être révoquée (hors ligne, réseau lent,
+ * Appwrite en panne) : rien n'est purgé, la page n'est pas rechargée.
+ */
+export class SignOutFailedError extends Error {
+  constructor() {
+    super('Déconnexion impossible : vérifiez votre connexion, puis réessayez.');
+    this.name = 'SignOutFailedError';
+  }
+}
+
+/** Délai laissé à la révocation (p95 d'Appwrite en charge : 650 ms). */
+const SESSION_REVOKE_TIMEOUT_MS = 10_000;
+
+/**
+ * Révoque la session serveur. La vraie session est le cookie `httpOnly`
+ * d'Appwrite, que le JavaScript ne peut pas effacer : tant qu'elle n'est pas
+ * révoquée, un rechargement rouvre le compte (ordinateur partagé). Une
+ * session déjà refusée (401, compte bloqué) n'a rien à révoquer.
+ */
+async function revokeCurrentSession(): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      account.deleteSession('current'),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error('session revocation timed out')), SESSION_REVOKE_TIMEOUT_MS);
+      }),
+    ]);
+  } catch (err) {
+    if (isSessionRejectedError(err)) return;
+    console.warn('[auth] Appwrite deleteSession failed:', err);
+    throw new SignOutFailedError();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
  * Déconnexion. Sans `force`, lève `UnsyncedProjectsError` si des projets ont
  * encore des modifications non synchronisées après une dernière tentative
  * (l'UI propose alors d'exporter / réessayer / se déconnecter quand même).
@@ -296,17 +334,12 @@ export async function signOutAccount({ force = false }: { force?: boolean } = {}
     if (pending.length > 0) throw new UnsyncedProjectsError(pending);
   }
 
-  // 1. Révoquer la session serveur EN PREMIER : le SDK Appwrite a besoin du
-  //    `cookieFallback` (header X-Fallback-Cookies) pour authentifier cet appel
-  //    lorsque les cookies tiers sont bloqués.
-  try {
-    await Promise.race([
-      account.deleteSession('current'),
-      new Promise((resolve) => setTimeout(resolve, 1500)),
-    ]);
-  } catch (err) {
-    console.warn('[auth] Appwrite deleteSession error (ignored):', err);
-  }
+  // 1. Révoquer la session serveur EN PREMIER, et l'attendre : le SDK
+  //    Appwrite a besoin du `cookieFallback` (header X-Fallback-Cookies) pour
+  //    authentifier cet appel lorsque les cookies tiers sont bloqués, et une
+  //    révocation coupée par le rechargement laissait le cookie de session
+  //    valide (A14-2). En cas d'échec : SignOutFailedError, rien n'est purgé.
+  await revokeCurrentSession();
 
   // 2. Puis purger l'état d'authentification local et les données propres à l'utilisateur.
   trackAnalyticsEvent({ name: 'logout' });

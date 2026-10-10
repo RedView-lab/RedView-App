@@ -6,6 +6,7 @@ export {
   
   
   signOutAccount,
+  SignOutFailedError,
   UnsyncedProjectsError,
   
 } from './profile';
