@@ -396,7 +396,10 @@ export function RythmeSection({
   const tiresBtnRef = useRef<HTMLButtonElement | null>(null);
 
   const displayTime = rhythm.startTime || DEFAULT_START_TIME;
-  const startDateText = rhythm.startDate ? formatDateForLocale(rhythm.startDate, locale) : '22/04/26';
+  // Sans date : « Choisir », jamais une date d'exemple (« 22/04/26 », reste de
+  // maquette, faisait croire la date posée alors que l'agenda, les horaires
+  // d'ouverture et l'export la tenaient pour inconnue).
+  const startDateText = rhythm.startDate ? formatDateForLocale(rhythm.startDate, locale) : null;
   const tiresText = rhythm.tiresMm ? `${rhythm.tiresMm}mm` : '35mm';
   const isCustom = isCustomRhythmProfile(rhythm);
   const presetLevel = PRACTICE_LEVELS.find((l) => l.id === rhythm.practiceLevel) ?? PRACTICE_LEVELS[0];
@@ -424,14 +427,14 @@ export function RythmeSection({
             <button
               type="button"
               ref={dateChipRef}
-              className="rvi-rythme-figma__chip-btn"
+              className={`rvi-rythme-figma__chip-btn${startDateText ? '' : ' rvi-rythme-figma__chip-btn--empty'}`}
               onClick={() => setCalendarOpen((v) => !v)}
               aria-haspopup="dialog"
               aria-expanded={calendarOpen}
-              aria-label={`${t('Date de départ')} ${startDateText}`}
+              aria-label={startDateText ? `${t('Date de départ')} ${startDateText}` : t('Date de départ : à choisir')}
             >
               <CalendarIcon size={10} />
-              <span>{startDateText}</span>
+              <span>{startDateText ?? t('Choisir')}</span>
             </button>
             <CalendarPopover
               open={calendarOpen}

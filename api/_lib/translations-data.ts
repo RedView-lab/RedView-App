@@ -2429,6 +2429,10 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Start date"
   },
   {
+    "fr": "Date de départ : à choisir",
+    "en": "Start date: not set"
+  },
+  {
     "fr": "Heure de départ",
     "en": "Start time"
   },

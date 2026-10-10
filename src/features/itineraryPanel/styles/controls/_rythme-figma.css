@@ -69,6 +69,11 @@
   white-space: nowrap;
 }
 
+/* Aucune date choisie : « Choisir » en retrait, jamais une fausse date. */
+.rvi-rythme-figma__chip-btn--empty {
+  color: rgb(var(--rv-ink) / 0.64);
+}
+
 .rvi-rythme-figma__chip-btn:hover {
   background: rgb(var(--rv-ink) / 0.12);
   border-color: rgb(var(--rv-ink) / 0.14);
