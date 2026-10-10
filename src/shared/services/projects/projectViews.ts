@@ -13,6 +13,9 @@
  * Sauf le lu / non lu des commentaires (`commentsView.reads`), fusionné fil
  * par fil à l'écriture et à la lecture (`mergeViewReads`) : un appareil resté
  * ouvert sur une vue ancienne remettait « non lus » les fils lus ailleurs.
+ * L'écriture est conditionnelle (`X-Appwrite-Timestamp` = version connue) :
+ * la vue n'est relue, puis fusionnée, que si un autre appareil l'a écrite
+ * depuis (409), ou si sa version n'est pas connue.
  *
  * Collection absente (pas encore créée côté serveur) : la vue reste locale,
  * signalée une fois dans la console, sans rien bloquer.
@@ -21,6 +24,7 @@ import type { ProjectViewState } from '@/features/itineraryPanel/lib/project/lay
 import { logger } from '@/shared/lib/logger';
 import {
   APPWRITE_DATABASE_ID,
+  client,
   databases,
   Permission,
   PROJECT_VIEWS_COLLECTION_ID,
@@ -74,6 +78,8 @@ const lastKnownViews = new Map<string, string>();
  * sans vue, en rouge dans la console, avant le `createDocument`.
  */
 const cloudViewIds = new Map<string, string | null>();
+/** `$updatedAt` de mon document de vue tel que lu ou écrit ici, par `${ownerId}:${projectId}`. */
+const cloudViewVersions = new Map<string, string>();
 let cloudViewsUnavailable = false;
 
 function viewKey(ownerId: string, projectId: string): string {
@@ -189,7 +195,10 @@ function parseCloudView(doc: { data?: unknown; project_id?: unknown; user_id?: u
 async function findOwnCloudView(projectId: string, ownerId: string): Promise<CloudViewDoc | null> {
   const doc = await (await loadAccessQueries()).listOwnCloudView(projectId, ownerId);
   const key = viewKey(ownerId, projectId);
-  if (doc) cloudViewIds.set(key, doc.$id);
+  if (doc) {
+    cloudViewIds.set(key, doc.$id);
+    if (doc.$updatedAt) cloudViewVersions.set(key, doc.$updatedAt);
+  }
   // Un id écrit entre-temps par cette session (écriture en cours) reste le bon.
   else if (!cloudViewIds.has(key)) cloudViewIds.set(key, null);
   return doc;
@@ -206,6 +215,29 @@ function serializeCloudView(record: StoredProjectView, view: ProjectViewState): 
   return null;
 }
 
+function isUpdateConflict(error: unknown): boolean {
+  return errorCode(error) === 409 && errorType(error) === 'document_update_conflict';
+}
+
+/**
+ * Met à jour mon document de vue seulement s'il n'a pas changé depuis
+ * `unchangedSince` (409 `document_update_conflict` sinon) ; retient sa nouvelle version.
+ */
+async function writeCloudViewIf(key: string, documentId: string, data: string, unchangedSince: string): Promise<void> {
+  const url = new URL(
+    `${client.config.endpoint}/databases/${encodeURIComponent(APPWRITE_DATABASE_ID)}/collections/${encodeURIComponent(PROJECT_VIEWS_COLLECTION_ID)}/documents/${encodeURIComponent(documentId)}`,
+  );
+  // X-Appwrite-Project explicite : le SDK web ne l'ajoute pas à client.call (accessQueries.ts).
+  const written = (await client.call('patch', url, {
+    'X-Appwrite-Project': client.config.project,
+    'X-Appwrite-Timestamp': unchangedSince,
+    'content-type': 'application/json',
+    accept: 'application/json',
+  }, { data: { data } })) as CloudViewDoc;
+  if (written?.$updatedAt) cloudViewVersions.set(key, written.$updatedAt);
+  else cloudViewVersions.delete(key);
+}
+
 async function upsertCloudView(record: StoredProjectView, createOnly: boolean): Promise<void> {
   if (cloudViewsUnavailable) return;
   const data = serializeCloudView(record, record.view);
@@ -216,14 +248,26 @@ async function upsertCloudView(record: StoredProjectView, createOnly: boolean): 
     // Une vraie vue existe : l'amorce ne la remplace jamais.
     if (createOnly) return;
     try {
-      // Relue juste avant : ses repères de lecture (autre appareil) sont fusionnés, pas écrasés.
-      const current = await databases.getDocument(APPWRITE_DATABASE_ID, PROJECT_VIEWS_COLLECTION_ID, knownId);
+      const version = cloudViewVersions.get(key);
+      if (version) {
+        try {
+          await writeCloudViewIf(key, knownId, data, version);
+          return;
+        } catch (error) {
+          if (!isUpdateConflict(error)) throw error;
+        }
+      }
+      // Écrite ailleurs depuis (ou version inconnue) : relue, ses repères de
+      // lecture fusionnés, puis écrite à la condition de cette lecture. Un
+      // nouveau conflit est réessayé plus tard (writeCloud).
+      const current = (await databases.getDocument(APPWRITE_DATABASE_ID, PROJECT_VIEWS_COLLECTION_ID, knownId)) as unknown as CloudViewDoc;
       const merged = serializeCloudView(
         record,
-        mergeViewReads(record.view, parseCloudView(current as CloudViewDoc, record.projectId, record.ownerId)?.view),
+        mergeViewReads(record.view, parseCloudView(current, record.projectId, record.ownerId)?.view),
       );
       if (merged == null) return;
-      await databases.updateDocument(APPWRITE_DATABASE_ID, PROJECT_VIEWS_COLLECTION_ID, knownId, { data: merged });
+      if (current.$updatedAt) await writeCloudViewIf(key, knownId, merged, current.$updatedAt);
+      else await databases.updateDocument(APPWRITE_DATABASE_ID, PROJECT_VIEWS_COLLECTION_ID, knownId, { data: merged });
       return;
     } catch (error) {
       if (isMissingCollection(error)) {
@@ -232,13 +276,14 @@ async function upsertCloudView(record: StoredProjectView, createOnly: boolean): 
       }
       if (errorCode(error) !== 404) throw error;
       cloudViewIds.delete(key); // effacée ailleurs : recréée ci-dessous
+      cloudViewVersions.delete(key);
     }
   }
   // Vue absente du cloud, ou inconnue (projet tout juste créé, importé ou
   // dupliqué ; lecture échouée) : création, et un 409 si elle existait.
   const documentId = projectViewDocumentId(record.projectId, record.ownerId);
   try {
-    await databases.createDocument(
+    const created = (await databases.createDocument(
       APPWRITE_DATABASE_ID,
       PROJECT_VIEWS_COLLECTION_ID,
       documentId,
@@ -248,8 +293,9 @@ async function upsertCloudView(record: StoredProjectView, createOnly: boolean): 
         Permission.update(Role.user(record.ownerId)),
         Permission.delete(Role.user(record.ownerId)),
       ],
-    );
+    )) as unknown as CloudViewDoc;
     cloudViewIds.set(key, documentId);
+    if (created?.$updatedAt) cloudViewVersions.set(key, created.$updatedAt);
   } catch (error) {
     if (isMissingCollection(error)) {
       markCloudViewsUnavailable(error);
@@ -269,6 +315,8 @@ async function upsertCloudView(record: StoredProjectView, createOnly: boolean): 
       key,
       await (await loadAccessQueries()).writeConflictedCloudView(documentId, record.projectId, record.ownerId, merged),
     );
+    // Écrite sans condition : sa nouvelle version n'est pas connue ici.
+    cloudViewVersions.delete(key);
   }
 }
 
@@ -475,6 +523,7 @@ export async function deleteProjectView(projectId: string): Promise<void> {
   await idbDeleteProjectView(projectId).catch(() => undefined);
   const ownerId = getCachedCurrentUserIdSync();
   lastKnownViews.delete(viewKey(ownerId, projectId));
+  cloudViewVersions.delete(viewKey(ownerId, projectId));
   if (ownerId === ANONYMOUS_OWNER || isCloudless(projectId, ownerId) || cloudViewsUnavailable) return;
   await enqueue(cloudViewQueues, projectId, async () => {
     const key = viewKey(ownerId, projectId);

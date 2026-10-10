@@ -135,7 +135,12 @@ describe('lu / non lu des commentaires entre appareils (E3-2)', () => {
       data: JSON.stringify({ updatedAt: '2026-10-02T11:00:00.000Z', view: withReads('portable', { f1: NEW, f2: NEW }) }),
     });
     // Le fixe déplace la carte : sa vue part, avec ses anciens repères de lecture.
+    mock.calls = [];
     await views.saveProjectViewNow('p1', withReads('fixe déplacé', { f1: OLD, f3: OLD }));
+    // Écriture conditionnelle refusée (le portable a écrit depuis), relue, fusionnée, réécrite.
+    expect(mock.calls.filter((call) => call.endsWith(':project_views'))).toEqual([
+      'updateDocument:project_views', 'getDocument:project_views', 'updateDocument:project_views',
+    ]);
     const stored = storedView(mock.col('project_views').get(docId('p1'))?.data);
     expect(stored.activeItineraryId).toBe('fixe déplacé');
     expect(stored.commentsView?.reads).toEqual({ f1: NEW, f2: NEW, f3: OLD });
@@ -167,8 +172,7 @@ describe('aucune requête qui répond 404 (rouge dans la console)', () => {
     expect(viewCalls(mock.calls)).toEqual([
       'listDocuments:project_views',
       'createDocument:project_views',
-      // Relue avant chaque mise à jour : ses repères de lecture sont fusionnés (E3-2).
-      'getDocument:project_views',
+      // Écriture conditionnelle sur la version connue : pas de relecture (E3-2).
       'updateDocument:project_views',
     ]);
   });
@@ -181,7 +185,7 @@ describe('aucune requête qui répond 404 (rouge dans la console)', () => {
     mock.calls = [];
     expect((await views.readProjectView('p1'))?.view.activeItineraryId).toBe('ailleurs');
     await views.saveProjectViewNow('p1', view('ici'));
-    expect(viewCalls(mock.calls)).toEqual(['listDocuments:project_views', 'getDocument:project_views', 'updateDocument:project_views']);
+    expect(viewCalls(mock.calls)).toEqual(['listDocuments:project_views', 'updateDocument:project_views']);
     expect(storedView(mock.col('project_views').get(docId('p1'))?.data).activeItineraryId).toBe('ici');
   });
 
@@ -207,6 +211,7 @@ describe('aucune requête qui répond 404 (rouge dans la console)', () => {
     expect(storedView(mock.col('project_views').get(docId('p1'))?.data).activeItineraryId).toBe('ici');
     mock.calls = [];
     await views.saveProjectViewNow('p1', view('encore'));
+    // Écrite sans condition après le 409 : version inconnue, relue une fois.
     expect(viewCalls(mock.calls)).toEqual(['getDocument:project_views', 'updateDocument:project_views']);
   });
 });
