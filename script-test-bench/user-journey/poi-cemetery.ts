@@ -64,15 +64,15 @@ async function main() {
   const pageErrors: string[] = [];
   try {
     await installBackend(context, { root: REPO, origin: server.origin, loggedIn: false, analytics: false });
-    const requested: string[][] = [];
+    const requested: Array<{ categories: string[]; radiusM: number }> = [];
     for (const route of ['brouter', 'openmeteo', 'weather', 'meteofrance', 'overpass', 'geocode-iconic', 'snow-context']) {
       await context.route(new RegExp(`^${server.origin}/api/${route}(?:[/?]|$)`), (r) => r.fulfill({ status: 503, contentType: 'application/json', body: '{"error":"e2e"}' }));
     }
     await context.route(new RegExp(`^${server.origin}/api/poi(?:[/?]|$)`), async (r) => {
       const url = new URL(r.request().url());
       if (url.searchParams.get('op') !== 'corridor') return r.fulfill({ status: 200, contentType: 'application/json', body: '{"features":[]}' });
-      const body = JSON.parse(r.request().postData() ?? '{}') as { categories: string[] };
-      requested.push(body.categories);
+      const body = JSON.parse(r.request().postData() ?? '{}') as { categories: string[]; radiusM: number };
+      requested.push({ categories: body.categories, radiusM: body.radiusM });
       const features = POIS.filter((p) => body.categories.includes(p.category));
       return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ features }) });
     });
@@ -104,8 +104,12 @@ async function main() {
     const load = p.getByRole('button', { name: 'Charger', exact: true });
     if (await load.isVisible().catch(() => false)) await load.click();
     await p.getByText(/POI trouvés/).first().waitFor({ timeout: 30_000 });
-    const flat = requested.flat();
-    check(flat.includes('cemetery'), 'le couloir demande la catégorie « cemetery »', [...new Set(flat)].join(','));
+    // Une requête par rayon : les cimetières seuls à 100 m (+ tolérance), le
+    // reste à 20 m — jamais tous les commerces au rayon des cimetières.
+    const cemeteryRequest = requested.find((q) => q.categories.includes('cemetery'));
+    check(cemeteryRequest?.categories.length === 1 && cemeteryRequest.radiusM >= 100, 'cimetières interrogés seuls, à ≥ 100 m', JSON.stringify(cemeteryRequest ?? null).slice(0, 80));
+    const others = requested.filter((q) => !q.categories.includes('cemetery'));
+    check(others.length > 0 && others.every((q) => q.radiusM < 30), 'autres catégories interrogées à < 30 m', others.map((q) => `${q.categories.length} cat. à ${q.radiusM.toFixed(0)} m`).join(', '));
     const found = await p.getByText(/POI trouvés/).first().textContent();
     // 60 m gardé (≤ 100 m), 400 m écarté, la fontaine à 5 m gardée (≤ 20 m).
     check(/\(2 POI trouvés\)/.test(found ?? ''), 'filtrage latéral : cimetière à 60 m gardé, à 400 m écarté', found ?? '');

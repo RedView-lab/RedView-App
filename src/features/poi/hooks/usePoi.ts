@@ -24,6 +24,7 @@ import type { PoiCategory, PoiFeature, GpxRoute } from '../types';
 import { GPX_IMPORT_POI_SOURCE } from '../types';
 import { PoiApiError, clampCorridorRadiusM, fetchPoisAlongRouteChunked } from '../lib/poi-api';
 import { buildCorridorSamples } from '../lib/corridor-samples';
+import { groupCategoriesByRadius } from '../lib/corridor-radius-groups';
 import { filterPoisByLateralDistance } from '../lib/corridor-distance-filter';
 import { PoiMarkerManager } from '../lib/poi-markers';
 import type { UsePoiPopupActions } from '../lib/poi-popup';
@@ -141,7 +142,12 @@ export function usePoi(
   gpxRoute: GpxRoute | null = null,
   radiusM: number = 1000,
   maxLateralDistanceByCategory: Partial<Record<PoiCategory, number>> | null = null,
-  onCorridorUpdate?: (features: PoiFeature[]) => void,
+  /**
+   * Inutilisé : la recherche ne publie plus de résultats partiels (une
+   * écriture du projet à la fin, `onCorridorComplete`). Gardé pour la
+   * signature positionnelle.
+   */
+  _onCorridorUpdate?: (features: PoiFeature[]) => void,
   /** Fin de recherche : POI à enregistrer et trace sur laquelle ils ont été cherchés. */
   onCorridorComplete?: (features: PoiFeature[], routePoints: GpxRoute['points']) => void,
   /**
@@ -192,7 +198,6 @@ export function usePoi(
   const gpxRef = useLatestRef(gpxRoute);
   const radiusRef = useLatestRef(radiusM);
   const maxLateralDistanceByCategoryRef = useLatestRef(maxLateralDistanceByCategory);
-  const onCorridorUpdateRef = useLatestRef(onCorridorUpdate);
   const onCorridorCompleteRef = useLatestRef(onCorridorComplete);
   const popupActionsRef = useLatestRef(popupActions);
   const initialFeaturesRef = useLatestRef(initialFeatures);
@@ -333,33 +338,33 @@ export function usePoi(
     };
     setSearch({ routeId: searchRouteId, loading: true, error: null, progress: 0 });
 
-    // Polyligne simplifiée (tolérance <= r/4, sommets de virage conservés)
-    // puis densifiée dans le budget de points du serveur, interrogée avec
-    // r + tolérance ; le filtre latéral client ramène ensuite chaque
-    // catégorie à sa distance X. Voir lib/corridor-samples.ts.
-    // Le serveur rejette (400) tout rayon hors [1, 10000] m.
-    const { samples, queryRadiusM } = buildCorridorSamples(route.points, radiusRef.current);
+    // Une requête par rayon (catégories regroupées par leur distance X) :
+    // les cimetières à 100 m ne font pas chercher tous les commerces à
+    // 100 m. Pour chacune, polyligne simplifiée (tolérance <= r/4, sommets de
+    // virage conservés) puis densifiée dans le budget de points du serveur,
+    // interrogée avec r + tolérance ; le filtre latéral client ramène ensuite
+    // chaque catégorie à sa distance X. Voir lib/corridor-samples.ts et
+    // lib/corridor-radius-groups.ts. Le serveur rejette (400) tout rayon hors
+    // [1, 10000] m.
+    const groups = groupCategoriesByRadius(cats, maxLateralDistanceByCategoryRef.current, radiusRef.current);
 
     try {
-      const features = await fetchPoisAlongRouteChunked({
-        samples,
-        radiusM: queryRadiusM,
-        categories: cats,
-        signal: controller.signal,
-        onProgress: (deduped, { done, total }) => {
-          if (controller.signal.aborted) return;
-          updateSearch({ progress: total > 0 ? done / total : 0 });
-          // Le tick vide « requête démarrée » ne doit PAS effacer les POI
-          // affichés (il vidait tous les marqueurs et les reconstruisait tous à
-          // la réponse), et le tick final est traité une fois par la branche de
-          // fin ci-dessous.
-          if (deduped.length === 0 || done >= total) return;
-          const all = mergeCorridorWithSavedFeatures(deduped, initialFeaturesRef.current);
-          lastCorridorFeatures.current = all;
-          syncRenderedFeatures(buildRenderableFeatures(all));
-          onCorridorUpdateRef.current?.(buildStoredFeatures(all));
-        },
-      });
+      let done = 0;
+      const results = await Promise.all(groups.map(async (group) => {
+        const { samples, queryRadiusM } = buildCorridorSamples(route.points, group.radiusM);
+        const found = await fetchPoisAlongRouteChunked({
+          samples,
+          radiusM: queryRadiusM,
+          categories: group.categories,
+          signal: controller.signal,
+        });
+        done += 1;
+        if (!controller.signal.aborted) updateSearch({ progress: done / groups.length });
+        return found;
+      }));
+      const byId = new Map<number, PoiFeature>();
+      for (const found of results) for (const feature of found) byId.set(feature.id, feature);
+      const features = [...byId.values()];
       if (!controller.signal.aborted) {
         const all = mergeCorridorWithSavedFeatures(features, initialFeaturesRef.current);
         lastCorridorFeatures.current = all;
@@ -378,7 +383,7 @@ export function usePoi(
         updateSearch({ loading: false, progress: null });
       }
     }
-  }, [buildRenderableFeatures, buildStoredFeatures, syncRenderedFeatures, gpxRef, initialFeaturesRef, onCorridorCompleteRef, onCorridorUpdateRef, radiusRef, routeIdRef, searchCategoriesRef]);
+  }, [buildRenderableFeatures, buildStoredFeatures, syncRenderedFeatures, gpxRef, initialFeaturesRef, maxLateralDistanceByCategoryRef, onCorridorCompleteRef, radiusRef, routeIdRef, searchCategoriesRef]);
 
   // ── Déclencheurs publics ──────────────────────────────────────────
 

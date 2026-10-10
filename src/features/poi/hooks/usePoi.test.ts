@@ -13,7 +13,8 @@ import type { GpxRoute, PoiCategory, PoiFeature } from '../types';
  */
 
 interface PendingSearch {
-  onProgress: (deduped: PoiFeature[], progress: { done: number; total: number }) => void;
+  categories: PoiCategory[];
+  radiusM: number;
   resolve: (features: PoiFeature[]) => void;
   reject: (error: unknown) => void;
 }
@@ -22,10 +23,9 @@ const searches = vi.hoisted(() => [] as PendingSearch[]);
 
 vi.mock('../lib/poi-api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/poi-api')>()),
-  fetchPoisAlongRouteChunked: (options: { onProgress: PendingSearch['onProgress'] }) =>
+  fetchPoisAlongRouteChunked: (options: { categories: PoiCategory[]; radiusM: number }) =>
     new Promise<PoiFeature[]>((resolve, reject) => {
-      searches.push({ onProgress: options.onProgress, resolve, reject });
-      options.onProgress([], { done: 0, total: 2 });
+      searches.push({ categories: options.categories, radiusM: options.radiusM, resolve, reject });
     }),
 }));
 
@@ -41,7 +41,9 @@ vi.mock('../lib/poi-markers', () => ({
 
 const { usePoi } = await import('./usePoi');
 
-const CATEGORIES = new Set<PoiCategory>(['drinking_water']);
+const CATEGORIES = new Set<PoiCategory>(['drinking_water', 'cemetery']);
+/** Deux rayons : une requête par groupe. */
+const DISTANCES: Partial<Record<PoiCategory, number>> = { drinking_water: 20, cemetery: 100 };
 const ROUTE: GpxRoute = {
   name: null,
   points: [
@@ -53,7 +55,7 @@ const MAP = {} as MapboxMap;
 
 function renderPoi(routeId: string) {
   return renderHook(
-    (id: string) => usePoi(MAP, true, CATEGORIES, ROUTE, 1000, null, undefined, undefined, null, {}, id),
+    (id: string) => usePoi(MAP, true, CATEGORIES, ROUTE, 100, DISTANCES, undefined, undefined, null, {}, id),
     { initialProps: routeId },
   );
 }
@@ -68,11 +70,15 @@ describe('usePoi : recherche en corridor', () => {
     act(() => hook.result.current.searchCorridor());
     expect(hook.result.current.loading).toBe(true);
     expect(hook.result.current.corridorProgress).toBe(0);
+    // Une requête par rayon : l'eau à 20 m, les cimetières à 100 m (+ tolérance).
+    expect(searches.map((search) => search.categories)).toEqual([['drinking_water'], ['cemetery']]);
+    expect(searches[0].radiusM).toBeLessThan(30);
+    expect(searches[1].radiusM).toBeGreaterThanOrEqual(100);
 
-    act(() => searches[0].onProgress([], { done: 1, total: 2 }));
+    await act(async () => searches[0].resolve([]));
     expect(hook.result.current.corridorProgress).toBe(0.5);
 
-    await act(async () => searches[0].reject(new Error('réseau')));
+    await act(async () => searches[1].reject(new Error('réseau')));
     expect(hook.result.current.loading).toBe(false);
     expect(hook.result.current.corridorProgress).toBeNull();
     expect(hook.result.current.error).not.toBeNull();
@@ -89,8 +95,8 @@ describe('usePoi : recherche en corridor', () => {
     expect(hook.result.current.error).toBeNull();
 
     // L'ancienne recherche répond encore : rien ne change pour « b ».
-    act(() => searches[0].onProgress([], { done: 1, total: 2 }));
-    await act(async () => searches[0].reject(new Error('réseau')));
+    await act(async () => searches[0].resolve([]));
+    await act(async () => searches[1].reject(new Error('réseau')));
     expect(hook.result.current.loading).toBe(false);
     expect(hook.result.current.corridorProgress).toBeNull();
     expect(hook.result.current.error).toBeNull();
@@ -98,7 +104,7 @@ describe('usePoi : recherche en corridor', () => {
     // Une recherche lancée sur « b » suit son propre cours.
     act(() => hook.result.current.searchCorridor());
     expect(hook.result.current.loading).toBe(true);
-    await act(async () => searches[1].resolve([]));
+    await act(async () => { searches[2].resolve([]); searches[3].resolve([]); });
     expect(hook.result.current.loading).toBe(false);
   });
 
