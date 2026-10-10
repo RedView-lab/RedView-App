@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { useHasChanged } from '@/shared/hooks/useHasChanged';
+import { useLatestRef } from '@/shared/hooks/useLatestRef';
 import { useAppI18n } from '@/shared/i18n';
 
 import {
@@ -69,6 +69,25 @@ function serializePracticeForm(value: AccountPracticeForm) {
   return JSON.stringify(value);
 }
 
+const sameValue = (a: unknown, b: unknown) => a === b || JSON.stringify(a) === JSON.stringify(b);
+
+/**
+ * Formulaire après un changement de profil : chaque champ que l'utilisateur
+ * n'a pas modifié prend la nouvelle valeur, une saisie en cours reste.
+ * Repartir du profil effaçait une saisie non enregistrée dès que l'autre
+ * section s'enregistrait (prénom tapé, puis pays changé : la pratique
+ * s'enregistre seule et le prénom disparaissait).
+ */
+function rebaseForm<T extends object>(form: T, before: T, after: T): T {
+  let next = form;
+  for (const key of Object.keys(after) as Array<keyof T>) {
+    if (sameValue(form[key], before[key]) && !sameValue(form[key], after[key])) {
+      next = { ...next, [key]: after[key] };
+    }
+  }
+  return next;
+}
+
 export function AccountPanel({
   profile,
   isLoading,
@@ -86,6 +105,16 @@ export function AccountPanel({
   const { t } = useAppI18n();
   const syncedPracticeRef = useRef(serializePracticeForm(createPracticeForm(profile)));
   const mountedRef = useRef(true);
+  const profileRef = useLatestRef(profile);
+  const onProfileUpdatedRef = useLatestRef(onProfileUpdated);
+  // Toujours à partir du dernier profil reçu : un enregistrement lent ne
+  // ramène jamais les champs qu'une autre section a changés entre-temps.
+  // Stable : le parent passe une fonction neuve à chaque rendu, ce qui
+  // relançait le délai d'enregistrement de la pratique.
+  const updateProfile = useCallback((patch: Partial<AccountProfile>) => {
+    const current = profileRef.current;
+    if (current) onProfileUpdatedRef.current({ ...current, ...patch });
+  }, [onProfileUpdatedRef, profileRef]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -94,10 +123,12 @@ export function AccountPanel({
     };
   }, []);
 
-  // Nouveau profil : formulaires repartis de lui (au premier rendu, l'état initial en vient déjà).
-  if (useHasChanged(profile)) {
-    setIdentityForm(createIdentityForm(profile));
-    setPracticeForm(createPracticeForm(profile));
+  // Nouveau profil (au premier rendu, l'état initial en vient déjà).
+  const [previousProfile, setPreviousProfile] = useState(profile);
+  if (previousProfile !== profile) {
+    setPreviousProfile(profile);
+    setIdentityForm((form) => rebaseForm(form, createIdentityForm(previousProfile), createIdentityForm(profile)));
+    setPracticeForm((form) => rebaseForm(form, createPracticeForm(previousProfile), createPracticeForm(profile)));
   }
 
   useEffect(() => {
@@ -120,11 +151,7 @@ export function AccountPanel({
         try {
           await saveAccountPractice(practiceForm);
           syncedPracticeRef.current = serialized;
-          onProfileUpdated({
-            ...profile,
-            country: practiceForm.country,
-            sports: practiceForm.sports,
-          });
+          updateProfile({ country: practiceForm.country, sports: practiceForm.sports });
         } catch (nextError) {
           if (mountedRef.current) {
             setNotice({
@@ -144,7 +171,7 @@ export function AccountPanel({
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [onProfileUpdated, practiceForm, profile]);
+  }, [practiceForm, profile, updateProfile]);
 
   const handleIdentitySave = async () => {
     if (!profile) return;
@@ -152,8 +179,7 @@ export function AccountPanel({
     setNotice(null);
     try {
       const nextUser = await saveAccountIdentity(identityForm);
-      onProfileUpdated({
-        ...profile,
+      updateProfile({
         firstName: identityForm.firstName.trim(),
         lastName: identityForm.lastName.trim(),
         email: nextUser.email ?? identityForm.email.trim(),
@@ -180,7 +206,7 @@ export function AccountPanel({
       await updateAccountPassword(password.next, profile?.hasPassword ? password.current : undefined);
       setPassword(EMPTY_PASSWORD);
       // Compte Google : il a maintenant un mot de passe (l'actuel sera demandé la prochaine fois).
-      if (profile && !profile.hasPassword) onProfileUpdated({ ...profile, hasPassword: true });
+      if (profile && !profile.hasPassword) updateProfile({ hasPassword: true });
       setNotice({
         tone: 'success',
         message: t('Mot de passe mis à jour.'),
@@ -238,7 +264,7 @@ export function AccountPanel({
         isSaving={identitySaving}
         hasPassword={profile.hasPassword}
         onEmailChanged={(email) => {
-          onProfileUpdated({ ...profile, email });
+          updateProfile({ email });
           setNotice({ tone: 'success', message: t('Adresse e-mail changée : {{email}}', { email }) });
         }}
         onChange={setIdentityForm}
