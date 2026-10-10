@@ -4,6 +4,8 @@
  *   npx tsx --env-file=.env scripts/appwrite/secure-shared-projects.ts               # lecture seule : rapport
  *   npx tsx --env-file=.env scripts/appwrite/secure-shared-projects.ts --apply       # corrige ce qui est sûr
  *   npx tsx --env-file=.env scripts/appwrite/secure-shared-projects.ts --check-documents [--all]
+ *   npx tsx --env-file=.env scripts/appwrite/secure-shared-projects.ts --check-fit   # .fit : lecture seule
+ *   npx tsx --env-file=.env scripts/appwrite/secure-shared-projects.ts --grant-fit   # .fit : ouvre ce qui est sûr
  *
  * Rapport (ids seulement, jamais de contenu) :
  *  - lignes partagées dont les permissions ne sont pas canoniques
@@ -27,6 +29,16 @@
  * `--check-documents` : chaque document partagé (`--all` : chaque projet), rejoué en opérations
  * (collab/model/diff.ts), passe-t-il la validation du serveur temps réel
  * (collab/model/validate.ts) ? Un refus serait un lot honnête perdu.
+ *
+ * `--check-fit` : les .fit référencés par chaque document partagé sont-ils
+ * lisibles par l'équipe ? Jusqu'à d6b67443, un .fit envoyé hors session
+ * temps réel (serveur injoignable, session en cours d'ouverture) ne l'était
+ * pas, et les éditeurs recevaient un 404. `--grant-fit` (indépendant de
+ * `--apply`) l'accorde seulement quand c'est sûr : auteur du fichier membre de
+ * l'équipe ET fichier créé après le partage (création de l'équipe) — un
+ * éditeur ne peut pas faire ouvrir le fichier d'un autre compte, ni un
+ * fichier antérieur au partage, en glissant son id dans le document. Le reste
+ * est listé à relire.
  */
 import { gunzipSync } from 'node:zlib';
 
@@ -52,6 +64,9 @@ const API_KEY = process.env.APPWRITE_API_KEY || '';
 const APPLY = process.argv.includes('--apply');
 const CHECK_DOCUMENTS = process.argv.includes('--check-documents');
 const CHECK_ALL = process.argv.includes('--all');
+const GRANT_FIT = process.argv.includes('--grant-fit');
+const CHECK_FIT = GRANT_FIT || process.argv.includes('--check-fit');
+const FIT_BUCKET_ID = 'itinerary-fit-files';
 
 if (!API_KEY) {
   console.error('APPWRITE_API_KEY manquant (lancer avec --env-file=.env).');
@@ -185,6 +200,8 @@ async function main(): Promise<void> {
     for (const [reason, count] of reasons) console.log(`- ${reason} : ${count}`);
   }
 
+  if (CHECK_FIT) await auditFitPermissions(sharedRows);
+
   if (!APPLY) {
     console.log('\nLecture seule : rien n’a été modifié (--apply pour corriger ce qui est sûr).');
     return;
@@ -212,6 +229,80 @@ async function main(): Promise<void> {
     deletedTeams += 1;
   }
   console.log(`${fixedRows} ligne(s) mise(s) en conformité, ${deletedTeams} équipe(s) sans projet supprimée(s).`);
+}
+
+/** Ids des .fit référencés par un document (`itineraries[].fitUploads[].path`). */
+function fitFileIds(document: unknown): string[] {
+  const itineraries = (document as { itineraries?: unknown } | null)?.itineraries;
+  if (!Array.isArray(itineraries)) return [];
+  const ids = new Set<string>();
+  for (const itinerary of itineraries) {
+    const uploads = (itinerary as { fitUploads?: unknown } | null)?.fitUploads;
+    if (!Array.isArray(uploads)) continue;
+    for (const upload of uploads) {
+      const path = (upload as { path?: unknown } | null)?.path;
+      if (typeof path === 'string' && /^[A-Za-z0-9][A-Za-z0-9._-]{0,35}$/.test(path)) ids.add(path);
+    }
+  }
+  return [...ids];
+}
+
+/** Auteur d'un fichier : le compte qui peut le supprimer (seul l'auteur reçoit `delete`). */
+const fileAuthor = (permissions: string[]) =>
+  permissions.map((permission) => /^delete\("user:([^"]+)"\)$/.exec(permission)?.[1]).find(Boolean) ?? null;
+
+async function auditFitPermissions(sharedRows: Row[]): Promise<void> {
+  console.log(`\n=== .fit des projets partagés : lecture de l’équipe${GRANT_FIT ? ' (CORRECTION --grant-fit)' : ''} ===`);
+  const counts = new Map<string, number>();
+  const count = (label: string) => counts.set(label, (counts.get(label) ?? 0) + 1);
+  let granted = 0;
+  for (const row of sharedRows) {
+    const teamId = projectTeamId(row.$id);
+    let team: Models.Team<Models.Preferences>;
+    try {
+      team = await teams.get(teamId);
+    } catch {
+      count('projet sans équipe (non traité)');
+      continue;
+    }
+    const members = new Set((await memberships(teamId)).filter((membership) => membership.confirm).map((membership) => membership.userId));
+    let ids: string[];
+    try {
+      ids = fitFileIds(await readDocument(await databases.getDocument(DATABASE_ID, 'projects', row.$id) as unknown as Row));
+    } catch {
+      count('document illisible (non traité)');
+      continue;
+    }
+    const teamRead = `read("team:${teamId}")`;
+    for (const fileId of ids) {
+      let file: Models.File;
+      try {
+        file = await storage.getFile(FIT_BUCKET_ID, fileId);
+      } catch (error) {
+        count((error as { code?: number }).code === 404 ? 'supprimé (référence orpheline, retirée par l’app)' : 'erreur de lecture');
+        continue;
+      }
+      if (file.$permissions.includes(teamRead)) {
+        count('déjà lisible par l’équipe');
+        continue;
+      }
+      const author = fileAuthor(file.$permissions);
+      if (!author || !members.has(author) || Date.parse(file.$createdAt) < Date.parse(team.$createdAt)) {
+        count('à relire (auteur hors de l’équipe, ou fichier antérieur au partage)');
+        console.log(`  à relire : projet ${row.$id}, fichier ${fileId}`);
+        continue;
+      }
+      count('à ouvrir à l’équipe (envoyé hors session)');
+      if (GRANT_FIT) {
+        await storage.updateFile(FIT_BUCKET_ID, fileId, file.name, [...file.$permissions, teamRead]);
+        granted += 1;
+      }
+    }
+  }
+  if (counts.size === 0) console.log(`Aucun .fit dans les ${sharedRows.length} projet(s) partagé(s).`);
+  for (const [label, total] of counts) console.log(`- ${label} : ${total}`);
+  if (GRANT_FIT) console.log(`${granted} fichier(s) .fit ouvert(s) à leur équipe.`);
+  else if (counts.has('à ouvrir à l’équipe (envoyé hors session)')) console.log('(--grant-fit pour les ouvrir)');
 }
 
 main().catch((error: unknown) => {
