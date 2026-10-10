@@ -2,6 +2,7 @@ import {
   account,
   clearStoredAppwriteSession,
   getAppwriteUser,
+  readStoredAppwriteSession,
   rememberAppwriteUser,
   updateAccountPrefs,
 } from '@/shared/services/appwrite';
@@ -15,7 +16,7 @@ import { APP_CACHE_EPOCH_STORAGE_KEY } from '@/shared/lib/appCacheEpoch';
 import { appwriteFailureMessage, isSessionRejectedError } from '@/shared/lib/appwriteErrors';
 import { clearAnalyticsContext, trackAnalyticsEvent } from '@/shared/lib/analytics';
 import { syncDirtyProjects } from '@/shared/services/projects';
-import { clearProjectStore } from '@/shared/services/storage/idbProjectStore';
+import { clearProjectStoreForUser } from '@/shared/services/storage/idbProjectStore';
 
 import {
   DEFAULT_COUNTRY,
@@ -241,13 +242,18 @@ function deleteIndexedDb(name: string): Promise<void> {
  * Après la suppression du compte : tout ce qu'il a laissé sur cet appareil —
  * session, clés `redview:*` du compte, projets en cache (IndexedDB) et lots de
  * co-édition non envoyés (`redview-collab`, gardés à la déconnexion pour être
- * renvoyés à la session suivante du même compte).
+ * renvoyés à la session suivante du même compte). Les copies non envoyées
+ * d'un autre compte du même appareil restent (B3-3).
  */
 export async function clearLocalAccountData(): Promise<void> {
+  const userId = readStoredAppwriteSession()?.user.id ?? null;
   clearStoredAppwriteSession();
   clearUserScopedLocalStorage();
+  const clearCollabCopies = userId
+    ? import('@/features/collab/client/unsyncedStore').then(({ deleteUnsyncedOfUser }) => deleteUnsyncedOfUser(userId))
+    : deleteIndexedDb('redview-collab');
   await Promise.race([
-    Promise.allSettled([clearProjectStore(), deleteIndexedDb('redview-collab')]),
+    Promise.allSettled([clearProjectStoreForUser(userId), clearCollabCopies]),
     new Promise((resolve) => setTimeout(resolve, 3000)),
   ]);
 }
@@ -341,7 +347,10 @@ export async function signOutAccount({ force = false }: { force?: boolean } = {}
   //    valide (A14-2). En cas d'échec : SignOutFailedError, rien n'est purgé.
   await revokeCurrentSession();
 
-  // 2. Puis purger l'état d'authentification local et les données propres à l'utilisateur.
+  // 2. Puis purger l'état d'authentification local et les données propres à
+  //    l'utilisateur — jamais les copies non envoyées d'un autre compte de
+  //    l'appareil (B3-3) : le compte qui part est lu avant d'oublier la session.
+  const userId = readStoredAppwriteSession()?.user.id ?? null;
   trackAnalyticsEvent({ name: 'logout' });
   clearAnalyticsContext();
   clearStoredAppwriteSession();
@@ -349,7 +358,7 @@ export async function signOutAccount({ force = false }: { force?: boolean } = {}
 
   try {
     await Promise.race([
-      clearProjectStore(),
+      clearProjectStoreForUser(userId),
       new Promise((resolve) => setTimeout(resolve, 1500)),
     ]);
   } catch (err) {

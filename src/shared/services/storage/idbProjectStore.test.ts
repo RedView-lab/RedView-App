@@ -185,6 +185,28 @@ describe('idbProjectStore', () => {
     expect(await store.idbListProjectMetas()).toEqual([]);
   });
 
+  it('sign-out on a shared device keeps only the unsynced copies of another account (B3-3)', async () => {
+    const store = await loadStore();
+    await store.idbSaveProject({ ...meta('a-dirty', { user_id: 'alice', dirty: true }), data: project('Alice hors ligne') });
+    await store.idbSaveProject({ ...meta('a-clean', { user_id: 'alice' }), data: project('Alice synchro') });
+    await store.idbSaveProject({ ...meta('b-dirty', { user_id: 'bob', dirty: true }), data: project('Bob hors ligne') });
+    await store.idbSaveThumbnail('a-dirty', new Blob(['png']));
+    await store.idbSaveThumbnail('b-dirty', new Blob(['png']));
+    await store.idbSaveProjectView({ projectId: 'b-dirty', ownerId: 'bob', updatedAt: '2026-10-01T00:00:00.000Z', view: { itineraries: {} } });
+
+    await store.clearProjectStoreForUser('bob');
+    expect(documentOf(await store.idbGetProject('a-dirty'))).toBe(documentOf({ ...meta('a'), data: project('Alice hors ligne') }));
+    expect(await store.idbGetThumbnail('a-dirty')).not.toBeNull();
+    expect(await store.idbGetProject('a-clean')).toBeNull();
+    expect(await store.idbGetProject('b-dirty')).toBeNull();
+    expect(await store.idbGetThumbnail('b-dirty')).toBeNull();
+    expect(await store.idbGetProjectView('b-dirty')).toBeNull();
+
+    // Nothing of another account left to keep: the whole database goes, as before.
+    await store.clearProjectStoreForUser('alice');
+    expect(await store.idbListProjectMetas()).toEqual([]);
+  });
+
   it('sign-out wipes everything, even while another tab holds the database open', async () => {
     const otherTab = await loadStore();
     await otherTab.idbSaveProject({ ...meta('p1'), data: project('A') });

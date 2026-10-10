@@ -18,6 +18,7 @@ vi.mock('@/shared/services/appwrite', () => ({
     deleteSession: appwrite.deleteSession,
   },
   clearStoredAppwriteSession: () => appwrite.clearedSession(),
+  readStoredAppwriteSession: () => ({ user: { id: 'u1' } }),
   getAppwriteUser: async () => appwrite.user,
   rememberAppwriteUser: () => {},
   updateAccountPrefs: async (update: (prefs: Record<string, unknown>, user: Record<string, unknown>) => unknown) => {
@@ -26,7 +27,7 @@ vi.mock('@/shared/services/appwrite', () => ({
   },
 }));
 
-vi.mock('@/shared/services/storage/idbProjectStore', () => ({ clearProjectStore: async () => appwrite.clearedStore() }));
+vi.mock('@/shared/services/storage/idbProjectStore', () => ({ clearProjectStoreForUser: async (userId: string | null) => appwrite.clearedStore(userId) }));
 vi.mock('@/shared/services/projects', () => ({ syncDirtyProjects: async () => ({ remaining: [] }) }));
 
 const { accountUpdateFailureMessage, saveAccountIdentity, saveAccountPractice, signOutAccount, SignOutFailedError, updateAccountPassword } = await import('./profile');
@@ -104,7 +105,8 @@ describe('signOutAccount (A14-2)', () => {
     await signOutAccount({ force: true });
     expect(appwrite.deleteSession).toHaveBeenCalledWith('current');
     expect(appwrite.clearedSession).toHaveBeenCalled();
-    expect(appwrite.clearedStore).toHaveBeenCalled();
+    // Seules les données du compte qui part (B3-3 : jamais les copies non envoyées d'un autre compte).
+    expect(appwrite.clearedStore).toHaveBeenCalledWith('u1');
   });
 
   it('révocation impossible (hors ligne) : erreur claire, rien n’est purgé — la session ne se rouvre pas au rechargement suivant par surprise', async () => {

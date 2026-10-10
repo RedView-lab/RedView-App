@@ -116,6 +116,44 @@ export async function clearProjectStore(): Promise<void> {
   });
 }
 
+/**
+ * Déconnexion (ou suppression du compte) de `userId` sur cet appareil : tout
+ * ce qu'il laisse part, mais les copies non synchronisées (`dirty`) d'un
+ * AUTRE compte restent (document, miniature, vue) — appareil partagé, session
+ * de l'autre expirée avant l'envoi : les supprimer détruisait son travail
+ * sans qu'il le sache (B3-3). Rien à garder : toute la base est supprimée.
+ */
+export async function clearProjectStoreForUser(userId: string | null): Promise<void> {
+  if (typeof window === 'undefined' || typeof indexedDB === 'undefined') return;
+  const metas = userId ? await idbListProjectMetas().catch(() => []) : [];
+  const keep = new Set(
+    metas
+      .filter((meta) => meta.dirty && typeof meta.user_id === 'string' && meta.user_id !== '' && meta.user_id !== userId)
+      .map((meta) => meta.id),
+  );
+  if (keep.size === 0) {
+    await clearProjectStore();
+    return;
+  }
+  const db = await getDb();
+  const stores = [STORE_PROJECTS, STORE_PROJECT_DATA, STORE_CACHE, STORE_THUMBNAILS, STORE_VIEWS];
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(stores, 'readwrite');
+    for (const name of stores) {
+      const store = tx.objectStore(name);
+      const keys = store.getAllKeys();
+      keys.onsuccess = () => {
+        for (const key of keys.result) {
+          if (!keep.has(String(key))) store.delete(key);
+        }
+      };
+    }
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error ?? new Error('IndexedDB transaction aborted'));
+  });
+}
+
 // ── Migration depuis LocalStorage ─────────────────────────────────────────
 
 const LOCAL_PROJECTS_KEY = 'redview:local-projects:v1';

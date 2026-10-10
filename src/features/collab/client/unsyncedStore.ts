@@ -85,6 +85,17 @@ export function deleteUnsynced(clientId: string): Promise<void> {
   return run('readwrite', (store) => store.delete(clientId)).then(() => undefined);
 }
 
+/**
+ * Compte supprimé : ses copies partent, jamais celles d'un autre compte du
+ * même appareil (non envoyées : ce serait son travail perdu, B3-3).
+ */
+export async function deleteUnsyncedOfUser(userId: string): Promise<void> {
+  const records = await run('readonly', (store) => store.getAll() as IDBRequest<UnsyncedRecord[]>);
+  for (const record of records) {
+    if (record.userId === userId) await deleteUnsynced(record.clientId);
+  }
+}
+
 function listUnsynced(projectId: string): Promise<UnsyncedRecord[]> {
   return run('readonly', (store) => store.index(PROJECT_INDEX).getAll(projectId) as IDBRequest<UnsyncedRecord[]>);
 }
