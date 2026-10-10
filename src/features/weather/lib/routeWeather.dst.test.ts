@@ -10,10 +10,16 @@ beforeEach(() => {
   vi.stubEnv('TZ', 'Europe/Paris');
 });
 
-/** Série horaire Open-Meteo (`timezone=auto` : heures murales) d'une journée, valeur = heure. */
+/**
+ * Série horaire Open-Meteo d'une journée locale (`timezone=GMT` : heures UTC),
+ * valeur = heure murale locale de l'instant (25 h en octobre, 23 h en mars).
+ */
 function dayAtStation(dateIso: string): RouteWeatherDataset['samples'][number] {
-  const time = Array.from({ length: 24 }, (_, h) => `${dateIso}T${String(h).padStart(2, '0')}:00`);
-  const values = time.map((_, h) => h);
+  const [year, month, day] = dateIso.split('-').map(Number) as [number, number, number];
+  const midnight = new Date(year, month - 1, day).getTime();
+  const instants = Array.from({ length: 25 }, (_, h) => midnight + h * 3600_000);
+  const time = instants.map((ms) => new Date(ms).toISOString().slice(0, 16));
+  const values = instants.map((ms) => new Date(ms).getHours());
   return {
     lat: 48.85,
     lng: 2.35,

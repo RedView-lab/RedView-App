@@ -8,6 +8,8 @@ import {
 import type { ChartMetricId, RouteChartPoint } from '@/features/centerPanel/components/chart/seriesCommon';
 import { buildRouteContentSignature } from '@/features/itineraryPanel/lib/routes';
 import { createSharedRequests, isAbortError } from '@/shared/lib/sharedRequests';
+import { resolveTimeZoneAt } from '@/shared/lib/timeZoneAt';
+import { zonedDateTimeToInstantMs } from '@/shared/lib/zonedTime';
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -103,14 +105,28 @@ function startOfLocalDay(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
-/** Départ (ms epoch) : heure murale du jour de départ, midi par défaut ; maintenant si la date est illisible. */
-function departureTimestamp(startDate: string, startTime: string | null | undefined): number {
-  return localDateTimeMs(startDate, startTime || '12:00') ?? Date.now();
+/**
+ * Départ (ms epoch) : heure murale du jour de départ (midi par défaut) au lieu
+ * de départ (`timeZone`), sinon dans le fuseau du navigateur ; maintenant si
+ * la date est illisible.
+ */
+function departureTimestamp(startDate: string, startTime: string | null | undefined, timeZone?: string | null): number {
+  const time = startTime || '12:00';
+  return (timeZone ? zonedDateTimeToInstantMs(startDate, time, timeZone) : null)
+    ?? localDateTimeMs(startDate, time)
+    ?? Date.now();
+}
+
+/** Jour UTC (AAAA-MM-JJ) d'un instant : les heures sont demandées en UTC. */
+function utcDateIso(ms: number): string {
+  return new Date(ms).toISOString().slice(0, 10);
 }
 
 /**
- * Plage de dates à demander : du jour de départ au jour d'arrivée estimé
- * (durée prédite + 1 h de marge), bornée à l'horizon de prévision.
+ * Plage de jours UTC à demander (les heures sont demandées en UTC) : du
+ * départ à l'arrivée estimée (durée prédite + 1 h de marge), bornée à
+ * l'horizon de prévision. `timeZone` : fuseau du lieu de départ, où l'heure
+ * de départ est une heure murale (défaut : celui du navigateur).
  * `null` si le départ est au-delà de l'horizon (aucune prévision possible).
  */
 export function resolveRouteWeatherDateRange(
@@ -118,6 +134,7 @@ export function resolveRouteWeatherDateRange(
   startTime: string,
   rideDurationHours: number,
   now: Date = new Date(),
+  timeZone?: string | null,
 ): { startDate: string; endDate: string } | null {
   const startDay = parseLocalDateIso(startDate);
   if (!startDay) return null;
@@ -125,11 +142,13 @@ export function resolveRouteWeatherDateRange(
   // plaçait son dernier jour à 23:00 la veille, et un départ ce jour-là hors horizon.
   const lastForecastDay = addDays(startOfLocalDay(now), OPENMETEO_FORECAST_DAYS - 1);
   if (startDay.getTime() > lastForecastDay.getTime()) return null;
-  const departureMs = departureTimestamp(startDate, startTime);
+  const lastForecastIso = formatLocalDateIso(lastForecastDay);
+  const departureMs = departureTimestamp(startDate, startTime, timeZone);
   const durationH = Number.isFinite(rideDurationHours) && rideDurationHours > 0 ? rideDurationHours : 0;
-  const arrivalDay = startOfLocalDay(new Date(departureMs + (durationH + 1) * 3600 * 1000));
-  const endDay = arrivalDay.getTime() > lastForecastDay.getTime() ? lastForecastDay : arrivalDay;
-  return { startDate, endDate: formatLocalDateIso(endDay) };
+  const firstIso = utcDateIso(departureMs);
+  const arrivalIso = utcDateIso(departureMs + (durationH + 1) * 3600 * 1000);
+  const endIso = arrivalIso > lastForecastIso ? lastForecastIso : arrivalIso;
+  return { startDate: firstIso, endDate: endIso < firstIso ? firstIso : endIso };
 }
 
 // ── Échantillonnage spatial de la trace ───────────────────────────────
@@ -226,7 +245,10 @@ export async function fetchRouteWeatherDataset(
   const rideDurationHours = options.rideDurationHours && options.rideDurationHours > 0
     ? options.rideDurationHours
     : totalDistanceKm / FALLBACK_RIDE_SPEED_KMH;
-  const range = resolveRouteWeatherDateRange(startDate, startTime, rideDurationHours);
+  // L'heure de départ est celle du lieu de départ, pas celle du navigateur.
+  const departure = routePoints[0]!;
+  const timeZone = await resolveTimeZoneAt(departure.lon, departure.lat);
+  const range = resolveRouteWeatherDateRange(startDate, startTime, rideDurationHours, new Date(), timeZone);
   if (!range) return null;
 
   const signature = buildRouteContentSignature(routePoints);
@@ -240,7 +262,7 @@ export async function fetchRouteWeatherDataset(
 
   try {
     return await weatherRequests.run(cacheKey, (requestSignal) => requestRouteWeather(
-      cacheKey, itineraryId, signature, sampledStations, range, startDate, startTime, requestSignal,
+      cacheKey, itineraryId, signature, sampledStations, range, startDate, startTime, timeZone, requestSignal,
     ), { signal });
   } catch (error) {
     // Appelant parti (son signal annulé) : rien à afficher.
@@ -258,19 +280,23 @@ async function requestRouteWeather(
   range: { startDate: string; endDate: string },
   startDate: string,
   startTime: string,
+  timeZone: string | null,
   signal: AbortSignal,
 ): Promise<RouteWeatherDataset | null> {
   try {
     const lats = sampledStations.map((s) => s.lat.toFixed(4)).join(',');
     const lngs = sampledStations.map((s) => s.lng.toFixed(4)).join(',');
 
-    // timezone=auto : heures locales du lieu de chaque station (heure murale),
-    // cohérentes avec l'heure de départ saisie pour ce parcours.
+    // timezone=GMT : des instants sans ambiguïté. En heure murale de chaque
+    // station (timezone=auto), lue dans le fuseau du navigateur, deux stations
+    // de part et d'autre d'une frontière de fuseau étaient décalées d'une heure,
+    // l'heure répétée d'automne lue deux fois, et un navigateur dans un autre
+    // fuseau que le parcours décalait tout.
     const url =
       `${OPENMETEO_FORECAST_URL}?latitude=${lats}&longitude=${lngs}` +
       `&hourly=temperature_2m,apparent_temperature,precipitation,wind_speed_10m,cloud_cover,relative_humidity_2m,sunshine_duration` +
       `&start_date=${range.startDate}&end_date=${range.endDate}` +
-      `&timezone=auto&temperature_unit=celsius&precipitation_unit=mm&wind_speed_unit=kmh&cell_selection=nearest` +
+      `&timezone=GMT&temperature_unit=celsius&precipitation_unit=mm&wind_speed_unit=kmh&cell_selection=nearest` +
       `&models=${OPENMETEO_MODEL}`;
 
     const response = await fetch(url, {
@@ -364,7 +390,7 @@ async function requestRouteWeather(
       return null;
     }
 
-    const departureTimestampMs = departureTimestamp(startDate, startTime);
+    const departureTimestampMs = departureTimestamp(startDate, startTime, timeZone);
 
     const dataset: RouteWeatherDataset = {
       itineraryId,
@@ -394,9 +420,9 @@ function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * Math.max(0, Math.min(1, t));
 }
 
+/** Heure Open-Meteo demandée en GMT (« 2026-10-12T14:00 », sans décalage) : un instant UTC. */
 function parseHourTimeMs(timeIso: string): number {
-  const parsed = new Date(timeIso);
-  return parsed.getTime();
+  return Date.parse(/[zZ]|[+-]\d{2}:?\d{2}$/.test(timeIso) ? timeIso : `${timeIso}Z`);
 }
 
 /** Une valeur horaire vaut pour l'heure qui l'entoure : tolérance aux bornes de la série. */

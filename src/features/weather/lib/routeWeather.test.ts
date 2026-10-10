@@ -8,6 +8,7 @@ import {
   type RouteWeatherDataset,
   type RouteWeatherHourly,
 } from './routeWeather';
+import { preloadTimeZoneTable } from '@/shared/lib/timeZoneAt';
 
 const NOW = new Date(2026, 9, 6, 10, 0); // 6 octobre 2026, 10:00 locale
 
@@ -16,13 +17,9 @@ function route(km: number, step = 500): Array<{ lat: number; lon: number; distan
   return Array.from({ length: n }, (_, i) => ({ lat: 45 + i * 0.004, lon: 6, distanceM: i * step, elevationM: 500 }));
 }
 
-/** Heures murales locales « YYYY-MM-DDTHH:00 » à partir du 6 octobre 2026 00:00. */
+/** Heures Open-Meteo demandées en GMT (« YYYY-MM-DDTHH:00 » UTC) à partir du 6 octobre 2026 00:00 locale. */
 function hours(count: number): string[] {
-  return Array.from({ length: count }, (_, h) => {
-    const t = new Date(2026, 9, 6, h);
-    const pad = (v: number) => String(v).padStart(2, '0');
-    return `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}T${pad(t.getHours())}:00`;
-  });
+  return Array.from({ length: count }, (_, h) => new Date(2026, 9, 6, h).toISOString().slice(0, 16));
 }
 
 function hourly(temps: number[]): RouteWeatherHourly {
@@ -48,15 +45,17 @@ afterEach(() => {
 });
 
 describe('resolveRouteWeatherDateRange', () => {
-  it('spans from the departure day to the arrival day (+1 h margin)', () => {
-    expect(resolveRouteWeatherDateRange('2026-10-06', '06:00', 30, NOW)).toEqual({ startDate: '2026-10-06', endDate: '2026-10-07' });
+  it('spans from the departure day to the arrival day (+1 h margin), in UTC days', () => {
+    expect(resolveRouteWeatherDateRange('2026-10-06', '06:00', 30, NOW, 'UTC')).toEqual({ startDate: '2026-10-06', endDate: '2026-10-07' });
     // 06:00 + 41 h + 1 h = 8 octobre 00:00
-    expect(resolveRouteWeatherDateRange('2026-10-06', '06:00', 41, NOW)?.endDate).toBe('2026-10-08');
+    expect(resolveRouteWeatherDateRange('2026-10-06', '06:00', 41, NOW, 'UTC')?.endDate).toBe('2026-10-08');
+    // 00:30 à Paris (UTC+2) = 5 octobre 22:30 UTC : le jour UTC précédent est demandé aussi.
+    expect(resolveRouteWeatherDateRange('2026-10-06', '00:30', 2, NOW, 'Europe/Paris')).toEqual({ startDate: '2026-10-05', endDate: '2026-10-06' });
   });
 
   it('caps at the 4-day horizon of the self-hosted models and refuses a departure beyond it', () => {
-    expect(resolveRouteWeatherDateRange('2026-10-08', '06:00', 60, NOW)).toEqual({ startDate: '2026-10-08', endDate: '2026-10-09' });
-    expect(resolveRouteWeatherDateRange('2026-10-09', '06:00', 200, NOW)).toEqual({ startDate: '2026-10-09', endDate: '2026-10-09' });
+    expect(resolveRouteWeatherDateRange('2026-10-08', '06:00', 60, NOW, 'UTC')).toEqual({ startDate: '2026-10-08', endDate: '2026-10-09' });
+    expect(resolveRouteWeatherDateRange('2026-10-09', '06:00', 200, NOW, 'UTC')).toEqual({ startDate: '2026-10-09', endDate: '2026-10-09' });
     expect(resolveRouteWeatherDateRange('2026-10-10', '06:00', 2, NOW)).toBeNull();
     expect(resolveRouteWeatherDateRange('pas une date', '06:00', 2, NOW)).toBeNull();
   });
@@ -146,8 +145,36 @@ describe('fetchRouteWeatherDataset', () => {
     expect(h.cloud_cover[0]).toBe(100);
     expect(h.sunshine_duration).toEqual([30, 60, 60]); // la 3e heure : 1 − couverture
     const url = String(fetchMock.mock.calls[0][0]);
-    expect(url).toContain('timezone=auto');
+    expect(url).toContain('timezone=GMT');
     expect(new URL(url, 'http://x').searchParams.get('latitude')?.split(',')).toHaveLength(3);
+  });
+
+  it('reads the departure at the departure place and the hours as instants, whatever the browser zone (E2-2)', async () => {
+    vi.stubEnv('TZ', 'America/New_York');
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-11T12:00:00Z'));
+    // Heures GMT du 12 octobre ; valeur = heure UTC.
+    const time = Array.from({ length: 24 }, (_, h) => `2026-10-12T${String(h).padStart(2, '0')}:00`);
+    const values = time.map((_, h) => h);
+    stubOpenMeteo(200, [0, 1, 2].map(() => ({
+      latitude: 45,
+      longitude: 6,
+      hourly: {
+        time,
+        temperature_2m: values,
+        apparent_temperature: values,
+        precipitation: values,
+        wind_speed_10m: values,
+        cloud_cover: values,
+        relative_humidity_2m: values,
+        sunshine_duration: values,
+      },
+    })));
+    // Départ « 08:00 » dans les Alpes (UTC+2) = 06:00 UTC, même depuis un navigateur à New York.
+    const ds = await fetchRouteWeatherDataset('it-tz', route(4), '2026-10-12', '08:00');
+    expect(ds?.departureTimestampMs).toBe(Date.UTC(2026, 9, 12, 6));
+    expect(getRouteWeatherAtDistanceAndTime(ds!, 0, 0)?.temperature).toBe(6);
+    expect(getRouteWeatherAtDistanceAndTime(ds!, 0, 90 * 60)?.temperature).toBeCloseTo(7.5, 6);
   });
 
   it('gives null, never invented values, when the forecast service fails', async () => {
@@ -196,9 +223,13 @@ describe('fetchRouteWeatherDataset', () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(NOW);
     const fetchMock = stubAbortableOpenMeteo();
+    await preloadTimeZoneTable();
     const points = route(4, 400);
     const previous = new AbortController();
     const dropped = fetchRouteWeatherDataset('it-3', points, '2026-10-06', '08:00', previous.signal);
+    // Requête partie (après la résolution du fuseau du départ), pas encore revenue.
+    for (let tick = 0; tick < 1_000 && fetchMock.mock.calls.length === 0; tick += 1) await Promise.resolve();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     previous.abort(); // nettoyage de l'effet précédent
     const current = fetchRouteWeatherDataset('it-3', points, '2026-10-06', '08:00', new AbortController().signal);
     expect(await dropped).toBeNull();
