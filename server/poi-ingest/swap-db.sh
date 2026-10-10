@@ -47,10 +47,15 @@ rm -f "$NEW-wal" "$NEW-shm"
 
 echo "── Redémarrage du service…"
 sudo systemctl start poi-server
-sleep 3
 
+# Le serveur construit sa pyramide d'échantillonnage avant d'écouter (~6 s
+# pour 1,35 M POI) : 3 s fixes signalaient une panne qui n'en était pas une.
 echo "── Vérification via HTTP…"
-curl -fsS http://127.0.0.1:17778/health || { echo "❌ Le service ne répond pas."; exit 1; }
+for _ in $(seq 1 60); do
+  curl -fsS http://127.0.0.1:17778/health 2>/dev/null && break
+  sleep 1
+done
+curl -fsS http://127.0.0.1:17778/health >/dev/null || { echo "❌ Le service ne répond pas après 60 s."; exit 1; }
 echo ""
 echo "✅ Bascule terminée. Ancienne base conservée dans data/backup-pois-$STAMP.db"
 echo "   (pense à purger les sauvegardes : ls -la data/backup-pois-*.db)"
