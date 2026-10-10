@@ -62,10 +62,17 @@ export function buildRouteSignature(route: Pick<GpxRoute, 'points' | 'originalPo
   const points = route?.points;
   if (!points || points.length < 2) return '';
   const last = points[points.length - 1];
-  const original = route.originalPoints && route.originalPoints !== points && route.originalPoints.length >= 2
-    ? `|o${route.originalPoints.length}:${hashRoutePoints(route.originalPoints)}`
-    : '';
-  return `${ROUTE_SIGNATURE_VERSION}|${points.length}|${last?.distanceM ?? ''}|${hashRoutePoints(points)}${original}`;
+  const pointsHash = hashRoutePoints(points);
+  // Par contenu, pas par référence : un rognage ou une découpe font de
+  // `originalPoints` le tableau `points` lui-même, et après un rechargement ou
+  // une matérialisation collab ce sont deux tableaux égaux — l'empreinte doit
+  // rester la même partout (sinon recalcul à chaque ouverture, et va-et-vient
+  // entre deux éditeurs qui ne calculent pas la même).
+  const originalHash = route.originalPoints && route.originalPoints !== points && route.originalPoints.length >= 2
+    ? hashRoutePoints(route.originalPoints)
+    : pointsHash;
+  const original = originalHash !== pointsHash ? `|o${route.originalPoints!.length}:${originalHash}` : '';
+  return `${ROUTE_SIGNATURE_VERSION}|${points.length}|${last?.distanceM ?? ''}|${pointsHash}${original}`;
 }
 
 /** Entrées d'une prédiction : un résultat n'est valable que pour elles. */

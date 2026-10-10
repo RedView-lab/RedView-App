@@ -47,6 +47,16 @@ describe('buildRouteSignature', () => {
     expect(buildRouteSignature(shifted)).not.toBe(buildRouteSignature(route()));
   });
 
+  it('is the same when the original points are the route itself, aliased or reloaded (4c relecture)', () => {
+    const base = route();
+    const aliased = { ...base, originalPoints: base.points };
+    // Après un rechargement (JSON) ou une matérialisation collab : même contenu, autre tableau.
+    const reloaded = JSON.parse(JSON.stringify(aliased)) as typeof aliased;
+    expect(reloaded.originalPoints).not.toBe(reloaded.points);
+    expect(buildRouteSignature(reloaded)).toBe(buildRouteSignature(aliased));
+    expect(buildRouteSignature(aliased)).toBe(buildRouteSignature(base));
+  });
+
   it('includes the original points of an imported GPX that the engine reads', () => {
     const base = route();
     const dense = (elevationM: number) => Array.from({ length: 1_001 }, (_, index) => ({
