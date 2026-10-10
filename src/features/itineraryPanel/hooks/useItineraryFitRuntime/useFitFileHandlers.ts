@@ -2,7 +2,7 @@ import { countBucket, trackAnalyticsEvent } from '@/shared/lib/analytics';
 import { useCallback, useRef, type ChangeEvent, type Dispatch, type SetStateAction } from 'react';
 import { translateAppText } from '@/shared/i18n';
 import { appwriteFailureMessage } from '@/shared/lib/appwriteErrors';
-import { ensureHealthDataConsent } from '@/shared/services/healthDataConsent';
+import { ensureHealthDataConsent, runWithHealthDataConsent } from '@/shared/services/healthDataConsent';
 import { deleteFitUploads, uploadProjectItineraryFitFiles } from '@/shared/services/projects';
 import { validateFitFile, type FitFileProblem } from '@/features/fitPredictor/lib/fitFileValidation';
 import { buildFitUploadsSignature } from '../../lib/schedule';
@@ -45,10 +45,12 @@ export function useFitFileHandlers({
     if (!active) return;
     const targetId = active.id;
     // Données de santé (RGPD art. 9) : accord explicite avant d'ouvrir le
-    // sélecteur, donc aucun fichier n'est lu ni envoyé sans lui. Le clic sur
-    // « J'accepte » garde l'activation utilisateur qu'exige input.click().
-    void ensureHealthDataConsent().then((accepted) => {
-      if (!accepted) return;
+    // sélecteur. input.click() exige un geste de l'utilisateur, que WebKit
+    // perd après ~1 s d'attente réseau : le sélecteur s'ouvre dans le clic
+    // même (accord connu) ou dans celui sur « J'accepte » (A10-2). Les
+    // fichiers choisis ne sont lus qu'une fois l'accord confirmé
+    // (handleFitInputChange).
+    runWithHealthDataConsent(() => {
       fitUploadTargetIdRef.current = targetId;
       if (fitInputRef.current) {
         fitInputRef.current.value = '';
@@ -64,6 +66,10 @@ export function useFitFileHandlers({
 
       const selected = Array.from(event.target.files ?? []);
       if (selected.length === 0) return;
+      // Le sélecteur a pu s'ouvrir avant que l'accord soit écrit dans le
+      // compte, ou sur un accord retiré depuis sur un autre appareil : aucun
+      // fichier n'est lu sans accord confirmé.
+      if (!(await ensureHealthDataConsent())) return;
 
       // L'extension ne suffit pas (GPX renommé, fichier vide ou tronqué) : un
       // seul fichier illisible faisait échouer toute la prédiction, et

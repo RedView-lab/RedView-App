@@ -265,6 +265,8 @@ export const projectBrowserTranslationPairs: ReadonlyArray<AppTranslationPair> =
   { fr: 'Refuser', en: 'Decline' },
   { fr: 'J’accepte', en: 'I agree' },
   { fr: 'Votre accord n’a pas pu être enregistré. Vérifiez votre connexion et réessayez.', en: 'Your consent could not be saved. Check your connection and try again.' },
+  { fr: 'Accord enregistré : choisissez vos fichiers .fit.', en: 'Consent saved: choose your .fit files.' },
+  { fr: 'Choisir les fichiers', en: 'Choose files' },
   { fr: 'Données de santé (fichiers .fit)', en: 'Health data (.fit files)' },
   { fr: 'Accord donné le {{date}} pour lire et enregistrer vos fichiers .fit (trace GPS, fréquence cardiaque, puissance, cadence).', en: 'Consent given on {{date}} to read and store your .fit files (GPS track, heart rate, power, cadence).' },
   { fr: 'Aucun accord : vos fichiers .fit ne sont ni lus ni enregistrés. L’accord vous est demandé au premier ajout.', en: 'No consent: your .fit files are neither read nor stored. You will be asked when you first add one.' },

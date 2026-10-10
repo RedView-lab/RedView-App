@@ -15,6 +15,12 @@ const projects = vi.hoisted(() => ({
 vi.mock('@/shared/services/projects', () => projects);
 const sharing = vi.hoisted(() => ({ fetchMissingFitFiles: vi.fn<(projectId: string, ids: string[]) => Promise<string[]>>() }));
 vi.mock('@/shared/services/projects/sharing', () => sharing);
+// Accord aux données de santé : donné, sauf dans le test qui le retire.
+const consent = vi.hoisted(() => ({ accepted: true }));
+vi.mock('@/shared/services/healthDataConsent', () => ({
+  ensureHealthDataConsent: async () => consent.accepted,
+  runWithHealthDataConsent: (action: () => void) => { if (consent.accepted) action(); },
+}));
 vi.mock('@/features/fitPredictor/engine/api', () => ({
   FitPredictionCancelledError: class extends Error {},
   createFitPredictionEngine: () => ({ terminate: () => {} }),
@@ -199,5 +205,22 @@ describe('useItineraryFitRuntime — uploads introuvables ou illisibles', () => 
     });
     expect(projects.uploadProjectItineraryFitFiles).toHaveBeenCalledWith('p-1', 'it-1', [expect.objectContaining({ name: 'nouveau.fit' })]);
     expect(lastProjectUpdate(setProject, active).itineraries[0]!.fitUploads).toEqual([ride, added, other]);
+  });
+
+  it('fichiers choisis sans accord confirmé (retiré ailleurs, non enregistré) : rien n’est lu ni envoyé (A10-2)', async () => {
+    consent.accepted = false;
+    try {
+      const added = upload('nouveau.fit');
+      const active = itinerary([ride]);
+      const { result } = renderRuntime(active);
+      await flush();
+      const event = { target: { files: [fileOf(added)] } } as unknown as ChangeEvent<HTMLInputElement>;
+      await act(async () => {
+        await result.current.handleFitInputChange(event);
+      });
+      expect(projects.uploadProjectItineraryFitFiles).not.toHaveBeenCalled();
+    } finally {
+      consent.accepted = true;
+    }
   });
 });
