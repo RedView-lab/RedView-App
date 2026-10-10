@@ -2,7 +2,18 @@ import type { ApiRequest } from '../types.js';
 import { getAppBaseUrl } from '../config.js';
 import { PublicError } from '../errors.js';
 
-const ALLOWED_ORIGIN = /^https?:\/\/(?:(?:[a-zA-Z0-9-]+\.)*redview\.tech|localhost|127\.0\.0\.1)(?::\d+)?$/;
+/**
+ * Origines où Stripe peut ramener l'utilisateur : l'app seulement, en https
+ * (un sous-domaine oublié ou repris devenait une destination de redirection
+ * depuis le portail Stripe, A2-3), et le serveur de dev hors production.
+ */
+const APP_ORIGINS = new Set(['https://app.redview.tech']);
+const DEV_ORIGIN = /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/;
+
+function isAllowedBillingOrigin(origin: string): boolean {
+  if (APP_ORIGINS.has(origin)) return true;
+  return process.env.NODE_ENV !== 'production' && DEV_ORIGIN.test(origin);
+}
 
 /**
  * Page où Stripe ramène l'utilisateur (portail, paiement par redirection) :
@@ -11,7 +22,7 @@ const ALLOWED_ORIGIN = /^https?:\/\/(?:(?:[a-zA-Z0-9-]+\.)*redview\.tech|localho
  */
 export function billingReturnUrl(req: ApiRequest): string {
   const origin = req.headers.origin;
-  const base = typeof origin === 'string' && ALLOWED_ORIGIN.test(origin) ? origin : getAppBaseUrl(req);
+  const base = typeof origin === 'string' && isAllowedBillingOrigin(origin) ? origin : getAppBaseUrl(req);
   return `${base.replace(/\/+$/, '')}/?tab=subscription`;
 }
 

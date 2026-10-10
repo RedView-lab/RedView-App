@@ -17,15 +17,18 @@ export function getAppBaseUrl(req: ApiRequest): string {
     return configured.replace(/\/+$/, '');
   }
 
-  const hostHeader = req.headers['x-forwarded-host'] ?? req.headers.host;
-  const protoHeader = req.headers['x-forwarded-proto'];
-  const host = Array.isArray(hostHeader) ? hostHeader[0] : hostHeader;
-  const proto = Array.isArray(protoHeader) ? protoHeader[0] : protoHeader;
-
-  const ALLOWED_HOST_PATTERN = /^(?:(?:[a-zA-Z0-9-]+\.)*redview\.tech|localhost|127\.0\.0\.1)(?::\d+)?$/;
-
-  if (host && ALLOWED_HOST_PATTERN.test(host)) {
-    return `${proto ?? 'https'}://${host}`.replace(/\/+$/, '');
+  // Hôte de la requête accepté seulement en développement : en production,
+  // l'URL publique de l'app (X-Forwarded-Host vient du client quand le proxy
+  // ne la réécrit pas ; un sous-domaine quelconque devenait une destination
+  // de redirection, A2-3).
+  if (process.env.NODE_ENV !== 'production') {
+    const hostHeader = req.headers['x-forwarded-host'] ?? req.headers.host;
+    const protoHeader = req.headers['x-forwarded-proto'];
+    const host = Array.isArray(hostHeader) ? hostHeader[0] : hostHeader;
+    const proto = Array.isArray(protoHeader) ? protoHeader[0] : protoHeader;
+    if (host && /^(?:localhost|127\.0\.0\.1)(?::\d+)?$/.test(host)) {
+      return `${proto === 'https' ? 'https' : 'http'}://${host}`;
+    }
   }
 
   return 'https://app.redview.tech';
