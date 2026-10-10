@@ -192,7 +192,14 @@ export function buildDaySegments(
     if (overlapEndMs <= overlapStartMs) return;
 
     const segmentStartMinute = getMinuteOfDay(new Date(overlapStartMs));
-    const rawDurationMin = (overlapEndMs - overlapStartMs) / 60_000;
+    // Haut et bas à l'heure murale, comme l'axe des heures partagé par les
+    // colonnes : le jour d'un changement d'heure, une hauteur égale au temps
+    // écoulé recouvrait le bloc suivant (02:00 répété le 25/10) ou laissait un
+    // trou (02:00 sauté en mars).
+    const segmentEndMinute = overlapEndMs >= dayEnd.getTime()
+      ? MINUTES_PER_DAY
+      : getMinuteOfDay(new Date(overlapEndMs));
+    const rawDurationMin = Math.max(0, segmentEndMinute - segmentStartMinute);
     const segmentHeightMin = Math.min(
       Math.max(resolveVisualDurationMin(rawDurationMin), rawDurationMin),
       MINUTES_PER_DAY - segmentStartMinute,
