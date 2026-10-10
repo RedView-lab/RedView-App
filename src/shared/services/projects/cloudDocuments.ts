@@ -1,5 +1,5 @@
 import { logger } from '@/shared/lib/logger';
-import { APPWRITE_DATABASE_ID, client, PROJECTS_COLLECTION_ID } from '@/shared/services/appwrite';
+import { APPWRITE_DATABASE_ID, client, databases, PROJECTS_COLLECTION_ID, Query } from '@/shared/services/appwrite';
 import {
   decompressProjectBytes,
   decompressProjectPayload,
@@ -264,7 +264,19 @@ export async function updateProjectDocument(
  */
 export async function settlePayloadFiles(projectId: string, data: string, writtenAt: string): Promise<void> {
   if (!filePayloadProjects.has(projectId) && payloadFilesChecked.has(projectId)) return;
+  // Ligne réécrite depuis notre écriture (onglet d'une version précédente,
+  // sans écriture conditionnelle ; sauvegarde forcée) : son fichier peut être
+  // antérieur au nôtre et le seul pointé. Relu juste avant de supprimer ;
+  // réécrite, rien n'est élagué — la sauvegarde suivante le fera.
+  const stillOurs = async () => {
+    const current = (await databases.getDocument(APPWRITE_DATABASE_ID, PROJECTS_COLLECTION_ID, projectId, [
+      Query.select(['$id', '$updatedAt']),
+    ])) as unknown as CloudProjectDoc;
+    if (current.$updatedAt === writtenAt) return true;
+    logger.projects.warn('Payload files prune skipped: project row rewritten since this save', { projectId });
+    return false;
+  };
+  if (!(await pruneProjectPayloadFiles(projectId, data, writtenAt, stillOurs))) return;
   payloadFilesChecked.add(projectId);
-  await pruneProjectPayloadFiles(projectId, data, writtenAt);
   if (!isPayloadFilePointer(data)) filePayloadProjects.delete(projectId);
 }

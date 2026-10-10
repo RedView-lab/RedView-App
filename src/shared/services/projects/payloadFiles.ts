@@ -151,15 +151,20 @@ export async function pruneProjectPayloadFiles(
   projectId: string,
   keepPointer: string | null | undefined,
   writtenAt: string,
-): Promise<void> {
+  /** Relu juste avant les suppressions : false (ligne réécrite depuis) = rien n'est supprimé. */
+  stillCurrent: () => Promise<boolean> = async () => true,
+): Promise<boolean> {
   const keepId = keepPointer && isPayloadFilePointer(keepPointer) ? payloadFileIdOf(keepPointer) : null;
   const before = Date.parse(writtenAt);
-  if (!Number.isFinite(before)) return;
+  if (!Number.isFinite(before)) return false;
   try {
     const res = await listProjectPayloadFiles(projectId);
     const stale = res.files.filter((file) => file.$id !== keepId && !(Date.parse(file.$createdAt) >= before));
+    if (stale.length > 0 && !(await stillCurrent())) return false;
     await Promise.allSettled(stale.map((file) => storage.deleteFile(PROJECT_PAYLOADS_BUCKET_ID, file.$id)));
+    return true;
   } catch (error) {
     logger.projects.debug('Payload files prune skipped', projectId, error);
+    return false;
   }
 }

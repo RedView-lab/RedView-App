@@ -271,6 +271,25 @@ describe('deux onglets ou deux appareils qui enregistrent en même temps', () =>
     expect(payloadFiles(mock, row.id)).toContain('doc-later');
   });
 
+  it('élagage : rien n’est supprimé si la ligne a été réécrite après cette sauvegarde (onglet d’une ancienne version, B3-1)', async () => {
+    const { mock, rows, otherDevice } = await load();
+    limits.payloadChars = 64;
+    const row = await rows.createProject('Gros');
+    // Fichier envoyé par un onglet resté sur l'ancienne version (sans écriture conditionnelle), avant notre écriture.
+    const storage = (await import('@/shared/services/appwrite')).storage;
+    await storage.createFile('project-payloads', 'doc-ancien', new File([new Uint8Array(4)], `${row.id}.json.gz`));
+    const listing = vi.spyOn(storage, 'listFiles');
+    listing.mockImplementationOnce(async (...args) => {
+      // Son écriture sans condition arrive entre notre écriture et notre élagage.
+      await otherDevice.updateDocument('db', 'projects', row.id, { data: 'file:doc-ancien' });
+      listing.mockRestore();
+      return storage.listFiles(...args);
+    });
+    await rows.saveProject(row.id, project('Gros v2'));
+    expect(cloudDoc(mock, row.id).data).toBe('file:doc-ancien');
+    expect(payloadFiles(mock, row.id)).toContain('doc-ancien');
+  });
+
   it('fichier pointé disparu : ouverture sur le plus récent fichier du projet encore présent (B3-1)', async () => {
     const { mock, rows, idb } = await load();
     limits.payloadChars = 64;
