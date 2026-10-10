@@ -11,13 +11,16 @@
 //
 // Ce garde tourne dans le serveur de l'app (prod, clé d'API) : toutes les
 // `intervalMs`, il relit les fichiers créés depuis son dernier passage et :
-//   1. supprime un fichier terminé dont le contenu n'a pas la signature de
-//      son bucket (en-tête FIT, magie gzip, image) ;
+//   1. supprime un fichier terminé, créé depuis le démarrage de la garde,
+//      dont le contenu n'a pas la signature de son bucket (en-tête FIT, magie
+//      gzip, image) ; un fichier plus ancien est seulement signalé (jamais
+//      d'effacement du stock existant sur une règle qui n'existait pas) ;
 //   2. tient à jour l'occupation de chaque compte (propriétaire = rôle
 //      `user:<id>` de la permission `delete`, comme partout ailleurs) et,
 //      au-delà de `perUserBytes`, supprime les fichiers NEUFS du compte, du
 //      plus récent au plus ancien, jusqu'à repasser sous le plafond — jamais
-//      un fichier qui existait avant le passage précédent ;
+//      un fichier qui existait avant le passage précédent, ni la charge la plus
+//      récente d'un projet (bucket des charges : la dernière sauvegarde) ;
 //   3. signale chaque suppression à GlitchTip (identifiants et tailles
 //      seulement, jamais un nom de fichier : données personnelles).
 // L'occupation complète est recalculée au démarrage et toutes les
@@ -91,7 +94,11 @@ function isComplete(file) {
  * Fichiers à supprimer pour ramener chaque compte sous son plafond : les
  * fichiers neufs (`freshIds`) du compte, du plus récent au plus ancien, tant
  * que l'occupation dépasse `perUserBytes`. Fonction pure.
- * @param {Map<string, Map<string, { size: number, createdAt: number, bucketId: string }>>} usage
+ * La charge la plus récente de chaque projet (bucket `project-payloads`,
+ * un nom de fichier par projet) n'est jamais retirée : c'est sa dernière
+ * sauvegarde.
+ *
+ * @param {Map<string, Map<string, { size: number, createdAt: number, bucketId: string, name?: string }>>} usage
  * @param {Set<string>} freshKeys  clés `bucket/fileId` des fichiers de ce passage
  * @param {number} perUserBytes
  * @returns {{ userId: string, bucketId: string, fileId: string, size: number }[]}
@@ -102,8 +109,15 @@ export function planQuotaEvictions(usage, freshKeys, perUserBytes) {
     let total = 0;
     for (const entry of files.values()) total += entry.size;
     if (total <= perUserBytes) continue;
+    const newestPayloadByName = new Map();
+    for (const [key, entry] of files) {
+      if (entry.bucketId !== 'project-payloads' || !entry.name) continue;
+      const current = newestPayloadByName.get(entry.name);
+      if (!current || files.get(current).createdAt < entry.createdAt) newestPayloadByName.set(entry.name, key);
+    }
+    const protectedKeys = new Set(newestPayloadByName.values());
     const fresh = [...files.entries()]
-      .filter(([key]) => freshKeys.has(key))
+      .filter(([key]) => freshKeys.has(key) && !protectedKeys.has(key))
       .sort((a, b) => b[1].createdAt - a[1].createdAt);
     for (const [key, entry] of fresh) {
       if (total <= perUserBytes) break;
@@ -142,6 +156,8 @@ export function createStorageGuard(deps) {
   let lastScanAt = null;
   let lastFullScanAt = 0;
   let running = false;
+  /** Démarrage de la garde : seuls les fichiers créés depuis peuvent être effacés pour leur contenu. */
+  let guardStartedAt = null;
 
   async function listAll(bucketId, sinceIso) {
     const out = [];
@@ -186,7 +202,9 @@ export function createStorageGuard(deps) {
     let removed = 0;
     try {
       const startedAt = now();
+      if (guardStartedAt === null) guardStartedAt = startedAt;
       const full = lastScanAt === null || startedAt - lastFullScanAt >= options.fullScanEveryMs;
+      const listedKeys = new Set();
       const sinceIso = full ? null : new Date(lastScanAt - options.overlapMs).toISOString();
       const nextUsage = full ? new Map() : usage;
       const freshKeys = new Set();
@@ -206,6 +224,7 @@ export function createStorageGuard(deps) {
           const owner = fileOwnerId(file);
           if (!owner) continue;
           const key = `${bucket.id}/${file.$id}`;
+          listedKeys.add(key);
           const createdAt = Date.parse(file.$createdAt) || startedAt;
           const isFresh = !isFirstScan && (lastScanAt === null || createdAt >= lastScanAt - options.overlapMs);
 
@@ -233,8 +252,13 @@ export function createStorageGuard(deps) {
               if (head) {
                 checked.add(key);
                 if (!hasExpectedSignature(bucket.kind, head)) {
-                  if (await remove(bucket.id, file, 'bad-content', { kind: bucket.kind })) removed += 1;
-                  continue;
+                  if (createdAt >= guardStartedAt) {
+                    if (await remove(bucket.id, file, 'bad-content', { kind: bucket.kind })) removed += 1;
+                    continue;
+                  }
+                  deps.report(new Error('Storage guard: existing file with unexpected content (kept)'), {
+                    bucketId: bucket.id, fileId: file.$id, ownerId: owner, size: Number(file.sizeOriginal ?? 0), reason: 'bad-content-existing', kind: bucket.kind,
+                  });
                 }
               }
             }
@@ -242,11 +266,17 @@ export function createStorageGuard(deps) {
 
           let files0 = nextUsage.get(owner);
           if (!files0) nextUsage.set(owner, (files0 = new Map()));
-          files0.set(key, { size: Number(file.sizeOriginal ?? 0), createdAt, bucketId: bucket.id });
+          files0.set(key, { size: Number(file.sizeOriginal ?? 0), createdAt, bucketId: bucket.id, name: String(file.name ?? '') });
           if (isFresh) freshKeys.add(key);
         }
       }
       usage = nextUsage;
+      // Passage complet : les fichiers disparus quittent la mémoire de la garde
+      // (bornée par le nombre de fichiers des buckets).
+      if (full) {
+        for (const key of checked) if (!listedKeys.has(key)) checked.delete(key);
+        for (const key of incomplete.keys()) if (!listedKeys.has(key)) incomplete.delete(key);
+      }
 
       for (const eviction of planQuotaEvictions(usage, freshKeys, options.perUserBytes)) {
         const file = { $id: eviction.fileId, $permissions: [`delete("user:${eviction.userId}")`], sizeOriginal: eviction.size };

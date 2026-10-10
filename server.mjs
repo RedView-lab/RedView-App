@@ -607,14 +607,17 @@ if (isMain) {
     }
     // Garde des buckets Appwrite (contenu, plafond par compte) : les envois
     // du navigateur y vont directement (server/lib/storage-guard.mjs).
-    // REDVIEW_STORAGE_GUARD = off | report (signale sans supprimer) | enforce (défaut).
-    const guardMode = process.env.REDVIEW_STORAGE_GUARD || 'enforce';
-    if (process.env.APPWRITE_API_KEY && guardMode !== 'off') {
+    // REDVIEW_STORAGE_GUARD = off (défaut) | report (signale sans supprimer) |
+    // enforce. Posé à enforce par l'image Docker seulement : un banc qui lance
+    // dist-server avec une clé (factice, ou la vraie via --env-file) ne doit
+    // jamais parcourir ni effacer de buckets.
+    const guardMode = process.env.REDVIEW_STORAGE_GUARD || 'off';
+    if (process.env.APPWRITE_API_KEY && (guardMode === 'report' || guardMode === 'enforce')) {
       createAppwriteStorageGuard({
         endpoint: process.env.APPWRITE_ENDPOINT || process.env.VITE_APPWRITE_ENDPOINT || 'http://127.0.0.1:8082/v1',
         projectId: process.env.APPWRITE_PROJECT_ID || process.env.VITE_APPWRITE_PROJECT_ID || 'redview-prod',
         apiKey: process.env.APPWRITE_API_KEY,
-        enforce: guardMode !== 'report',
+        enforce: guardMode === 'enforce',
         report: (error, extra) => {
           console.warn(`[storage-guard] ${error.message}`, JSON.stringify(extra ?? {}));
           captureServerError(error, { route: 'storage-guard', ...(extra ?? {}) });

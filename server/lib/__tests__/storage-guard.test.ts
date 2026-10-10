@@ -15,6 +15,7 @@ interface FakeFile {
   $createdAt: string;
   $permissions: string[];
   sizeOriginal: number;
+  name: string;
   chunksTotal: number;
   chunksUploaded: number;
   head: Uint8Array;
@@ -30,7 +31,7 @@ function fakeAppwrite() {
   ]);
   const reports: { message: string; extra?: Record<string, unknown> }[] = [];
   let seq = 0;
-  const add = (bucketId: string, owner: string | null, size: number, head: Uint8Array, chunks = { total: 1, uploaded: 1 }) => {
+  const add = (bucketId: string, owner: string | null, size: number, head: Uint8Array, chunks = { total: 1, uploaded: 1 }, name = '') => {
     seq += 1;
     const id = `f${String(seq).padStart(4, '0')}`;
     buckets.get(bucketId)!.set(id, {
@@ -38,6 +39,7 @@ function fakeAppwrite() {
       $createdAt: new Date(clock).toISOString(),
       $permissions: owner ? [`read("user:${owner}")`, `update("user:${owner}")`, `delete("user:${owner}")`] : [],
       sizeOriginal: size,
+      name,
       chunksTotal: chunks.total,
       chunksUploaded: chunks.uploaded,
       head,
@@ -173,6 +175,8 @@ describe('garde des buckets (A15-3)', () => {
   it('mode « report » : signale sans rien supprimer', async () => {
     const app = fakeAppwrite();
     const guard = createStorageGuard({ ...app.deps, enforce: false });
+    await guard.runOnce();
+    app.advance(60_000);
     const fake = app.add('project-payloads', 'mallory', 30 * MB, JUNK);
     expect(await guard.runOnce()).toBe(0);
     expect(app.has('project-payloads', fake)).toBe(true);
@@ -194,5 +198,29 @@ describe('garde des buckets (A15-3)', () => {
     const guard = createStorageGuard({ ...app.deps });
     await guard.runOnce();
     expect(guard.usageOf('erin')).toBe(250);
+  });
+
+  it('stock existant au démarrage : un contenu inattendu est signalé, jamais effacé', async () => {
+    const app = fakeAppwrite();
+    const legacy = app.add('project-thumbnails', 'dave', 1 * MB, JUNK);
+    app.advance(1_000);
+    const guard = createStorageGuard({ ...app.deps });
+    expect(await guard.runOnce()).toBe(0);
+    expect(app.has('project-thumbnails', legacy)).toBe(true);
+    expect(app.reports.map((r) => r.extra?.reason)).toEqual(['bad-content-existing']);
+  });
+
+  it('au-delà du plafond, la charge la plus récente de chaque projet (sa dernière sauvegarde) est gardée', async () => {
+    const app = fakeAppwrite();
+    const guard = createStorageGuard({ ...app.deps, options: { perUserBytes: 40 * MB } });
+    await guard.runOnce();
+    app.advance(60_000);
+    const older = app.add('project-payloads', 'erin', 30 * MB, GZIP_HEAD, undefined, 'p1.json.gz');
+    app.advance(1_000);
+    const latest = app.add('project-payloads', 'erin', 30 * MB, GZIP_HEAD, undefined, 'p1.json.gz');
+    app.advance(60_000);
+    expect(await guard.runOnce()).toBe(1);
+    expect(app.has('project-payloads', latest)).toBe(true);
+    expect(app.has('project-payloads', older)).toBe(false);
   });
 });

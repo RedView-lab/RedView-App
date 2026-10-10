@@ -91,6 +91,8 @@ ENV SOURCE_COMMIT=${SOURCE_COMMIT}
 # monter ici un volume persistant (Coolify → Storages, destination /app/data),
 # sinon chaque déploiement les efface.
 ENV REDVIEW_AUTH_STORE_DIR=/app/data
+# Garde des buckets Appwrite (server/lib/storage-guard.mjs) : seulement dans l'image.
+ENV REDVIEW_STORAGE_GUARD=enforce
 RUN mkdir -p /app/data && chown redview:nodejs /app/data && chmod 700 /app/data
 
 USER redview
