@@ -60,6 +60,14 @@ describe('GPX RedView : aller-retour export → import', () => {
   });
 });
 
+describe('GPX RedView exporté en anglais', () => {
+  it('garde ses favoris à la réimportation', () => {
+    const gpx = `<?xml version="1.0"?><gpx version="1.1" creator="RedView"><wpt lat="44.05" lon="6.0001"><name>BAK_R08_Paul</name><cmt>Paul</cmt><desc>Bakery - km 5.5 (favorite)</desc><type>food</type><extensions><redview:category>bakery</redview:category></extensions></wpt><trk><trkseg>${points.map((p) => `<trkpt lat="${p.lat}" lon="${p.lon}"/>`).join('')}</trkseg></trk></gpx>`;
+    const imported = buildImportedGpxWaypoints(parseGpxText(gpx), points, 1);
+    expect(imported.poiFeatures.map((feature) => [feature.category, feature.name, feature.favorite])).toEqual([['bakery', 'Paul', true]]);
+  });
+});
+
 describe('GPX tiers', () => {
   const wrap = (wpt: string) => `<?xml version="1.0"?><gpx version="1.1" creator="Garmin Connect"><wpt lat="44.05" lon="6.0001">${wpt}</wpt><trk><trkseg>${points.map((p) => `<trkpt lat="${p.lat}" lon="${p.lon}"/>`).join('')}</trkseg></trk></gpx>`;
 

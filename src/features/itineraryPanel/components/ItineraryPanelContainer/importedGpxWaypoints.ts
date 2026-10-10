@@ -37,8 +37,11 @@ const MAX_WAYPOINT_OFFSET_M = 2_000;
 const ON_ROUTE_TOLERANCE_M = 25;
 
 const REDVIEW_CREATOR = 'RedView';
-/** Suffixe que l'export RedView ajoute à la <desc> des POI favoris. */
-const REDVIEW_FAVORITE_SUFFIX = '(favori)';
+/**
+ * Suffixe que l'export RedView ajoute à la <desc> des POI favoris, dans la
+ * langue de l'exportateur : un fichier exporté en anglais perdait ses favoris.
+ */
+const REDVIEW_FAVORITE_SUFFIXES = ['(favori)', '(favorite)'];
 
 const ENDPOINT_TYPES = new Set(['start', 'finish', 'end']);
 const ENDPOINT_SYMS = new Set(['flag, green', 'flag, red']);
@@ -181,7 +184,7 @@ export function buildImportedGpxWaypoints(
       // dans le fichier est un choix explicite : on le garde en favori pour
       // qu'une recherche POI ultérieure ne l'efface pas.
       const favorite = isRedViewExport
-        ? Boolean(waypoint.desc?.trim().endsWith(REDVIEW_FAVORITE_SUFFIX))
+        ? REDVIEW_FAVORITE_SUFFIXES.some((suffix) => waypoint.desc?.trim().endsWith(suffix) === true)
         : true;
       const tags: Record<string, string> = { source: GPX_IMPORT_POI_SOURCE };
       if (waypoint.elevationM != null) tags.ele = String(waypoint.elevationM);
