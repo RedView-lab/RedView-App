@@ -53,8 +53,12 @@ for (const [feature, panel] of Object.entries(FEATURE_TO_PANEL_POI)) {
   }
 }
 
-/** Symboles Garmin usuels (dont ceux émis par l'export RedView) → ligne du panneau. */
-const GPX_SYM_TO_PANEL: Record<string, PanelPoiCategory> = {
+/**
+ * Symboles Garmin usuels (dont ceux émis par l'export RedView) → ligne du
+ * panneau. Des `Map` : une clé lue dans un fichier (`constructor`,
+ * `__proto__`) ne doit jamais tomber sur une propriété d'objet.
+ */
+const GPX_SYM_TO_PANEL = new Map<string, PanelPoiCategory>(Object.entries({
   'drinking water': 'fountains',
   'water source': 'fountains',
   restroom: 'toilets',
@@ -72,18 +76,55 @@ const GPX_SYM_TO_PANEL: Record<string, PanelPoiCategory> = {
   'first aid': 'health',
   'medical facility': 'health',
   'ground transportation': 'transport',
-};
+} satisfies Record<string, PanelPoiCategory>));
+
+/**
+ * Types de points de parcours Garmin (`<type>` des exports RedView et Garmin
+ * Connect) → ligne du panneau. `checkpoint`, `generic`… restent des points de
+ * passage.
+ */
+const GARMIN_COURSE_TYPE_TO_PANEL = new Map<string, PanelPoiCategory>(Object.entries({
+  water: 'fountains',
+  food: 'restaurants',
+  store: 'supermarkets',
+  toilet: 'toilets',
+  shower: 'toilets',
+  shelter: 'hotels',
+  campsite: 'hotels',
+  first_aid: 'health',
+  summit: 'passes',
+  overlook: 'passes',
+  rest_area: 'passes',
+  transport: 'transport',
+} satisfies Record<string, PanelPoiCategory>));
 
 function resolveFeatureCategory(waypoint: GpxWaypoint): FeaturePoiCategory | null {
+  // Export RedView : la catégorie exacte, en extension.
+  const exact = waypoint.redviewCategory?.trim();
+  if (exact && FEATURE_CATEGORY_SET.has(exact)) return exact as FeaturePoiCategory;
+  const exactPanel = exact ? PANEL_TO_DEFAULT_FEATURE.get(exact.toLowerCase()) : undefined;
+  if (exactPanel) return exactPanel;
   const type = waypoint.type?.trim();
   if (type) {
     if (FEATURE_CATEGORY_SET.has(type)) return type as FeaturePoiCategory;
     const fromPanel = PANEL_TO_DEFAULT_FEATURE.get(type.toLowerCase());
     if (fromPanel) return fromPanel;
+    const garminPanel = GARMIN_COURSE_TYPE_TO_PANEL.get(type.toLowerCase());
+    if (garminPanel) return PANEL_TO_DEFAULT_FEATURE.get(garminPanel.toLowerCase()) ?? null;
   }
   const sym = waypoint.sym?.trim().toLowerCase();
-  const panelFromSym = sym ? GPX_SYM_TO_PANEL[sym] : undefined;
+  const panelFromSym = sym ? GPX_SYM_TO_PANEL.get(sym) : undefined;
   return panelFromSym ? PANEL_TO_DEFAULT_FEATURE.get(panelFromSym.toLowerCase()) ?? null : null;
+}
+
+/**
+ * Nom lisible d'un point : dans un export RedView, le `<name>` d'un POI est
+ * son nom GPS (`BOU_D03_7-19_La Mie Câline`) et le nom de la feuille de route
+ * est dans `<cmt>`.
+ */
+function resolveWaypointName(waypoint: GpxWaypoint, isRedViewExport: boolean): string | null {
+  const comment = waypoint.cmt?.trim();
+  return isRedViewExport && comment ? comment : waypoint.name;
 }
 
 function isEndpointWaypoint(waypoint: GpxWaypoint): boolean {
@@ -130,6 +171,7 @@ export function buildImportedGpxWaypoints(
     seen.add(dedupeKey);
     const projected = projectPointAlongRoute(waypoint, routePoints, cumulativeLengths);
     if (!projected) return;
+    const name = resolveWaypointName(waypoint, isRedViewExport);
     const offsetM = haversineRouteDistanceM(waypoint, projected);
     const category = resolveFeatureCategory(waypoint);
 
@@ -148,7 +190,7 @@ export function buildImportedGpxWaypoints(
         lat: waypoint.lat,
         lon: waypoint.lon,
         category,
-        name: waypoint.name,
+        name,
         tags,
         favorite,
         ...(favorite ? { favoriteSource: 'manual' as const } : {}),
@@ -160,7 +202,7 @@ export function buildImportedGpxWaypoints(
     waypointRows.push({
       id: `${GPX_IMPORT_WAYPOINT_ID_PREFIX}${index}`,
       kind: 'waypoint',
-      label: waypoint.name ?? formatGpsCoordinateLabel(waypoint.lon, waypoint.lat),
+      label: name ?? formatGpsCoordinateLabel(waypoint.lon, waypoint.lat),
       distanceKm: roundDistanceKm(projected.distanceM),
       lat: waypoint.lat,
       lon: waypoint.lon,

@@ -60,6 +60,8 @@ export function compareSortKeys(
   return direction === 'asc' ? cmp : -cmp;
 }
 
+const ACTIONS_COLUMN_WIDTH_PX = 3 * 24 + 2 * 2 + 2 * 4;
+
 export function buildGridTemplate(
   cols: TimelineColumnDef[],
   widths: Partial<Record<TimelineColumnId, number>> = {},
@@ -78,7 +80,9 @@ export function buildGridTemplate(
       return `${initialW}px`;
     })
     .join(' ');
-  return `28px ${middle} minmax(0, 1fr) 72px`;
+  // Actions : 3 boutons de 24 px (cible minimale WCAG 2.2) + écarts et marges ;
+  // à 72 px, ils étaient écrasés à 16 px.
+  return `28px ${middle} minmax(0, 1fr) ${ACTIONS_COLUMN_WIDTH_PX}px`;
 }
 
 export interface RenderCellExtras {
@@ -89,8 +93,10 @@ export interface RenderCellExtras {
   onMovePause?: (id: string, distanceKm: number) => void;
   onChangePauseDuration?: (id: string, durationMin: number) => void;
   onChangeIntervalPauseDuration?: (pauseIntervalId: string, durationMin: number) => void;
+  /** Nom saisi dans la colonne « Nom » d'un POI. */
+  onRename?: (id: string, label: string) => void;
   maxDistanceKm?: number;
-  t: (key: string) => string;
+  t: (key: string, vars?: Record<string, string | number>) => string;
 }
 
 /** Id de l'intervalle d'une pause automatique (`<intervalId>::<n>`), sinon null. */

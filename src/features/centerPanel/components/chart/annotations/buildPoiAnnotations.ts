@@ -13,18 +13,13 @@ import { projectPredictionElapsedHoursToX } from '../series/timeline';
 import { projectElapsedHoursToX } from '../seriesPredictionMath';
 import { normalizeRouteProfile as normalizeChartRouteProfile } from '../series/routeProfile';
 
-import { cumulativeRouteLengthsM, projectDistanceAlongRouteM, roundDistanceKm } from '@/features/itineraryPanel/lib/routes';
+import { projectDistanceAlongRouteM, roundDistanceKm, routeDistancesM } from '@/features/itineraryPanel/lib/routes';
 import { FEATURE_TO_PANEL_POI } from '@/features/itineraryPanel/lib/schedule';
 
 const predictionTimelineCache = new WeakMap<PredictionResult, TimelineSample[] | null>();
-const cumulativeLengthsCache = new WeakMap<object, number[]>();
-
-function getCachedCumulativeLengths(points: Parameters<typeof cumulativeRouteLengthsM>[0]): number[] {
-  const cached = cumulativeLengthsCache.get(points);
-  if (cached && cached.length === points.length) return cached;
-  const lengths = cumulativeRouteLengthsM(points);
-  cumulativeLengthsCache.set(points, lengths);
-  return lengths;
+/** Distances du tracé sur l'axe du graphique (celles de la prédiction). */
+function getCachedCumulativeLengths(points: Parameters<typeof routeDistancesM>[0]): number[] {
+  return routeDistancesM(points);
 }
 const predictionProfileCache = new WeakMap<PredictionResult, ElevationSample[] | null>();
 

@@ -275,6 +275,23 @@
   font-size: var(--rv-font-size-md);
 }
 
+/* Nom d'un POI en cours de saisie : prend la place du titre. */
+.rvi-tl-row__name-input {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 24px;
+  padding: 0 6px;
+  font-size: var(--rv-font-size-lg);
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--rvi-text);
+  background: light-dark(#fff, rgba(0, 0, 0, 0.65));
+  border: 1px solid var(--rvi-red-accent, #c50000);
+  border-radius: 4px;
+  outline: none;
+  box-sizing: border-box;
+}
+
 .rvi-tl-row__actions {
   display: inline-flex;
   align-items: center;

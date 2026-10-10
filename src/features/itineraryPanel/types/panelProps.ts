@@ -181,6 +181,8 @@ export interface ItineraryPanelProps {
   onChangeTimelinePauseDuration?: (id: string, durationMin: number) => void;
   onRemoveTimelineItem?: (id: string) => void;
   onFavoriteTimelineItem?: (id: string, favorite: boolean) => void;
+  /** Nom saisi dans la colonne « Nom » d'un POI (vide = nom d'origine). */
+  onRenameTimelineItem?: (id: string, label: string) => void;
   onSearchTimeline?: () => void;
   onOpenTimelineSettings?: () => void;
   globalFilters?: TimelineFilterState;

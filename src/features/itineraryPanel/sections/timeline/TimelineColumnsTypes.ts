@@ -7,6 +7,7 @@ export type TimelineColumnId =
   | 'typePicto'
   | 'typeText'
   | 'name'
+  | 'gpsName'
   | 'distance'
   | 'clockTime'
   | 'elapsedTime'
@@ -54,6 +55,8 @@ export interface TimelineColumnContext {
   weather?: RouteWeatherValues | null;
   /** Trail / course affichent des allures (min/km) au lieu de km/h. */
   discipline: SportDiscipline;
+  /** Nom écrit par l'export GPS pour ce POI (colonne « Nom GPS »). */
+  gpsName: string | null;
 }
 
 interface TimelineColumnCell {
@@ -90,4 +93,5 @@ export interface BuildContextArgs {
   weatherDataset?: RouteWeatherDataset | null;
   /** Discipline de l'itinéraire, utilisée quand il n'y a pas encore de prédiction. */
   discipline?: SportDiscipline;
+  gpsName?: string | null;
 }

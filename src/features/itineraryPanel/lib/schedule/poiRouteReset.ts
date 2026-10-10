@@ -11,9 +11,9 @@ import type { Itinerary } from '../../types';
 import { DEFAULT_POI_DISTANCE_M } from '../project/defaultState';
 import {
   buildRouteGeometrySignature,
-  cumulativeRouteLengthsM,
   projectDistanceAlongRouteM,
   roundDistanceKm,
+  routeDistancesM,
 } from '../routes';
 import { FEATURE_TO_PANEL_POI } from './poi-to-timeline';
 
@@ -66,7 +66,7 @@ export function resetPoisForRouteChange(itinerary: Itinerary): void {
 
   const kept = [...custom, ...keptFavorites];
   const keptIds = new Set<number>(kept.map((feature) => feature.id));
-  const cumLengths = routePoints.length >= 2 ? cumulativeRouteLengthsM(routePoints) : null;
+  const cumLengths = routePoints.length >= 2 ? routeDistancesM(routePoints) : null;
 
   itinerary.poiFeatures = kept;
   itinerary.timeline = itinerary.timeline

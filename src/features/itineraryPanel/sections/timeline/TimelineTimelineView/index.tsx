@@ -79,6 +79,7 @@ export function TimelineTimelineView({
   onChangeIntervalPauseDuration,
   onRegisterPauseInsertionResolver,
   onToggleFavorite,
+  onRename,
   onRemove,
 }: TimelineTimelineViewProps) {
   const [localHourZoom, setLocalHourZoom] = useState(hourZoom);
@@ -709,6 +710,7 @@ export function TimelineTimelineView({
         onChangePauseDuration={onChangePauseDuration}
         onChangeIntervalPauseDuration={onChangeIntervalPauseDuration}
         onToggleFavorite={onToggleFavorite}
+        onRename={onRename}
         onRemove={onRemove}
         dayEndPx={dayEndPx}
         resolveColumnPlacement={resolveColumnPlacement}

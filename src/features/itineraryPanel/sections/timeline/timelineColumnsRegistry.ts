@@ -71,6 +71,19 @@ export const TIMELINE_COLUMNS: TimelineColumnDef[] = [
     getCell: (ctx) => ({ display: ctx.item.label, sortKey: ctx.item.label.toLowerCase() }),
   },
   {
+    // Nom du point de parcours écrit par l'export GPX / FIT (convention
+    // CAT_CDD[_horaires][_nom]) : ce que le compteur affichera.
+    id: 'gpsName',
+    label: 'Nom GPS (export)',
+    shortLabel: 'Nom GPS',
+    defaultOn: false,
+    align: 'left',
+    minWidth: 110,
+    defaultWidth: 160,
+    custom: true,
+    getCell: (ctx) => ({ display: ctx.gpsName ?? '', sortKey: ctx.gpsName }),
+  },
+  {
     id: 'distance',
     label: 'Distance',
     defaultOn: true,

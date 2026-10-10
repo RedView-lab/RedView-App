@@ -1,4 +1,7 @@
+import { GARMIN_VISIBLE_NAME_CHARS } from '@/features/exporter';
 import type { TimelineItem } from '../../../types';
+import { EditableTimelineName } from '../EditableTimelineName';
+import { isRenamableTimelineItem } from '../timelineNames';
 import { KindBadge } from '../KindBadge';
 import { kindLabel } from '../timelineKindLabels';
 import { PlaceSearchInput } from '../components';
@@ -36,10 +39,32 @@ export function renderCell(
   if (col.id === 'name') {
     return renderNameCell(item, extras);
   }
+  if (col.id === 'gpsName') {
+    return renderGpsNameCell(cell.display, extras);
+  }
   if (col.id === 'distance') {
     return <TimelineSheetDistanceCell item={item} displayValue={cell.display} extras={extras} />;
   }
   return <span className="rvi-tl-td__value">{cell.display}</span>;
+}
+
+/** Nom GPS : les caractères qu'un Garmin affiche, puis la suite estompée (coupée à l'écran). */
+function renderGpsNameCell(gpsName: string, extras: RenderCellExtras) {
+  if (!gpsName) return <span className="rvi-tl-td__value" />;
+  const chars = Array.from(gpsName);
+  const visible = chars.slice(0, GARMIN_VISIBLE_NAME_CHARS).join('');
+  const hidden = chars.slice(GARMIN_VISIBLE_NAME_CHARS).join('');
+  return (
+    <span
+      className="rvi-tl-td__gps-name"
+      title={hidden
+        ? extras.t('{{name}} · un Garmin n’en affiche que les {{count}} premiers caractères', { name: gpsName, count: GARMIN_VISIBLE_NAME_CHARS })
+        : gpsName}
+    >
+      {visible}
+      {hidden ? <span className="rvi-tl-td__gps-name-rest">{hidden}</span> : null}
+    </span>
+  );
 }
 
 function renderNameCell(item: TimelineItem, extras: RenderCellExtras) {
@@ -81,6 +106,17 @@ function renderNameCell(item: TimelineItem, extras: RenderCellExtras) {
         item={item}
         primaryLabel={primaryLabel}
         extras={extras}
+      />
+    );
+  }
+
+  if (extras.onRename && isRenamableTimelineItem(item)) {
+    return (
+      <EditableTimelineName
+        item={item}
+        className="rvi-tl-td__name"
+        inputClassName="rvi-tl-td__name-input"
+        onRename={extras.onRename}
       />
     );
   }

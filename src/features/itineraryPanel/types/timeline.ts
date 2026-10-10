@@ -37,6 +37,12 @@ export interface TimelineItem {
   id: string;
   kind: TimelineItemKind;
   label: string;
+  /**
+   * `label` saisi par l'utilisateur dans la colonne « Nom » (horaires, nom
+   * raccourci…) : gardé quand la recherche POI régénère les lignes, et repris
+   * tel quel par les exports GPS après le code de catégorie.
+   */
+  labelEdited?: boolean;
   /** Distance depuis le départ en km. */
   distanceKm: number | null;
   /** Pour une pause : durée en minutes. */

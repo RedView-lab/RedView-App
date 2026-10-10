@@ -4893,6 +4893,58 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Destination set at km {{km}}"
   },
   {
+    "fr": "Modifier le nom",
+    "en": "Edit name"
+  },
+  {
+    "fr": "Nom d’origine",
+    "en": "Original name"
+  },
+  {
+    "fr": "{{name}} · cliquer pour modifier (horaires, nom court…), repris par l’export GPS",
+    "en": "{{name}} · click to edit (opening hours, short name…), used by the GPS export"
+  },
+  {
+    "fr": "{{name}} · double-cliquer pour modifier (horaires, nom court…), repris par l’export GPS",
+    "en": "{{name}} · double-click to edit (opening hours, short name…), used by the GPS export"
+  },
+  {
+    "fr": "Nom GPS (export)",
+    "en": "GPS name (export)"
+  },
+  {
+    "fr": "Nom GPS",
+    "en": "GPS name"
+  },
+  {
+    "fr": "{{name}} · un Garmin n’en affiche que les {{count}} premiers caractères",
+    "en": "{{name}} · a Garmin only shows the first {{count}} characters"
+  },
+  {
+    "fr": "Feuille de route ({{count}})",
+    "en": "Roadbook ({{count}})"
+  },
+  {
+    "fr": "Favoris ({{count}})",
+    "en": "Favorites ({{count}})"
+  },
+  {
+    "fr": "Tous les POI ({{count}})",
+    "en": "All POIs ({{count}})"
+  },
+  {
+    "fr": "Aucun POI",
+    "en": "No POIs"
+  },
+  {
+    "fr": "Noms GPS : {{examples}}",
+    "en": "GPS names: {{examples}}"
+  },
+  {
+    "fr": "{{count}} points de parcours : au-delà de {{limit}}, certains compteurs Garmin n’annoncent plus les derniers.",
+    "en": "{{count}} course points: beyond {{limit}}, some Garmin units stop announcing the last ones."
+  },
+  {
     "fr": "RedView — Cartographie 3D Haute Résolution & LiDAR Outdoor",
     "en": "RedView — High-Resolution 3D Mapping & Outdoor LiDAR"
   },

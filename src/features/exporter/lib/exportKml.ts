@@ -9,6 +9,7 @@ import {
   KML_NAMESPACE,
   POI_CATEGORY_TO_KML_COLOR,
   type ExportAnchor,
+  type ExportOptions,
 } from './exportHelpers';
 import { translateAppText } from '@/shared/i18n/config';
 
@@ -35,7 +36,7 @@ const KML_STYLE_COLORS: Record<string, string> = {
  */
 export function buildItineraryKml(
   itinerary: Itinerary,
-  options?: { favoritesOnly?: boolean },
+  options?: ExportOptions,
 ): string {
   const routePoints = getExportRoutePoints(itinerary);
   const anchors = collectExportAnchors(itinerary, routePoints, options);

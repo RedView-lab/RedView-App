@@ -143,26 +143,26 @@ const itinerary = {
   },
 };
 
-// Test A : avec favoritesOnly: true (seulement les 101 points d'eau et cols favoris)
-const favAnchors = collectExportAnchors(itinerary, points, { favoritesOnly: true });
-console.log(`\x1b[32m✔\x1b[0m collectExportAnchors with favoritesOnly=true: ${favAnchors.length} anchors (including Depart/Arrivee)`);
+// Test A : avec pois: 'favorites' (seulement les 101 points d'eau et cols favoris)
+const favAnchors = collectExportAnchors(itinerary, points, { pois: 'favorites' });
+console.log(`\x1b[32m✔\x1b[0m collectExportAnchors with pois=favorites: ${favAnchors.length} anchors (including Depart/Arrivee)`);
 const sampleFav = favAnchors.find(a => a.kind === 'poi');
 if (sampleFav) {
   console.log(`   Sample favorite POI: [${sampleFav.poiCategory}] "${sampleFav.name}" at km ${(sampleFav.distanceM / 1000).toFixed(1)}`);
 }
 
-// Test B : avec favoritesOnly: false (TOUS les 624 vrais POI)
-const allAnchors = collectExportAnchors(itinerary, points, { favoritesOnly: false });
-console.log(`\x1b[32m✔\x1b[0m collectExportAnchors with favoritesOnly=false: ${allAnchors.length} anchors`);
+// Test B : avec pois: 'all' (TOUS les 624 vrais POI)
+const allAnchors = collectExportAnchors(itinerary, points, { pois: 'all' });
+console.log(`\x1b[32m✔\x1b[0m collectExportAnchors with pois=all: ${allAnchors.length} anchors`);
 
 // Generate GPX with ALL POIs as requested: "refait un gpx GT20_POI.gpx avec tout les poi, 40m de recherche"
-const gpxAllPois = buildItineraryGpx(itinerary, { favoritesOnly: false });
+const gpxAllPois = buildItineraryGpx(itinerary, { pois: 'all' });
 fs.writeFileSync(outputPath, gpxAllPois, 'utf-8');
 console.log(`\x1b[32m✔\x1b[0m Generated and saved GPX: ${outputPath} (${(fs.statSync(outputPath).size / 1024).toFixed(1)} KB)`);
 
 // Enregistre aussi le KML pour vérification
 const kmlOutputPath = path.join(BENCH_DATA_DIR, 'GT20_POI.kml');
-const kmlAllPois = buildItineraryKml(itinerary, { favoritesOnly: false });
+const kmlAllPois = buildItineraryKml(itinerary, { pois: 'all' });
 fs.writeFileSync(kmlOutputPath, kmlAllPois, 'utf-8');
 console.log(`\x1b[32m✔\x1b[0m Generated and saved KML: ${kmlOutputPath} (${(fs.statSync(kmlOutputPath).size / 1024).toFixed(1)} KB)`);
 

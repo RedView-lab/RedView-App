@@ -661,6 +661,24 @@
   padding-top: 3px;
 }
 
+/* Nom d'un POI en cours de saisie (double-clic / F2) : à la place du nom. */
+.rvi-tl-schedule__event-name-input {
+  width: 100%;
+  min-width: 0;
+  height: 24px;
+  padding: 0 6px;
+  font-size: var(--rv-font-size-md);
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--rvi-text);
+  background: light-dark(#fff, rgba(0, 0, 0, 0.65));
+  border: 1px solid var(--rvi-red-accent, #c50000);
+  border-radius: 4px;
+  outline: none;
+  box-sizing: border-box;
+  cursor: text;
+}
+
 .rvi-tl-schedule__event-pauses {
   grid-column: 3;
   display: flex;

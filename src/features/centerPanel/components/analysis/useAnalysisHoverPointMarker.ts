@@ -7,8 +7,8 @@ import type { PredictionResult } from '@/features/fitPredictor';
 import { getItineraryStartDistanceKm } from '@/features/itineraryPanel/lineage/itineraryLineage';
 import { clearAnalysisHoverPoint } from '@/features/itineraryPanel/lib/route-layer';
 import {
-  cumulativeRouteLengthsM,
   projectPointAlongRoute,
+  routeDistancesM,
   type ProjectedRoutePoint,
   type RouteDistancePoint,
 } from '@/features/itineraryPanel/lib/routes';
@@ -22,15 +22,9 @@ import { buildPauseAwareSchedule } from '@/features/itineraryPanel/lib/schedule'
 const ENTER_ROUTE_HOVER_DISTANCE_PX = 36;
 const EXIT_ROUTE_HOVER_DISTANCE_PX = 48;
 
-const cumulativeLengthsCache = new WeakMap<object, number[]>();
-
-function getCumulativeLengths(points: RouteDistancePoint[]): number[] {
-  let lengths = cumulativeLengthsCache.get(points);
-  if (!lengths) {
-    lengths = cumulativeRouteLengthsM(points);
-    cumulativeLengthsCache.set(points, lengths);
-  }
-  return lengths;
+/** Distances du tracé sur l'axe du graphique (celles de la prédiction, pas la trace simplifiée recalculée). */
+function getCumulativeLengths(points: Array<RouteDistancePoint & { distanceM?: number }>): number[] {
+  return routeDistancesM(points);
 }
 
 function renderHoverMarker(

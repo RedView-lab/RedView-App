@@ -14,6 +14,7 @@ import { projectDistanceAlongRouteM } from '../../lib/routes';
 import { normalizeItineraryRhythmState } from '../../lib/project';
 import { setManualFavoriteOrigin } from './poiFeatureUtils';
 import { setPoiRowFavorite, setPoiRowPauseDuration } from './poiFavoritePause';
+import { renamePoiTimelineRow } from './poiRowName';
 import type { ItineraryProject } from '../../types';
 
 interface UseItineraryTimelineCallbacksArgs {
@@ -124,6 +125,13 @@ export function useItineraryTimelineCallbacks({
     });
   }, [updateActive]);
 
+  /** Nom saisi dans la colonne « Nom » d'un POI ; vide = retour au nom d'origine. */
+  const handleRenameTimelineItem = useCallback((id: string, label: string) => {
+    updateActive((it) => {
+      renamePoiTimelineRow(it, id, label);
+    });
+  }, [updateActive]);
+
   const handleSelectTimelinePlace = useCallback((id: string, place: { name: string; lat: number; lon: number }) => {
     updateActive((it) => {
       const row = it.timeline.find((item) => item.id === id);
@@ -153,6 +161,7 @@ export function useItineraryTimelineCallbacks({
     handleChangeTimelinePauseDuration,
     handleRemoveTimelineItem,
     handleFavoriteTimelineItem,
+    handleRenameTimelineItem,
     handleSelectTimelinePlace,
   };
 }

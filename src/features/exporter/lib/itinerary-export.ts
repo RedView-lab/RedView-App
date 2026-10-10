@@ -2,6 +2,7 @@ import type { Itinerary } from '@/features/itineraryPanel/types';
 import {
   buildExportFileName,
   triggerBrowserDownload,
+  type ExportOptions,
 } from './exportHelpers';
 import { buildItineraryGpx } from './exportGpx';
 import { buildItineraryKml } from './exportKml';
@@ -9,15 +10,13 @@ import { buildItineraryFitCourse } from './exportFit';
 
 export type ItineraryExportFormat = 'gpx' | 'fit' | 'kml';
 
-;
-
 /**
  * Exporte et déclenche le téléchargement d'un itinéraire au format GPX, KML ou FIT.
  */
 export function exportItineraryFile(
   itinerary: Itinerary,
   format: ItineraryExportFormat,
-  options?: { favoritesOnly?: boolean },
+  options?: ExportOptions,
 ): { fileName: string } {
   const fileName = buildExportFileName(itinerary, format);
 

@@ -11,9 +11,9 @@ import type { PoiFeature, PoiCategory as FeaturePoiCategory } from '@/features/p
 import { POI_LABELS } from '@/features/poi/types';
 
 import {
-  cumulativeRouteLengthsM,
   projectDistanceAlongRouteM,
   roundDistanceKm,
+  routeDistancesM,
 } from '../routes';
 import type { PoiCategory as PanelPoiCategory, TimelineItem } from '../../types';
 
@@ -100,11 +100,12 @@ export function isAutoHotelOption(item: Pick<TimelineItem, 'favoriteSource' | 'a
  */
 export function poiFeaturesToTimelineItems(
   features: PoiFeature[],
-  routePoints: { lat: number; lon: number }[],
+  routePoints: { lat: number; lon: number; distanceM?: number }[],
 ): TimelineItem[] {
   if (features.length === 0 || routePoints.length < 2) return [];
 
-  const cumulativeLengths = cumulativeRouteLengthsM(routePoints);
+  // Axe de la prédiction : les distances portées par le tracé (trace d'origine).
+  const cumulativeLengths = routeDistancesM(routePoints);
 
   const rows: TimelineItem[] = [];
   const seenIds = new Set<string | number>();

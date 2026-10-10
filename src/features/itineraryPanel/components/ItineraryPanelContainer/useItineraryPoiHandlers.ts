@@ -14,7 +14,7 @@ import {
 } from '../../lib/schedule';
 import { normalizeItineraryRhythmState } from '../../lib/project';
 import type { Itinerary, ItineraryProject, PoiAutoSortSummary } from '../../types';
-import { cumulativeRouteLengthsM, projectDistanceAlongRouteM, roundDistanceKm } from '../../lib/routes';
+import { projectDistanceAlongRouteM, roundDistanceKm, routeDistancesM } from '../../lib/routes';
 import { insertWaypointIntoTimeline } from './timelineMutations';
 import {
   hasEditableRoute,
@@ -39,7 +39,7 @@ function projectFeatureDistanceKm(itinerary: Itinerary, feature: PoiFeature): nu
   const distM = projectDistanceAlongRouteM(
     { lat: feature.lat, lon: feature.lon },
     routePoints,
-    cumulativeRouteLengthsM(routePoints),
+    routeDistancesM(routePoints),
   );
   return distM != null ? roundDistanceKm(distM) : null;
 }

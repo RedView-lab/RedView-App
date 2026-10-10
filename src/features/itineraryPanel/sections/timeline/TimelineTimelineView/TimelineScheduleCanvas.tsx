@@ -72,6 +72,7 @@ interface TimelineScheduleCanvasProps {
   onChangePauseDuration?: (id: string, durationMin: number) => void;
   onChangeIntervalPauseDuration?: (pauseIntervalId: string, durationMin: number) => void;
   onToggleFavorite?: (id: string, favorite: boolean) => void;
+  onRename?: (id: string, label: string) => void;
   onRemove?: (id: string) => void;
   resolveColumnPlacement: (dayKey: string | null) => CSSProperties;
   resolveNowLinePlacement: () => CSSProperties;
@@ -120,6 +121,7 @@ export function TimelineScheduleCanvas({
   onChangePauseDuration,
   onChangeIntervalPauseDuration,
   onToggleFavorite,
+  onRename,
   onRemove,
   resolveColumnPlacement,
   resolveNowLinePlacement,
@@ -408,6 +410,7 @@ export function TimelineScheduleCanvas({
               onToggleSelect={onToggleSelect}
               onToggleVisibility={onToggleVisibility}
               onToggleFavorite={onToggleFavorite}
+              onRename={onRename}
               onRemove={onRemove}
               onPoiPauseDurationClick={handlePoiPauseDurationClick}
               onPauseDurationDraftChange={(draft) => setEditingPauseDuration((curr) => curr ? { ...curr, draft } : curr)}

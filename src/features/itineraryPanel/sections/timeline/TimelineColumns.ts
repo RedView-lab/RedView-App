@@ -64,5 +64,6 @@ export function buildTimelineColumnContext(args: BuildContextArgs): TimelineColu
     pointPrev: pointAtDistanceM(args.prediction, prevDistanceM),
     pointNext: pointAtDistanceM(args.prediction, nextDistanceM),
     weather,
+    gpsName: args.gpsName ?? null,
   };
 }

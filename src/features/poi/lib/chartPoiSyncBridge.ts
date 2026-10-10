@@ -1,8 +1,8 @@
 import type { PredictionResult } from '@/features/fitPredictor';
 import { getItineraryStartDistanceKm } from '@/features/itineraryPanel/lineage/itineraryLineage';
 import {
-  cumulativeRouteLengthsM,
   projectPointAlongRoute,
+  routeDistancesM,
 } from '@/features/itineraryPanel/lib/routes';
 import type { Itinerary } from '@/features/itineraryPanel/types';
 import type { ChartPoiAnnotation, AxisMode } from '@/features/centerPanel/components/chart';
@@ -62,15 +62,9 @@ export function listenOpenPoiOnMap(
   return () => window.removeEventListener(OPEN_POI_ON_MAP_EVENT, handler as EventListener);
 }
 
-const cumulativeLengthsCache = new WeakMap<object, number[]>();
-
-function getCumulativeLengths(points: { lat: number; lon: number }[]): number[] {
-  let lengths = cumulativeLengthsCache.get(points);
-  if (!lengths) {
-    lengths = cumulativeRouteLengthsM(points);
-    cumulativeLengthsCache.set(points, lengths);
-  }
-  return lengths;
+/** Distances du tracé sur l'axe du graphique (celles de la prédiction). */
+function getCumulativeLengths(points: { lat: number; lon: number; distanceM?: number }[]): number[] {
+  return routeDistancesM(points);
 }
 
 export function findChartXForPoi({

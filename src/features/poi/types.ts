@@ -166,4 +166,8 @@ export interface GpxWaypoint {
   type: string | null;
   sym: string | null;
   desc: string | null;
+  /** Commentaire : le nom lisible d'un POI dans un export RedView (son `<name>` est le nom GPS). */
+  cmt?: string | null;
+  /** Catégorie exacte d'un POI exporté par RedView (`<extensions><redview:category>`). */
+  redviewCategory?: string | null;
 }

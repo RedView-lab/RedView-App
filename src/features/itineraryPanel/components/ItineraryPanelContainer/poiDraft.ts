@@ -91,6 +91,7 @@ export function upsertDraftPoiIntoItinerary(itinerary: Itinerary, draft: MapPoiD
       visible: previous.visible ?? nextRow.visible,
       favorite: feature.favorite,
       distanceKm: nextRow.distanceKm ?? previous.distanceKm ?? null,
+      ...(previous.labelEdited ? { label: previous.label, labelEdited: true } : {}),
     };
     return feature.id;
   }

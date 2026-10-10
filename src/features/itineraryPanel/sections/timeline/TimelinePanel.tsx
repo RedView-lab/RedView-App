@@ -53,6 +53,8 @@ interface TimelinePanelProps {
   isFullscreen?: boolean;
   tableSettings?: TimelineTableSettingsState;
   globalFilters?: TimelineFilterState;
+  /** Nom GPS de chaque ligne de POI (colonne « Nom GPS » de la feuille de route). */
+  gpsNames?: ReadonlyMap<string, string> | null;
 
   onChangeView?: (v: TimelineView) => void;
   onOpenSettings?: () => void;
@@ -65,6 +67,8 @@ interface TimelinePanelProps {
   onChangePauseDuration?: (id: string, durationMin: number) => void;
   onChangeIntervalPauseDuration?: (pauseIntervalId: string, durationMin: number) => void;
   onFavoriteItem?: (id: string, favorite: boolean) => void;
+  /** Nom saisi dans la colonne « Nom » d'un POI (vide = nom d'origine). */
+  onRenameItem?: (id: string, label: string) => void;
   onRemoveItem?: (id: string) => void;
   onSelectPlace?: (
     id: string,
@@ -88,6 +92,7 @@ export function TimelinePanel({
   isFullscreen,
   tableSettings,
   globalFilters,
+  gpsNames,
   selectedIds: selectedIdsProp,
   onSelectRow,
   onChangeView,
@@ -100,6 +105,7 @@ export function TimelinePanel({
   onChangePauseDuration,
   onChangeIntervalPauseDuration,
   onFavoriteItem,
+  onRenameItem,
   onRemoveItem,
   onSelectPlace,
   onSelectionChange,
@@ -302,6 +308,7 @@ export function TimelinePanel({
               rhythm={rhythm}
               prediction={prediction}
               discipline={discipline}
+              gpsNames={gpsNames}
               columns={resolvedTableSettings.columns}
               sort={resolvedTableSettings.sort}
               onChangeSort={(next) =>
@@ -312,6 +319,7 @@ export function TimelinePanel({
               onToggleSelect={handleToggleSelect}
               onToggleVisibility={onToggleItem}
               onToggleFavorite={onFavoriteItem}
+              onRename={onRenameItem}
               onRemove={onRemoveItem}
               onAdd={handleOpenKindMenu}
               onOpenKindMenu={handleOpenKindMenu}
@@ -343,6 +351,7 @@ export function TimelinePanel({
               pauseInsertionResolverRef.current = resolver;
             }}
             onToggleFavorite={onFavoriteItem}
+            onRename={onRenameItem}
             onRemove={onRemoveItem}
           />
         )}

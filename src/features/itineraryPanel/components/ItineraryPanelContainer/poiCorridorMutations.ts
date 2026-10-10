@@ -89,6 +89,11 @@ export function applyCorridorComplete(
       visible: previous.visible ?? row.visible,
       ...(favorite && origin?.favoriteSource ? { favoriteSource: origin.favoriteSource } : {}),
       ...(favorite && origin?.autoReason ? { autoReason: origin.autoReason } : {}),
+      // Pause du favori (y compris 0 : pause décochée) : l'agenda, la synthèse
+      // et l'export la lisent sur la ligne ; la perdre raccourcissait le plan.
+      ...(previous.durationMin !== undefined ? { durationMin: previous.durationMin } : {}),
+      // Nom saisi dans la colonne « Nom » : jamais écrasé par le nom OSM.
+      ...(previous.labelEdited ? { label: previous.label, labelEdited: true } : {}),
     };
   });
 

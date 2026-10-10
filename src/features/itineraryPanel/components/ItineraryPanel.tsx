@@ -1,5 +1,6 @@
-import { useEffect, useId, useState, type CSSProperties } from 'react';
+import { useEffect, useId, useMemo, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
+import { buildRoadbookGpsNames } from '@/features/exporter';
 import { MapCanvasGlassBackdrop } from '@/shared/components/MapCanvasGlassBackdrop';
 import { useAppI18n } from '@/shared/i18n';
 import { normalizeDiscipline } from '@/shared/lib/discipline';
@@ -110,6 +111,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
     onChangeTimelinePauseDuration,
     onRemoveTimelineItem,
     onFavoriteTimelineItem,
+    onRenameTimelineItem,
     onOpenTimelineSettings,
     globalFilters,
     onSelectTimelinePlace,
@@ -154,6 +156,13 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
     };
   }, [isTimelineFullscreenOpen]);
 
+  // Colonne « Nom GPS » : noms de l'export, calculés seulement quand elle est affichée.
+  const showGpsNames = timelineTableSettings.columns.gpsName === true;
+  const gpsNames = useMemo(
+    () => (showGpsNames && active ? buildRoadbookGpsNames(active) : null),
+    [active, showGpsNames],
+  );
+
   const timelinePanelProps = active
     ? {
       items: active.timeline,
@@ -184,8 +193,10 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
         );
       },
       onFavoriteItem: onFavoriteTimelineItem,
+      onRenameItem: onRenameTimelineItem,
       onRemoveItem: onRemoveTimelineItem,
       onSelectPlace: onSelectTimelinePlace,
+      gpsNames,
     }
     : null;
 

@@ -29,6 +29,8 @@ export interface TimelineTimelineViewProps {
   onChangeIntervalPauseDuration?: (pauseIntervalId: string, durationMin: number) => void;
   onRegisterPauseInsertionResolver?: (resolver: (() => number | null) | null) => void;
   onToggleFavorite?: (id: string, favorite: boolean) => void;
+  /** Nom saisi pour un POI (double-clic sur son nom, ou F2). */
+  onRename?: (id: string, label: string) => void;
   onRemove?: (id: string) => void;
 }
 

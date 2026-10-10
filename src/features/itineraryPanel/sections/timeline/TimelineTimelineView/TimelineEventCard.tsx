@@ -1,6 +1,8 @@
 import {
+  useState,
   type CSSProperties,
   type MouseEvent as ReactMouseEvent,
+  type ReactNode,
   type RefObject,
 } from 'react';
 import { useAppI18n } from '@/shared/i18n';
@@ -9,6 +11,8 @@ import {
   IconStar,
   IconTrash,
 } from '../../../components/icons';
+import { TimelineNameInput } from '../EditableTimelineName';
+import { isRenamableTimelineItem } from '../timelineNames';
 import { KindBadge } from '../KindBadge';
 import { CARD_NAME_LINE_HEIGHT_PX, CARD_NAME_MAX_LINES } from './constants';
 import type { TimelineItem } from '../../../types';
@@ -42,6 +46,8 @@ interface TimelineEventCardProps {
   onToggleSelect?: (id: string, selected: boolean) => void;
   onToggleVisibility?: (id: string, visible: boolean) => void;
   onToggleFavorite?: (id: string, favorite: boolean) => void;
+  /** Nom saisi pour un POI (double-clic sur le nom, ou F2). */
+  onRename?: (id: string, label: string) => void;
   onRemove?: (id: string) => void;
   /** Modifier la pause de ce POI (sa durée à lui seul). */
   onPoiPauseDurationClick: (
@@ -78,6 +84,7 @@ export function TimelineEventCard({
   onToggleSelect,
   onToggleVisibility,
   onToggleFavorite,
+  onRename,
   onRemove,
   onPoiPauseDurationClick,
   onPauseDurationDraftChange,
@@ -86,6 +93,8 @@ export function TimelineEventCard({
   resolveColumnPlacement,
 }: TimelineEventCardProps) {
   const { t } = useAppI18n();
+  const [renaming, setRenaming] = useState(false);
+  const canRename = Boolean(onRename) && isRenamableTimelineItem(event.item);
   const visible = event.item.visible !== false;
   const hasAttachedPauses = previewEvent.attachedPauses.length > 0;
   const hasNextMetric = event.toNextSeconds !== null && Number.isFinite(event.toNextSeconds);
@@ -122,6 +131,143 @@ export function TimelineEventCard({
     ...resolveColumnPlacement(previewEvent.spanSegments[0]?.dayKey ?? previewEvent.dayKey),
   } as CSSProperties;
 
+  // Pendant la saisie du nom, la carte n'est plus un bouton : jamais de champ dans un bouton.
+  const cardContent: ReactNode = (
+    <span className="rvi-tl-schedule__event-main">
+      <span className="rvi-tl-schedule__event-icon" aria-hidden>
+        {/* La pause a sa colonne : pas de seconde pastille sur l'icône. */}
+        <KindBadge
+          kind={event.item.kind}
+          poiCategory={event.item.poiCategory}
+          favorite={event.item.favorite}
+          size={24}
+        />
+      </span>
+      <span className="rvi-tl-schedule__event-title">
+        {renaming && onRename ? (
+          <TimelineNameInput
+            item={event.item}
+            className="rvi-tl-schedule__event-name-input"
+            onRename={onRename}
+            onDone={() => setRenaming(false)}
+          />
+        ) : (
+          <span
+            className="rvi-tl-schedule__event-name"
+            title={canRename
+              ? t('{{name}} · double-cliquer pour modifier (horaires, nom court…), repris par l’export GPS', { name: title })
+              : title}
+            onDoubleClick={canRename
+              ? (doubleClickEvent) => {
+                  doubleClickEvent.stopPropagation();
+                  setRenaming(true);
+                }
+              : undefined}
+          >
+            {title}
+          </span>
+        )}
+        {departureLabel ? (
+          <span className="rvi-tl-schedule__event-caption">
+            {t('Repart à {{time}}', { time: departureLabel })}
+          </span>
+        ) : null}
+      </span>
+      <span className="rvi-tl-schedule__event-pauses">
+        {hasAttachedPauses ? (
+          previewEvent.attachedPauses.map((pause, pauseIndex) => (
+            <span
+              key={pause.id}
+              className={[
+                'rvi-tl-schedule__pause-chip',
+                pause.visible ? 'is-visible' : '',
+                canEditPoiPause ? 'is-editable' : '',
+                dragStateId === pause.id ? 'is-dragging' : '',
+              ].filter(Boolean).join(' ')}
+              style={{
+                minHeight: pause.heightPx,
+                height: pause.heightPx,
+              }}
+              title={canEditPoiPause
+                ? t('{{duration}} · départ {{time}} · cliquer pour modifier', {
+                    duration: formatPauseDuration(pause.durationMin),
+                    time: pauseUntilLabels[pauseIndex] ?? '',
+                  })
+                : t('{{duration}} · départ {{time}}', {
+                    duration: formatPauseDuration(pause.durationMin),
+                    time: pauseUntilLabels[pauseIndex] ?? '',
+                  })}
+            >
+              <span
+                className="rvi-tl-schedule__pause-chip-icon"
+                aria-hidden
+              >
+                <KindBadge kind="pause" size={24} />
+              </span>
+              {isEditingPoiPause ? (
+                <input
+                  ref={pauseDurationInputRef}
+                  className="rvi-tl-schedule__pause-chip-input"
+                  value={editingPauseDuration?.draft ?? ''}
+                  onChange={(changeEvent) => {
+                    onPauseDurationDraftChange(changeEvent.target.value);
+                  }}
+                  onPointerDown={(pointerEvent) => {
+                    pointerEvent.stopPropagation();
+                  }}
+                  onClick={(clickEvent) => {
+                    clickEvent.stopPropagation();
+                  }}
+                  onBlur={onCommitPauseDurationEdit}
+                  onKeyDown={(keyEvent) => {
+                    if (keyEvent.key === 'Enter') {
+                      keyEvent.preventDefault();
+                      onCommitPauseDurationEdit();
+                    } else if (keyEvent.key === 'Escape') {
+                      keyEvent.preventDefault();
+                      onCancelPauseDurationEdit();
+                    }
+                  }}
+                  aria-label={t('Modifier la durée de la pause')}
+                />
+              ) : (
+                <span
+                  className="rvi-tl-schedule__pause-chip-text"
+                  onClick={canEditPoiPause ? (clickEvent) => onPoiPauseDurationClick(
+                    event.item.id,
+                    pause.durationMin,
+                    clickEvent,
+                  ) : undefined}
+                >
+                  {formatPauseDuration(pause.durationMin)}
+                </span>
+              )}
+            </span>
+          ))
+        ) : null}
+      </span>
+      <span className="rvi-tl-schedule__event-metric rvi-tl-schedule__event-metric--from-start">
+        {formatDistanceLabel(event.distanceKm)}
+      </span>
+      <span className="rvi-tl-schedule__event-metric rvi-tl-schedule__event-metric--next">
+        {hasNextMetric ? formatLegDuration(event.toNextSeconds) : ''}
+      </span>
+      <span
+        className={`rvi-tl-schedule__event-favorite${event.item.favorite ? ' is-active' : ''}`}
+        role="button"
+        tabIndex={0}
+        onClick={(clickEvent) => {
+          clickEvent.stopPropagation();
+          onToggleFavorite?.(event.item.id, !event.item.favorite);
+        }}
+        aria-label={t('Favori')}
+        aria-pressed={!!event.item.favorite}
+      >
+        <IconStar size={12} />
+      </span>
+    </span>
+  );
+
   return (
     <article
       className={`rvi-tl-schedule__event${selected ? ' is-selected' : ''}`}
@@ -130,129 +276,28 @@ export function TimelineEventCard({
       data-timeline-id={event.item.id}
       data-multiline-name={nameLines > 1 ? '' : undefined}
     >
-      <button
-        type="button"
-        className="rvi-tl-schedule__event-card"
-        aria-pressed={selected}
-        onClick={() => {
-          onToggleSelect?.(event.item.id, !selected);
-          onSelectRow?.(event.item.id, event.item);
-        }}
-      >
-        <span className="rvi-tl-schedule__event-main">
-          <span className="rvi-tl-schedule__event-icon" aria-hidden>
-            {/* La pause a sa colonne : pas de seconde pastille sur l'icône. */}
-            <KindBadge
-              kind={event.item.kind}
-              poiCategory={event.item.poiCategory}
-              favorite={event.item.favorite}
-              size={24}
-            />
-          </span>
-          <span className="rvi-tl-schedule__event-title">
-            <span className="rvi-tl-schedule__event-name" title={title}>
-              {title}
-            </span>
-            {departureLabel ? (
-              <span className="rvi-tl-schedule__event-caption">
-                {t('Repart à {{time}}', { time: departureLabel })}
-              </span>
-            ) : null}
-          </span>
-          <span className="rvi-tl-schedule__event-pauses">
-            {hasAttachedPauses ? (
-              previewEvent.attachedPauses.map((pause, pauseIndex) => (
-                <span
-                  key={pause.id}
-                  className={[
-                    'rvi-tl-schedule__pause-chip',
-                    pause.visible ? 'is-visible' : '',
-                    canEditPoiPause ? 'is-editable' : '',
-                    dragStateId === pause.id ? 'is-dragging' : '',
-                  ].filter(Boolean).join(' ')}
-                  style={{
-                    minHeight: pause.heightPx,
-                    height: pause.heightPx,
-                  }}
-                  title={canEditPoiPause
-                    ? t('{{duration}} · départ {{time}} · cliquer pour modifier', {
-                        duration: formatPauseDuration(pause.durationMin),
-                        time: pauseUntilLabels[pauseIndex] ?? '',
-                      })
-                    : t('{{duration}} · départ {{time}}', {
-                        duration: formatPauseDuration(pause.durationMin),
-                        time: pauseUntilLabels[pauseIndex] ?? '',
-                      })}
-                >
-                  <span
-                    className="rvi-tl-schedule__pause-chip-icon"
-                    aria-hidden
-                  >
-                    <KindBadge kind="pause" size={24} />
-                  </span>
-                  {isEditingPoiPause ? (
-                    <input
-                      ref={pauseDurationInputRef}
-                      className="rvi-tl-schedule__pause-chip-input"
-                      value={editingPauseDuration?.draft ?? ''}
-                      onChange={(changeEvent) => {
-                        onPauseDurationDraftChange(changeEvent.target.value);
-                      }}
-                      onPointerDown={(pointerEvent) => {
-                        pointerEvent.stopPropagation();
-                      }}
-                      onClick={(clickEvent) => {
-                        clickEvent.stopPropagation();
-                      }}
-                      onBlur={onCommitPauseDurationEdit}
-                      onKeyDown={(keyEvent) => {
-                        if (keyEvent.key === 'Enter') {
-                          keyEvent.preventDefault();
-                          onCommitPauseDurationEdit();
-                        } else if (keyEvent.key === 'Escape') {
-                          keyEvent.preventDefault();
-                          onCancelPauseDurationEdit();
-                        }
-                      }}
-                      aria-label={t('Modifier la durée de la pause')}
-                    />
-                  ) : (
-                    <span
-                      className="rvi-tl-schedule__pause-chip-text"
-                      onClick={canEditPoiPause ? (clickEvent) => onPoiPauseDurationClick(
-                        event.item.id,
-                        pause.durationMin,
-                        clickEvent,
-                      ) : undefined}
-                    >
-                      {formatPauseDuration(pause.durationMin)}
-                    </span>
-                  )}
-                </span>
-              ))
-            ) : null}
-          </span>
-          <span className="rvi-tl-schedule__event-metric rvi-tl-schedule__event-metric--from-start">
-            {formatDistanceLabel(event.distanceKm)}
-          </span>
-          <span className="rvi-tl-schedule__event-metric rvi-tl-schedule__event-metric--next">
-            {hasNextMetric ? formatLegDuration(event.toNextSeconds) : ''}
-          </span>
-          <span
-            className={`rvi-tl-schedule__event-favorite${event.item.favorite ? ' is-active' : ''}`}
-            role="button"
-            tabIndex={0}
-            onClick={(clickEvent) => {
-              clickEvent.stopPropagation();
-              onToggleFavorite?.(event.item.id, !event.item.favorite);
-            }}
-            aria-label={t('Favori')}
-            aria-pressed={!!event.item.favorite}
-          >
-            <IconStar size={12} />
-          </span>
-        </span>
-      </button>
+      {renaming ? (
+        <div className="rvi-tl-schedule__event-card">{cardContent}</div>
+      ) : (
+        <button
+          type="button"
+          className="rvi-tl-schedule__event-card"
+          aria-pressed={selected}
+          onClick={() => {
+            onToggleSelect?.(event.item.id, !selected);
+            onSelectRow?.(event.item.id, event.item);
+          }}
+          onKeyDown={canRename
+            ? (keyEvent) => {
+                if (keyEvent.key !== 'F2') return;
+                keyEvent.preventDefault();
+                setRenaming(true);
+              }
+            : undefined}
+        >
+          {cardContent}
+        </button>
+      )}
 
       <span className="rvi-tl-schedule__actions">
         <button

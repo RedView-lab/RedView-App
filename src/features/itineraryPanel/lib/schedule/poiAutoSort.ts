@@ -14,7 +14,6 @@ import {
 import { projectRoutePoints } from '@/features/poi/lib/refinePoiProjection';
 import { POI_LABELS, type PoiAutoSortReason, type PoiFeature } from '@/features/poi/types';
 
-import { parseStartReference } from '../../sections/timeline/TimelineTimelineView/utils';
 import type {
   Itinerary,
   PoiAutoSortPickRef,
@@ -24,10 +23,8 @@ import type {
 } from '../../types';
 import { DEFAULT_POI_DISTANCE_M, normalizeItineraryRhythmState } from '../project/defaultState';
 import { buildPauseAwareSchedule } from './pauseAwareSchedule';
+import { resolveScheduleStart, rideSecondsModel } from './passageClock';
 import { FEATURE_TO_PANEL_POI } from './poi-to-timeline';
-
-/** Vitesse de repli quand aucune prédiction n'est disponible. */
-const FALLBACK_SPEED_MS = 18 / 3.6;
 
 export interface PoiAutoSortRun {
   result: AutoSortResult;
@@ -95,36 +92,6 @@ function isManualFavorite(item: { favorite?: boolean; favoriteSource?: string })
   return Boolean(item.favorite) && item.favoriteSource !== 'auto';
 }
 
-function rideSecondsModel(
-  prediction: PredictionResult | null,
-  routeTotalM: number,
-): (progressM: number) => number {
-  const points = prediction?.points ?? [];
-  if (points.length < 2 || routeTotalM <= 0) {
-    return (progressM) => progressM / FALLBACK_SPEED_MS;
-  }
-  // La prédiction travaille sur sa propre trace rééchantillonnée : on passe
-  // par la fraction parcourue pour rester insensible aux écarts de longueur.
-  const predictionTotalM = points[points.length - 1]!.distance_m;
-  return (progressM) => {
-    const d = (progressM / routeTotalM) * predictionTotalM;
-    if (d <= points[0]!.distance_m) return points[0]!.elapsed_time_s;
-    let lo = 0;
-    let hi = points.length - 1;
-    if (d >= points[hi]!.distance_m) return points[hi]!.elapsed_time_s;
-    while (lo + 1 < hi) {
-      const mid = (lo + hi) >> 1;
-      if (points[mid]!.distance_m <= d) lo = mid;
-      else hi = mid;
-    }
-    const a = points[lo]!;
-    const b = points[hi]!;
-    const span = b.distance_m - a.distance_m;
-    if (span <= 0) return a.elapsed_time_s;
-    return a.elapsed_time_s + ((d - a.distance_m) / span) * (b.elapsed_time_s - a.elapsed_time_s);
-  };
-}
-
 /**
  * Lance le tri auto sur l'itinéraire. Ne modifie rien : le résultat est
  * enregistré dans `Itinerary.poiAutoSort.picks` (voir `toPoiAutoSortPickRefs`).
@@ -168,15 +135,8 @@ export function computePoiAutoSort(
     ? (buildPauseAwareSchedule(baseItinerary, usablePrediction)?.stopAnchors ?? [])
     : [];
 
-  const reference = parseStartReference(rhythm);
-  let start: Date;
-  if (reference.hasRealDate && reference.reference) {
-    start = reference.reference;
-  } else {
-    // Pas de date : départ supposé demain, jour de semaine traité comme inconnu.
-    start = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-    start.setMinutes(reference.startMinutes);
-  }
+  // Pas de date : départ supposé demain, jour de semaine traité comme inconnu.
+  const { start, hasRealDate } = resolveScheduleStart(rhythm, now);
 
   const projected = projectRoutePoints(routePoints);
   const routeTotalM = projected[projected.length - 1]?.progressM ?? 0;
@@ -185,7 +145,7 @@ export function computePoiAutoSort(
     rideSecondsAt: rideSecondsModel(usablePrediction, routeTotalM),
     baseStopAnchors,
     start,
-    hasRealDate: reference.hasRealDate,
+    hasRealDate,
     // Les POI retenus ne vont pas dans la timeline : ils ne posent pas de
     // pause, l'horaire du tri reste celui affiché par la feuille de route.
     pauseMinutesFor: () => 0,

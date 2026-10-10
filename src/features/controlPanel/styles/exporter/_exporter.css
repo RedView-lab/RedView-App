@@ -147,6 +147,44 @@
   background: transparent;
 }
 
+/* POI exportés avec l'itinéraire : sous la ligne « Itinéraire(s) », alignés sur son libellé. */
+.rvc-exporter-panel__pois {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-left: 20px;
+}
+
+.rvc-exporter-panel__row--sub {
+  gap: 8px;
+}
+
+.rvc-exporter-panel__sublabel {
+  flex: 0 0 auto;
+  font-size: var(--rv-font-size-md);
+  font-weight: 500;
+  color: var(--rvc-text);
+  opacity: 0.64;
+}
+
+.rvc-exporter-panel__select--wide.rvc-select {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.rvc-exporter-panel__hint {
+  margin: 0;
+  font-size: var(--rv-font-size-xs);
+  font-weight: 500;
+  line-height: 1.35;
+  color: rgb(var(--rv-ink) / 0.64);
+  overflow-wrap: anywhere;
+}
+
+.rvc-exporter-panel__hint--warning {
+  color: light-dark(#b54708, #fdb022);
+}
+
 .rvc-exporter-panel__submit {
   width: 100%;
 }

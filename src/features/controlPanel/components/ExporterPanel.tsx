@@ -1,4 +1,4 @@
-import { useState, type CSSProperties, memo } from 'react';
+import { Fragment, useMemo, useState, type CSSProperties, memo } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 
 import {
@@ -8,8 +8,15 @@ import {
   useFlyoverController,
   type FlyoverVideoOrientation,
 } from '@/features/centerPanel/flyover';
-import { exportItineraryFile, type ItineraryExportFormat } from '@/features/exporter';
-import { useProjectStoreOptional } from '@/features/itineraryPanel';
+import {
+  countExportPois,
+  exportItineraryFile,
+  GARMIN_COURSE_POINT_LIMIT,
+  gpsNameExamples,
+  type ExportPoiScope,
+  type ItineraryExportFormat,
+} from '@/features/exporter';
+import { usePredictionStoreOptional, useProjectStoreOptional } from '@/features/itineraryPanel';
 import type { ItineraryProject } from '@/features/itineraryPanel/types';
 import { describeRedviewExportError, exportProjectAsRedview } from '@/features/redviewFile';
 import { useAppI18n } from '@/shared/i18n';
@@ -80,17 +87,48 @@ const INITIAL_ROWS: ExportRow[] = [
   { id: 'video', label: 'Vidéo flyover', format: 'mp4-landscape', checked: false },
 ];
 
+/**
+ * Format d'itinéraire retenu sur cet appareil : qui exporte en FIT pour son
+ * Garmin n'a pas à le rechoisir à chaque fois. Préférence locale, au mieux.
+ */
+const ITINERARY_FORMAT_STORAGE_KEY = 'redview:exporter:itinerary-format';
+
+function readStoredItineraryFormat(): ItineraryExportFormat | null {
+  try {
+    const stored = window.localStorage.getItem(ITINERARY_FORMAT_STORAGE_KEY);
+    return ITINERARY_FORMAT_OPTIONS.some((option) => option.value === stored) ? (stored as ItineraryExportFormat) : null;
+  } catch {
+    return null;
+  }
+}
+
+function storeItineraryFormat(format: ItineraryExportFormat): void {
+  try {
+    window.localStorage.setItem(ITINERARY_FORMAT_STORAGE_KEY, format);
+  } catch {
+    // Préférence de confort : sans stockage, GPX reste proposé par défaut.
+  }
+}
+
+function initialRows(): ExportRow[] {
+  const format = readStoredItineraryFormat();
+  return format
+    ? INITIAL_ROWS.map((row) => (row.id === 'itineraries' ? { ...row, format } : row))
+    : INITIAL_ROWS;
+}
+
 export const ExporterPanel = memo(function ExporterPanel({
   width,
   projectId = null,
   map = null,
   getProjectSnapshot,
 }: ExporterPanelProps) {
-  const { t } = useAppI18n();
+  const { t, locale } = useAppI18n();
   const store = useProjectStoreOptional();
+  const predictionStore = usePredictionStoreOptional();
   const flyover = useFlyoverController();
   const [open, setOpen] = useState(true);
-  const [rows, setRows] = useState(INITIAL_ROWS);
+  const [rows, setRows] = useState(initialRows);
   const [isExporting, setIsExporting] = useState(false);
   const [status, setStatus] = useState<{ tone: 'idle' | 'success' | 'error'; message: string } | null>(null);
   const style: CSSProperties | undefined = width ? { width } : undefined;
@@ -98,6 +136,29 @@ export const ExporterPanel = memo(function ExporterPanel({
   const activeItinerary = store?.project.itineraries.find(
     (itinerary) => itinerary.id === store.project.activeItineraryId,
   ) ?? null;
+
+  // POI exportés avec la trace (GPX / FIT / KML) : par défaut ceux de la
+  // feuille de route, ou les favoris quand la feuille de route dépasse ce
+  // qu'un compteur Garmin annonce.
+  const [poiScopeChoice, setPoiScopeChoice] = useState<ExportPoiScope | null>(null);
+  const poiCounts = useMemo(() => (activeItinerary ? countExportPois(activeItinerary) : null), [activeItinerary]);
+  const waypointCount = useMemo(
+    () => activeItinerary?.timeline.filter((row) => row.kind === 'waypoint' && Number.isFinite(row.lat) && Number.isFinite(row.lon)).length ?? 0,
+    [activeItinerary],
+  );
+  const defaultPoiScope: ExportPoiScope = poiCounts
+    && poiCounts.roadbook + waypointCount > GARMIN_COURSE_POINT_LIMIT
+    && poiCounts.favorites > 0
+    ? 'favorites'
+    : 'roadbook';
+  const poiScope = poiScopeChoice ?? defaultPoiScope;
+  const poiScopeOptions: { value: ExportPoiScope; label: string }[] = [
+    { value: 'roadbook', label: t('Feuille de route ({{count}})', { count: poiCounts?.roadbook ?? 0 }) },
+    { value: 'favorites', label: t('Favoris ({{count}})', { count: poiCounts?.favorites ?? 0 }) },
+    { value: 'all', label: t('Tous les POI ({{count}})', { count: poiCounts?.all ?? 0 }) },
+    { value: 'none', label: t('Aucun POI') },
+  ];
+  const coursePointCount = (poiScope === 'none' ? 0 : poiCounts?.[poiScope] ?? 0) + waypointCount;
 
   const handleToggle = (id: string, nextChecked: boolean) => {
     setRows((current) =>
@@ -108,6 +169,9 @@ export const ExporterPanel = memo(function ExporterPanel({
   };
 
   const handleFormatChange = (id: string, nextFormat: ExportFormat) => {
+    if (id === 'itineraries' && ITINERARY_FORMAT_OPTIONS.some((option) => option.value === nextFormat)) {
+      storeItineraryFormat(nextFormat as ItineraryExportFormat);
+    }
     setRows((current) =>
       current.map((row) =>
         row.id === id && !row.disabled ? { ...row, format: nextFormat } : row,
@@ -120,7 +184,11 @@ export const ExporterPanel = memo(function ExporterPanel({
     if (format !== 'gpx' && format !== 'fit' && format !== 'kml') {
       throw new Error("Le format sélectionné n'est pas encore pris en charge pour l'itinéraire.");
     }
-    const { fileName } = exportItineraryFile(activeItinerary, format);
+    const { fileName } = exportItineraryFile(activeItinerary, format, {
+      pois: poiScope,
+      // Heures de passage (horodatage FIT, horaires du jour) : la prédiction affichée.
+      prediction: predictionStore?.predictions[activeItinerary.id] ?? activeItinerary.prediction ?? null,
+    });
     // Moment de valeur : le parcours part vers le GPS / l'appli de navigation.
     trackAnalyticsEvent({ name: 'route_exported', data: { format, scope: 'itinerary' } });
     return t("{{files}} exporté depuis l'itinéraire actif.", { files: fileName });
@@ -252,24 +320,49 @@ export const ExporterPanel = memo(function ExporterPanel({
 
             <div className="rvc-exporter-panel__rows">
               {rows.map((row) => (
-                <div
-                  key={row.id}
-                  className={`rvc-exporter-panel__row${row.disabled ? ' is-disabled' : ''}`}
-                >
-                  <Checkbox
-                    id={`export-${row.id}`}
-                    checked={row.checked}
-                    onChange={(nextChecked) => handleToggle(row.id, nextChecked)}
-                    label={row.label}
-                  />
-                  <Select
-                    className="rvc-exporter-panel__select"
-                    value={row.format}
-                    options={FORMAT_OPTIONS[row.format]}
-                    onChange={(nextFormat) => handleFormatChange(row.id, nextFormat)}
-                    width="var(--rvc-exporter-select-width)"
-                  />
-                </div>
+                <Fragment key={row.id}>
+                  <div className={`rvc-exporter-panel__row${row.disabled ? ' is-disabled' : ''}`}>
+                    <Checkbox
+                      id={`export-${row.id}`}
+                      checked={row.checked}
+                      onChange={(nextChecked) => handleToggle(row.id, nextChecked)}
+                      label={row.label}
+                    />
+                    <Select
+                      className="rvc-exporter-panel__select"
+                      value={row.format}
+                      options={FORMAT_OPTIONS[row.format]}
+                      onChange={(nextFormat) => handleFormatChange(row.id, nextFormat)}
+                      width="var(--rvc-exporter-select-width)"
+                    />
+                  </div>
+                  {row.id === 'itineraries' && row.checked && activeItinerary ? (
+                    <div className="rvc-exporter-panel__pois">
+                      <div className="rvc-exporter-panel__row rvc-exporter-panel__row--sub">
+                        <span className="rvc-exporter-panel__sublabel">{t('POI')}</span>
+                        <Select
+                          className="rvc-exporter-panel__select rvc-exporter-panel__select--wide"
+                          value={poiScope}
+                          options={poiScopeOptions}
+                          onChange={setPoiScopeChoice}
+                        />
+                      </div>
+                      {row.format !== 'kml' && poiScope !== 'none' ? (
+                        <p className="rvc-exporter-panel__hint">
+                          {t('Noms GPS : {{examples}}', { examples: gpsNameExamples(locale).join(' · ') })}
+                        </p>
+                      ) : null}
+                      {row.format !== 'kml' && coursePointCount > GARMIN_COURSE_POINT_LIMIT ? (
+                        <p className="rvc-exporter-panel__hint rvc-exporter-panel__hint--warning">
+                          {t('{{count}} points de parcours : au-delà de {{limit}}, certains compteurs Garmin n’annoncent plus les derniers.', {
+                            count: coursePointCount,
+                            limit: GARMIN_COURSE_POINT_LIMIT,
+                          })}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </Fragment>
               ))}
             </div>
 
@@ -294,7 +387,8 @@ export const ExporterPanel = memo(function ExporterPanel({
                   fontSize: 'var(--rv-font-size-sm)',
                   fontWeight: 500,
                   lineHeight: 1.4,
-                  color: status.tone === 'error' ? '#ff8d8d' : '#cbe8b1',
+                  // Tons d'état du thème clair (le vert / rouge pâle du sombre y était illisible).
+                  color: status.tone === 'error' ? 'light-dark(#b42318, #ff8d8d)' : 'light-dark(#067647, #cbe8b1)',
                 }}
               >
                 {status.message}

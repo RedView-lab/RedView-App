@@ -236,3 +236,42 @@ export function evaluateOpeningHoursAt(
 export function isOpen247(openingHours: string | undefined): boolean {
   return openingHours?.trim() === '24/7';
 }
+
+/** Plage d'ouverture en minutes depuis minuit ; `end` dépasse 1 440 quand elle finit après minuit. */
+export interface OpeningInterval {
+  start: number;
+  end: number;
+}
+
+function sameIntervals(a: readonly Interval[], b: readonly Interval[]): boolean {
+  return a.length === b.length && a.every((it, index) => it.start === b[index]!.start && it.end === b[index]!.end);
+}
+
+/**
+ * Plages d'ouverture du jour de `date` (heure locale), triées : `[]` = fermé
+ * ce jour-là, null = horaires absents ou non compris.
+ *
+ * @param weekdayKnown Sans date de départ réelle, le jour est inconnu : les
+ *   plages ne sont rendues que si elles sont les mêmes les 7 jours.
+ */
+export function openingIntervalsOnDate(
+  openingHours: string | undefined,
+  date: Date,
+  weekdayKnown = true,
+): OpeningInterval[] | null {
+  const raw = openingHours?.trim();
+  if (!raw) return null;
+  if (raw === '24/7') return [{ start: 0, end: 24 * 60 }];
+  const rules = parseOpeningHours(raw);
+  if (!rules) return null;
+
+  const sorted = (day: Date) => [...intervalsForDay(rules, day)].sort((l, r) => l.start - r.start);
+  const today = sorted(date);
+  if (!weekdayKnown) {
+    for (let offset = 1; offset < 7; offset++) {
+      const day = new Date(date.getFullYear(), date.getMonth(), date.getDate() + offset);
+      if (!sameIntervals(today, sorted(day))) return null;
+    }
+  }
+  return today.map(({ start, end }) => ({ start, end }));
+}

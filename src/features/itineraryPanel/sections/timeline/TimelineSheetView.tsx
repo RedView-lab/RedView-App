@@ -54,6 +54,8 @@ interface TimelineSheetViewProps {
   prediction?: PredictionResult | null;
   discipline?: SportDiscipline;
   weatherDataset?: RouteWeatherDataset | null;
+  /** Nom GPS de chaque ligne de POI (colonne « Nom GPS »), calculé seulement quand elle est affichée. */
+  gpsNames?: ReadonlyMap<string, string> | null;
   columns: Record<TimelineColumnId, boolean>;
   sort: TimelineTableSortState | null;
   onChangeSort: (next: TimelineTableSortState | null) => void;
@@ -62,6 +64,8 @@ interface TimelineSheetViewProps {
   onToggleSelect?: (id: string, selected: boolean) => void;
   onToggleVisibility?: (id: string, visible: boolean) => void;
   onToggleFavorite?: (id: string, favorite: boolean) => void;
+  /** Nom saisi dans la colonne « Nom » d'un POI. */
+  onRename?: (id: string, label: string) => void;
   onRemove?: (id: string) => void;
   onAdd?: MouseEventHandler<HTMLButtonElement>;
   onOpenKindMenu?: MouseEventHandler<HTMLButtonElement>;
@@ -80,6 +84,7 @@ export function TimelineSheetView({
   prediction,
   discipline = 'bike',
   weatherDataset,
+  gpsNames,
   columns,
   sort,
   onChangeSort,
@@ -88,6 +93,7 @@ export function TimelineSheetView({
   onToggleSelect,
   onToggleVisibility,
   onToggleFavorite,
+  onRename,
   onRemove,
   onAdd,
   onOpenKindMenu,
@@ -134,11 +140,12 @@ export function TimelineSheetView({
         reference,
         weatherDataset,
         discipline,
+        gpsName: gpsNames?.get(item.id) ?? null,
       });
       const cells = visibleColumns.map((col) => col.getCell(ctx));
       return { item, ctx, cells };
     });
-  }, [discipline, items, prediction, rhythm, visibleColumns, weatherDataset]);
+  }, [discipline, gpsNames, items, prediction, rhythm, visibleColumns, weatherDataset]);
 
   const sortedRows: PreparedRow[] = useMemo(() => {
     if (!sort) return preparedRows;
@@ -177,9 +184,10 @@ export function TimelineSheetView({
     onMovePause,
     onChangePauseDuration,
     onChangeIntervalPauseDuration,
+    onRename,
     maxDistanceKm,
     t,
-  }), [maxDistanceKm, onChangeIntervalPauseDuration, onChangePauseDuration, onMovePause, onSelectPlace, t]);
+  }), [maxDistanceKm, onChangeIntervalPauseDuration, onChangePauseDuration, onMovePause, onRename, onSelectPlace, t]);
 
   if (useCompactListLayout) {
     const typeDirection = sort?.columnId === 'typeText' ? sort.direction : null;
@@ -256,6 +264,7 @@ export function TimelineSheetView({
                     onSelectRow={onSelectRow}
                     onToggleVisibility={onToggleVisibility}
                     onToggleFavorite={onToggleFavorite}
+                    onRename={onRename}
                     onRemove={onRemove}
                     onSelectPlace={onSelectPlace}
                     onMovePause={onMovePause}

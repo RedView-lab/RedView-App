@@ -85,6 +85,9 @@ const NAME_REGEX = new RegExp(`<${NS}name\\b[^>]*>([\\s\\S]*?)</${NS}name\\s*>`,
 const WAYPOINT_TYPE_REGEX = new RegExp(`<${NS}type\\b[^>]*>([\\s\\S]*?)</${NS}type\\s*>`, 'i');
 const WAYPOINT_SYM_REGEX = new RegExp(`<${NS}sym\\b[^>]*>([\\s\\S]*?)</${NS}sym\\s*>`, 'i');
 const WAYPOINT_DESC_REGEX = new RegExp(`<${NS}desc\\b[^>]*>([\\s\\S]*?)</${NS}desc\\s*>`, 'i');
+const WAYPOINT_CMT_REGEX = new RegExp(`<${NS}cmt\\b[^>]*>([\\s\\S]*?)</${NS}cmt\\s*>`, 'i');
+/** Catégorie exacte d'un POI exporté par RedView (extension `<redview:category>`). */
+const WAYPOINT_REDVIEW_CATEGORY_REGEX = /<redview:category\b[^>]*>([\s\S]*?)<\/redview:category\s*>/i;
 const LAT_REGEX = /(?:^|\s)lat\s*=\s*["']([^"']+)["']/i;
 const LON_REGEX = /(?:^|\s)lon\s*=\s*["']([^"']+)["']/i;
 
@@ -229,6 +232,8 @@ function extractWaypoints(text: string): NonNullable<GpxRoute['waypoints']> {
       type: extractElementText(body, WAYPOINT_TYPE_REGEX),
       sym: extractElementText(body, WAYPOINT_SYM_REGEX),
       desc: extractElementText(body, WAYPOINT_DESC_REGEX),
+      cmt: extractElementText(body, WAYPOINT_CMT_REGEX),
+      redviewCategory: extractElementText(body, WAYPOINT_REDVIEW_CATEGORY_REGEX),
     });
   });
   return waypoints;

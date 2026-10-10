@@ -11,12 +11,15 @@ import {
   GPX_NAMESPACE,
   POI_CATEGORY_TO_GPX_SYM,
   type ExportAnchor,
+  type ExportOptions,
 } from './exportHelpers';
 import { translateAppText } from '@/shared/i18n/config';
+import { gpxCoursePointType } from './coursePointTypes';
+
+/** Espace de noms des extensions RedView d'un point (catégorie exacte, relue à l'import). */
+const REDVIEW_GPX_NAMESPACE = 'https://redview.tech/xmlns/gpx/1';
 
 function mapPoiCategoryToGpxSym(anchor: ExportAnchor): string {
-  if (anchor.kind === 'start') return 'Flag, Green';
-  if (anchor.kind === 'end') return 'Flag, Red';
   if (anchor.kind === 'waypoint') return 'Flag, Blue';
   if (anchor.kind === 'poi' && anchor.poiCategory) {
     return POI_CATEGORY_TO_GPX_SYM[anchor.poiCategory] ?? 'Waypoint';
@@ -24,27 +27,28 @@ function mapPoiCategoryToGpxSym(anchor: ExportAnchor): string {
   return 'Waypoint';
 }
 
-function buildGpxWaypointType(anchor: ExportAnchor): string {
-  if (anchor.kind === 'start') return 'start';
-  if (anchor.kind === 'end') return 'finish';
-  if (anchor.kind === 'waypoint') return 'checkpoint';
-  return anchor.poiCategory ?? 'poi';
-}
-
 function buildWaypointDescription(anchor: ExportAnchor): string {
   if (anchor.kind === 'waypoint') return translateAppText('Point de passage exporté depuis la feuille de route.');
   if (anchor.kind === 'poi') return buildPoiExportDescription(anchor);
-  if (anchor.kind === 'start') return translateAppText('Départ du parcours.');
-  if (anchor.kind === 'end') return translateAppText('Arrivée du parcours.');
   return translateAppText('Point exporté depuis RedView.');
 }
 
 /**
- * Génère le fichier GPX complet pour un itinéraire avec ses points de trace, étapes et POIs favoris.
+ * Génère le fichier GPX complet pour un itinéraire avec ses points de trace,
+ * étapes et POI, pensé pour un import dans Garmin Connect :
+ *  - `<name>` d'un POI = convention GPS (`CAT_CDD[_horaires][_nom]`,
+ *    gpsNames.ts), ce que le compteur affiche ;
+ *  - `<type>` = type de point de parcours Garmin (`water`, `food`,
+ *    `checkpoint`…), donc la bonne icône ;
+ *  - pas de point de départ / d'arrivée : le compteur a les siens, ils
+ *    n'ajoutaient que deux drapeaux à la liste ;
+ *  - le nom lisible (`<cmt>`) et la catégorie RedView (extension) sont relus
+ *    par l'import RedView.
  */
-export function buildItineraryGpx(itinerary: Itinerary, options?: { favoritesOnly?: boolean }): string {
+export function buildItineraryGpx(itinerary: Itinerary, options?: ExportOptions): string {
   const routePoints = getExportRoutePoints(itinerary);
-  const anchors = collectExportAnchors(itinerary, routePoints, options);
+  const anchors = collectExportAnchors(itinerary, routePoints, options)
+    .filter((anchor) => anchor.kind !== 'start' && anchor.kind !== 'end');
   const bounds = buildBounds(routePoints);
   const exportedAt = new Date().toISOString();
   const routeName = itinerary.gpxRoute?.name?.trim() || itinerary.name.trim() || translateAppText('Itinéraire');
@@ -57,10 +61,18 @@ export function buildItineraryGpx(itinerary: Itinerary, options?: { favoritesOnl
       if (anchor.elevationM != null) {
         lines.push(`  <ele>${formatDecimal(anchor.elevationM, 1)}</ele>`);
       }
-      lines.push(`  <name>${escapeXml(anchor.name)}</name>`);
-      lines.push(`  <sym>${escapeXml(mapPoiCategoryToGpxSym(anchor))}</sym>`);
-      lines.push(`  <type>${escapeXml(buildGpxWaypointType(anchor))}</type>`);
+      // Ordre imposé par le schéma GPX 1.1 : name, cmt, desc, …, sym, type, extensions.
+      lines.push(`  <name>${escapeXml(anchor.gpsName)}</name>`);
+      if (anchor.gpsName !== anchor.name) {
+        lines.push(`  <cmt>${escapeXml(anchor.name)}</cmt>`);
+      }
       lines.push(`  <desc>${escapeXml(buildWaypointDescription(anchor))}</desc>`);
+      lines.push(`  <sym>${escapeXml(mapPoiCategoryToGpxSym(anchor))}</sym>`);
+      lines.push(`  <type>${gpxCoursePointType(anchor)}</type>`);
+      const category = anchor.featureCategory ?? anchor.poiCategory;
+      if (anchor.kind === 'poi' && category) {
+        lines.push(`  <extensions><redview:category>${escapeXml(category)}</redview:category></extensions>`);
+      }
       lines.push('</wpt>');
       return lines.join('\n');
     })
@@ -78,11 +90,11 @@ export function buildItineraryGpx(itinerary: Itinerary, options?: { favoritesOnl
 
   return [
     '<?xml version="1.0" encoding="UTF-8"?>',
-    `<gpx version="1.1" creator="${APP_CREATOR}" xmlns="${GPX_NAMESPACE}">`,
+    `<gpx version="1.1" creator="${APP_CREATOR}" xmlns="${GPX_NAMESPACE}" xmlns:redview="${REDVIEW_GPX_NAMESPACE}">`,
     '  <metadata>',
     `    <name>${escapeXml(routeName)}</name>`,
-    `    <time>${exportedAt}</time>`,
     `    <desc>${escapeXml(translateAppText('Trace exportée depuis RedView sans données de vitesse, cadence ou puissance.'))}</desc>`,
+    `    <time>${exportedAt}</time>`,
     `    <bounds minlat="${formatCoordinate(bounds.minLat)}" minlon="${formatCoordinate(bounds.minLon)}" maxlat="${formatCoordinate(bounds.maxLat)}" maxlon="${formatCoordinate(bounds.maxLon)}" />`,
     '  </metadata>',
     waypointXml,

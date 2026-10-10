@@ -341,6 +341,19 @@
   color: var(--rv-text);
   outline: none;
 }
+/* Colonne « Nom GPS » : ce qu'affiche le compteur, la suite (coupée à l'écran) estompée. */
+.rvi-tl-td__gps-name {
+  display: inline-block;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.rvi-tl-td__gps-name-rest {
+  color: rgb(var(--rv-ink) / 0.38);
+}
 .rvi-tl-td__type-text {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -383,6 +396,23 @@
 .rvi-tl-td__duration-input {
   width: 72px;
   text-align: left;
+}
+
+/* Nom d'un POI en cours de saisie : toute la largeur de la colonne. */
+.rvi-tl-td__name-input {
+  width: 100%;
+  min-width: 0;
+  height: 24px;
+  padding: 0 6px;
+  font-size: var(--rv-font-size-md);
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--rvi-text);
+  background: light-dark(#fff, rgba(0, 0, 0, 0.65));
+  border: 1px solid var(--rvi-red-accent, #c50000);
+  border-radius: 4px;
+  outline: none;
+  box-sizing: border-box;
 }
 
 .rvi-tl-td__check {
@@ -428,6 +458,7 @@
 .rvi-tl-tr__action {
   all: unset;
   display: inline-flex;
+  flex-shrink: 0;
   align-items: center;
   justify-content: center;
   width: 24px;

@@ -37,6 +37,35 @@ export function cumulativeRouteLengthsM(points: RouteDistancePoint[]): number[] 
   return out;
 }
 
+const routeDistancesCache = new WeakMap<object, number[]>();
+
+/**
+ * Distances cumulées d'un tracé sur l'axe de la prédiction et du graphique :
+ * celles que portent ses points (`distanceM`, mesurées sur la trace d'origine
+ * quand celle affichée est simplifiée) quand elles sont toutes là et
+ * croissantes, sinon recalculées à vol d'oiseau. Recalculées sur des points
+ * simplifiés, elles raccourcissent le tracé (−0,9 % sur les 593 km du GT20 :
+ * un POI placé 5 km trop tôt à l'arrivée, son heure de passage avec).
+ */
+export function routeDistancesM(
+  points: ReadonlyArray<RouteDistancePoint & { distanceM?: number | null }>,
+): number[] {
+  const cached = routeDistancesCache.get(points);
+  if (cached && cached.length === points.length) return cached;
+  let stored: number[] | null = new Array<number>(points.length);
+  for (let index = 0; index < points.length; index += 1) {
+    const distanceM = points[index]!.distanceM;
+    if (typeof distanceM !== 'number' || !Number.isFinite(distanceM) || (index > 0 && distanceM < stored[index - 1]!)) {
+      stored = null;
+      break;
+    }
+    stored[index] = distanceM;
+  }
+  const distances = stored ?? cumulativeRouteLengthsM(points as RouteDistancePoint[]);
+  routeDistancesCache.set(points, distances);
+  return distances;
+}
+
 export function projectDistanceAlongRouteM(
   point: RouteDistancePoint,
   routePoints: RouteDistancePoint[],

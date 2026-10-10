@@ -660,6 +660,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
         onChangeTimelinePauseDuration={timelineCallbacks.handleChangeTimelinePauseDuration}
         onRemoveTimelineItem={timelineCallbacks.handleRemoveTimelineItem}
         onFavoriteTimelineItem={timelineCallbacks.handleFavoriteTimelineItem}
+        onRenameTimelineItem={timelineCallbacks.handleRenameTimelineItem}
         onSearchTimeline={() => { }}
         onOpenTimelineSettings={() => { }}
         globalFilters={globalFilters}

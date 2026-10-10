@@ -12,6 +12,7 @@ export {
   projectPointAlongRoute,
   projectViaPointAlongRoute,
   roundDistanceKm,
+  routeDistancesM,
 } from './route-distance';
 export type { RouteDistancePoint, ProjectedRoutePoint } from './route-distance';
 export {
