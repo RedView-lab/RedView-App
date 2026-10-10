@@ -11,7 +11,9 @@ import { useProjectSave } from './useProjectSave';
 
 const toast = vi.hoisted(() => ({ error: vi.fn() }));
 vi.mock('@/shared/lib/notify', () => ({ notify: toast }));
-const dialogs = vi.hoisted(() => ({ confirmDialog: vi.fn<(options: { title: string }) => Promise<boolean>>() }));
+const dialogs = vi.hoisted(() => ({
+  confirmDialog: vi.fn<(options: { title: string }, control?: { signal?: AbortSignal }) => Promise<boolean>>(),
+}));
 vi.mock('@/shared/lib/appDialog', () => dialogs);
 
 /**
@@ -141,6 +143,30 @@ describe('résultat d’une sauvegarde', () => {
     expect(hook.result.current.displayedSaveStatus).toBe('error');
     act(() => { vi.advanceTimersByTime(1); });
     expect(hook.result.current.displayedSaveStatus).toBe('idle');
+  });
+
+  it('projet fermé ou changé pendant la question : la pop-in se ferme, rien n’est forcé', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    let signal: AbortSignal | undefined;
+    // Même un « Remplacer » arrivé après coup ne doit pas forcer l'autre projet.
+    dialogs.confirmDialog.mockImplementation((_options, control) => new Promise((resolve) => {
+      signal = control?.signal;
+      signal?.addEventListener('abort', () => resolve(true));
+    }));
+    const save = vi.fn<Save>(async (options) => {
+      if (!options?.force) throw new ProjectCloudError('conflict');
+      return saved;
+    });
+    const { hook } = render(save, 'p1');
+    let pending!: Promise<void>;
+    act(() => { pending = hook.result.current.handleSaveProject(); });
+    await settle();
+    expect(signal?.aborted).toBe(false);
+    act(() => hook.rerender({ projectId: 'p2', onSaveProject: save, setProject: vi.fn() }));
+    await act(async () => { await pending; });
+    expect(signal?.aborted).toBe(true);
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(save).not.toHaveBeenCalledWith({ force: true });
   });
 
   it('une autre erreur ne demande aucune confirmation', async () => {

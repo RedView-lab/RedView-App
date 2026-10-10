@@ -45,9 +45,31 @@ function emit() {
   for (const listener of listeners) listener();
 }
 
-function enqueue(request: AppDialogRequest): Promise<boolean | string | null> {
+/**
+ * `signal` : la question n'a plus d'objet (projet fermé, autre projet ouvert) —
+ * la pop-in se ferme, ou ne s'ouvre jamais, et vaut Annuler. Un dialogue natif
+ * bloquait la page ; celle-ci continue de vivre derrière la pop-in.
+ */
+type AppDialogControl = { signal?: AbortSignal };
+
+function enqueue(request: AppDialogRequest, { signal }: AppDialogControl): Promise<boolean | string | null> {
+  const cancelValue = request.kind === 'confirm' ? false : null;
+  if (signal?.aborted) return Promise.resolve(cancelValue);
   return new Promise((resolve) => {
-    queue = [...queue, { request, resolve }];
+    const onAbort = () => {
+      const wasShown = queue[0]?.request.id === request.id;
+      queue = queue.filter((pending) => pending.request.id !== request.id);
+      if (wasShown) emit();
+      resolve(cancelValue);
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+    queue = [...queue, {
+      request,
+      resolve: (value) => {
+        signal?.removeEventListener('abort', onAbort);
+        resolve(value);
+      },
+    }];
     if (queue.length === 1) emit();
   });
 }
@@ -76,11 +98,11 @@ export function answerAppDialog(id: number, value: boolean | string | null): voi
 }
 
 /** Vrai si l'utilisateur confirme ; faux s'il annule, appuie sur Échap ou clique à côté. */
-export function confirmDialog(options: ConfirmDialogOptions): Promise<boolean> {
-  return enqueue({ id: nextId++, kind: 'confirm', options }).then((value) => value === true);
+export function confirmDialog(options: ConfirmDialogOptions, control: AppDialogControl = {}): Promise<boolean> {
+  return enqueue({ id: nextId++, kind: 'confirm', options }, control).then((value) => value === true);
 }
 
 /** Texte saisi, sans espaces autour (jamais vide) ; null si l'utilisateur annule. */
-export function promptDialog(options: PromptDialogOptions): Promise<string | null> {
-  return enqueue({ id: nextId++, kind: 'prompt', options }).then((value) => (typeof value === 'string' ? value : null));
+export function promptDialog(options: PromptDialogOptions, control: AppDialogControl = {}): Promise<string | null> {
+  return enqueue({ id: nextId++, kind: 'prompt', options }, control).then((value) => (typeof value === 'string' ? value : null));
 }

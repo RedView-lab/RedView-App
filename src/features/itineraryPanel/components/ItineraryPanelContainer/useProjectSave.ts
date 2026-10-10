@@ -28,6 +28,12 @@ export function useProjectSave({ projectId, onSaveProject, setProject }: UseProj
     if (saveStatusTimerRef.current != null) window.clearTimeout(saveStatusTimerRef.current);
   }, []);
 
+  // Question de conflit encore ouverte quand le projet se ferme ou change
+  // (la page vit derrière la pop-in) : elle se ferme, rien n'est forcé. La
+  // sauvegarde forcée vise le projet ouvert à ce moment-là, plus celui-ci.
+  const conflictDialogRef = useRef<AbortController | null>(null);
+  useEffect(() => () => conflictDialogRef.current?.abort(), [projectId]);
+
   const handleSaveProject = useCallback(async () => {
     if (!onSaveProject || saveStatus === 'saving') return;
     if (saveStatusTimerRef.current != null) {
@@ -43,20 +49,18 @@ export function useProjectSave({ projectId, onSaveProject, setProject }: UseProj
         saved = await onSaveProject();
       } catch (error) {
         // Version cloud modifiée sur un autre appareil : écraser seulement sur confirmation.
-        if (
-          isProjectCloudError(error)
-          && error.kind === 'conflict'
-          && await confirmDialog({
-            title: t('Ce projet a été modifié sur un autre appareil'),
-            message: t('Remplacer la version du cloud par la vôtre ? Sinon, vos modifications restent sur cet appareil.'),
-            confirmLabel: t('Remplacer la version du cloud'),
-            cancelLabel: t('Garder sur cet appareil'),
-          })
-        ) {
-          saved = await onSaveProject({ force: true });
-        } else {
-          throw error;
-        }
+        if (!isProjectCloudError(error) || error.kind !== 'conflict') throw error;
+        const dialog = new AbortController();
+        conflictDialogRef.current = dialog;
+        const replace = await confirmDialog({
+          title: t('Ce projet a été modifié sur un autre appareil'),
+          message: t('Remplacer la version du cloud par la vôtre ? Sinon, vos modifications restent sur cet appareil.'),
+          confirmLabel: t('Remplacer la version du cloud'),
+          cancelLabel: t('Garder sur cet appareil'),
+        }, { signal: dialog.signal });
+        if (conflictDialogRef.current === dialog) conflictDialogRef.current = null;
+        if (!replace || dialog.signal.aborted) throw error;
+        saved = await onSaveProject({ force: true });
       }
       const savedProject = saved;
       if (savedProject) {

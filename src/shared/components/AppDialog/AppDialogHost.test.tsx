@@ -133,6 +133,30 @@ describe('confirmDialog', () => {
     await expect(second).resolves.toBe(false);
   });
 
+  it('question devenue sans objet (signal) : la pop-in se ferme, ou ne s’ouvre jamais, et vaut Annuler', async () => {
+    const shown = new AbortController();
+    const queued = new AbortController();
+    const first = confirmDialog({ ...confirmOptions, title: 'Première' }, { signal: shown.signal });
+    const second = confirmDialog({ ...confirmOptions, title: 'Seconde' }, { signal: queued.signal });
+    const third = confirmDialog({ ...confirmOptions, title: 'Troisième' });
+    await flush();
+    queued.abort();
+    await expect(second).resolves.toBe(false);
+    expect(dialog()!.textContent).toContain('Première');
+    shown.abort();
+    await expect(first).resolves.toBe(false);
+    await flush();
+    expect(dialog()!.textContent).toContain('Troisième');
+    act(() => buttonByText('Annuler')!.click());
+    await third;
+
+    const already = new AbortController();
+    already.abort();
+    await expect(promptDialog({ title: 'x', label: 'y', confirmLabel: 'z' }, { signal: already.signal })).resolves.toBeNull();
+    await flush();
+    expect(dialog()).toBeNull();
+  });
+
   it('rend le focus à l’élément qui l’avait', async () => {
     const trigger = document.createElement('button');
     document.body.appendChild(trigger);
