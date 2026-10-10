@@ -11,8 +11,8 @@ export {
   
   parseDayKey,
   parseStartReference,
-  
-  
+  relativeDayNumber,
+  toAgendaReference,
   toDayKey,
 } from './utilsParts/format';
 export {

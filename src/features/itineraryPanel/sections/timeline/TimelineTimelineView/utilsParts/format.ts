@@ -91,9 +91,51 @@ export function addDays(date: Date, days: number): Date {
   return result;
 }
 
-export function buildDayWindow(anchor: Date): Date[] {
-  const start = addDays(anchor, -3);
-  return Array.from({ length: DAY_WINDOW_DAYS }, (_, index) => addDays(start, index));
+/**
+ * Jours de l'agenda autour du jour choisi. Avec `bounds` (jours relatifs, sans
+ * date de départ), la fenêtre reste entre le premier et le dernier jour du
+ * parcours : pas de J0 ni de colonnes vides après l'arrivée.
+ */
+export function buildDayWindow(anchor: Date, bounds?: { first: Date; last: Date }): Date[] {
+  if (!bounds) {
+    const start = addDays(anchor, -3);
+    return Array.from({ length: DAY_WINDOW_DAYS }, (_, index) => addDays(start, index));
+  }
+  const dayCount = Math.max(1, daysBetween(bounds.first, bounds.last) + 1);
+  const length = Math.min(DAY_WINDOW_DAYS, dayCount);
+  const offset = Math.min(Math.max(0, daysBetween(bounds.first, anchor) - 3), dayCount - length);
+  const start = addDays(bounds.first, offset);
+  return Array.from({ length }, (_, index) => addDays(start, index));
+}
+
+/** Jours calendaires de `from` à `to` (minuit à minuit, heure locale). */
+function daysBetween(from: Date, to: Date): number {
+  const start = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+  const end = new Date(to.getFullYear(), to.getMonth(), to.getDate());
+  return Math.round((end.getTime() - start.getTime()) / 86_400_000);
+}
+
+/**
+ * Sans date de départ, l'agenda compte les jours depuis le départ (J1, J2…)
+ * sur un calendrier fictif : un parcours de plusieurs jours garde une colonne
+ * par jour, au lieu d'empiler toutes ses heures dans la journée du départ.
+ * `hasRealDate` y est vrai pour la mise en page (colonnes, suites après
+ * minuit), `relativeDays` réserve aux vraies dates l'heure actuelle et les
+ * noms des jours. Début mai : aucun changement d'heure dans les semaines qui
+ * suivent, dans aucun hémisphère.
+ */
+export function toAgendaReference(reference: StartReference): StartReference {
+  if (reference.hasRealDate) return reference;
+  const start = new Date(RELATIVE_DAY_EPOCH);
+  start.setMinutes(reference.startMinutes, 0, 0);
+  return { reference: start, hasRealDate: true, relativeDays: true, startMinutes: reference.startMinutes };
+}
+
+const RELATIVE_DAY_EPOCH = new Date(2001, 4, 7).getTime();
+
+/** Numéro du jour d'un calendrier relatif : 1 le jour du départ. */
+export function relativeDayNumber(day: Date): number {
+  return daysBetween(new Date(RELATIVE_DAY_EPOCH), day) + 1;
 }
 
 export function formatDayLabel(date: Date, locale: AppLocale = readDocumentAppLocale()): string {

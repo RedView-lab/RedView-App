@@ -1,15 +1,18 @@
 import type { CSSProperties } from 'react';
 import { useAppI18n } from '@/shared/i18n';
-import { formatDayLabel, toDayKey } from './utils';
+import { formatDayLabel, relativeDayNumber, toDayKey } from './utils';
 
 interface TimelineScheduleHeaderProps {
   displayDays: Date[];
+  /** Sans date de départ : « Jour 1 », « Jour 2 »… au lieu des dates. */
+  relativeDays: boolean;
   selectedDayKey: string;
   onSelectDay: (dayKey: string) => void;
 }
 
 export function TimelineScheduleHeader({
   displayDays,
+  relativeDays,
   selectedDayKey,
   onSelectDay,
 }: TimelineScheduleHeaderProps) {
@@ -34,8 +37,8 @@ export function TimelineScheduleHeader({
                 className={`rvi-tl-schedule__day${isSelected ? ' is-selected' : ''}`}
                 onClick={() => onSelectDay(dayKey)}
               >
-                <span className="rvi-tl-schedule__day-label">{formatDayLabel(day, locale)}</span>
-                <span className="rvi-tl-schedule__day-number">{day.getDate()}</span>
+                <span className="rvi-tl-schedule__day-label">{relativeDays ? t('Jour') : formatDayLabel(day, locale)}</span>
+                <span className="rvi-tl-schedule__day-number">{relativeDays ? relativeDayNumber(day) : day.getDate()}</span>
               </button>
             );
           })}

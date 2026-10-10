@@ -13,7 +13,6 @@ import {
   BASE_HOUR_ROW_HEIGHT_PX,
   CARD_COMPACT_MIN_WIDTH_PX,
   CARD_REGULAR_MIN_WIDTH_PX,
-  DAY_WINDOW_DAYS,
   MINUTES_PER_DAY,
   SCHEDULE_RAIL_WIDTH_PX,
   SINGLE_DAY_CARD_MAX_WIDTH_PX,
@@ -38,6 +37,7 @@ import {
   positionTimelineBlocks,
   resolveMarkerKmStep,
   resolveRideElapsedSecondsAtScheduledElapsed,
+  toAgendaReference,
   toDayKey,
 } from './utils';
 
@@ -96,7 +96,8 @@ export function TimelineTimelineView({
   // Offset (1 = haut, 0 = bas) à appliquer une fois le canevas re-rendu au nouveau zoom.
   const pendingScrollOffsetRef = useRef<number | null>(null);
 
-  const reference = useMemo(() => parseStartReference(rhythm), [rhythm]);
+  // Sans date de départ : jours relatifs J1, J2… (une colonne par jour).
+  const reference = useMemo(() => toAgendaReference(parseStartReference(rhythm)), [rhythm]);
   const scheduleState = useMemo(
     () => buildScheduledTimelineState(items, prediction, reference, rhythm),
     [items, prediction, reference, rhythm],
@@ -131,9 +132,7 @@ export function TimelineTimelineView({
   const defaultAnchorDayKey = useMemo(() => toDayKey(defaultAnchorDay), [defaultAnchorDay]);
 
   const [selectedDayKey, setSelectedDayKey] = useState(() => defaultAnchorDayKey);
-  const [isCompactLayout, setIsCompactLayout] = useState(false);
-  const [multiDayCardDensity, setMultiDayCardDensity] = useState<CardDensity>('regular');
-  const [singleDayCardDensity, setSingleDayCardDensity] = useState<CardDensity>('regular');
+  const [canvasWidthPx, setCanvasWidthPx] = useState<number | null>(null);
   const [now, setNow] = useState(() => new Date());
   // Jour d'ancrage changé (nouveau planning) : la sélection y revient (pendant le rendu).
   const defaultAnchorDayKeyChanged = useHasChanged(defaultAnchorDayKey);
@@ -146,12 +145,7 @@ export function TimelineTimelineView({
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (!entry) return;
-      // 6 jours seulement si chaque colonne garde une carte lisible ; sinon 1 jour.
-      const canvasWidthPx = Math.max(0, entry.contentRect.width - SCHEDULE_RAIL_WIDTH_PX);
-      const multiDayCardWidthPx = canvasWidthPx / DAY_WINDOW_DAYS;
-      setIsCompactLayout(multiDayCardWidthPx < CARD_COMPACT_MIN_WIDTH_PX);
-      setMultiDayCardDensity(resolveCardDensity(multiDayCardWidthPx));
-      setSingleDayCardDensity(resolveCardDensity(Math.min(canvasWidthPx, SINGLE_DAY_CARD_MAX_WIDTH_PX)));
+      setCanvasWidthPx(Math.max(0, entry.contentRect.width - SCHEDULE_RAIL_WIDTH_PX));
     });
 
     observer.observe(node);
@@ -168,8 +162,28 @@ export function TimelineTimelineView({
     [defaultAnchorDay, selectedDayKey],
   );
 
-  const dayWindow = useMemo(() => buildDayWindow(selectedDayDate), [selectedDayDate]);
-  const headerDays = useMemo(() => dayWindow, [dayWindow]);
+  // Jours relatifs : la fenêtre reste entre J1 et le jour de l'arrivée.
+  const relativeDayBounds = useMemo(() => {
+    if (!reference.relativeDays || !reference.reference) return undefined;
+    const first = reference.reference;
+    const last = [...scheduleState.timedItems, ...scheduleState.autoPauses].reduce(
+      (latest, entry) => (entry.date && entry.date > latest ? entry.date : latest),
+      first,
+    );
+    return { first, last };
+  }, [reference, scheduleState.autoPauses, scheduleState.timedItems]);
+  const dayWindow = useMemo(
+    () => buildDayWindow(selectedDayDate, relativeDayBounds),
+    [relativeDayBounds, selectedDayDate],
+  );
+  const headerDays = dayWindow;
+  // Plusieurs colonnes seulement si chacune garde une carte lisible ; sinon 1 jour.
+  const multiDayCardWidthPx = canvasWidthPx === null ? Infinity : canvasWidthPx / dayWindow.length;
+  const isCompactLayout = multiDayCardWidthPx < CARD_COMPACT_MIN_WIDTH_PX;
+  const multiDayCardDensity = resolveCardDensity(multiDayCardWidthPx);
+  const singleDayCardDensity = resolveCardDensity(
+    canvasWidthPx === null ? Infinity : Math.min(canvasWidthPx, SINGLE_DAY_CARD_MAX_WIDTH_PX),
+  );
   const displayDays = useMemo(() => {
     if (!reference.hasRealDate || isCompactLayout) return [selectedDayDate];
     return dayWindow;
@@ -443,17 +457,19 @@ export function TimelineTimelineView({
     ],
   );
 
+  // Jours relatifs (sans date de départ) : pas d'heure actuelle à situer.
+  const showsNow = reference.hasRealDate && !reference.relativeDays;
   const currentTimeLineTopPx = useMemo(() => {
-    if (!reference.hasRealDate) return null;
+    if (!showsNow) return null;
     if (!displayDayKeySet.has(toDayKey(now))) return null;
     const minuteOfDay = now.getHours() * 60 + now.getMinutes();
     if (minuteOfDay < startMinutes || minuteOfDay > endMinutes) return null;
     return minuteToCanvasTopPx(minuteOfDay, startMinutes, pixelsPerMinute);
-  }, [displayDayKeySet, endMinutes, now, pixelsPerMinute, reference.hasRealDate, startMinutes]);
+  }, [displayDayKeySet, endMinutes, now, pixelsPerMinute, showsNow, startMinutes]);
   const currentTimeLineDayIndex = useMemo(() => {
-    if (!reference.hasRealDate) return null;
+    if (!showsNow) return null;
     return dayIndexByKey.get(toDayKey(now)) ?? null;
-  }, [dayIndexByKey, now, reference.hasRealDate]);
+  }, [dayIndexByKey, now, showsNow]);
 
   const [viewportMetrics, setViewportMetrics] = useState({
     clientHeight: 0,
@@ -673,6 +689,7 @@ export function TimelineTimelineView({
     >
       <TimelineScheduleHeader
         displayDays={headerDays}
+        relativeDays={reference.relativeDays === true}
         selectedDayKey={selectedDayKey}
         onSelectDay={setSelectedDayKey}
       />

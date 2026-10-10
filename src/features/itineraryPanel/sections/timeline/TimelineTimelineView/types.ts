@@ -38,6 +38,8 @@ export interface StartReference {
   reference: Date | null;
   hasRealDate: boolean;
   startMinutes: number;
+  /** Agenda sans date de départ : jours comptés depuis le départ (toAgendaReference). */
+  relativeDays?: boolean;
 }
 
 export interface TimedTimelineItem {
