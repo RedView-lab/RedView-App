@@ -199,7 +199,10 @@ export function buildDaySegments(
     const segmentEndMinute = overlapEndMs >= dayEnd.getTime()
       ? MINUTES_PER_DAY
       : getMinuteOfDay(new Date(overlapEndMs));
-    const rawDurationMin = Math.max(0, segmentEndMinute - segmentStartMinute);
+    const wallDurationMin = segmentEndMinute - segmentStartMinute;
+    // Bloc tenu dans l'heure répétée d'automne (02:40 été → 02:10 hiver) : la
+    // fin murale précède le début ; sa durée réelle le garde visible.
+    const rawDurationMin = wallDurationMin >= 0 ? wallDurationMin : (overlapEndMs - overlapStartMs) / 60_000;
     const segmentHeightMin = Math.min(
       Math.max(resolveVisualDurationMin(rawDurationMin), rawDurationMin),
       MINUTES_PER_DAY - segmentStartMinute,

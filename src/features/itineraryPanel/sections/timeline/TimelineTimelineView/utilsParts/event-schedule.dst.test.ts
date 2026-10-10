@@ -36,6 +36,14 @@ describe('agenda : blocs au changement d’heure (B4-1)', () => {
     expect(second[0] - first[1]).toBeCloseTo(0, 6);
   });
 
+  it('garde visible un bloc tenu dans l’heure répétée (02:40 été → 02:10 hiver, 4c relecture)', () => {
+    // 02:40 heure d'été = 00:40 UTC ; 30 min plus tard = 01:10 UTC = 02:10 heure d'hiver.
+    const start = new Date(Date.UTC(2026, 9, 25, 0, 40));
+    expect([start.getHours(), start.getMinutes()]).toEqual([2, 40]);
+    const [top, bottom] = block(start, 30);
+    expect(bottom - top).toBeCloseTo(30, 6);
+  });
+
   it('garde la hauteur de la durée un jour ordinaire', () => {
     expect(block(new Date(2026, 9, 20, 1, 30), 120)).toEqual([100, 220]); // marge haute du canevas : 10 px
   });
