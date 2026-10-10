@@ -6,10 +6,12 @@ import type { AxisMetricId, AxisMode } from '../chart';
 import { useToolbarFitDensity } from './useToolbarFitDensity';
 import { useAppI18n } from '@/shared/i18n';
 
-export type ToolbarFilterKey = 'jourNuit';
+export type ToolbarFilterKey = 'pente' | 'jourNuit';
 
 // « Pente » et « Alertes » sont dans la barre de filtres de la carte.
+// « Profil d'altitude » (clé historique `pente`) : silhouette du relief en fond.
 const visibleToolbarFilters: ReadonlyArray<{ key: ToolbarFilterKey; label: string }> = [
+  { key: 'pente', label: "Profil d'altitude" },
   { key: 'jourNuit', label: 'Jour/nuit' },
 ];
 

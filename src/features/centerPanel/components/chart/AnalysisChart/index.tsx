@@ -264,8 +264,13 @@ export const AnalysisChart = memo(function AnalysisChart({
     return buildNiceDomain(rawBackdropYDomain.min, rawBackdropYDomain.max, target);
   }, [plotSize.height, rawBackdropYDomain]);
 
+  // Altitude déjà sur un axe : le profil en fond prend l'échelle de cet axe et
+  // se superpose exactement à la courbe. Sinon, sa propre échelle (silhouette
+  // du relief derrière la vitesse, la puissance…).
   const backdropYDomain = useMemo<AxisDomain | null>(() => {
     if (!backdropNiceBase) return null;
+    if (axis1Metric === 'Altitude') return plotYDomain;
+    if (axis2Metric === 'Altitude') return plotY2Domain;
     if (yVisibleFraction >= 0.999) {
       return backdropNiceBase.domain;
     }
@@ -276,7 +281,7 @@ export const AnalysisChart = memo(function AnalysisChart({
       min: backdropNiceBase.domain.min + startRatio * fullSpan,
       max: backdropNiceBase.domain.min + startRatio * fullSpan + visibleSpan,
     };
-  }, [backdropNiceBase, normalizedYOffset, yVisibleFraction]);
+  }, [axis1Metric, axis2Metric, backdropNiceBase, normalizedYOffset, plotY2Domain, plotYDomain, yVisibleFraction]);
 
   // Courbe colorée par la pente : la première courbe d'altitude de l'itinéraire
   // de l'overlay (série d'axe, sinon profil d'altitude en fond).
