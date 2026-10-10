@@ -4,7 +4,8 @@ import {
   buildPoiSearchSignature,
   poiFeaturesToTimelineItems,
 } from '../../lib/schedule';
-import type { ItineraryProject } from '../../types';
+import { projectDistanceAlongRouteM, roundDistanceKm, routeDistancesM } from '../../lib/routes';
+import type { ItineraryProject, TimelineItem } from '../../types';
 import { mergePoiFeatureFavorites } from './poiFeatureUtils';
 
 /**
@@ -13,9 +14,21 @@ import { mergePoiFeatureFavorites } from './poiFeatureUtils';
  */
 
 /**
- * Recherche terminée : remplace les lignes POI de la feuille de route (en
- * gardant favoris/visibilité des lignes déjà présentes) et mémorise les
- * empreintes de recherche et de trace.
+ * Ligne POI marquée par l'utilisateur : favori posé à la main (et sa pause),
+ * ou nom saisi dans la colonne « Nom ». Jamais retirée par une recherche qui
+ * ne la renvoie plus (catégorie décochée, couloir réduit, POI sorti de la
+ * base) : la nuit réservée et sa pause disparaissaient sinon du plan.
+ */
+function isUserMarkedPoiRow(row: TimelineItem): boolean {
+  return (Boolean(row.favorite) && row.favoriteSource !== 'auto') || row.labelEdited === true;
+}
+
+/**
+ * Recherche terminée : remplace les lignes POI automatiques de la feuille de
+ * route par les résultats (favoris, pauses, visibilité et noms saisis reportés
+ * sur les POI retrouvés), garde les lignes marquées par l'utilisateur que la
+ * recherche ne renvoie plus (kilométrage recalculé sur le tracé courant), et
+ * mémorise les empreintes de recherche et de trace.
  */
 export function applyCorridorComplete(
   p: ItineraryProject,
@@ -59,12 +72,30 @@ export function applyCorridorComplete(
     };
   });
 
+  // Lignes marquées que la recherche n'a pas renvoyées : gardées, avec leur POI sur la carte.
+  const foundIds = new Set(newPoiRows.map((row) => row.osmId));
+  const cumulativeM = routeDistancesM(route);
+  const keptRows = target.timeline
+    .filter((row) => row.kind === 'poi' && isUserMarkedPoiRow(row) && !foundIds.has(row.osmId))
+    .map((row) => {
+      if (row.lat == null || row.lon == null) return row;
+      const distanceM = projectDistanceAlongRouteM({ lat: row.lat, lon: row.lon }, route, cumulativeM);
+      return distanceM == null ? row : { ...row, distanceKm: roundDistanceKm(distanceM) };
+    });
+  const keptIds = new Set(keptRows.map((row) => row.osmId).filter((id): id is number => id != null));
+  const mergedIds = new Set(mergedFeatures.map((feature) => feature.id));
+  const keptFeatures = (target.poiFeatures ?? []).filter((feature) => keptIds.has(feature.id) && !mergedIds.has(feature.id));
+  const poiRows = keptRows.length > 0
+    ? [...newPoiRows, ...keptRows].sort((a, b) => (a.distanceKm ?? 0) - (b.distanceKm ?? 0))
+    : newPoiRows;
+  const storedFeatures = keptFeatures.length > 0 ? [...mergedFeatures, ...keptFeatures] : mergedFeatures;
+
   const stripped = target.timeline.filter((row) => row.kind !== 'poi');
   const endIdx = stripped.findIndex((row) => row.kind === 'end');
   const insertAt = endIdx >= 0 ? endIdx : stripped.length;
   const merged = [
     ...stripped.slice(0, insertAt),
-    ...newPoiRows,
+    ...poiRows,
     ...stripped.slice(insertAt),
   ];
 
@@ -75,7 +106,7 @@ export function applyCorridorComplete(
         ? {
           ...it,
           timeline: merged,
-          poiFeatures: mergedFeatures,
+          poiFeatures: storedFeatures,
           poiSearchSignature: buildPoiSearchSignature(target.poi),
           // Trace interrogée, pas la courante : si elle a bougé pendant
           // la recherche, l'écart relance une recherche.
