@@ -9,6 +9,7 @@
  */
 
 import { MAPBOX_TOKEN } from '@/features/map3d/lib/mapbox.config';
+import { createSharedRequests, isAbortError } from '@/shared/lib/sharedRequests';
 
 export interface GeocodeSuggestion {
   /** Id de l'élément Mapbox (utilisé comme clé React). */
@@ -120,7 +121,7 @@ interface CacheEntry {
 }
 
 const forwardCache = new Map<string, CacheEntry>();
-const inFlight = new Map<string, Promise<GeocodeSuggestion[]>>();
+const forwardRequests = createSharedRequests<GeocodeSuggestion[]>();
 
 function buildForwardCacheKey(query: string, opts: GeocodeOptions): string {
   const proximity = opts.proximity
@@ -157,9 +158,6 @@ function writeForwardCache(key: string, value: GeocodeSuggestion[]): void {
   forwardCache.set(key, { expiresAt: Date.now() + FORWARD_CACHE_TTL_MS, value });
 }
 
-function isAbortError(err: unknown): boolean {
-  return err instanceof DOMException && err.name === 'AbortError';
-}
 
 function normalizeSearchText(value: string): string {
   return value
@@ -415,34 +413,24 @@ export async function geocodePlaces(
   const cached = readForwardCache(cacheKey);
   if (cached) return cached;
 
-  // Regrouper les requêtes identiques simultanées pour qu'une frappe rapide ou
-  // des montages simultanés ne puissent pas marteler le point d'accès Mapbox.
-  const existing = inFlight.get(cacheKey);
-  if (existing) {
-    // Respecter l'annulation de l'appelant sans interrompre la requête partagée.
-    if (opts.signal) {
-      return new Promise<GeocodeSuggestion[]>((resolve, reject) => {
-        const onAbort = () => reject(new DOMException('Aborted', 'AbortError'));
-        if (opts.signal!.aborted) {
-          onAbort();
-          return;
-        }
-        opts.signal!.addEventListener('abort', onAbort, { once: true });
-        existing.then(
-          (value) => {
-            opts.signal!.removeEventListener('abort', onAbort);
-            resolve(value);
-          },
-          (err) => {
-            opts.signal!.removeEventListener('abort', onAbort);
-            reject(err);
-          },
-        );
-      });
-    }
-    return existing;
-  }
+  // Requêtes identiques simultanées regroupées (frappe rapide, montages
+  // simultanés) sans marteler Mapbox ; chaque appelant garde son annulation,
+  // la requête partagée ne dépend du signal d'aucun (sharedRequests.ts) — elle
+  // partait avec celui du premier, et son abandon (double montage d'un effet)
+  // vidait les suggestions des suivants.
+  return forwardRequests.run(
+    cacheKey,
+    (requestSignal) => fetchForwardSuggestions(trimmed, opts, cacheKey, requestSignal),
+    { signal: opts.signal },
+  );
+}
 
+async function fetchForwardSuggestions(
+  trimmed: string,
+  opts: GeocodeOptions,
+  cacheKey: string,
+  signal: AbortSignal,
+): Promise<GeocodeSuggestion[]> {
   const finalLimit = Math.min(Math.max(opts.limit ?? 5, 1), 10);
   const mapboxLimit = Math.min(Math.max(finalLimit + 4, finalLimit), 10);
 
@@ -461,52 +449,41 @@ export async function geocodePlaces(
   }
 
   const url = `${ENDPOINT}/${encodeURIComponent(trimmed)}.json?${params.toString()}`;
-  const promise = (async () => {
-    const iconicPromise = opts.includeLandmarks && canSearchLandmarks(trimmed)
-      ? fetchIconicFallbackPlaces(trimmed, {
-          ...opts,
-          limit: 6,
-        }).catch((error: unknown) => {
-          if (isAbortError(error)) throw error;
-          if (typeof console !== 'undefined') {
-            console.warn('[geocoder] iconic fallback failed', error);
-          }
-          return [] as RankedGeocodeSuggestion[];
-        })
-      : Promise.resolve([] as RankedGeocodeSuggestion[]);
+  const iconicPromise = opts.includeLandmarks && canSearchLandmarks(trimmed)
+    ? fetchIconicFallbackPlaces(trimmed, {
+        ...opts,
+        signal,
+        limit: 6,
+      }).catch((error: unknown) => {
+        if (isAbortError(error)) throw error;
+        if (typeof console !== 'undefined') {
+          console.warn('[geocoder] iconic fallback failed', error);
+        }
+        return [] as RankedGeocodeSuggestion[];
+      })
+    : Promise.resolve([] as RankedGeocodeSuggestion[]);
 
-    const res = await fetchWithRetry(url, opts.signal);
-    const json = (await res.json()) as MapboxResponse;
-    const mapboxSuggestions: RankedGeocodeSuggestion[] = (json.features ?? []).map((f) => ({
-      id: f.id,
-      name: f.text,
-      fullName: f.place_name,
-      lon: f.center[0],
-      lat: f.center[1],
-      featureType: f.place_type?.[0] ?? 'unknown',
-      source: 'mapbox',
-      score: 0,
-    }));
-    const iconicSuggestions = await iconicPromise;
-    const suggestions = rankAndMergeSuggestions(
-      trimmed,
-      mapboxSuggestions,
-      iconicSuggestions,
-      finalLimit,
-    );
-    writeForwardCache(cacheKey, suggestions);
-    return suggestions;
-  })();
-
-  inFlight.set(cacheKey, promise);
-  try {
-    return await promise;
-  } finally {
-    // Différer l'éviction pour qu'un autre consommateur qui attend la même clé la voie encore.
-    queueMicrotask(() => {
-      if (inFlight.get(cacheKey) === promise) inFlight.delete(cacheKey);
-    });
-  }
+  const res = await fetchWithRetry(url, signal);
+  const json = (await res.json()) as MapboxResponse;
+  const mapboxSuggestions: RankedGeocodeSuggestion[] = (json.features ?? []).map((f) => ({
+    id: f.id,
+    name: f.text,
+    fullName: f.place_name,
+    lon: f.center[0],
+    lat: f.center[1],
+    featureType: f.place_type?.[0] ?? 'unknown',
+    source: 'mapbox',
+    score: 0,
+  }));
+  const iconicSuggestions = await iconicPromise;
+  const suggestions = rankAndMergeSuggestions(
+    trimmed,
+    mapboxSuggestions,
+    iconicSuggestions,
+    finalLimit,
+  );
+  writeForwardCache(cacheKey, suggestions);
+  return suggestions;
 }
 
 export async function reverseGeocodeSettlement(

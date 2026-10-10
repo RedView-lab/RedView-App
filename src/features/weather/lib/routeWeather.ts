@@ -7,6 +7,7 @@ import {
 } from './forecastTime';
 import type { ChartMetricId, RouteChartPoint } from '@/features/centerPanel/components/chart/seriesCommon';
 import { buildRouteContentSignature } from '@/features/itineraryPanel/lib/routes';
+import { createSharedRequests, isAbortError } from '@/shared/lib/sharedRequests';
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -87,46 +88,12 @@ function cacheWeather(key: string, dataset: RouteWeatherDataset | null, ttlMs: n
 }
 
 /**
- * Requête partagée par tous les appelants d'une même clé. Elle n'est annulée
- * que quand tous l'ont abandonnée : liée au signal du premier, elle finissait
- * en `null` pour l'appelant suivant — l'effet relancé à chaque modification du
- * projet annule le précédent, reprenait sa requête en vol et affichait
- * « prévisions indisponibles » jusqu'à la modification suivante.
+ * Requêtes en vol, partagées par clé (sharedRequests.ts) : l'effet relancé à
+ * chaque modification du projet annule le précédent et reprend aussitôt sa
+ * requête ; liée au signal du premier, elle finissait en « prévisions
+ * indisponibles ».
  */
-interface InFlightWeather {
-  promise: Promise<RouteWeatherDataset | null>;
-  controller: AbortController;
-  waiters: number;
-}
-
-const inFlightRequests = new Map<string, InFlightWeather>();
-
-/** Résultat de la requête partagée pour un appelant ; null dès que son `signal` est annulé. */
-function awaitSharedRequest(
-  key: string,
-  request: InFlightWeather,
-  signal: AbortSignal | undefined,
-): Promise<RouteWeatherDataset | null> {
-  if (signal?.aborted) return Promise.resolve(null);
-  request.waiters += 1;
-  if (!signal) return request.promise;
-  return new Promise((resolve) => {
-    const leave = () => {
-      resolve(null);
-      request.waiters -= 1;
-      if (request.waiters > 0) return;
-      // Plus personne ne l'attend : annulée, et retirée tout de suite pour
-      // qu'un nouvel appelant reparte d'une requête neuve.
-      if (inFlightRequests.get(key) === request) inFlightRequests.delete(key);
-      request.controller.abort();
-    };
-    signal.addEventListener('abort', leave, { once: true });
-    void request.promise.then((dataset) => {
-      signal.removeEventListener('abort', leave);
-      resolve(dataset);
-    });
-  });
-}
+const weatherRequests = createSharedRequests<RouteWeatherDataset | null>();
 
 function makeCacheKey(signature: string, startDate: string, startTimeHour: string, endDate: string): string {
   return `${signature}|${startDate}|${startTimeHour}|${endDate}`;
@@ -271,145 +238,154 @@ export async function fetchRouteWeatherDataset(
     return cached.dataset;
   }
 
-  const inFlight = inFlightRequests.get(cacheKey);
-  if (inFlight) return awaitSharedRequest(cacheKey, inFlight, signal);
+  try {
+    return await weatherRequests.run(cacheKey, (requestSignal) => requestRouteWeather(
+      cacheKey, itineraryId, signature, sampledStations, range, startDate, startTime, requestSignal,
+    ), { signal });
+  } catch (error) {
+    // Appelant parti (son signal annulé) : rien à afficher.
+    if (isAbortError(error)) return null;
+    throw error;
+  }
+}
 
-  const controller = new AbortController();
-  const promise = (async (): Promise<RouteWeatherDataset | null> => {
-    try {
-      const lats = sampledStations.map((s) => s.lat.toFixed(4)).join(',');
-      const lngs = sampledStations.map((s) => s.lng.toFixed(4)).join(',');
+/** Requête Open-Meteo d'une trace (partagée par clé) ; null = prévisions indisponibles, gardé en cache. */
+async function requestRouteWeather(
+  cacheKey: string,
+  itineraryId: string,
+  signature: string,
+  sampledStations: ReturnType<typeof sampleRouteForWeather>,
+  range: { startDate: string; endDate: string },
+  startDate: string,
+  startTime: string,
+  signal: AbortSignal,
+): Promise<RouteWeatherDataset | null> {
+  try {
+    const lats = sampledStations.map((s) => s.lat.toFixed(4)).join(',');
+    const lngs = sampledStations.map((s) => s.lng.toFixed(4)).join(',');
 
-      // timezone=auto : heures locales du lieu de chaque station (heure murale),
-      // cohérentes avec l'heure de départ saisie pour ce parcours.
-      const url =
-        `${OPENMETEO_FORECAST_URL}?latitude=${lats}&longitude=${lngs}` +
-        `&hourly=temperature_2m,apparent_temperature,precipitation,wind_speed_10m,cloud_cover,relative_humidity_2m,sunshine_duration` +
-        `&start_date=${range.startDate}&end_date=${range.endDate}` +
-        `&timezone=auto&temperature_unit=celsius&precipitation_unit=mm&wind_speed_unit=kmh&cell_selection=nearest` +
-        `&models=${OPENMETEO_MODEL}`;
+    // timezone=auto : heures locales du lieu de chaque station (heure murale),
+    // cohérentes avec l'heure de départ saisie pour ce parcours.
+    const url =
+      `${OPENMETEO_FORECAST_URL}?latitude=${lats}&longitude=${lngs}` +
+      `&hourly=temperature_2m,apparent_temperature,precipitation,wind_speed_10m,cloud_cover,relative_humidity_2m,sunshine_duration` +
+      `&start_date=${range.startDate}&end_date=${range.endDate}` +
+      `&timezone=auto&temperature_unit=celsius&precipitation_unit=mm&wind_speed_unit=kmh&cell_selection=nearest` +
+      `&models=${OPENMETEO_MODEL}`;
 
-      const response = await fetch(url, {
-        signal: controller.signal,
-        headers: { Accept: 'application/json' },
+    const response = await fetch(url, {
+      signal,
+      headers: { Accept: 'application/json' },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Open-Meteo HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const rawJson = (await response.json()) as RawOpenMeteoForecastItem | RawOpenMeteoForecastItem[];
+    const items: RawOpenMeteoForecastItem[] = Array.isArray(rawJson) ? rawJson : [rawJson];
+
+    const samples: RouteWeatherSample[] = [];
+
+    for (let i = 0; i < sampledStations.length; i++) {
+      const station = sampledStations[i]!;
+      const rawItem = items[i] ?? items[0];
+      const hourly = rawItem?.hourly;
+
+      if (!hourly || !hourly.time || hourly.time.length === 0) {
+        continue;
+      }
+
+      const count = hourly.time.length;
+      const tempArr = new Array<number>(count);
+      const feelsArr = new Array<number>(count);
+      const precipArr = new Array<number>(count);
+      const windArr = new Array<number>(count);
+      const cloudArr = new Array<number>(count);
+      const humidityArr = new Array<number>(count);
+      const sunshineArr = new Array<number>(count);
+
+      // Valeur absente (null au-delà de l'horizon du modèle) → NaN : le point
+      // est omis du graphique plutôt que remplacé par une valeur inventée.
+      for (let t = 0; t < count; t++) {
+        const rawTemp = hourly.temperature_2m?.[t];
+        const temp = Number.isFinite(rawTemp) ? (rawTemp as number) : Number.NaN;
+        tempArr[t] = temp;
+
+        const rawFeels = hourly.apparent_temperature?.[t];
+        feelsArr[t] = Number.isFinite(rawFeels) ? (rawFeels as number) : Number.NaN;
+
+        const rawPrecip = hourly.precipitation?.[t];
+        precipArr[t] = Number.isFinite(rawPrecip) ? Math.max(0, rawPrecip as number) : Number.NaN;
+
+        const rawWind = hourly.wind_speed_10m?.[t];
+        windArr[t] = Number.isFinite(rawWind) ? Math.max(0, rawWind as number) : Number.NaN;
+
+        const rawCloud = hourly.cloud_cover?.[t];
+        const cloud = Number.isFinite(rawCloud) ? Math.max(0, Math.min(100, rawCloud as number)) : Number.NaN;
+        cloudArr[t] = cloud;
+
+        const rawHumidity = hourly.relative_humidity_2m?.[t];
+        humidityArr[t] = Number.isFinite(rawHumidity) ? Math.max(0, Math.min(100, rawHumidity as number)) : Number.NaN;
+
+        const rawSunshine = hourly.sunshine_duration?.[t];
+        if (Number.isFinite(rawSunshine)) {
+          // sunshine_duration d'Open-Meteo est en secondes (0..3600), converti en minutes (0..60)
+          sunshineArr[t] = Math.max(0, Math.min(60, Math.round((rawSunshine as number) / 60)));
+        } else {
+          // Fallback: inverse of cloud cover (NaN si la couverture manque aussi)
+          sunshineArr[t] = Math.max(0, Math.min(60, Math.round((1 - cloud / 100) * 60)));
+        }
+      }
+
+      samples.push({
+        lat: station.lat,
+        lng: station.lng,
+        distanceM: station.distanceM,
+        elevationM: station.elevationM,
+        hourly: {
+          time: hourly.time,
+          timeMs: hourly.time.map((t) => parseHourTimeMs(t)),
+          temperature_2m: tempArr,
+          apparent_temperature: feelsArr,
+          precipitation: precipArr,
+          wind_speed_10m: windArr,
+          cloud_cover: cloudArr,
+          relative_humidity_2m: humidityArr,
+          sunshine_duration: sunshineArr,
+        },
       });
+    }
 
-      if (!response.ok) {
-        throw new Error(`Open-Meteo HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const rawJson = (await response.json()) as RawOpenMeteoForecastItem | RawOpenMeteoForecastItem[];
-      const items: RawOpenMeteoForecastItem[] = Array.isArray(rawJson) ? rawJson : [rawJson];
-
-      const samples: RouteWeatherSample[] = [];
-
-      for (let i = 0; i < sampledStations.length; i++) {
-        const station = sampledStations[i]!;
-        const rawItem = items[i] ?? items[0];
-        const hourly = rawItem?.hourly;
-
-        if (!hourly || !hourly.time || hourly.time.length === 0) {
-          continue;
-        }
-
-        const count = hourly.time.length;
-        const tempArr = new Array<number>(count);
-        const feelsArr = new Array<number>(count);
-        const precipArr = new Array<number>(count);
-        const windArr = new Array<number>(count);
-        const cloudArr = new Array<number>(count);
-        const humidityArr = new Array<number>(count);
-        const sunshineArr = new Array<number>(count);
-
-        // Valeur absente (null au-delà de l'horizon du modèle) → NaN : le point
-        // est omis du graphique plutôt que remplacé par une valeur inventée.
-        for (let t = 0; t < count; t++) {
-          const rawTemp = hourly.temperature_2m?.[t];
-          const temp = Number.isFinite(rawTemp) ? (rawTemp as number) : Number.NaN;
-          tempArr[t] = temp;
-
-          const rawFeels = hourly.apparent_temperature?.[t];
-          feelsArr[t] = Number.isFinite(rawFeels) ? (rawFeels as number) : Number.NaN;
-
-          const rawPrecip = hourly.precipitation?.[t];
-          precipArr[t] = Number.isFinite(rawPrecip) ? Math.max(0, rawPrecip as number) : Number.NaN;
-
-          const rawWind = hourly.wind_speed_10m?.[t];
-          windArr[t] = Number.isFinite(rawWind) ? Math.max(0, rawWind as number) : Number.NaN;
-
-          const rawCloud = hourly.cloud_cover?.[t];
-          const cloud = Number.isFinite(rawCloud) ? Math.max(0, Math.min(100, rawCloud as number)) : Number.NaN;
-          cloudArr[t] = cloud;
-
-          const rawHumidity = hourly.relative_humidity_2m?.[t];
-          humidityArr[t] = Number.isFinite(rawHumidity) ? Math.max(0, Math.min(100, rawHumidity as number)) : Number.NaN;
-
-          const rawSunshine = hourly.sunshine_duration?.[t];
-          if (Number.isFinite(rawSunshine)) {
-            // sunshine_duration d'Open-Meteo est en secondes (0..3600), converti en minutes (0..60)
-            sunshineArr[t] = Math.max(0, Math.min(60, Math.round((rawSunshine as number) / 60)));
-          } else {
-            // Fallback: inverse of cloud cover (NaN si la couverture manque aussi)
-            sunshineArr[t] = Math.max(0, Math.min(60, Math.round((1 - cloud / 100) * 60)));
-          }
-        }
-
-        samples.push({
-          lat: station.lat,
-          lng: station.lng,
-          distanceM: station.distanceM,
-          elevationM: station.elevationM,
-          hourly: {
-            time: hourly.time,
-            timeMs: hourly.time.map((t) => parseHourTimeMs(t)),
-            temperature_2m: tempArr,
-            apparent_temperature: feelsArr,
-            precipitation: precipArr,
-            wind_speed_10m: windArr,
-            cloud_cover: cloudArr,
-            relative_humidity_2m: humidityArr,
-            sunshine_duration: sunshineArr,
-          },
-        });
-      }
-
-      const hasAnyValue = samples.some((sample) => sample.hourly.temperature_2m.some((v) => Number.isFinite(v)));
-      if (!hasAnyValue) {
-        // Tracé hors du domaine du modèle : la réponse ne changera pas d'ici l'expiration.
-        cacheWeather(cacheKey, null, CACHE_TTL_MS);
-        return null;
-      }
-
-      const departureTimestampMs = departureTimestamp(startDate, startTime);
-
-      const dataset: RouteWeatherDataset = {
-        itineraryId,
-        signature,
-        startDate,
-        startTime,
-        departureTimestampMs,
-        samples,
-        fetchedAt: Date.now(),
-      };
-
-      cacheWeather(cacheKey, dataset, CACHE_TTL_MS);
-      return dataset;
-    } catch (err) {
-      if (controller.signal.aborted) {
-        return null;
-      }
-      console.warn('[routeWeather] Failed to fetch route weather forecast:', err);
-      cacheWeather(cacheKey, null, UNAVAILABLE_TTL_MS);
+    const hasAnyValue = samples.some((sample) => sample.hourly.temperature_2m.some((v) => Number.isFinite(v)));
+    if (!hasAnyValue) {
+      // Tracé hors du domaine du modèle : la réponse ne changera pas d'ici l'expiration.
+      cacheWeather(cacheKey, null, CACHE_TTL_MS);
       return null;
     }
-  })();
 
-  const request: InFlightWeather = { promise, controller, waiters: 0 };
-  inFlightRequests.set(cacheKey, request);
-  void promise.finally(() => {
-    if (inFlightRequests.get(cacheKey) === request) inFlightRequests.delete(cacheKey);
-  });
-  return awaitSharedRequest(cacheKey, request, signal);
+    const departureTimestampMs = departureTimestamp(startDate, startTime);
+
+    const dataset: RouteWeatherDataset = {
+      itineraryId,
+      signature,
+      startDate,
+      startTime,
+      departureTimestampMs,
+      samples,
+      fetchedAt: Date.now(),
+    };
+
+    cacheWeather(cacheKey, dataset, CACHE_TTL_MS);
+    return dataset;
+  } catch (err) {
+    if (signal.aborted) {
+      return null;
+    }
+    console.warn('[routeWeather] Failed to fetch route weather forecast:', err);
+    cacheWeather(cacheKey, null, UNAVAILABLE_TTL_MS);
+    return null;
+  }
 }
 
 // ── Interpolation Spatio-Temporelle ──────────────────────────────────

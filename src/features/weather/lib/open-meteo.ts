@@ -3,6 +3,7 @@ import { coordCacheKey } from './wind-grid';
 import { OPENMETEO_FORECAST_URL, OPENMETEO_MODEL } from './openMeteoConfig';
 import { translateAppText } from '@/shared/i18n';
 import { logger } from '@/shared/lib/logger';
+import { createSharedRequests } from '@/shared/lib/sharedRequests';
 import {
   normaliseWindRequestedHourKey,
   normaliseWindSelection,
@@ -35,7 +36,19 @@ interface WindHourlyCacheEntry {
 }
 
 const cache = new Map<string, WindHourlyCacheEntry>();
-const inFlightGridFetches = new Map<string, Promise<{ points: WindPoint[]; source: WindDataSource | null }>>();
+
+type WindGridResult = { points: WindPoint[]; source: WindDataSource | null };
+
+/**
+ * Chargements de grille partagés par sélection (sharedRequests.ts), entre
+ * l'affichage et le préchargement de l'heure suivante, progression relayée à
+ * chacun. Liés au signal du premier : passer à l'heure en cours de
+ * préchargement annule ce préchargement, le chargement de cette heure le
+ * reprenait, prenait son rejet pour sa propre annulation et le vent restait
+ * « en chargement » jusqu'au déplacement suivant de la carte. Un chargement
+ * abandonné par tous repart de zéro, les lots déjà reçus restant en cache.
+ */
+const windGridRequests = createSharedRequests<WindGridResult, WindFetchProgress>();
 
 function toDailyCacheKey(lat: number, lng: number, dateIso: string): string {
   return `${coordCacheKey(lat, lng)}|${dateIso}`;
@@ -370,10 +383,9 @@ async function fetchWindGridForSelection(
   selection: WindTimeSelection,
   signal?: AbortSignal,
   onProgress?: (progress: WindFetchProgress) => void,
-): Promise<{ points: WindPoint[]; source: WindDataSource | null }> {
+): Promise<WindGridResult> {
   const key = gridSelectionCacheKey(grid, selection);
-  const existing = inFlightGridFetches.get(key);
-  if (existing) {
+  if (windGridRequests.has(key)) {
     onProgress?.({
       completedBatches: 0,
       totalBatches: 1,
@@ -384,18 +396,12 @@ async function fetchWindGridForSelection(
         rows: grid.rows,
       }),
     });
-    return existing;
   }
-
-  const request = fetchWindGridForSelectionInternal(grid, selection, signal, onProgress)
-    .finally(() => {
-      if (inFlightGridFetches.get(key) === request) {
-        inFlightGridFetches.delete(key);
-      }
-    });
-
-  inFlightGridFetches.set(key, request);
-  return request;
+  return windGridRequests.run(
+    key,
+    (requestSignal, emit) => fetchWindGridForSelectionInternal(grid, selection, requestSignal, emit),
+    { signal, onEvent: onProgress },
+  );
 }
 
 export function hasWindGridSelectionCached(
