@@ -68,6 +68,17 @@ export const __idb = {
 export async function clearProjectStore(): Promise<void> {
   __idb.clear();
 }
+/** Même règle que le vrai store : seules restent les copies non synchronisées d'un autre compte. */
+export async function clearProjectStoreForUser(userId: string | null): Promise<void> {
+  const keep = new Set(
+    [...projects.values()]
+      .filter((row) => userId && row.dirty && typeof row.user_id === 'string' && row.user_id !== '' && row.user_id !== userId)
+      .map((row) => row.id),
+  );
+  for (const map of [projects, cache, thumbs, views] as Array<Map<string, unknown>>) {
+    for (const id of [...map.keys()]) if (!keep.has(id)) map.delete(id);
+  }
+}
 export async function migrateFromLocalStorageIfNeeded(): Promise<void> {}
 export async function idbSaveProject(row: ProjectRow, serialized?: SerializedProject): Promise<void> {
   const { data, ...meta } = row;
